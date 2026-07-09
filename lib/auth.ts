@@ -14,6 +14,9 @@ export interface UserProfile {
 
 /** Returns the currently signed-in user's profile (id, full_name, role), or null. */
 export async function getCurrentProfile(): Promise<UserProfile | null> {
+  // Guard: cannot access auth session during static build (no browser)
+  if (typeof window === "undefined") return null;
+
   const {
     data: { session },
   } = await supabase.auth.getSession();
