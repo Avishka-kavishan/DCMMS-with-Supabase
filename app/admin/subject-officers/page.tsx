@@ -2,126 +2,95 @@
 import React, { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import "../../../i18n";
-import { Search, UserPlus, X, Edit, Trash2, ShieldAlert, Check } from "lucide-react";
+import { UserPlus, X, Edit, Trash2, Check } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 
 interface Officer {
   id: string;
   fullName: string;
   email: string;
-  role: "subject_officer" | "investigation_officer" | "daily_mail";
+  role: "subject_officer";
   status: "Active" | "Inactive";
   createdAt: string;
 }
 
 export default function SubjectOfficersPage() {
-  const { t, i18n } = useTranslation();
-  const lang = i18n.language;
+  const { t } = useTranslation();
 
-  // Search & data states
   const [searchQuery, setSearchQuery] = useState("");
   const [officers, setOfficers] = useState<Officer[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [toastMessage, setToastMessage] = useState("");
 
-  // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  // Form states
   const [formName, setFormName] = useState("");
   const [formEmail, setFormEmail] = useState("");
   const [formStatus, setFormStatus] = useState<"Active" | "Inactive">("Active");
-
-  // Error states
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Show Toast Helper
   const showToast = (msg: string) => {
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(""), 3000);
+    setTimeout(() => setToastMessage(""), 3500);
   };
 
-  // Fetch Officers list
+  // ── Fetch officers — DB primary, localStorage fallback ─────────────────────
   const fetchOfficers = async () => {
-    let dbOfficers: Officer[] = [];
+    setIsLoading(true);
+    let result: Officer[] = [];
 
     if (isSupabaseConfigured) {
       try {
         const { data, error } = await supabase
           .from("dcmms_profiles")
-          .select("*")
-          .eq("role", "subject_officer");
+          .select("id, full_name, email, status, created_at")
+          .eq("role", "subject_officer")
+          .order("created_at", { ascending: false });
 
         if (!error && data) {
-          dbOfficers = data.map((profile: any) => ({
-            id: profile.id,
-            fullName: profile.full_name,
-            email: profile.email || `${profile.full_name.toLowerCase().replace(/\s+/g, "")}@gmail.com`,
+          result = data.map((p: any) => ({
+            id: p.id,
+            fullName: p.full_name || "",
+            email: p.email || "",
             role: "subject_officer",
-            status: profile.status || "Active",
-            createdAt: profile.created_at || new Date().toISOString().split("T")[0],
+            status: (p.status === "Inactive" ? "Inactive" : "Active") as "Active" | "Inactive",
+            createdAt: (p.created_at || "").slice(0, 10),
           }));
         }
       } catch (err) {
-        console.error("Error loading subject officers from database:", err);
+        console.error("Failed to load subject officers from Supabase:", err);
       }
     }
 
-    // Load custom officers from localStorage
-    let localOfficers: Officer[] = [];
+    // Merge any locally-created officers that aren't in the DB yet
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("dcmms_custom_profiles");
       if (stored) {
         try {
-          const parsed = JSON.parse(stored);
-          localOfficers = parsed.filter((o: Officer) => o.role === "subject_officer");
+          const list = JSON.parse(stored) as Officer[];
+          const localSubject = list.filter((o) => o.role === "subject_officer");
+          const dbIds = new Set(result.map((o) => o.id));
+          localSubject.forEach((lo) => {
+            if (!dbIds.has(lo.id)) result.push(lo);
+          });
         } catch (e) {
-          console.error("Error parsing custom profiles from localStorage:", e);
+          console.error("Failed to parse local profiles:", e);
         }
       }
     }
 
-    // Combine lists, preferring DB entry on ID conflicts
-    const combinedMap = new Map<string, Officer>();
-    
-    // Add default templates if nothing is present
-    const defaults: Officer[] = [
-      {
-        id: "default-sub-1",
-        fullName: "Nathasha Sathsarani",
-        email: "nathashasathsarani209@gmail.com",
-        role: "subject_officer",
-        status: "Active",
-        createdAt: "2026-01-01"
-      },
-      {
-        id: "default-sub-2",
-        fullName: "Kamal Perera",
-        email: "kamalperera@gmail.com",
-        role: "subject_officer",
-        status: "Active",
-        createdAt: "2026-01-10"
-      }
-    ];
-
-    defaults.forEach(d => combinedMap.set(d.id, d));
-    localOfficers.forEach(l => combinedMap.set(l.id, l));
-    dbOfficers.forEach(d => combinedMap.set(d.id, d));
-
-    setOfficers(Array.from(combinedMap.values()));
+    setOfficers(result);
+    setIsLoading(false);
   };
 
-  useEffect(() => {
-    fetchOfficers();
-  }, []);
+  useEffect(() => { fetchOfficers(); }, []);
 
-  // Validation
+  // ── Validation ─────────────────────────────────────────────────────────────
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
-    if (!formName.trim()) {
-      newErrors.name = t("pleaseFillAllFields", "Please fill out all fields.");
-    }
+    if (!formName.trim()) newErrors.name = t("pleaseFillAllFields", "Please fill out all fields.");
     if (!formEmail.trim()) {
       newErrors.email = t("pleaseFillAllFields", "Please fill out all fields.");
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formEmail.trim())) {
@@ -131,73 +100,70 @@ export default function SubjectOfficersPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  // Open Modal Helpers
+  // ── Modal helpers ──────────────────────────────────────────────────────────
   const openAddModal = () => {
-    setIsEditMode(false);
-    setEditingId(null);
-    setFormName("");
-    setFormEmail("");
-    setFormStatus("Active");
-    setErrors({});
-    setIsModalOpen(true);
+    setIsEditMode(false); setEditingId(null);
+    setFormName(""); setFormEmail(""); setFormStatus("Active");
+    setErrors({}); setIsModalOpen(true);
+  };
+  const openEditModal = (o: Officer) => {
+    setIsEditMode(true); setEditingId(o.id);
+    setFormName(o.fullName); setFormEmail(o.email); setFormStatus(o.status);
+    setErrors({}); setIsModalOpen(true);
   };
 
-  const openEditModal = (officer: Officer) => {
-    setIsEditMode(true);
-    setEditingId(officer.id);
-    setFormName(officer.fullName);
-    setFormEmail(officer.email);
-    setFormStatus(officer.status);
-    setErrors({});
-    setIsModalOpen(true);
-  };
-
-  // Save Form Handler
+  // ── Save (Add / Edit) ──────────────────────────────────────────────────────
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
 
-    const savedOfficer: Officer = {
-      id: isEditMode && editingId ? editingId : `sub-${Date.now()}`,
+    const now = new Date().toISOString();
+    const isNew = !isEditMode || !editingId;
+    const newId = isNew ? `sub-${Date.now()}` : editingId!;
+
+    const officer: Officer = {
+      id: newId,
       fullName: formName.trim(),
       email: formEmail.trim().toLowerCase(),
       role: "subject_officer",
       status: formStatus,
-      createdAt: isEditMode && editingId
-        ? officers.find(o => o.id === editingId)?.createdAt || new Date().toISOString().split("T")[0]
-        : new Date().toISOString().split("T")[0],
+      createdAt: isNew
+        ? now.slice(0, 10)
+        : officers.find((o) => o.id === editingId)?.createdAt || now.slice(0, 10),
     };
 
-    // Save custom profiles in localStorage
+    // 1. Write to Supabase (primary)
+    if (isSupabaseConfigured) {
+      try {
+        const payload: any = {
+          full_name: officer.fullName,
+          email: officer.email,
+          role: "subject_officer",
+          status: officer.status,
+        };
+        // Only include `id` for real UUID edits (not temp local ids)
+        if (!isNew && !officer.id.startsWith("sub-")) payload.id = officer.id;
+
+        const { error } = await supabase.from("dcmms_profiles").upsert(payload);
+        if (error) throw error;
+
+        showToast(isEditMode ? "Officer updated successfully!" : t("officerAddedSuccess", "Officer registered successfully!"));
+        setIsModalOpen(false);
+        fetchOfficers();
+        return;
+      } catch (err: any) {
+        console.error("Supabase upsert failed:", err?.message ?? err);
+      }
+    }
+
+    // 2. Fallback: localStorage
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("dcmms_custom_profiles");
       let list: Officer[] = [];
-      if (stored) {
-        try {
-          list = JSON.parse(stored);
-        } catch (e) {
-          list = [];
-        }
-      }
-
-      if (isEditMode) {
-        list = list.filter(o => o.id !== savedOfficer.id);
-      }
-      list.push(savedOfficer);
+      try { list = stored ? JSON.parse(stored) : []; } catch { list = []; }
+      list = list.filter((o) => o.id !== officer.id);
+      list.push(officer);
       localStorage.setItem("dcmms_custom_profiles", JSON.stringify(list));
-    }
-
-    // Try DB upsert
-    if (isSupabaseConfigured) {
-      try {
-        await supabase.from("dcmms_profiles").upsert({
-          id: savedOfficer.id.startsWith("sub-") || savedOfficer.id.startsWith("default-") ? undefined : savedOfficer.id, // bypass UUID generation constraint on local mock IDs
-          full_name: savedOfficer.fullName,
-          role: "subject_officer",
-        });
-      } catch (err) {
-        console.warn("Could not upsert to Supabase due to session constraints. Falling back fully to local persistence.", err);
-      }
     }
 
     showToast(isEditMode ? "Officer updated successfully!" : t("officerAddedSuccess", "Officer registered successfully!"));
@@ -205,56 +171,74 @@ export default function SubjectOfficersPage() {
     fetchOfficers();
   };
 
-  // Delete Handler
-  const handleDelete = (id: string) => {
+  // ── Delete ─────────────────────────────────────────────────────────────────
+  const handleDelete = async (officer: Officer) => {
     if (!confirm("Are you sure you want to delete this officer?")) return;
 
+    // 1. Delete from Supabase if it has a real (non-temp) id
+    if (isSupabaseConfigured && !officer.id.startsWith("sub-")) {
+      try {
+        const { error } = await supabase.from("dcmms_profiles").delete().eq("id", officer.id);
+        if (error) throw error;
+      } catch (err: any) {
+        console.error("Supabase delete failed:", err?.message ?? err);
+      }
+    }
+
+    // 2. Remove from localStorage
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("dcmms_custom_profiles");
       if (stored) {
         try {
-          let list = JSON.parse(stored);
-          list = list.filter((o: Officer) => o.id !== id);
+          let list = JSON.parse(stored) as Officer[];
+          list = list.filter((o) => o.id !== officer.id);
           localStorage.setItem("dcmms_custom_profiles", JSON.stringify(list));
-        } catch (e) {
-          console.error(e);
-        }
+        } catch { /* ignore */ }
       }
     }
+
     showToast("Officer deleted successfully.");
     fetchOfficers();
   };
 
-  // Toggle Status Handler
-  const handleToggleStatus = (officer: Officer) => {
+  // ── Toggle Status ──────────────────────────────────────────────────────────
+  const handleToggleStatus = async (officer: Officer) => {
     const newStatus: "Active" | "Inactive" = officer.status === "Active" ? "Inactive" : "Active";
-    const updated: Officer = { ...officer, status: newStatus };
 
+    // 1. Update in Supabase
+    if (isSupabaseConfigured && !officer.id.startsWith("sub-")) {
+      try {
+        const { error } = await supabase
+          .from("dcmms_profiles")
+          .update({ status: newStatus })
+          .eq("id", officer.id);
+        if (error) throw error;
+      } catch (err: any) {
+        console.error("Supabase status update failed:", err?.message ?? err);
+      }
+    }
+
+    // 2. Update localStorage
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("dcmms_custom_profiles");
       let list: Officer[] = [];
-      if (stored) {
-        try {
-          list = JSON.parse(stored);
-        } catch (e) {
-          list = [];
-        }
-      }
-      list = list.filter(o => o.id !== officer.id);
-      list.push(updated);
+      try { list = stored ? JSON.parse(stored) : []; } catch { list = []; }
+      list = list.filter((o) => o.id !== officer.id);
+      list.push({ ...officer, status: newStatus });
       localStorage.setItem("dcmms_custom_profiles", JSON.stringify(list));
     }
 
-    showToast(`Status of ${officer.fullName} updated to ${newStatus}`);
+    showToast(`Status of ${officer.fullName} updated to ${newStatus}.`);
     fetchOfficers();
   };
 
-  // Filter list by search query
-  const filteredOfficers = officers.filter(o =>
-    o.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    o.email.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredOfficers = officers.filter(
+    (o) =>
+      o.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      o.email.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="admin-dashboard-container">
       {/* Action Bar */}
@@ -265,7 +249,7 @@ export default function SubjectOfficersPage() {
           </svg>
           <input
             type="text"
-            placeholder={t("searchUserPlaceholder", "Search by name, role, email...")}
+            placeholder={t("searchUserPlaceholder", "Search by name, role, email…")}
             className="search-input"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -273,7 +257,7 @@ export default function SubjectOfficersPage() {
         </div>
         <button className="btn-admin-add" onClick={openAddModal}>
           <UserPlus size={18} />
-          {t("addSubjectOfficer", "Add Subject officer")}
+          {t("addSubjectOfficer", "Add Subject Officer")}
         </button>
       </div>
 
@@ -291,12 +275,18 @@ export default function SubjectOfficersPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredOfficers.length > 0 ? (
+              {isLoading ? (
+                <tr>
+                  <td colSpan={5} className="admin-table-no-data table-no-data-padding">
+                    {t("loadingData", "Loading officers from database…")}
+                  </td>
+                </tr>
+              ) : filteredOfficers.length > 0 ? (
                 filteredOfficers.map((item) => (
                   <tr key={item.id} className="letter-table-row">
                     <td className="admin-table-case-no font-semibold">{item.fullName}</td>
-                    <td>{item.email}</td>
-                    <td>{t("roleSubject", "Subject officer")}</td>
+                    <td>{item.email || "—"}</td>
+                    <td>{t("roleSubject", "Subject Officer")}</td>
                     <td>
                       <span className={item.status === "Active" ? "status-badge-active" : "status-badge-inactive"}>
                         {item.status === "Active" ? t("active", "Active") : t("inactive", "Inactive")}
@@ -304,13 +294,13 @@ export default function SubjectOfficersPage() {
                     </td>
                     <td className="admin-table-cell-center">
                       <div className="action-btn-row">
-                        <button className="btn-table-edit" onClick={() => openEditModal(item)} title={t("view", "Edit")}>
+                        <button className="btn-table-edit" onClick={() => openEditModal(item)} title={t("edit", "Edit")}>
                           <Edit size={16} />
                         </button>
                         <button className="btn-table-toggle" onClick={() => handleToggleStatus(item)} title="Toggle Status">
                           <Check size={16} />
                         </button>
-                        <button className="btn-table-delete" onClick={() => handleDelete(item.id)} title="Delete">
+                        <button className="btn-table-delete" onClick={() => handleDelete(item)} title="Delete">
                           <Trash2 size={16} />
                         </button>
                       </div>
@@ -320,7 +310,9 @@ export default function SubjectOfficersPage() {
               ) : (
                 <tr>
                   <td colSpan={5} className="admin-table-no-data table-no-data-padding">
-                    {t("noLettersFound", "No entries found matching search")}
+                    {officers.length === 0
+                      ? t("noOfficersInDatabase", "No subject officers found in the database.")
+                      : t("noLettersFound", "No entries found matching search.")}
                   </td>
                 </tr>
               )}
@@ -365,7 +357,7 @@ export default function SubjectOfficersPage() {
                   </label>
                   <input
                     id="email"
-                    type="text"
+                    type="email"
                     placeholder={t("placeholderEmailExample", "e.g. ranjithbandara@gmail.com")}
                     value={formEmail}
                     onChange={(e) => setFormEmail(e.target.value)}
@@ -380,7 +372,7 @@ export default function SubjectOfficersPage() {
                     id="assignedRole"
                     type="text"
                     disabled
-                    value={t("roleSubject", "Subject officer")}
+                    value={t("roleSubject", "Subject Officer")}
                     className="field-input disabled-input-custom"
                   />
                 </div>
@@ -412,7 +404,7 @@ export default function SubjectOfficersPage() {
         </div>
       )}
 
-      {/* Toast Notification */}
+      {/* Toast */}
       {toastMessage && (
         <div className="toast-notification">
           <div className="toast-success-icon-container">
