@@ -35,14 +35,20 @@ interface CaseRow {
   type: string;
 }
 
+interface OfficerStat {
+  name: string;
+  role: string;
+  count: number;
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Derive a display status from a raw DB status string */
-function mapStatus(raw: string): string {
+/** Derive a display status from a raw DB status string and case number */
+function mapStatus(raw: string, caseNo: string): string {
   const s = (raw || "").toLowerCase();
   if (s.includes("closed")) return "Closed";
-  if (s.includes("scheduled") || s.includes("subject")) return "Under Subject Officer";
-  return "Under Investigation";
+  if ((caseNo || "").includes("INQ/")) return "Under Investigation";
+  return "Under Subject Officer";
 }
 
 /** Heuristic type label from subject text */
@@ -144,6 +150,7 @@ export default function AdminDashboard() {
   const [allCases, setAllCases] = useState<{ type: string; status: string }[]>([]);
   const [recentCases, setRecentCases] = useState<CaseRow[]>([]);
   const [caseDates, setCaseDates] = useState<string[]>([]);
+  const [officerStats, setOfficerStats] = useState<OfficerStat[]>([]);
 
   // ── Session guard ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -172,43 +179,63 @@ export default function AdminDashboard() {
           return;
         }
 
-        const { data, error } = await supabase
-          .from("dcmms_cases")
-          .select("id, case_no, assigned_date, created_at, subject, assigned_to, priority, status")
-          .order("created_at", { ascending: false });
+        let mapped: CaseRow[] = [];
 
-        if (error) throw error;
+        // ── Cases query (may fail if table doesn't exist yet) ──
+        try {
+          const { data, error } = await supabase
+            .from("dcmms_cases")
+            .select("id, case_no, assigned_date, created_at, subject, assigned_to, priority, status")
+            .order("created_at", { ascending: false });
 
-        if (!data || data.length === 0) {
-          setIsLoading(false);
-          return;
+          if (error) throw error;
+
+          if (data && data.length > 0) {
+            mapped = data.map((c: any) => ({
+              id: c.id,
+              caseNo: c.case_no || c.id,
+              dateFiled: (c.assigned_date || c.created_at || "").slice(0, 10),
+              subject: c.subject || "",
+              assignedTo: c.assigned_to || c.assigned || "—",
+              priority: c.priority
+                ? c.priority.charAt(0).toUpperCase() + c.priority.slice(1)
+                : "Medium",
+              status: mapStatus(c.status, c.case_no || c.id),
+              type: mapType(c.subject),
+            }));
+
+            setAllCases(mapped.map((m) => ({ type: m.type, status: m.status })));
+            setRecentCases(mapped.slice(0, 10));
+            setCaseDates(
+              data.map((c: any) => (c.created_at || c.assigned_date || "")).filter(Boolean)
+            );
+          }
+        } catch (caseErr) {
+          console.error("Failed to load cases from Supabase", caseErr);
         }
 
-        const mapped: CaseRow[] = data.map((c: any) => ({
-          id: c.id,
-          caseNo: c.case_no || c.id,
-          dateFiled: (c.assigned_date || c.created_at || "").slice(0, 10),
-          subject: c.subject || "",
-          assignedTo: c.assigned_to || c.assigned || "—",
-          priority: c.priority
-            ? c.priority.charAt(0).toUpperCase() + c.priority.slice(1)
-            : "Medium",
-          status: mapStatus(c.status),
-          type: mapType(c.subject),
-        }));
+        // ── Officer stats query (independent of cases) ──
+        try {
+          const { data: profiles } = await supabase.from("dcmms_profiles").select("*");
+          const { data: lettersData } = await supabase.from("dcmms_letters").select("officer_name");
 
-        // All cases for stats / charts
-        setAllCases(mapped.map((m) => ({ type: m.type, status: m.status })));
-
-        // Recent = top 10
-        setRecentCases(mapped.slice(0, 10));
-
-        // Dates for chart building
-        setCaseDates(
-          data.map((c: any) => (c.created_at || c.assigned_date || "")).filter(Boolean)
-        );
+          if (profiles) {
+            const stats: OfficerStat[] = profiles.map((p: any) => {
+              let count = 0;
+              if (p.role === "subject_officer") {
+                count = (lettersData || []).filter((l: any) => l.officer_name === p.full_name).length;
+              } else if (p.role === "investigation_officer") {
+                count = mapped.filter((c) => c.assignedTo === p.full_name).length;
+              }
+              return { name: p.full_name, role: p.role, count };
+            });
+            setOfficerStats(stats);
+          }
+        } catch (officerErr) {
+          console.error("Failed to load officer stats from Supabase", officerErr);
+        }
       } catch (err) {
-        console.error("Failed to load cases from Supabase", err);
+        console.error("Dashboard data load error", err);
       } finally {
         setIsLoading(false);
       }
@@ -454,6 +481,57 @@ export default function AdminDashboard() {
         </div>
       </div>
 
+      {/* Officer Workload Section */}
+      <section className="letters-list-section" style={{ marginTop: "32px" }}>
+        <div className="letters-list-header">
+          <h3 className="section-title">
+            <svg className="admin-section-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+            </svg>
+            <span>{t("officerWorkload", "Officer Workload")}</span>
+          </h3>
+        </div>
+        <div className="table-responsive-container">
+          <table className="letters-data-table">
+            <thead>
+              <tr>
+                <th scope="col">{t("officerName", "Officer Name")}</th>
+                <th scope="col">{t("role", "Role")}</th>
+                <th scope="col" style={{ textAlign: "right" }}>{t("assignedLetters", "Assigned Cases / Letters")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {officerStats.length > 0 ? (
+                officerStats.map((stat, idx) => (
+                  <tr key={idx} className="letter-table-row">
+                    <td className="font-semibold">{stat.name}</td>
+                    <td>
+                      {stat.role === "subject_officer"
+                        ? t("roleSubjectOfficer", "Subject Officer")
+                        : stat.role === "investigation_officer"
+                        ? t("roleInvestigationOfficer", "Investigation Officer")
+                        : t("roleDailyMail", "Daily Mail Officer")}
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      {stat.role === "daily_mail" ? "—" : (
+                        <span className="badge-badge badge-priority-high" style={{ minWidth: "40px", display: "inline-block", textAlign: "center" }}>
+                          {stat.count}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={3} className="admin-table-no-data">
+                    {isLoading ? t("loadingData", "Loading data from database…") : t("noOfficersFound", "No officers found.")}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
       {/* Recent Cases Section */}
       <section className="letters-list-section">
         <div className="letters-list-header">

@@ -86,26 +86,6 @@ export default function DailyMailOfficersPage() {
     const combinedMap = new Map<string, Officer>();
     
     // Add default templates if nothing is present
-    const defaults: Officer[] = [
-      {
-        id: "default-dm-1",
-        fullName: "Aruni Rajapaksha",
-        email: "arunirajapaksha@gmail.com",
-        role: "daily_mail",
-        status: "Active",
-        createdAt: "2026-01-01"
-      },
-      {
-        id: "default-dm-2",
-        fullName: "Tharindu Perera",
-        email: "tharinduperera@gmail.com",
-        role: "daily_mail",
-        status: "Active",
-        createdAt: "2026-03-05"
-      }
-    ];
-
-    defaults.forEach(d => combinedMap.set(d.id, d));
     localOfficers.forEach(l => combinedMap.set(l.id, l));
     dbOfficers.forEach(d => combinedMap.set(d.id, d));
 
@@ -193,7 +173,9 @@ export default function DailyMailOfficersPage() {
         await supabase.from("dcmms_profiles").upsert({
           id: savedOfficer.id.startsWith("dm-") || savedOfficer.id.startsWith("default-") ? undefined : savedOfficer.id,
           full_name: savedOfficer.fullName,
+          email: savedOfficer.email,
           role: "daily_mail",
+          status: savedOfficer.status,
         });
       } catch (err) {
         console.warn("Could not upsert to Supabase. Falling back fully to localStorage.", err);
@@ -206,8 +188,16 @@ export default function DailyMailOfficersPage() {
   };
 
   // Delete Handler
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this officer?")) return;
+
+    if (isSupabaseConfigured) {
+      try {
+        await supabase.from("dcmms_profiles").delete().eq("id", id);
+      } catch (err) {
+        console.error("Failed to delete from Supabase", err);
+      }
+    }
 
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("dcmms_custom_profiles");
@@ -226,9 +216,17 @@ export default function DailyMailOfficersPage() {
   };
 
   // Toggle Status Handler
-  const handleToggleStatus = (officer: Officer) => {
+  const handleToggleStatus = async (officer: Officer) => {
     const newStatus: "Active" | "Inactive" = officer.status === "Active" ? "Inactive" : "Active";
     const updated: Officer = { ...officer, status: newStatus };
+
+    if (isSupabaseConfigured) {
+      try {
+        await supabase.from("dcmms_profiles").update({ status: newStatus }).eq("id", officer.id);
+      } catch (err) {
+        console.error("Failed to update status in Supabase", err);
+      }
+    }
 
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("dcmms_custom_profiles");

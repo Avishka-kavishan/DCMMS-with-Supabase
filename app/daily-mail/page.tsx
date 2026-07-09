@@ -121,58 +121,7 @@ export default function DailyMailPage() {
             console.error("Error parsing stored letters", e);
           }
         } else {
-          const defaults: Letter[] = [
-            {
-              id: "1",
-              refNo: "DCMMS/2026/001",
-              letterNo: "L-5421",
-              receivedDate: "2026-06-20",
-              letterDate: "2026-06-18",
-              senderName: "W. M. Perera",
-              instituteName: "Royal College, Colombo 07",
-              subject: "Complaint on student discipline issues",
-              subjectCategory: "Student Misconduct",
-              officerName: "Kamal Perera",
-              letterType: "Complaint",
-              regionProvince: "province",
-              priority: "high",
-              status: "registered",
-            },
-            {
-              id: "2",
-              refNo: "DCMMS/2026/002",
-              letterNo: "L-8762",
-              receivedDate: "2026-06-22",
-              letterDate: "2026-06-20",
-              senderName: "S. K. Rajan",
-              instituteName: "Zonal Education Office, Jaffna",
-              subject: "Teacher absenteeism inquiry report",
-              subjectCategory: "Teacher Absenteeism",
-              officerName: "Suresh Silva",
-              letterType: "Inquiry",
-              regionProvince: "region",
-              priority: "medium",
-              status: "assigned",
-            },
-            {
-              id: "3",
-              refNo: "DCMMS/2026/003",
-              letterNo: "L-1092",
-              receivedDate: "2026-06-23",
-              letterDate: "2026-06-21",
-              senderName: "Secretary",
-              instituteName: "Ministry of Education (Isurupaya)",
-              subject: "Guidelines for annual sport meets",
-              subjectCategory: "Administrative Issues",
-              officerName: "Aruni Rajapaksha",
-              letterType: "Circular",
-              regionProvince: "province",
-              priority: "low",
-              status: "pending",
-            }
-          ];
-          setLetters(defaults);
-          localStorage.setItem("dcmms_letters", JSON.stringify(defaults));
+          setLetters([]);
         }
       }
     };

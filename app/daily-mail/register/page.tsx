@@ -242,6 +242,7 @@ function RegisterComplaintForm() {
               subject: newLetter.subject || null,
               priority: newLetter.priority || "medium",
               status: "In Progress",
+              assigned_to: newLetter.officerName || null,
             }, { onConflict: "case_no", ignoreDuplicates: true });
 
           if (caseUpsertError) {
@@ -333,6 +334,7 @@ function RegisterComplaintForm() {
             subject: newLetter.subject,
             priority: newLetter.priority,
             status: "In Progress",
+            assigned_to: newLetter.officerName || null,
           });
 
         if (caseError) {
@@ -389,6 +391,7 @@ function RegisterComplaintForm() {
         subject: newLetter.subject,
         priority: newLetter.priority,
         status: "In Progress",
+        assignedTo: newLetter.officerName || "",
       };
       const updatedCases = casesList.filter((item: any) => item.caseNo !== newCase.caseNo);
       localStorage.setItem("dcmms_cases", JSON.stringify([newCase, ...updatedCases]));

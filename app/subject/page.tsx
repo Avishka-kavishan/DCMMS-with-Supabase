@@ -172,39 +172,7 @@ export default function SubjectOfficerDashboard() {
             console.error("Error parsing localStorage fallback data", e);
           }
         } else {
-          // If no data exists, load defaults mapped to active user
-          let activeName = profile?.full_name || t("subjectName");
-          const defaultLetters = [
-            {
-              id: "1",
-              refNo: "DCMMS/2026/001",
-              letterNo: "L-5421",
-              receivedDate: "2026-06-20",
-              letterDate: "2026-06-18",
-              senderName: "W. M. Perera",
-              instituteName: "Royal College, Colombo 07",
-              subject: "Complaint on student discipline issues",
-              subjectCategory: "Student Misconduct",
-              officerName: activeName,
-              letterType: "Complaint",
-              regionProvince: "province",
-              priority: "high",
-              status: "registered",
-            }
-          ];
-          const defaultCases: Case[] = [
-            {
-              id: "1",
-              caseNo: "DCMMS/2026/001",
-              assignedDate: "2026-06-20",
-              subject: "Complaint on student discipline issues",
-              priority: "high",
-              status: "In Progress",
-            }
-          ];
-          setCases(defaultCases);
-          localStorage.setItem("dcmms_letters", JSON.stringify(defaultLetters));
-          localStorage.setItem("dcmms_cases", JSON.stringify(defaultCases));
+          setCases([]);
         }
       }
     };
