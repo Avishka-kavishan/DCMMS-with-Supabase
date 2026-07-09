@@ -241,6 +241,12 @@ export default function InvestigationPage() {
     );
   });
 
+  // Dynamic counts calculations
+  const activeInquiriesCount = inquiries.length;
+  const inProgressInquiriesCount = inquiries.filter((i) => i.status === "In Progress").length;
+  const evidenceReviewsInquiriesCount = inquiries.filter((i) => i.status === "Evidence Review").length;
+  const scheduledHearingsInquiriesCount = inquiries.filter((i) => i.status === "Scheduled").length;
+
   return (
     <div className="dashboard-container" data-font-scale={fontScale}>
       {/* ── Skip Link (A11y) ── */}
@@ -389,19 +395,19 @@ export default function InvestigationPage() {
           <section className="dashboard-stats-grid">
             <div className="hero-action-card">
               <h4>Active Inquiries</h4>
-              <p>{inquiries.length}</p>
+              <p>{activeInquiriesCount}</p>
             </div>
             <div className="hero-action-card">
               <h4>In Progress</h4>
-              <p className="val-info">1</p>
+              <p className="val-info">{inProgressInquiriesCount}</p>
             </div>
             <div className="hero-action-card">
               <h4>Evidence Reviews</h4>
-              <p className="val-purple">1</p>
+              <p className="val-purple">{evidenceReviewsInquiriesCount}</p>
             </div>
             <div className="hero-action-card">
               <h4>Scheduled Hearings</h4>
-              <p className="val-warning">1</p>
+              <p className="val-warning">{scheduledHearingsInquiriesCount}</p>
             </div>
           </section>
 

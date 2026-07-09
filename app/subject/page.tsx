@@ -229,6 +229,17 @@ export default function SubjectOfficerDashboard() {
     router.push("/");
   };
 
+  // Dynamic counts for stats cards
+  const totalCasesCount = cases.length;
+  const inProgressCasesCount = cases.filter((c) => c.status === "In Progress").length;
+  const pendingCasesCount = cases.filter((c) => c.status === "Pending").length;
+  const closedCasesCount = cases.filter((c) => c.status === "Closed").length;
+
+  const totalPct = "100%";
+  const inProgressPct = totalCasesCount > 0 ? `+${Math.round((inProgressCasesCount / totalCasesCount) * 100)}%` : "0%";
+  const pendingPct = totalCasesCount > 0 ? `+${Math.round((pendingCasesCount / totalCasesCount) * 100)}%` : "0%";
+  const closedPct = totalCasesCount > 0 ? `+${Math.round((closedCasesCount / totalCasesCount) * 100)}%` : "0%";
+
   // Filter cases list in real-time
   const filteredCases = cases.filter((item) => {
     const matchesSearch =
@@ -391,11 +402,11 @@ export default function SubjectOfficerDashboard() {
                   </svg>
                   <span>{t("totalCases")}</span>
                 </div>
-                <span className="premium-card-percentage">100%</span>
+                <span className="premium-card-percentage">{totalPct}</span>
               </div>
               <div className="premium-card-bottom">
                 <div className="premium-card-value-area">
-                  <span className="premium-card-value">56</span>
+                  <span className="premium-card-value">{String(totalCasesCount).padStart(2, "0")}</span>
                   <span className="premium-card-label">cases</span>
                 </div>
                 <div className="premium-card-sparkline">
@@ -415,11 +426,11 @@ export default function SubjectOfficerDashboard() {
                   </svg>
                   <span>{t("inProgressCases")}</span>
                 </div>
-                <span className="premium-card-percentage">+18%</span>
+                <span className="premium-card-percentage">{inProgressPct}</span>
               </div>
               <div className="premium-card-bottom">
                 <div className="premium-card-value-area">
-                  <span className="premium-card-value">10</span>
+                  <span className="premium-card-value">{String(inProgressCasesCount).padStart(2, "0")}</span>
                   <span className="premium-card-label">cases</span>
                 </div>
                 <div className="premium-card-sparkline">
@@ -439,11 +450,11 @@ export default function SubjectOfficerDashboard() {
                   </svg>
                   <span>{t("pendingCases")}</span>
                 </div>
-                <span className="premium-card-percentage">+9%</span>
+                <span className="premium-card-percentage">{pendingPct}</span>
               </div>
               <div className="premium-card-bottom">
                 <div className="premium-card-value-area">
-                  <span className="premium-card-value">05</span>
+                  <span className="premium-card-value">{String(pendingCasesCount).padStart(2, "0")}</span>
                   <span className="premium-card-label">cases</span>
                 </div>
                 <div className="premium-card-sparkline">
@@ -463,11 +474,11 @@ export default function SubjectOfficerDashboard() {
                   </svg>
                   <span>{t("closeCases")}</span>
                 </div>
-                <span className="premium-card-percentage">+57%</span>
+                <span className="premium-card-percentage">{closedPct}</span>
               </div>
               <div className="premium-card-bottom">
                 <div className="premium-card-value-area">
-                  <span className="premium-card-value">32</span>
+                  <span className="premium-card-value">{String(closedCasesCount).padStart(2, "0")}</span>
                   <span className="premium-card-label">cases</span>
                 </div>
                 <div className="premium-card-sparkline">
