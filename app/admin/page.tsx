@@ -185,10 +185,21 @@ export default function AdminDashboard() {
         try {
           const { data, error } = await supabase
             .from("dcmms_cases")
-            .select("id, case_no, assigned_date, created_at, subject, assigned_to, priority, status")
+            .select("id, case_no, assigned_date, created_at, subject, priority, status")
             .order("created_at", { ascending: false });
 
           if (error) throw error;
+
+          // Build a lookup map from dcmms_letters to resolve which officer is assigned
+          const { data: letterLookup } = await supabase
+            .from("dcmms_letters")
+            .select("ref_no, officer_name");
+          const officerMap: Record<string, string> = {};
+          if (letterLookup) {
+            letterLookup.forEach((l: any) => {
+              if (l.ref_no && l.officer_name) officerMap[l.ref_no] = l.officer_name;
+            });
+          }
 
           if (data && data.length > 0) {
             mapped = data.map((c: any) => ({
@@ -196,7 +207,7 @@ export default function AdminDashboard() {
               caseNo: c.case_no || c.id,
               dateFiled: (c.assigned_date || c.created_at || "").slice(0, 10),
               subject: c.subject || "",
-              assignedTo: c.assigned_to || c.assigned || "—",
+              assignedTo: officerMap[c.case_no] || "—",
               priority: c.priority
                 ? c.priority.charAt(0).toUpperCase() + c.priority.slice(1)
                 : "Medium",

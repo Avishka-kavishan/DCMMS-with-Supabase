@@ -242,7 +242,6 @@ function RegisterComplaintForm() {
               subject: newLetter.subject || null,
               priority: newLetter.priority || "medium",
               status: "In Progress",
-              assigned_to: newLetter.officerName || null,
             }, { onConflict: "case_no", ignoreDuplicates: true });
 
           if (caseUpsertError) {
@@ -334,7 +333,6 @@ function RegisterComplaintForm() {
             subject: newLetter.subject,
             priority: newLetter.priority,
             status: "In Progress",
-            assigned_to: newLetter.officerName || null,
           });
 
         if (caseError) {
