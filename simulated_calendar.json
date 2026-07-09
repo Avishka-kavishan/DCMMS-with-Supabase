@@ -1,0 +1,54 @@
+[
+  {
+    "id": "mock-inq-001",
+    "summary": "Inquiry Hearing: INQ/2026/001",
+    "description": "Formal disciplinary inquiry - Student misconduct at Royal College",
+    "start": {
+      "dateTime": "2026-07-05T10:00:00+05:30"
+    },
+    "end": {
+      "dateTime": "2026-07-05T12:00:00+05:30"
+    },
+    "location": "Discipline Branch, Ministry of Education, Isurupaya",
+    "source": "Inquiry Target Date"
+  },
+  {
+    "id": "mock-inq-002",
+    "summary": "Inquiry Hearing: INQ/2026/002",
+    "description": "Preliminary investigation on teacher absenteeism - Jaffna Office",
+    "start": {
+      "dateTime": "2026-07-12T09:30:00+05:30"
+    },
+    "end": {
+      "dateTime": "2026-07-12T11:30:00+05:30"
+    },
+    "location": "Zonal Education Office, Jaffna",
+    "source": "Inquiry Target Date"
+  },
+  {
+    "id": "mock-inq-003",
+    "summary": "Inquiry Hearing: INQ/2026/003",
+    "description": "Inquiry into safety guidelines violation - Annual Sports Meet",
+    "start": {
+      "dateTime": "2026-07-20T14:00:00+05:30"
+    },
+    "end": {
+      "dateTime": "2026-07-20T16:00:00+05:30"
+    },
+    "location": "Discipline Branch, Ministry of Education, Isurupaya",
+    "source": "Inquiry Target Date"
+  },
+  {
+    "id": "mock-appt-001",
+    "summary": "Officer Appointment: DCMMS/2026/001",
+    "description": "Inquiry Officer appointment date for Student Misconduct case.",
+    "start": {
+      "dateTime": "2026-07-10T09:00:00+05:30"
+    },
+    "end": {
+      "dateTime": "2026-07-10T10:00:00+05:30"
+    },
+    "location": "Discipline Branch, Isurupaya",
+    "source": "Officer Appointment Date"
+  }
+]

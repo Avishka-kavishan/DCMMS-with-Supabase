@@ -1,0 +1,224 @@
+/* ============================================================
+   REGISTER PAGE  —  Matches login page design system
+   ============================================================ */
+
+.register-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--background);
+}
+
+/* Font scale levels */
+.register-page[data-font-scale="small"]  { --font-scale: 0.875; }
+.register-page[data-font-scale="medium"] { --font-scale: 1; }
+.register-page[data-font-scale="large"]  { --font-scale: 1.2; }
+
+/* ── Main content ──────────────────────────────────────────── */
+.register-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1.5rem;
+}
+
+/* ── Card ──────────────────────────────────────────────────── */
+.register-card {
+  background: var(--card-background);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 2.5rem;
+  width: 100%;
+  max-width: 480px;
+  box-shadow: 0 4px 24px rgba(14, 22, 47, 0.08);
+}
+
+.register-card-header {
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+.register-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.register-logo-icon {
+  width: 40px;
+  height: 40px;
+  background: var(--primary-color);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 800;
+  font-size: calc(16px * var(--font-scale));
+  font-family: var(--font-bebas, sans-serif);
+  letter-spacing: 0.05em;
+}
+
+.register-logo-text {
+  font-size: calc(20px * var(--font-scale));
+  font-weight: 700;
+  color: var(--primary-color);
+  font-family: var(--font-bebas, sans-serif);
+  letter-spacing: 0.08em;
+}
+
+.register-card-title {
+  font-size: calc(22px * var(--font-scale));
+  font-weight: 700;
+  color: var(--foreground);
+  margin: 0 0 0.4rem;
+}
+
+.register-card-subtitle {
+  font-size: calc(13px * var(--font-scale));
+  color: #64748b;
+  margin: 0;
+}
+
+/* ── Form ──────────────────────────────────────────────────── */
+.register-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
+.form-row {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.form-row > * {
+  flex: 1;
+}
+
+.register-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.register-label {
+  font-size: calc(13px * var(--font-scale));
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.register-label .required-star {
+  color: #ef4444;
+  margin-left: 2px;
+}
+
+.register-input,
+.register-select {
+  width: 100%;
+  padding: 0.65rem 0.9rem;
+  border: 1.5px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--input-background);
+  font-family: var(--font-sans);
+  font-size: calc(14px * var(--font-scale));
+  color: var(--foreground);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.register-input:focus,
+.register-select:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(14, 22, 47, 0.1);
+}
+
+.register-input.error,
+.register-select.error {
+  border-color: #ef4444;
+}
+
+.field-error {
+  font-size: calc(12px * var(--font-scale));
+  color: #ef4444;
+  margin: 0;
+}
+
+/* ── Submit Button ─────────────────────────────────────────── */
+.register-submit-btn {
+  width: 100%;
+  padding: 0.75rem;
+  background: var(--primary-color);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-family: var(--font-sans);
+  font-size: calc(15px * var(--font-scale));
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+  margin-top: 0.5rem;
+}
+
+.register-submit-btn:hover:not(:disabled) {
+  background: #0e162f;
+  transform: translateY(-1px);
+}
+
+.register-submit-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ── Error Banner ──────────────────────────────────────────── */
+.register-error-banner {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  font-size: calc(13px * var(--font-scale));
+  color: #dc2626;
+  text-align: center;
+}
+
+/* ── Success Banner ────────────────────────────────────────── */
+.register-success-banner {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  padding: 1rem;
+  font-size: calc(13px * var(--font-scale));
+  color: #166534;
+  text-align: center;
+  line-height: 1.6;
+}
+
+/* ── Login Link ────────────────────────────────────────────── */
+.register-login-link {
+  text-align: center;
+  font-size: calc(13px * var(--font-scale));
+  color: #64748b;
+  margin-top: 1.25rem;
+}
+
+.register-login-link a {
+  color: var(--primary-color);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.register-login-link a:hover {
+  text-decoration: underline;
+}
+
+/* ── Footer ────────────────────────────────────────────────── */
+.register-footer {
+  padding: 1rem;
+  text-align: center;
+  font-size: calc(12px * var(--font-scale));
+  color: #94a3b8;
+  border-top: 1px solid var(--border-color);
+}
