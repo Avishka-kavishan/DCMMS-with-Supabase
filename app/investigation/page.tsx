@@ -125,6 +125,20 @@ export default function InvestigationPage() {
       setInquiries(defaults);
     };
     fetchInquiries();
+
+    // Subscribe to real-time updates from Supabase
+    const channel = supabase
+      .channel("investigation-realtime-changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_cases" }, fetchInquiries)
+      .subscribe();
+
+    // Fallback: auto-refresh every 30 seconds
+    const interval = setInterval(fetchInquiries, 30_000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(interval);
+    };
   }, []);
 
   // Calendar Events State for widget
@@ -213,6 +227,20 @@ export default function InvestigationPage() {
       }
     };
     fetchWidgetEvents();
+
+    // Subscribe to real-time updates from Supabase
+    const channel = supabase
+      .channel("investigation-calendar-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_calendar_events" }, fetchWidgetEvents)
+      .subscribe();
+
+    // Fallback: auto-refresh every 30 seconds
+    const interval = setInterval(fetchWidgetEvents, 30_000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(interval);
+    };
   }, []);
 
   // Search state

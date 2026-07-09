@@ -177,6 +177,21 @@ export default function SubjectOfficerDashboard() {
       }
     };
     fetchCases();
+
+    // Subscribe to real-time updates from Supabase
+    const channel = supabase
+      .channel("subject-realtime-changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_cases" }, fetchCases)
+      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_letters" }, fetchCases)
+      .subscribe();
+
+    // Fallback: auto-refresh every 30 seconds
+    const interval = setInterval(fetchCases, 30_000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(interval);
+    };
   }, [profile, t]);
 
   // Search & filter state

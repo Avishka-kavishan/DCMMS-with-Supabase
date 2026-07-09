@@ -254,9 +254,21 @@ export default function AdminDashboard() {
 
     fetchCases();
 
-    // Auto-refresh every 30 seconds
+    // Subscribe to real-time updates from Supabase
+    const channel = supabase
+      .channel("admin-realtime-changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_cases" }, fetchCases)
+      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_letters" }, fetchCases)
+      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_profiles" }, fetchCases)
+      .subscribe();
+
+    // Fallback: auto-refresh every 30 seconds in case Realtime is not enabled/blocked
     const interval = setInterval(fetchCases, 30_000);
-    return () => clearInterval(interval);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(interval);
+    };
   }, []);
 
   // ── Derived stats ──────────────────────────────────────────────────────────

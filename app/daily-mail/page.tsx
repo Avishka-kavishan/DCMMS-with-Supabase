@@ -126,6 +126,20 @@ export default function DailyMailPage() {
       }
     };
     fetchLetters();
+
+    // Subscribe to real-time updates from Supabase
+    const channel = supabase
+      .channel("daily-mail-realtime-changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_letters" }, fetchLetters)
+      .subscribe();
+
+    // Fallback: auto-refresh every 30 seconds
+    const interval = setInterval(fetchLetters, 30_000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(interval);
+    };
   }, []);
 
   // Check for registration success flag on mount
