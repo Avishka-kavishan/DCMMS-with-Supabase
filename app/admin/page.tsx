@@ -21,7 +21,7 @@ import {
 } from "recharts";
 import "./admin.css";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
-import { signOut } from "@/lib/auth";
+import { signOut, getCurrentProfile } from "@/lib/auth";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface CaseRow {
@@ -165,8 +165,19 @@ export default function AdminDashboard() {
     let greetingKey = "greetingMorning";
     if (hour >= 12 && hour < 17) greetingKey = "greetingAfternoon";
     else if (hour >= 17 || hour < 5) greetingKey = "greetingEvening";
-    const firstName = t("adminName", "Aruni").split(" ")[0];
-    setGreeting(`${t(greetingKey, "Good Morning")}, ${firstName}!`);
+
+    const loadGreeting = async () => {
+      let displayName = t("adminName", "Aruni");
+      if (isSupabaseConfigured) {
+        const prof = await getCurrentProfile();
+        if (prof) {
+          displayName = prof.full_name;
+        }
+      }
+      const firstName = displayName.split(" ")[0];
+      setGreeting(`${t(greetingKey, "Good Morning")}, ${firstName}!`);
+    };
+    loadGreeting();
   }, [t]);
 
   // ── Fetch live data from Supabase ──────────────────────────────────────────

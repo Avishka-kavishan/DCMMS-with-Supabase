@@ -1,10 +1,12 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
+import { supabase } from "@/lib/supabase";
+import { getCurrentProfile, UserProfile } from "@/lib/auth";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
@@ -47,23 +49,53 @@ export const Sidebar: React.FC<SidebarProps> = ({
           ? "investigation"
           : "dailymail");
 
-  // Determine user information based on active role
-  let userName = t("welcomeUser");
-  let userEmail = t("profileEmail");
-  let userInitials = "NS";
+  // Dynamic profile state
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [userEmailState, setUserEmailState] = useState("");
 
-  if (activeRole === "admin") {
-    userName = t("adminName");
-    userEmail = t("adminEmail");
-    userInitials = "AR";
-  } else if (activeRole === "subject") {
-    userName = t("subjectName");
-    userEmail = t("subjectEmail");
-    userInitials = "NS";
-  } else if (activeRole === "investigation") {
-    userName = t("investigationName");
-    userEmail = t("investigationEmail");
-    userInitials = "SS";
+  useEffect(() => {
+    const loadProfile = async () => {
+      const prof = await getCurrentProfile();
+      if (prof) {
+        setProfile(prof);
+      }
+      
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.email) {
+        setUserEmailState(session.user.email);
+      }
+    };
+    loadProfile();
+  }, []);
+
+  // Determine user information based on active role & live profile session
+  let userName = profile?.full_name || t("welcomeUser");
+  let userEmail = userEmailState || t("profileEmail");
+  let userInitials = "U";
+
+  // If live profile session is not available, default back to localized role fallbacks
+  if (!profile) {
+    if (activeRole === "admin") {
+      userName = t("adminName");
+      userEmail = t("adminEmail");
+      userInitials = "AR";
+    } else if (activeRole === "subject") {
+      userName = t("subjectName");
+      userEmail = t("subjectEmail");
+      userInitials = "NS";
+    } else if (activeRole === "investigation") {
+      userName = t("investigationName");
+      userEmail = t("investigationEmail");
+      userInitials = "SS";
+    }
+  } else {
+    // Generate initials dynamically from the user's name
+    const parts = userName.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      userInitials = (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    } else if (parts.length === 1 && parts[0]) {
+      userInitials = parts[0].slice(0, 2).toUpperCase();
+    }
   }
 
   // Quick Action button based on active role

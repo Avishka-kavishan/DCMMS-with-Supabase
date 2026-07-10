@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { Sidebar } from "@/components/Sidebar";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
-import { signOut } from "@/lib/auth";
+import { signOut, getCurrentProfile } from "@/lib/auth";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
@@ -27,7 +27,7 @@ interface Letter {
   officerName?: string;
   subjectCategory?: string;
   instituteName?: string;
-  regionProvince?: "region" | "province";
+  regionProvince?: string;
 }
 
 export default function DailyMailPage() {
@@ -52,8 +52,19 @@ export default function DailyMailPage() {
     } else if (hour >= 17 || hour < 5) {
       greetingKey = "greetingEvening";
     }
-    const firstName = t("welcomeUser").split(" ")[0];
-    setGreeting(`${t(greetingKey)}, ${firstName}!`);
+
+    const loadGreeting = async () => {
+      let displayName = t("welcomeUser");
+      if (isSupabaseConfigured) {
+        const prof = await getCurrentProfile();
+        if (prof) {
+          displayName = prof.full_name;
+        }
+      }
+      const firstName = displayName.split(" ")[0];
+      setGreeting(`${t(greetingKey)}, ${firstName}!`);
+    };
+    loadGreeting();
   }, [t]);
 
   // Close sidebar on Escape key press (A11y compliance)

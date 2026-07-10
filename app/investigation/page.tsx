@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { Sidebar } from "@/components/Sidebar";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
-import { signOut } from "@/lib/auth";
+import { signOut, getCurrentProfile } from "@/lib/auth";
 
 interface Inquiry {
   id: string;
@@ -29,7 +29,7 @@ export default function InvestigationPage() {
   // Mobile sidebar visibility state
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  // Dynamic localized greeting based on time of day
+  // Dynamic localized greeting
   const [greeting, setGreeting] = useState("");
 
   useEffect(() => {
@@ -40,8 +40,19 @@ export default function InvestigationPage() {
     } else if (hour >= 17 || hour < 5) {
       greetingKey = "greetingEvening";
     }
-    const firstName = t("investigationName").split(" ")[0];
-    setGreeting(`${t(greetingKey)}, ${firstName}!`);
+
+    const loadGreeting = async () => {
+      let displayName = t("investigationName");
+      if (isSupabaseConfigured) {
+        const prof = await getCurrentProfile();
+        if (prof) {
+          displayName = prof.full_name;
+        }
+      }
+      const firstName = displayName.split(" ")[0];
+      setGreeting(`${t(greetingKey)}, ${firstName}!`);
+    };
+    loadGreeting();
   }, [t]);
 
   // Close sidebar on Escape key press (A11y compliance)
