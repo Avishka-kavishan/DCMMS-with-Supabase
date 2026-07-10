@@ -43,7 +43,6 @@ export async function getCurrentProfile(): Promise<UserProfile | null> {
       id: session.user.id,
       full_name: authFullName,
       role: authRole,
-      email: session.user.email,
     });
   } catch (err) {
     console.error("Auto-heal profile insertion failed:", err);

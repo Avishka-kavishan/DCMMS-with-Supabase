@@ -133,8 +133,8 @@ export default function DailyMailPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_letters" }, fetchLetters)
       .subscribe();
 
-    // Fallback: auto-refresh every 30 seconds
-    const interval = setInterval(fetchLetters, 30_000);
+    // Fallback: auto-refresh every 5 seconds
+    const interval = setInterval(fetchLetters, 5_000);
 
     return () => {
       supabase.removeChannel(channel);

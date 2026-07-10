@@ -132,8 +132,8 @@ export default function InvestigationPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_cases" }, fetchInquiries)
       .subscribe();
 
-    // Fallback: auto-refresh every 30 seconds
-    const interval = setInterval(fetchInquiries, 30_000);
+    // Fallback: auto-refresh every 5 seconds
+    const interval = setInterval(fetchInquiries, 5_000);
 
     return () => {
       supabase.removeChannel(channel);
@@ -234,8 +234,8 @@ export default function InvestigationPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_calendar_events" }, fetchWidgetEvents)
       .subscribe();
 
-    // Fallback: auto-refresh every 30 seconds
-    const interval = setInterval(fetchWidgetEvents, 30_000);
+    // Fallback: auto-refresh every 5 seconds
+    const interval = setInterval(fetchWidgetEvents, 5_000);
 
     return () => {
       supabase.removeChannel(channel);

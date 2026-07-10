@@ -1,4 +1,4 @@
-﻿const fs = require('fs');
+const fs = require('fs');
 const path = require('path');
 
 const envPath = path.join(__dirname, '.env.local');
@@ -34,9 +34,7 @@ async function run() {
     const { error: subProfError } = await supabase.from('dcmms_profiles').upsert({
       id: subData.user.id,
       full_name: 'Rathnaweera',
-      role: 'subject_officer',
-      email: 'avishkakavishan13@gmail.com',
-      status: 'Active'
+      role: 'subject_officer'
     });
     if (subProfError) throw subProfError;
     console.log('Subject Officer profile created/updated!');
@@ -57,9 +55,7 @@ async function run() {
     const { error: dmProfError } = await supabase.from('dcmms_profiles').upsert({
       id: dmData.user.id,
       full_name: 'Avishka',
-      role: 'daily_mail',
-      email: 'avishakavishan3@gmail.com',
-      status: 'Active'
+      role: 'daily_mail'
     });
     if (dmProfError) throw dmProfError;
     console.log('Daily Mail Officer profile created/updated!');

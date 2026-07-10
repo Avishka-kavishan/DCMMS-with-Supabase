@@ -147,9 +147,7 @@ export default function InvestigationOfficersPage() {
       try {
         const payload: any = {
           full_name: officer.fullName,
-          email: officer.email,
           role: "investigation_officer",
-          status: officer.status,
         };
         // Only include `id` for real UUID edits (not temp local ids starting with "inv-")
         if (!isNew && !officer.id.startsWith("inv-")) {
@@ -223,18 +221,7 @@ export default function InvestigationOfficersPage() {
   const handleToggleStatus = async (officer: Officer) => {
     const newStatus: "Active" | "Inactive" = officer.status === "Active" ? "Inactive" : "Active";
 
-    // 1. Update in Supabase
-    if (isSupabaseConfigured && !officer.id.startsWith("inv-")) {
-      try {
-        const { error } = await supabase
-          .from("dcmms_profiles")
-          .update({ status: newStatus })
-          .eq("id", officer.id);
-        if (error) throw error;
-      } catch (err: any) {
-        console.error("Supabase status update failed:", err?.message ?? err);
-      }
-    }
+
 
     // 2. Update localStorage
     if (typeof window !== "undefined") {

@@ -173,9 +173,7 @@ export default function DailyMailOfficersPage() {
         await supabase.from("dcmms_profiles").upsert({
           id: savedOfficer.id.startsWith("dm-") || savedOfficer.id.startsWith("default-") ? undefined : savedOfficer.id,
           full_name: savedOfficer.fullName,
-          email: savedOfficer.email,
           role: "daily_mail",
-          status: savedOfficer.status,
         });
       } catch (err) {
         console.warn("Could not upsert to Supabase. Falling back fully to localStorage.", err);
@@ -220,13 +218,7 @@ export default function DailyMailOfficersPage() {
     const newStatus: "Active" | "Inactive" = officer.status === "Active" ? "Inactive" : "Active";
     const updated: Officer = { ...officer, status: newStatus };
 
-    if (isSupabaseConfigured) {
-      try {
-        await supabase.from("dcmms_profiles").update({ status: newStatus }).eq("id", officer.id);
-      } catch (err) {
-        console.error("Failed to update status in Supabase", err);
-      }
-    }
+
 
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("dcmms_custom_profiles");

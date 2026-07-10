@@ -262,8 +262,8 @@ export default function AdminDashboard() {
       .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_profiles" }, fetchCases)
       .subscribe();
 
-    // Fallback: auto-refresh every 30 seconds in case Realtime is not enabled/blocked
-    const interval = setInterval(fetchCases, 30_000);
+    // Fallback: auto-refresh every 5 seconds in case Realtime is not enabled/blocked
+    const interval = setInterval(fetchCases, 5_000);
 
     return () => {
       supabase.removeChannel(channel);

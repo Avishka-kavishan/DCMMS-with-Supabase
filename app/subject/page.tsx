@@ -185,8 +185,8 @@ export default function SubjectOfficerDashboard() {
       .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_letters" }, fetchCases)
       .subscribe();
 
-    // Fallback: auto-refresh every 30 seconds
-    const interval = setInterval(fetchCases, 30_000);
+    // Fallback: auto-refresh every 3 seconds
+    const interval = setInterval(fetchCases, 3_000);
 
     return () => {
       supabase.removeChannel(channel);
