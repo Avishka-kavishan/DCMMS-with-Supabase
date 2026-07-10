@@ -108,7 +108,7 @@ function CaseDetailsForm() {
         if (isSupabaseConfigured) {
           try {
             const { data, error } = await supabase
-              .from("dcmms_letters")
+              .from("dcmms_daily_mail")
               .select("*")
               .eq("ref_no", caseNoParam)
               .single();
@@ -155,12 +155,12 @@ function CaseDetailsForm() {
           }
         }
 
-        // 3. Fetch subject details (from dcmms_new_letter_current_case and dcmms_officer_concerned)
+        // 3. Fetch subject details (from dcmms_subject_details and dcmms_concerned_officers)
         if (isSupabaseConfigured) {
           try {
             // Load subsequent mails for this case
             const { data: mailsData, error: mailsError } = await supabase
-              .from("dcmms_new_mail_current_case")
+              .from("dcmms_subsequent_mails")
               .select("*")
               .eq("case_no", caseNoParam);
 
@@ -180,7 +180,7 @@ function CaseDetailsForm() {
 
             // Load new letter actions history list
             const { data: actionsData, error: actionError } = await supabase
-              .from("dcmms_new_letter_current_case")
+              .from("dcmms_subject_details")
               .select("*")
               .eq("case_no", caseNoParam)
               .order("received_date", { ascending: false });
@@ -193,6 +193,7 @@ function CaseDetailsForm() {
                 reportState: d.report_state,
                 specialNotes: d.special_notes,
                 subjectOfficerName: d.subject_officer_name,
+                stepItem: d.step_taken, // map step_taken to stepItem just in case
                 stepTaken: d.step_taken,
               }));
               setPreviousActions(mapped);
@@ -211,7 +212,7 @@ function CaseDetailsForm() {
 
             // Load concerned officer details
             const { data: concernedData, error: concernedError } = await supabase
-              .from("dcmms_officer_concerned")
+              .from("dcmms_concerned_officers")
               .select("*")
               .eq("case_no", caseNoParam)
               .single();
@@ -326,7 +327,7 @@ function CaseDetailsForm() {
     if (isSupabaseConfigured) {
       try {
         await supabase
-          .from("dcmms_calendar_events")
+          .from("dcmms_calendar")
           .upsert({
             id: newEvent.id,
             summary: newEvent.summary,
@@ -359,16 +360,16 @@ function CaseDetailsForm() {
       try {
         // Ensure the case row exists (needed for FK constraint)
         await supabase
-          .from("dcmms_cases")
+          .from("dcmms_subject")
           .upsert({
             id: `case-${refNo}`,
             case_no: refNo,
             status: status || "In Progress",
           }, { onConflict: "case_no", ignoreDuplicates: true });
 
-        // Save action/letters details as a new row in dcmms_new_letter_current_case
+        // Save action/letters details as a new row in dcmms_subject_details
         const { error: actionError } = await supabase
-          .from("dcmms_new_letter_current_case")
+          .from("dcmms_subject_details")
           .insert({
             id: actionId,
             case_no: refNo,
@@ -384,7 +385,7 @@ function CaseDetailsForm() {
         // Save concerned officer details (if concerned is yes)
         if (isConcerned === "yes") {
           const { error: concernedError } = await supabase
-            .from("dcmms_officer_concerned")
+            .from("dcmms_concerned_officers")
             .upsert({
               id: `concerned-${refNo}`,
               case_no: refNo,
@@ -399,23 +400,23 @@ function CaseDetailsForm() {
             });
           if (concernedError) throw concernedError;
         } else {
-          // Delete from dcmms_officer_concerned if not concerned
+          // Delete from dcmms_concerned_officers if not concerned
           await supabase
-            .from("dcmms_officer_concerned")
+            .from("dcmms_concerned_officers")
             .delete()
             .eq("case_no", refNo);
         }
 
         // Update main case status
         const { data: caseData, error: fetchError } = await supabase
-          .from("dcmms_cases")
+          .from("dcmms_subject")
           .select("*")
           .eq("case_no", refNo)
           .single();
 
         if (!fetchError && caseData) {
           await supabase
-            .from("dcmms_cases")
+            .from("dcmms_subject")
             .upsert({
               ...caseData,
               status: status || caseData.status,

@@ -79,7 +79,7 @@ export default function DailyMailPage() {
       if (isSupabaseConfigured) {
         try {
           const { data, error } = await supabase
-            .from("dcmms_letters")
+            .from("dcmms_daily_mail")
             .select("*")
             .order("created_at", { ascending: false });
 
@@ -130,7 +130,7 @@ export default function DailyMailPage() {
     // Subscribe to real-time updates from Supabase
     const channel = supabase
       .channel("daily-mail-realtime-changes")
-      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_letters" }, fetchLetters)
+      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_daily_mail" }, fetchLetters)
       .subscribe();
 
     // Fallback: auto-refresh every 5 seconds

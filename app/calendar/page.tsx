@@ -62,7 +62,7 @@ export default function CalendarPage() {
     try {
       if (isSupabaseConfigured) {
         const { data, error } = await supabase
-          .from("dcmms_calendar_events")
+          .from("dcmms_calendar")
           .select("*")
           .order("start_time", { ascending: true });
 
@@ -274,7 +274,7 @@ export default function CalendarPage() {
 
       if (isSupabaseConfigured) {
         const { error } = await supabase
-          .from("dcmms_calendar_events")
+          .from("dcmms_calendar")
           .upsert({
             id: newId,
             summary: formSummary,

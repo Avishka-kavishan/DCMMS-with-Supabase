@@ -74,7 +74,7 @@ export default function InvestigationPage() {
       if (isSupabaseConfigured) {
         try {
           const { data, error } = await supabase
-            .from("dcmms_cases")
+            .from("dcmms_subject")
             .select("*")
             .order("case_no", { ascending: true });
 
@@ -129,7 +129,7 @@ export default function InvestigationPage() {
     // Subscribe to real-time updates from Supabase
     const channel = supabase
       .channel("investigation-realtime-changes")
-      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_cases" }, fetchInquiries)
+      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subject" }, fetchInquiries)
       .subscribe();
 
     // Fallback: auto-refresh every 5 seconds
@@ -150,7 +150,7 @@ export default function InvestigationPage() {
       if (isSupabaseConfigured) {
         try {
           const { data, error } = await supabase
-            .from("dcmms_calendar_events")
+            .from("dcmms_calendar")
             .select("*");
 
           if (!error && data) {
@@ -231,7 +231,7 @@ export default function InvestigationPage() {
     // Subscribe to real-time updates from Supabase
     const channel = supabase
       .channel("investigation-calendar-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_calendar_events" }, fetchWidgetEvents)
+      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_calendar" }, fetchWidgetEvents)
       .subscribe();
 
     // Fallback: auto-refresh every 5 seconds

@@ -110,7 +110,7 @@ export default function SubjectOfficerDashboard() {
           if (activeProfile) {
             // Fetch letters assigned to this officer
             const { data: letters, error: lettersError } = await supabase
-              .from("dcmms_letters")
+              .from("dcmms_daily_mail")
               .select("ref_no")
               .eq("officer_name", activeProfile.full_name);
 
@@ -119,8 +119,8 @@ export default function SubjectOfficerDashboard() {
             const assignedRefNos = letters ? letters.map((l: any) => l.ref_no) : [];
 
             if (assignedRefNos.length > 0) {
-              const { data: casesData, error: casesError } = await supabase
-                .from("dcmms_cases")
+               const { data: casesData, error: casesError } = await supabase
+                .from("dcmms_subject")
                 .select("*")
                 .in("case_no", assignedRefNos)
                 .order("case_no", { ascending: true });
@@ -181,8 +181,8 @@ export default function SubjectOfficerDashboard() {
     // Subscribe to real-time updates from Supabase
     const channel = supabase
       .channel("subject-realtime-changes")
-      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_cases" }, fetchCases)
-      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_letters" }, fetchCases)
+      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subject" }, fetchCases)
+      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_daily_mail" }, fetchCases)
       .subscribe();
 
     // Fallback: auto-refresh every 3 seconds

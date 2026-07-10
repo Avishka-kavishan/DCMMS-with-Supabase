@@ -137,7 +137,7 @@ function RegisterComplaintForm() {
       if (isSupabaseConfigured) {
         try {
           const { data, error } = await supabase
-            .from("dcmms_letters")
+            .from("dcmms_daily_mail")
             .select("*")
             .eq("id", id)
             .single();
@@ -234,7 +234,7 @@ function RegisterComplaintForm() {
         try {
           // Ensure the case row exists (needed for FK constraint) before inserting subsequent mail
           const { error: caseUpsertError } = await supabase
-            .from("dcmms_cases")
+            .from("dcmms_subject")
             .upsert({
               id: `case-${newLetter.refNo}`,
               case_no: newLetter.refNo,
@@ -249,7 +249,7 @@ function RegisterComplaintForm() {
           }
 
           const { error } = await supabase
-            .from("dcmms_new_mail_current_case")
+            .from("dcmms_subsequent_mails")
             .insert({
               id: newLetter.id,
               case_no: newLetter.refNo,
@@ -298,7 +298,7 @@ function RegisterComplaintForm() {
     if (isSupabaseConfigured) {
       try {
         const { data: upserted, error } = await supabase
-          .from("dcmms_letters")
+          .from("dcmms_daily_mail")
           .upsert({
             id: newLetter.id,
             ref_no: newLetter.refNo,
@@ -323,9 +323,9 @@ function RegisterComplaintForm() {
           throw error;
         }
 
-        // Also write corresponding case to dcmms_cases so it displays for the subject officer
+        // Also write corresponding case to dcmms_subject so it displays for the subject officer
         const { error: caseError } = await supabase
-          .from("dcmms_cases")
+          .from("dcmms_subject")
           .upsert({
             id: `case-${newLetter.refNo}`,
             case_no: newLetter.refNo,
@@ -433,7 +433,7 @@ function RegisterComplaintForm() {
     if (isSupabaseConfigured) {
       try {
         const { data: upsertedDraft, error } = await supabase
-          .from("dcmms_letters")
+          .from("dcmms_daily_mail")
           .upsert({
             id: draftLetter.id,
             ref_no: draftLetter.refNo,

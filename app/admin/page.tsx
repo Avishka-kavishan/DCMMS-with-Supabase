@@ -184,15 +184,15 @@ export default function AdminDashboard() {
         // ── Cases query (may fail if table doesn't exist yet) ──
         try {
           const { data, error } = await supabase
-            .from("dcmms_cases")
+            .from("dcmms_subject")
             .select("id, case_no, assigned_date, created_at, subject, priority, status")
             .order("created_at", { ascending: false });
 
           if (error) throw error;
 
-          // Build a lookup map from dcmms_letters to resolve which officer is assigned
+          // Build a lookup map from dcmms_daily_mail to resolve which officer is assigned
           const { data: letterLookup } = await supabase
-            .from("dcmms_letters")
+            .from("dcmms_daily_mail")
             .select("ref_no, officer_name");
           const officerMap: Record<string, string> = {};
           if (letterLookup) {
@@ -228,7 +228,7 @@ export default function AdminDashboard() {
         // ── Officer stats query (independent of cases) ──
         try {
           const { data: profiles } = await supabase.from("dcmms_profiles").select("*");
-          const { data: lettersData } = await supabase.from("dcmms_letters").select("officer_name");
+          const { data: lettersData } = await supabase.from("dcmms_daily_mail").select("officer_name");
 
           if (profiles) {
             const stats: OfficerStat[] = profiles.map((p: any) => {
@@ -257,8 +257,8 @@ export default function AdminDashboard() {
     // Subscribe to real-time updates from Supabase
     const channel = supabase
       .channel("admin-realtime-changes")
-      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_cases" }, fetchCases)
-      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_letters" }, fetchCases)
+      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subject" }, fetchCases)
+      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_daily_mail" }, fetchCases)
       .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_profiles" }, fetchCases)
       .subscribe();
 
