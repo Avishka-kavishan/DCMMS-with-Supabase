@@ -31,6 +31,12 @@ function RegisterComplaintForm() {
     "Aruni Rajapaksha",
   ]);
 
+  const [instituteOptions, setInstituteOptions] = useState<string[]>([
+    "Zonal Office - Kandy",
+    "Royal College, Colombo 07",
+    "Zonal Education Office, Jaffna",
+  ]);
+
   // Mobile sidebar visibility state
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
@@ -58,7 +64,7 @@ function RegisterComplaintForm() {
     document.title = `${isEditMode ? t("editLetterTitle", "Edit Letter") : isSubsequentMode ? t("addSubsequentMailTitle", "Add Subsequent Mail") : t("registerComplaintTitle")} | DCMMS`;
   }, [lang, t, isEditMode, isSubsequentMode]);
 
-  // Load subject officers on mount
+  // Load subject officers and institutes on mount
   useEffect(() => {
     const loadOfficers = async () => {
       const namesSet = new Set<string>([
@@ -104,7 +110,49 @@ function RegisterComplaintForm() {
       setOfficerOptions(Array.from(namesSet));
     };
 
+    const loadInstitutes = async () => {
+      const namesSet = new Set<string>([
+        "Zonal Office - Kandy",
+        "Royal College, Colombo 07",
+        "Zonal Education Office, Jaffna",
+      ]);
+
+      // 1. Load from Supabase
+      if (isSupabaseConfigured) {
+        try {
+          const { data, error } = await supabase
+            .from("dcmms_institutes")
+            .select("name");
+          if (!error && data) {
+            data.forEach((d: any) => {
+              if (d.name) namesSet.add(d.name);
+            });
+          }
+        } catch (e) {
+          console.error("Failed to load institutes from Supabase", e);
+        }
+      }
+
+      // 2. Load from localStorage custom institutes
+      if (typeof window !== "undefined") {
+        const stored = localStorage.getItem("dcmms_institutes");
+        if (stored) {
+          try {
+            const list = JSON.parse(stored);
+            list.forEach((inst: any) => {
+              if (inst.name) namesSet.add(inst.name);
+            });
+          } catch (e) {
+            console.error("Failed to load custom institutes from localStorage", e);
+          }
+        }
+      }
+
+      setInstituteOptions(Array.from(namesSet));
+    };
+
     loadOfficers();
+    loadInstitutes();
   }, []);
 
   const changeLanguage = (lng: string) => {
@@ -694,7 +742,7 @@ function RegisterComplaintForm() {
 
                 <form onSubmit={handleSubmit} className="register-grid-form">
                   
-                  {/* Column 1 */}
+                  {/* Row 1 - Column 1: Case No. */}
                   <div className="form-field-group">
                     <label htmlFor="letterNo" className="field-label">{t("letterNo")}</label>
                     <input
@@ -707,7 +755,7 @@ function RegisterComplaintForm() {
                     />
                   </div>
 
-                  {/* Column 2 */}
+                  {/* Row 1 - Column 2: Name of Sender * */}
                   <div className="form-field-group">
                     <label htmlFor="senderName" className="field-label">{t("senderName")} <span className="required-star">*</span></label>
                     <input
@@ -721,119 +769,7 @@ function RegisterComplaintForm() {
                     />
                   </div>
 
-                  {/* Column 3 */}
-                  <div className="form-field-group">
-                    <label htmlFor="letterType" className="field-label">{t("letterType")}</label>
-                    <input
-                      id="letterType"
-                      type="text"
-                      value={formState.letterType}
-                      onChange={(e) => setFormState({ ...formState, letterType: e.target.value })}
-                      placeholder={t("placeholderLetterType")}
-                      className="field-input"
-                    />
-                  </div>
-
-                  {/* Row 2 - Column 1 */}
-                  <div className="form-field-group">
-                    <label htmlFor="officerName" className="field-label">{t("nameOfOfficer")}</label>
-                    <select
-                      id="officerName"
-                      value={formState.officerName}
-                      onChange={(e) => setFormState({ ...formState, officerName: e.target.value })}
-                      className="field-select"
-                    >
-                      <option value="">{t("selectRole")}</option>
-                      {officerOptions.map((opt) => (
-                        <option key={opt} value={opt}>
-                          {opt}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Row 2 - Column 2 */}
-                  <div className="form-field-group">
-                    <label htmlFor="subjectCategory" className="field-label">{t("subjectCategory")} <span className="required-star">*</span></label>
-                    <select
-                      id="subjectCategory"
-                      required
-                      value={formState.subjectCategory}
-                      onChange={(e) => setFormState({ ...formState, subjectCategory: e.target.value })}
-                      className="field-select"
-                    >
-                      <option value="">{t("selectRole")}</option>
-                      <option value="Student Misconduct">{t("optStudentMisconduct")}</option>
-                      <option value="Teacher Absenteeism">{t("optTeacherAbsenteeism")}</option>
-                      <option value="Financial Mismanagement">{t("optFinancialMismanagement")}</option>
-                      <option value="Administrative Issues">{t("optAdministrativeIssues")}</option>
-                      <option value="Other">{t("optOther")}</option>
-                    </select>
-                  </div>
-
-                  {/* Row 2 - Column 3 */}
-                  <div className="form-field-group">
-                    <label htmlFor="instituteName" className="field-label">{t("instituteName")}</label>
-                    <div className="input-icon-wrapper">
-                      <svg className="input-left-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                      </svg>
-                      <input
-                        id="instituteName"
-                        type="text"
-                        value={formState.instituteName}
-                        onChange={(e) => setFormState({ ...formState, instituteName: e.target.value })}
-                        placeholder={t("placeholderInstituteName")}
-                        className="field-input input-with-left-icon"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Row 3 - Column 1 */}
-                  <div className="form-field-group">
-                    <label htmlFor="refNo" className="field-label">{t("refNo")} <span className="required-star">*</span></label>
-                    <input
-                      id="refNo"
-                      type="text"
-                      required
-                      value={formState.refNo}
-                      onChange={(e) => setFormState({ ...formState, refNo: e.target.value })}
-                      placeholder={t("refPlaceholder")}
-                      className="field-input"
-                      readOnly={isSubsequentMode}
-                    />
-                  </div>
-
-                  {/* Row 3 - Column 2 */}
-                  <div className="form-field-group">
-                    <label htmlFor="letterDate" className="field-label">{t("letterDate")}</label>
-                    <div className="input-icon-wrapper">
-                      <input
-                        id="letterDate"
-                        type="date"
-                        value={formState.letterDate}
-                        onChange={(e) => setFormState({ ...formState, letterDate: e.target.value })}
-                        className="field-input input-with-right-icon"
-                      />
-                      <svg className="input-right-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                    </div>
-                  </div>
-
-                  {/* Row 3 - Column 3 (Spans 2 rows) */}
-                  <div className="form-field-group grid-row-span-2">
-                    <label htmlFor="subject" className="field-label">{t("letterTitle")}</label>
-                    <textarea
-                      id="subject"
-                      value={formState.subject}
-                      onChange={(e) => setFormState({ ...formState, subject: e.target.value })}
-                      placeholder={t("subjectPlaceholder")}
-                      className="field-textarea"
-                    />
-                  </div>
-
-                  {/* Row 4 - Column 1 */}
+                  {/* Row 1 - Column 3: Region/Province */}
                   <div className="form-field-group">
                     <span className="field-label">{t("regionProvince")}</span>
                     <div className="radio-group-container">
@@ -864,7 +800,122 @@ function RegisterComplaintForm() {
                     </div>
                   </div>
 
-                  {/* Row 4 - Column 2 */}
+                  {/* Row 2 - Column 1: Name of Subject Officer */}
+                  <div className="form-field-group">
+                    <label htmlFor="officerName" className="field-label">{t("nameOfOfficer")}</label>
+                    <select
+                      id="officerName"
+                      value={formState.officerName}
+                      onChange={(e) => setFormState({ ...formState, officerName: e.target.value })}
+                      className="field-select"
+                    >
+                      <option value="">{t("selectSubjectOfficer", "Select Subject Officer")}</option>
+                      {officerOptions.map((opt) => (
+                        <option key={opt} value={opt}>
+                          {opt}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Row 2 - Column 2: Subject Category * */}
+                  <div className="form-field-group">
+                    <label htmlFor="subjectCategory" className="field-label">{t("subjectCategory")} <span className="required-star">*</span></label>
+                    <select
+                      id="subjectCategory"
+                      required
+                      value={formState.subjectCategory}
+                      onChange={(e) => setFormState({ ...formState, subjectCategory: e.target.value })}
+                      className="field-select"
+                    >
+                      <option value="">{t("selectRole")}</option>
+                      <option value="Student Misconduct">{t("optStudentMisconduct")}</option>
+                      <option value="Teacher Absenteeism">{t("optTeacherAbsenteeism")}</option>
+                      <option value="Financial Mismanagement">{t("optFinancialMismanagement")}</option>
+                      <option value="Administrative Issues">{t("optAdministrativeIssues")}</option>
+                      <option value="Other">{t("optOther")}</option>
+                    </select>
+                  </div>
+
+                  {/* Row 2 - Column 3: Letter Type */}
+                  <div className="form-field-group">
+                    <label htmlFor="letterType" className="field-label">{t("letterType")}</label>
+                    <input
+                      id="letterType"
+                      type="text"
+                      value={formState.letterType}
+                      onChange={(e) => setFormState({ ...formState, letterType: e.target.value })}
+                      placeholder={t("placeholderLetterType")}
+                      className="field-input"
+                    />
+                  </div>
+
+                  {/* Row 3 - Column 1: Reference Number * */}
+                  <div className="form-field-group">
+                    <label htmlFor="refNo" className="field-label">{t("refNo")} <span className="required-star">*</span></label>
+                    <input
+                      id="refNo"
+                      type="text"
+                      required
+                      value={formState.refNo}
+                      onChange={(e) => setFormState({ ...formState, refNo: e.target.value })}
+                      placeholder={t("refPlaceholder")}
+                      className="field-input"
+                      readOnly={isSubsequentMode}
+                    />
+                  </div>
+
+                  {/* Row 3 - Column 2: Letter Date. */}
+                  <div className="form-field-group">
+                    <label htmlFor="letterDate" className="field-label">{t("letterDate")}</label>
+                    <div className="input-icon-wrapper">
+                      <input
+                        id="letterDate"
+                        type="date"
+                        value={formState.letterDate}
+                        onChange={(e) => setFormState({ ...formState, letterDate: e.target.value })}
+                        className="field-input input-with-right-icon"
+                      />
+                      <svg className="input-right-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                  </div>
+
+                  {/* Row 3 - Column 3: Institute Name */}
+                  <div className="form-field-group">
+                    <label htmlFor="instituteName" className="field-label">{t("instituteName")}</label>
+                    <select
+                      id="instituteName"
+                      value={formState.instituteName}
+                      onChange={(e) => setFormState({ ...formState, instituteName: e.target.value })}
+                      className="field-select"
+                    >
+                      <option value="">{t("selectInstitute", "Select Institute")}</option>
+                      {instituteOptions.map((opt) => (
+                        <option key={opt} value={opt}>
+                          {opt}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Row 4 - Column 1: Priority */}
+                  <div className="form-field-group">
+                    <label htmlFor="priority" className="field-label">{t("priority")}</label>
+                    <select
+                      id="priority"
+                      value={formState.priority}
+                      onChange={(e) => setFormState({ ...formState, priority: e.target.value as "high" | "medium" | "low" })}
+                      className="field-select"
+                    >
+                      <option value="high">{t("priorityHigh")}</option>
+                      <option value="medium">{t("priorityMedium")}</option>
+                      <option value="low">{t("priorityLow")}</option>
+                    </select>
+                  </div>
+
+                  {/* Row 4 - Column 2: Received Date */}
                   <div className="form-field-group">
                     <label htmlFor="receivedDate" className="field-label">{t("receivedDate")}</label>
                     <div className="input-icon-wrapper">
@@ -879,6 +930,19 @@ function RegisterComplaintForm() {
                         <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>
                     </div>
+                  </div>
+
+                  {/* Row 4 - Column 3: Letter Title */}
+                  <div className="form-field-group">
+                    <label htmlFor="subject" className="field-label">{t("letterTitle")}</label>
+                    <input
+                      id="subject"
+                      type="text"
+                      value={formState.subject}
+                      onChange={(e) => setFormState({ ...formState, subject: e.target.value })}
+                      placeholder={t("subjectPlaceholder")}
+                      className="field-input"
+                    />
                   </div>
 
                   {/* Form Action Buttons */}

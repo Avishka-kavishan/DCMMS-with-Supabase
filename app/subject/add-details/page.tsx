@@ -762,7 +762,7 @@ function CaseDetailsForm() {
                       </div>
                       {letterData.letterNo && (
                         <div className="complaint-detail-item">
-                          <span className="complaint-detail-label">{t("letterNo", "Letter No")}:</span>
+                          <span className="complaint-detail-label">{t("letterNo", "Case No")}:</span>
                           <span className="complaint-detail-value">{letterData.letterNo}</span>
                         </div>
                       )}
@@ -827,7 +827,7 @@ function CaseDetailsForm() {
                       )}
                       {mail.officerName && (
                         <div className="complaint-detail-item">
-                          <span className="complaint-detail-label">{t("nameOfOfficer", "Name of Officer")}:</span>
+                          <span className="complaint-detail-label">{t("nameOfOfficer", "Name of Subject officer")}:</span>
                           <span className="complaint-detail-value">{mail.officerName}</span>
                         </div>
                       )}
