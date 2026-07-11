@@ -346,3 +346,50 @@
     margin-top: 12px;
   }
 }
+
+/* ============================================================
+   CURRENT CASE DETAILS CONTAINER CARD STYLES
+   ============================================================ */
+.current-case-details-card {
+  background-color: #f1f5f9;
+  border-radius: 8px;
+  padding: 24px 32px;
+  border: 1px solid #e2e8f0;
+}
+
+.case-details-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+@media (min-width: 768px) {
+  .case-details-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px 40px;
+  }
+}
+
+.case-details-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.case-detail-item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: calc(13px * var(--font-scale));
+}
+
+.detail-label {
+  font-weight: 700;
+  color: #0e162f;
+  white-space: nowrap;
+}
+
+.detail-value {
+  color: #0e162f;
+  font-weight: 500;
+}

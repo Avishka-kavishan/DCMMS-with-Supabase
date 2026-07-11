@@ -24,6 +24,18 @@ function RegisterComplaintForm() {
 
   const [isEditMode, setIsEditMode] = useState(false);
   const [isSubsequentMode, setIsSubsequentMode] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+  const [currentCaseDetails, setCurrentCaseDetails] = useState<{
+    letterNo: string;
+    officerName: string;
+    refNo: string;
+    priority: string;
+    receivedDate: string;
+    letterType: string;
+  } | null>(null);
 
   const [officerOptions, setOfficerOptions] = useState<string[]>([
     "Kamal Perera",
@@ -61,7 +73,7 @@ function RegisterComplaintForm() {
   // Sync document properties
   useEffect(() => {
     document.documentElement.lang = lang;
-    document.title = `${isEditMode ? t("editLetterTitle", "Edit Letter") : isSubsequentMode ? t("addSubsequentMailTitle", "Add Subsequent Mail") : t("registerComplaintTitle")} | DCMMS`;
+    document.title = `${isEditMode ? t("editLetterTitle", "Edit Letter") : isSubsequentMode ? t("registerLetterForCurrentComplaintTitle", "Register New Letter for Current Complaint") : t("registerComplaintTitle")} | DCMMS`;
   }, [lang, t, isEditMode, isSubsequentMode]);
 
   // Load subject officers and institutes on mount
@@ -175,6 +187,60 @@ function RegisterComplaintForm() {
         ...prev,
         refNo: caseNo,
       }));
+
+      const fetchCurrentCase = async () => {
+        if (isSupabaseConfigured) {
+          try {
+            const { data, error } = await supabase
+              .from("dcmms_daily_mail")
+              .select("*")
+              .eq("ref_no", caseNo)
+              .order("created_at", { ascending: true });
+
+            if (!error && data && data.length > 0) {
+              const originalMail = data[0];
+              setCurrentCaseDetails({
+                letterNo: originalMail.letter_no || "—",
+                officerName: originalMail.officer_name || "—",
+                refNo: originalMail.ref_no || "—",
+                priority: originalMail.priority || "medium",
+                receivedDate: originalMail.received_date || "—",
+                letterType: originalMail.letter_type || "—",
+              });
+              return;
+            }
+          } catch (e) {
+            console.error("Failed to load current case details from Supabase", e);
+          }
+        }
+
+        // Fallback to localStorage
+        if (typeof window !== "undefined") {
+          try {
+            const stored = localStorage.getItem("dcmms_letters");
+            if (stored) {
+              const list = JSON.parse(stored);
+              const matchingMails = list.filter((item: any) => item.refNo === caseNo);
+              if (matchingMails.length > 0) {
+                // Select oldest matching letter from the list
+                const originalMail = matchingMails[matchingMails.length - 1];
+                setCurrentCaseDetails({
+                  letterNo: originalMail.letterNo || "—",
+                  officerName: originalMail.officerName || "—",
+                  refNo: originalMail.refNo || "—",
+                  priority: originalMail.priority || "medium",
+                  receivedDate: originalMail.receivedDate || "—",
+                  letterType: originalMail.letterType || "—",
+                });
+              }
+            }
+          } catch (e) {
+            console.error("Failed to parse local storage letters", e);
+          }
+        }
+      };
+
+      fetchCurrentCase();
       return;
     }
 
@@ -551,6 +617,9 @@ function RegisterComplaintForm() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
+  if (!mounted) {
+    return <div className="dashboard-container" style={{ minHeight: "100vh", opacity: 0 }}></div>;
+  }
 
   return (
     <div className="dashboard-container" data-font-scale={fontScale}>
@@ -695,7 +764,11 @@ function RegisterComplaintForm() {
               <div className="register-header-container">
                 <div className="register-header-left">
                   <h1 className="register-title">
-                    {isEditMode ? t("editLetterTitle", "Edit Letter") : t("registerComplaintTitle")}
+                    {isEditMode 
+                      ? t("editLetterTitle", "Edit Letter") 
+                      : isSubsequentMode 
+                        ? t("registerLetterForCurrentComplaintTitle", "Register New Letter for Current Complaint") 
+                        : t("registerComplaintTitle")}
                   </h1>
                   <p className="register-subtitle">
                     {isEditMode ? t("editLetterDesc", "Update the saved letter details and save changes.") : t("registerComplaintDesc")}
@@ -730,6 +803,48 @@ function RegisterComplaintForm() {
                   </button>
                 </div>
               </div>
+
+              {/* Case details summary box for subsequent mail */}
+              {isSubsequentMode && currentCaseDetails && (
+                <div className="current-case-details-card">
+                  <div className="case-details-grid">
+                    <div className="case-details-column">
+                      <div className="case-detail-item">
+                        <span className="detail-label">{t("caseNoLabel", "Case No. :")}</span>
+                        <span className="detail-value">{currentCaseDetails.letterNo}</span>
+                      </div>
+                      <div className="case-detail-item">
+                        <span className="detail-label">{t("priorityLabel", "Priority :")}</span>
+                        <span className="detail-value">
+                          {t(`priority${currentCaseDetails.priority.charAt(0).toUpperCase() + currentCaseDetails.priority.slice(1)}`, currentCaseDetails.priority)}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    <div className="case-details-column">
+                      <div className="case-detail-item">
+                        <span className="detail-label">{t("officerNameLabel", "Name of Subject Officer :")}</span>
+                        <span className="detail-value">{currentCaseDetails.officerName}</span>
+                      </div>
+                      <div className="case-detail-item">
+                        <span className="detail-label">{t("receivedDateLabel", "Received Date :")}</span>
+                        <span className="detail-value">{currentCaseDetails.receivedDate}</span>
+                      </div>
+                    </div>
+                    
+                    <div className="case-details-column">
+                      <div className="case-detail-item">
+                        <span className="detail-label">{t("refNoLabel", "Reference Number :")}</span>
+                        <span className="detail-value">{currentCaseDetails.refNo}</span>
+                      </div>
+                      <div className="case-detail-item">
+                        <span className="detail-label">{t("letterTypeLabel", "Letter Type :")}</span>
+                        <span className="detail-value">{currentCaseDetails.letterType}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Form entries section */}
               <div className="entries-container">
