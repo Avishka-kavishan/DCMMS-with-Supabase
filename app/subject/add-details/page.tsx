@@ -726,70 +726,43 @@ function CaseDetailsForm() {
                 </div>
 
                 {letterData && (
-                  <div className="registered-complaint-card">
-                    <h2 className="card-title-header">
-                      <svg className="card-title-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 19v-8.93a2 2 0 01.89-1.664l8-5.333a2 2 0 012.22 0l8 5.333A2 2 0 0121 10.07V19M3 19a2 2 0 002 2h14a2 2 0 002-2M3 19l6.75-4.5M21 19l-6.75-4.5M3 10l6.75 4.5M21 10l-6.75 4.5m0 0l-2.25-1.5a2 2 0 00-2.22 0l-2.25 1.5" />
-                      </svg>
-                      {t("registeredComplaintDetails", "Registered Complaint Details (Daily Mail Officer Form)")}
-                    </h2>
-                    <div className="complaint-details-grid">
-                      <div className="complaint-detail-item">
-                        <span className="complaint-detail-label">{t("refNo", "Reference Number")}:</span>
-                        <span className="complaint-detail-value font-semibold">{letterData.refNo}</span>
-                      </div>
-                      <div className="complaint-detail-item">
-                        <span className="complaint-detail-label">{t("senderName", "Sender Name")}:</span>
-                        <span className="complaint-detail-value">{letterData.senderName}</span>
-                      </div>
-                      <div className="complaint-detail-item">
-                        <span className="complaint-detail-label">{t("letterDate", "Letter Date")}:</span>
-                        <span className="complaint-detail-value">{letterData.letterDate}</span>
-                      </div>
-                      <div className="complaint-detail-item">
-                        <span className="complaint-detail-label">{t("receivedDate", "Received Date")}:</span>
-                        <span className="complaint-detail-value">{letterData.receivedDate}</span>
-                      </div>
-                      <div className="complaint-detail-item">
-                        <span className="complaint-detail-label">{t("subject", "Subject")}:</span>
-                        <span className="complaint-detail-value">{letterData.subject}</span>
-                      </div>
-                      <div className="complaint-detail-item">
-                        <span className="complaint-detail-label">{t("priority", "Priority")}:</span>
-                        <span className={`priority-badge-${letterData.priority?.toLowerCase() || "medium"}`}>
-                          {t(letterData.priority || "Medium")}
-                        </span>
-                      </div>
-                      {letterData.letterNo && (
-                        <div className="complaint-detail-item">
-                          <span className="complaint-detail-label">{t("letterNo", "Case No")}:</span>
-                          <span className="complaint-detail-value">{letterData.letterNo}</span>
+                  <div className="current-case-details-card">
+                    <h3 className="current-details-title">{t("currentDetails", "Current details")}</h3>
+                    <div className="case-details-grid">
+                      <div className="case-details-column">
+                        <div className="case-detail-item">
+                          <span className="detail-label">{t("caseNoLabel", "Case No. :")}</span>
+                          <span className="detail-value">{letterData.letterNo || ""}</span>
                         </div>
-                      )}
-                      {letterData.letterType && (
-                        <div className="complaint-detail-item">
-                          <span className="complaint-detail-label">{t("letterType", "Letter Type")}:</span>
-                          <span className="complaint-detail-value">{t(letterData.letterType)}</span>
+                        <div className="case-detail-item">
+                          <span className="detail-label">{t("priorityLabel", "Priority :")}</span>
+                          <span className="detail-value">
+                            {letterData.priority ? (t(`priority${letterData.priority.charAt(0).toUpperCase() + letterData.priority.slice(1).toLowerCase()}`, letterData.priority) as string) : ""}
+                          </span>
                         </div>
-                      )}
-                      {letterData.subjectCategory && (
-                        <div className="complaint-detail-item">
-                          <span className="complaint-detail-label">{t("subjectCategory", "Subject Category")}:</span>
-                          <span className="complaint-detail-value">{t(letterData.subjectCategory)}</span>
+                      </div>
+                      <div className="case-details-column">
+                        <div className="case-detail-item">
+                          <span className="detail-label">{t("officerNameLabel", "Name of Subject Officer :")}</span>
+                          <span className="detail-value">{letterData.officerName || ""}</span>
                         </div>
-                      )}
-                      {letterData.instituteName && (
-                        <div className="complaint-detail-item">
-                          <span className="complaint-detail-label">{t("educationalInstitute", "Educational Institute")}:</span>
-                          <span className="complaint-detail-value">{letterData.instituteName}</span>
+                        <div className="case-detail-item">
+                          <span className="detail-label">{t("receivedDateLabel", "Received Date :")}</span>
+                          <span className="detail-value">{letterData.receivedDate || ""}</span>
                         </div>
-                      )}
-                      {letterData.regionProvince && (
-                        <div className="complaint-detail-item">
-                          <span className="complaint-detail-label">{t("province", "Province")}:</span>
-                          <span className="complaint-detail-value">{t(letterData.regionProvince)}</span>
+                      </div>
+                      <div className="case-details-column">
+                        <div className="case-detail-item">
+                          <span className="detail-label">{t("refNoLabel", "Reference Number :")}</span>
+                          <span className="detail-value">{letterData.refNo || ""}</span>
                         </div>
-                      )}
+                        <div className="case-detail-item">
+                          <span className="detail-label">{t("letterTypeLabel", "Letter Type :")}</span>
+                          <span className="detail-value">
+                            {letterData.letterType ? t(letterData.letterType) : ""}
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}
