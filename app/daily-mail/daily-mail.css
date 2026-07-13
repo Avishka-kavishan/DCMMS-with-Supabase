@@ -836,6 +836,16 @@
   color: #475569;
 }
 
+.badge-status-closed {
+  background-color: #dcfce7;
+  color: #166534;
+}
+
+.badge-status-inprogress {
+  background-color: #dbeafe;
+  color: #1e40af;
+}
+
 .actions-cell {
   white-space: nowrap;
 }

@@ -717,3 +717,22 @@
   color: #0e162f;
   font-weight: 500;
 }
+
+/* ============================================================
+   SUBSEQUENT LETTERS TABLE CARD STYLES
+   ============================================================ */
+.subsequent-letters-table-card {
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.subsequent-table th,
+.subsequent-table td {
+  font-size: calc(13px * var(--font-scale, 1));
+}

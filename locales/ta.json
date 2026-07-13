@@ -38,6 +38,9 @@
   "assignedCases": "ஒதுக்கப்பட்ட வழக்குகள்",
   "searchCasesPlaceholder": "வழக்குகளைத் தேடு...",
   "statusInProgress": "நடைபெறும்",
+  "caseAge": "வழக்கு நிலை (புதிய/பழைய)",
+  "newCase": "புதிய வழக்கு",
+  "oldCase": "பழைய வழக்கு",
 
   "investigationDashboardTitle": "விசாரணை அதிகாரி டாஷ்போர்டு",
   "investigationDashboardDesc": "விசாரணைகளை நடத்துங்கள், ஆதாரங்களை சேகரிக்கவும் மற்றும் அறிக்கைகளை தொகுக்கவும்",
@@ -122,6 +125,7 @@
   "addSubjectDetailsTitle": "தற்போதைய வழக்கிற்கான விடய விபரங்களைச் சேர்க்கவும்",
   "addSubjectDetailsDesc": "பெறப்பட்ட கடிதத்தின் பொதுவான விபரங்களை உள்ளிடவும்.",
   "currentDetails": "தற்போதைய விபரங்கள்",
+  "subsequentMailReceivedTable": "வழக்கிற்குப் பெறப்பட்ட அடுத்தடுத்த கடிதங்கள்",
   "subjectOfficerLabel": "விடய உத்தியோகத்தர்",
   "reportState": "அறிக்கை நிலை",
   "stepTaken": "மேற்கொள்ளப்பட்ட நடவடிக்கை",

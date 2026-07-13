@@ -115,8 +115,22 @@ export default function DailyMailPage() {
               regionProvince: db.region_province || "",
             }));
             setLetters(mapped);
-            return;
           }
+
+          // Also fetch which cases have subject officer actions (dcmms_subject_details)
+          try {
+            const { data: detailsData, error: detailsError } = await supabase
+              .from("dcmms_subject_details")
+              .select("case_no");
+
+            if (!detailsError && detailsData) {
+              setCasesWithDetails(new Set(detailsData.map((d: any) => d.case_no)));
+            }
+          } catch (e) {
+            console.error("Failed to fetch subject details status", e);
+          }
+
+          return;
         } catch (err) {
           console.error("Supabase letters fetch error, falling back to local storage:", err);
         }
@@ -134,6 +148,19 @@ export default function DailyMailPage() {
         } else {
           setLetters([]);
         }
+
+        // Also check local storage for subject details
+        const storedActions = localStorage.getItem("dcmms_new_letter_current_case");
+        if (storedActions) {
+          try {
+            const actionsList = JSON.parse(storedActions);
+            if (Array.isArray(actionsList)) {
+              setCasesWithDetails(new Set(actionsList.map((a: any) => a.caseNo)));
+            }
+          } catch (e) {
+            console.error("Error parsing stored actions", e);
+          }
+        }
       }
     };
     fetchLetters();
@@ -142,6 +169,7 @@ export default function DailyMailPage() {
     const channel = supabase
       .channel("daily-mail-realtime-changes")
       .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_daily_mail" }, fetchLetters)
+      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subject_details" }, fetchLetters)
       .subscribe();
 
     // Fallback: auto-refresh every 5 seconds
@@ -170,6 +198,7 @@ export default function DailyMailPage() {
 
   // Letters listing state (initially empty, loaded from database)
   const [letters, setLetters] = useState<Letter[]>([]);
+  const [casesWithDetails, setCasesWithDetails] = useState<Set<string>>(new Set());
 
   // Search & filter state
   const [searchQuery, setSearchQuery] = useState("");
@@ -452,6 +481,7 @@ export default function DailyMailPage() {
                     <th scope="col">{t("subjectCategory")}</th>
                     <th scope="col">{t("nameOfOfficer")}</th>
                     <th scope="col">{t("letterTitle")}</th>
+                    <th scope="col">{t("subjectOfficerStatusCol", "Subject Officer Status")}</th>
                     <th scope="col" className="text-center">{t("edit", "Edit")}</th>
                   </tr>
                 </thead>
@@ -492,6 +522,11 @@ export default function DailyMailPage() {
                           )}
                         </td>
                         <td className="subject-cell">{letter.subject}</td>
+                        <td>
+                          <span className={`badge-badge ${casesWithDetails.has(letter.refNo) ? "badge-status-closed" : "badge-status-pending"}`}>
+                            {casesWithDetails.has(letter.refNo) ? t("detailsAdded", "Details Added") : t("pendingDetails", "Pending")}
+                          </span>
+                        </td>
                         <td className="text-center actions-cell">
                           <button
                             className="btn-action-view"
@@ -519,7 +554,7 @@ export default function DailyMailPage() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={8} className="empty-table-state-cell">
+                      <td colSpan={9} className="empty-table-state-cell">
                         <div className="empty-state-card">
                           <svg className="empty-state-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M3 19v-8.93a2 2 0 01.89-1.664l8-5.333a2 2 0 012.22 0l8 5.333A2 2 0 0121 10.07V19M3 19a2 2 0 002-2h14a2 2 0 002-2M3 19l6.75-4.5M21 19l-6.75-4.5M3 10l6.75 4.5M21 10l-6.75 4.5m0 0l-2.25-1.5a2 2 0 00-2.22 0l-2.25 1.5" />

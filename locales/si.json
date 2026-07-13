@@ -38,6 +38,9 @@
   "assignedCases": "පවරන ලද නඩු",
   "searchCasesPlaceholder": "විනය නඩු සොයන්න...",
   "statusInProgress": "සිදුවෙමින් පවතින",
+  "caseAge": "නඩු තත්ත්වය (නව/පැරණි)",
+  "newCase": "නව නඩුව",
+  "oldCase": "පැරණි නඩුව",
 
   "investigationDashboardTitle": "විමර්ශන නිලධාරී උපකරණ පුවරුව",
   "investigationDashboardDesc": "විමර්ශන පවත්වන්න, සාක්ෂි එකතු කරන්න, සහ වාර්තා සම්පාදනය කරන්න",
@@ -122,6 +125,7 @@
   "addSubjectDetailsTitle": "වත්මන් නඩුව සඳහා විෂය විස්තර එක් කරන්න",
   "addSubjectDetailsDesc": "ලැබුණු ලිපියේ සාමාන්‍ය තොරතුරු ඇතුළත් කරන්න.",
   "currentDetails": "වත්මන් විස්තර",
+  "subsequentMailReceivedTable": "නඩුව සඳහා ලැබුණු පසුකාලීන ලිපි",
   "subjectOfficerLabel": "විෂය භාර නිලධාරී",
   "reportState": "වාර්තා තත්ත්වය",
   "stepTaken": "ගෙන ඇති පියවර",

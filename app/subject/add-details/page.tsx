@@ -244,7 +244,17 @@ function CaseDetailsForm() {
             try {
               const list = JSON.parse(storedMails);
               const found = list.filter((item: any) => item.caseNo === caseNoParam);
-              setSubsequentMails(found);
+              const mapped = found.map((item: any) => ({
+                id: item.id,
+                refNo: item.caseNo || item.refNo,
+                officerName: item.mailOfficerName || item.officerName,
+                senderName: item.senderName,
+                subject: item.letterTitle || item.subject,
+                letterType: item.letterType,
+                letterDate: item.mailDate || item.letterDate,
+                receivedDate: item.receivedDate,
+              }));
+              setSubsequentMails(mapped);
             } catch (e) {
               console.error("Failed to parse subsequent letters from localStorage", e);
             }
@@ -767,46 +777,42 @@ function CaseDetailsForm() {
                   </div>
                 )}
 
-                {subsequentMails && subsequentMails.length > 0 && subsequentMails.map((mail: any, index: number) => (
-                  <div key={mail.id || index} className="registered-complaint-card subsequent-mail-card">
+                {subsequentMails && subsequentMails.length > 0 && (
+                  <div className="subsequent-letters-table-card">
                     <h2 className="card-title-header">
                       <svg className="card-title-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M3 19v-8.93a2 2 0 01.89-1.664l8-5.333a2 2 0 012.22 0l8 5.333A2 2 0 0121 10.07V19M3 19a2 2 0 002 2h14a2 2 0 002-2M3 19l6.75-4.5M21 19l-6.75-4.5M3 10l6.75 4.5M21 10l-6.75 4.5m0 0l-2.25-1.5a2 2 0 00-2.22 0l-2.25 1.5" />
                       </svg>
-                      {t("subsequentMailReceived", "Subsequent Mail Received")} #{index + 1}
+                      {t("subsequentMailReceivedTable", "Subsequent Letters Received for Case")}
                     </h2>
-                    <div className="complaint-details-grid">
-                      <div className="complaint-detail-item">
-                        <span className="complaint-detail-label">{t("senderName", "Sender Name")}:</span>
-                        <span className="complaint-detail-value">{mail.senderName}</span>
-                      </div>
-                      <div className="complaint-detail-item">
-                        <span className="complaint-detail-label">{t("letterDate", "Letter Date")}:</span>
-                        <span className="complaint-detail-value">{mail.letterDate}</span>
-                      </div>
-                      <div className="complaint-detail-item">
-                        <span className="complaint-detail-label">{t("receivedDate", "Received Date")}:</span>
-                        <span className="complaint-detail-value">{mail.receivedDate}</span>
-                      </div>
-                      <div className="complaint-detail-item">
-                        <span className="complaint-detail-label">{t("subject", "Subject")}:</span>
-                        <span className="complaint-detail-value">{mail.subject}</span>
-                      </div>
-                      {mail.letterType && (
-                        <div className="complaint-detail-item">
-                          <span className="complaint-detail-label">{t("letterType", "Letter Type")}:</span>
-                          <span className="complaint-detail-value">{t(mail.letterType)}</span>
-                        </div>
-                      )}
-                      {mail.officerName && (
-                        <div className="complaint-detail-item">
-                          <span className="complaint-detail-label">{t("nameOfOfficer", "Name of Subject officer")}:</span>
-                          <span className="complaint-detail-value">{mail.officerName}</span>
-                        </div>
-                      )}
+                    <div className="table-responsive-container">
+                      <table className="letters-data-table subsequent-table">
+                        <thead>
+                          <tr>
+                            <th scope="col">{t("senderName", "Sender Name")}</th>
+                            <th scope="col">{t("letterType", "Letter Type")}</th>
+                            <th scope="col">{t("letterDate", "Letter Date")}</th>
+                            <th scope="col">{t("receivedDate", "Received Date")}</th>
+                            <th scope="col">{t("nameOfOfficer", "Name of Subject Officer")}</th>
+                            <th scope="col">{t("subjectText", "Subject")}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {subsequentMails.map((mail: any, index: number) => (
+                            <tr key={mail.id || index} className="letter-table-row">
+                              <td className="font-semibold text-primary">{mail.senderName}</td>
+                              <td>{mail.letterType ? t(mail.letterType) : "—"}</td>
+                              <td>{mail.letterDate}</td>
+                              <td>{mail.receivedDate}</td>
+                              <td>{mail.officerName ? t(mail.officerName) : "—"}</td>
+                              <td className="subject-cell">{mail.subject}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
-                ))}
+                )}
 
                 <div className="add-details-cards-grid">
                 {/* ───────────────── Left Card ("Add Details") ───────────────── */}

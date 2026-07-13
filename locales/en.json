@@ -38,6 +38,9 @@
   "assignedCases": "Assigned Cases",
   "searchCasesPlaceholder": "Search Cases...",
   "statusInProgress": "In Progress",
+  "caseAge": "Case Status (New/Old)",
+  "newCase": "New Case",
+  "oldCase": "Old Case",
 
   "investigationDashboardTitle": "Investigation Officer Dashboard",
   "investigationDashboardDesc": "Conduct inquiries, gather evidence, and compile reports",
@@ -122,6 +125,7 @@
   "addSubjectDetailsTitle": "Add Subject Details for Current Case",
   "addSubjectDetailsDesc": "Enter the general details of the received letter.",
   "currentDetails": "Current details",
+  "subsequentMailReceivedTable": "Subsequent Letters Received for Case",
   "subjectOfficerLabel": "Subject officer",
   "reportState": "Report State",
   "stepTaken": "Step Taken",
@@ -263,6 +267,13 @@
   "dailyMailOfficers": "Daily Mail Officers",
   "dailyMailOfficersDescAdmin": "Manage daily mail reporter accounts",
   "educationalInstitutes": "Educational Institutes",
-  "educationalInstitutesDescAdmin": "Register and manage educational institutes"
+  "educationalInstitutesDescAdmin": "Register and manage educational institutes",
+  "subjectOfficerStatusCol": "Subject Officer Status",
+  "detailsAdded": "Details Added",
+  "pendingDetails": "Pending",
+  "subjectOfficerActionsTitle": "Subject Officer Actions History",
+  "previousLettersForCase": "Previous Letters for This Case",
+  "noActionsYet": "No actions recorded yet",
+  "noPreviousLetters": "No previous letters for this case"
 }
 

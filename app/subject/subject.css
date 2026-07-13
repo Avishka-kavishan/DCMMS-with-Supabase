@@ -334,6 +334,26 @@
   display: inline-block;
 }
 
+.badge-status-new {
+  background-color: #dbeafe !important;
+  color: #2563eb !important;
+  padding: 4px 8px;
+  border-radius: 9999px;
+  font-size: calc(12px * var(--font-scale, 1));
+  font-weight: 600;
+  display: inline-block;
+}
+
+.badge-status-old {
+  background-color: #e2e8f0 !important;
+  color: #475569 !important;
+  padding: 4px 8px;
+  border-radius: 9999px;
+  font-size: calc(12px * var(--font-scale, 1));
+  font-weight: 600;
+  display: inline-block;
+}
+
 /* Placeholder stripes mimicking the mockup screenshot */
 .placeholder-stripe-row {
   height: 48px;

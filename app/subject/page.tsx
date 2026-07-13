@@ -19,6 +19,7 @@ interface Case {
   subject: string;
   priority: "high" | "medium" | "low";
   status: "In Progress" | "Closed" | "Pending";
+  isOld?: boolean;
 }
 
 export default function SubjectOfficerDashboard() {
@@ -127,6 +128,14 @@ export default function SubjectOfficerDashboard() {
 
               if (casesError) throw casesError;
 
+              // Fetch details to check if there are actions taken
+              const { data: detailsData, error: detailsError } = await supabase
+                .from("dcmms_subject_details")
+                .select("case_no")
+                .in("case_no", assignedRefNos);
+
+              const casesWithDetails = new Set(detailsData ? detailsData.map((d: any) => d.case_no) : []);
+
               if (casesData) {
                 const mapped = casesData.map((item: any) => ({
                   id: item.id,
@@ -135,6 +144,7 @@ export default function SubjectOfficerDashboard() {
                   subject: item.subject,
                   priority: item.priority,
                   status: item.status,
+                  isOld: casesWithDetails.has(item.case_no) || item.status === "Closed" || item.status === "Pending",
                 }));
                 setCases(mapped);
                 return;
@@ -165,8 +175,23 @@ export default function SubjectOfficerDashboard() {
               .filter((l: any) => l.officerName === activeName)
               .map((l: any) => l.refNo);
 
-            // Filter cases matching assignedRefNos
-            const filtered = casesList.filter((c: any) => assignedRefNos.includes(c.caseNo));
+            // Check actions in localStorage
+            const storedActions = localStorage.getItem("dcmms_new_letter_current_case") || "[]";
+            let actionsList = [];
+            try { actionsList = JSON.parse(storedActions); } catch (e) {}
+            const casesWithActions = new Set(
+              Array.isArray(actionsList) 
+                ? actionsList.map((a: any) => a.caseNo)
+                : []
+            );
+
+            // Filter cases matching assignedRefNos and map isOld
+            const filtered = casesList
+              .filter((c: any) => assignedRefNos.includes(c.caseNo))
+              .map((c: any) => ({
+                ...c,
+                isOld: casesWithActions.has(c.caseNo) || c.status === "Closed" || c.status === "Pending",
+              }));
             setCases(filtered);
           } catch (e) {
             console.error("Error parsing localStorage fallback data", e);
@@ -534,6 +559,7 @@ export default function SubjectOfficerDashboard() {
                     <th scope="col">{t("subjectText")}</th>
                     <th scope="col">{t("priority")}</th>
                     <th scope="col">{t("status")}</th>
+                    <th scope="col">{t("caseAge", "Case Age")}</th>
                     <th scope="col" className="text-center">{t("addDetails")}</th>
                   </tr>
                 </thead>
@@ -556,6 +582,11 @@ export default function SubjectOfficerDashboard() {
                              item.status === "Closed" ? t("statusClosed") : t("statusPending")}
                           </span>
                         </td>
+                        <td>
+                          <span className={`badge-badge ${item.isOld ? "badge-status-old" : "badge-status-new"}`}>
+                            {item.isOld ? t("oldCase", "Old Case") : t("newCase", "New Case")}
+                          </span>
+                        </td>
                         <td className="text-center actions-cell">
                           <Link
                             href={`/subject/add-details?caseNo=${item.caseNo}`}
@@ -568,15 +599,15 @@ export default function SubjectOfficerDashboard() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={6} className="text-center py-4 text-muted">
+                      <td colSpan={7} className="text-center py-4 text-muted">
                         No cases found matching search
                       </td>
                     </tr>
                   )}
                   {/* Mock placeholder stripes as shown in the screenshot */}
-                  <tr className="placeholder-stripe-row"><td colSpan={6} aria-hidden="true"></td></tr>
-                  <tr className="placeholder-stripe-row"><td colSpan={6} aria-hidden="true"></td></tr>
-                  <tr className="placeholder-stripe-row"><td colSpan={6} aria-hidden="true"></td></tr>
+                  <tr className="placeholder-stripe-row"><td colSpan={7} aria-hidden="true"></td></tr>
+                  <tr className="placeholder-stripe-row"><td colSpan={7} aria-hidden="true"></td></tr>
+                  <tr className="placeholder-stripe-row"><td colSpan={7} aria-hidden="true"></td></tr>
                 </tbody>
               </table>
             </div>

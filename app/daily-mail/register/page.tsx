@@ -36,6 +36,8 @@ function RegisterComplaintForm() {
     receivedDate: string;
     letterType: string;
   } | null>(null);
+  const [subjectActions, setSubjectActions] = useState<any[]>([]);
+  const [previousLetters, setPreviousLetters] = useState<any[]>([]);
 
   const [officerOptions, setOfficerOptions] = useState<string[]>([
     "Kamal Perera",
@@ -207,11 +209,58 @@ function RegisterComplaintForm() {
                 receivedDate: originalMail.received_date || "—",
                 letterType: originalMail.letter_type || "—",
               });
-              return;
             }
           } catch (e) {
             console.error("Failed to load current case details from Supabase", e);
           }
+
+          // Fetch subject officer actions (dcmms_subject_details)
+          try {
+            const { data: actionsData, error: actionsError } = await supabase
+              .from("dcmms_subject_details")
+              .select("*")
+              .eq("case_no", caseNo)
+              .order("received_date", { ascending: false });
+
+            if (!actionsError && actionsData) {
+              setSubjectActions(actionsData.map((d: any) => ({
+                id: d.id,
+                caseNo: d.case_no,
+                receivedDate: d.received_date,
+                reportState: d.report_state,
+                specialNotes: d.special_notes,
+                subjectOfficerName: d.subject_officer_name,
+                stepTaken: d.step_taken,
+              })));
+            }
+          } catch (e) {
+            console.error("Failed to fetch subject actions from Supabase", e);
+          }
+
+          // Fetch previous subsequent mails (dcmms_subsequent_mails)
+          try {
+            const { data: mailsData, error: mailsError } = await supabase
+              .from("dcmms_subsequent_mails")
+              .select("*")
+              .eq("case_no", caseNo);
+
+            if (!mailsError && mailsData) {
+              setPreviousLetters(mailsData.map((d: any) => ({
+                id: d.id,
+                caseNo: d.case_no,
+                officerName: d.mail_officer_name,
+                senderName: d.sender_name,
+                subject: d.letter_title,
+                letterType: d.letter_type,
+                letterDate: d.mail_date,
+                receivedDate: d.received_date,
+              })));
+            }
+          } catch (e) {
+            console.error("Failed to fetch subsequent mails from Supabase", e);
+          }
+
+          return;
         }
 
         // Fallback to localStorage
@@ -222,7 +271,6 @@ function RegisterComplaintForm() {
               const list = JSON.parse(stored);
               const matchingMails = list.filter((item: any) => item.refNo === caseNo);
               if (matchingMails.length > 0) {
-                // Select oldest matching letter from the list
                 const originalMail = matchingMails[matchingMails.length - 1];
                 setCurrentCaseDetails({
                   letterNo: originalMail.letterNo || "—",
@@ -236,6 +284,34 @@ function RegisterComplaintForm() {
             }
           } catch (e) {
             console.error("Failed to parse local storage letters", e);
+          }
+
+          // Local storage fallback for subject actions
+          const storedActions = localStorage.getItem("dcmms_new_letter_current_case");
+          if (storedActions) {
+            try {
+              const actionsList = JSON.parse(storedActions);
+              if (Array.isArray(actionsList)) {
+                const found = actionsList.filter((a: any) => a.caseNo === caseNo);
+                setSubjectActions(found);
+              }
+            } catch (e) {
+              console.error("Failed to parse local storage actions", e);
+            }
+          }
+
+          // Local storage fallback for previous letters
+          const storedMails = localStorage.getItem("dcmms_new_mail_current_case");
+          if (storedMails) {
+            try {
+              const mailsList = JSON.parse(storedMails);
+              if (Array.isArray(mailsList)) {
+                const found = mailsList.filter((m: any) => m.caseNo === caseNo);
+                setPreviousLetters(found);
+              }
+            } catch (e) {
+              console.error("Failed to parse local storage subsequent mails", e);
+            }
           }
         }
       };
@@ -377,6 +453,31 @@ function RegisterComplaintForm() {
 
           if (error) throw error;
 
+          // Also insert into dcmms_daily_mail so that it displays in the daily mail recent add/list ledger
+          const { error: mailError } = await supabase
+            .from("dcmms_daily_mail")
+            .insert({
+              id: newLetter.id,
+              ref_no: newLetter.refNo,
+              sender_name: newLetter.senderName,
+              sender_address: newLetter.senderAddress || "N/A",
+              letter_date: newLetter.letterDate,
+              received_date: newLetter.receivedDate,
+              subject: newLetter.subject,
+              priority: newLetter.priority || "medium",
+              status: "registered",
+              letter_no: newLetter.letterNo || null,
+              letter_type: newLetter.letterType || null,
+              officer_name: newLetter.officerName || null,
+              subject_category: newLetter.subjectCategory || null,
+              institute_name: newLetter.instituteName || null,
+              region_province: newLetter.regionProvince || null,
+            });
+
+          if (mailError) {
+            console.error("Error inserting subsequent mail to dcmms_daily_mail:", mailError);
+          }
+
           localStorage.setItem("show_register_success", "true");
           router.push("/daily-mail");
           return;
@@ -388,6 +489,7 @@ function RegisterComplaintForm() {
 
       // Local storage fallback for subsequent mails
       if (typeof window !== "undefined") {
+        // 1. Save to dcmms_new_mail_current_case
         const stored = localStorage.getItem("dcmms_new_mail_current_case") || "[]";
         let list = [];
         try { list = JSON.parse(stored); } catch (e) {}
@@ -402,6 +504,14 @@ function RegisterComplaintForm() {
           receivedDate: newLetter.receivedDate,
         });
         localStorage.setItem("dcmms_new_mail_current_case", JSON.stringify(list));
+
+        // 2. Also save to dcmms_letters so it displays in the homepage list fallback
+        const storedLetters = localStorage.getItem("dcmms_letters") || "[]";
+        let lettersList = [];
+        try { lettersList = JSON.parse(storedLetters); } catch (e) {}
+        lettersList.push(newLetter);
+        localStorage.setItem("dcmms_letters", JSON.stringify(lettersList));
+
         localStorage.setItem("show_register_success", "true");
       }
 
@@ -842,6 +952,91 @@ function RegisterComplaintForm() {
                         <span className="detail-value">{currentCaseDetails.letterType}</span>
                       </div>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Subject Officer Actions History — visible in subsequent mode */}
+              {isSubsequentMode && (
+                <div className="subsequent-letters-table-card">
+                  <h2 className="card-title-header">
+                    <svg className="card-title-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    {t("subjectOfficerActionsTitle", "Subject Officer Actions History")}
+                  </h2>
+                  {subjectActions.length > 0 ? (
+                    <div className="table-responsive-container">
+                      <table className="letters-data-table subsequent-table">
+                        <thead>
+                          <tr>
+                            <th scope="col">{t("nameOfOfficer", "Subject Officer")}</th>
+                            <th scope="col">{t("reportState", "Report State")}</th>
+                            <th scope="col">{t("receivedDate", "Received Date")}</th>
+                            <th scope="col">{t("stepTaken", "Step Taken")}</th>
+                            <th scope="col">{t("specialNotes", "Special Notes")}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {subjectActions.map((action: any, index: number) => (
+                            <tr key={action.id || index} className="letter-table-row">
+                              <td className="font-semibold text-primary">{action.subjectOfficerName || "—"}</td>
+                              <td>
+                                <span className={`badge-badge ${
+                                  action.reportState === "Closed" ? "badge-status-closed" :
+                                  action.reportState === "In Progress" ? "badge-status-inprogress" : "badge-status-pending"
+                                }`}>
+                                  {action.reportState || "—"}
+                                </span>
+                              </td>
+                              <td>{action.receivedDate || "—"}</td>
+                              <td className="subject-cell">{action.stepTaken || "—"}</td>
+                              <td className="subject-cell">{action.specialNotes || "—"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="empty-actions-text">{t("noActionsYet", "No actions recorded yet")}</p>
+                  )}
+                </div>
+              )}
+
+              {/* Previous Letters for this Case — visible in subsequent mode */}
+              {isSubsequentMode && previousLetters.length > 0 && (
+                <div className="subsequent-letters-table-card">
+                  <h2 className="card-title-header">
+                    <svg className="card-title-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 19v-8.93a2 2 0 01.89-1.664l8-5.333a2 2 0 012.22 0l8 5.333A2 2 0 0121 10.07V19M3 19a2 2 0 002 2h14a2 2 0 002-2M3 19l6.75-4.5M21 19l-6.75-4.5M3 10l6.75 4.5M21 10l-6.75 4.5m0 0l-2.25-1.5a2 2 0 00-2.22 0l-2.25 1.5" />
+                    </svg>
+                    {t("previousLettersForCase", "Previous Letters for This Case")}
+                  </h2>
+                  <div className="table-responsive-container">
+                    <table className="letters-data-table subsequent-table">
+                      <thead>
+                        <tr>
+                          <th scope="col">{t("senderName", "Sender Name")}</th>
+                          <th scope="col">{t("letterType", "Letter Type")}</th>
+                          <th scope="col">{t("letterDate", "Letter Date")}</th>
+                          <th scope="col">{t("receivedDate", "Received Date")}</th>
+                          <th scope="col">{t("nameOfOfficer", "Mail Officer")}</th>
+                          <th scope="col">{t("letterTitle", "Subject")}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {previousLetters.map((mail: any, index: number) => (
+                          <tr key={mail.id || index} className="letter-table-row">
+                            <td className="font-semibold text-primary">{mail.senderName || "—"}</td>
+                            <td>{mail.letterType || "—"}</td>
+                            <td>{mail.letterDate || mail.mailDate || "—"}</td>
+                            <td>{mail.receivedDate || "—"}</td>
+                            <td>{mail.officerName || mail.mailOfficerName || "—"}</td>
+                            <td className="subject-cell">{mail.subject || mail.letterTitle || "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               )}

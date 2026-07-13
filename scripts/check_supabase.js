@@ -25,20 +25,21 @@ const path = require('path');
     }
 
     const supabase = createClient(url, key);
-    console.log('Querying dcmms_cases...');
+    
+    console.log('--- Querying dcmms_subsequent_mails ---');
     const { data, error } = await supabase
-      .from('dcmms_cases')
+      .from('dcmms_subsequent_mails')
       .select('*')
-      .limit(5)
-      .order('created_at', { ascending: false });
+      .limit(5);
+    
     if (error) {
-      console.error('Supabase query error:', error);
-      process.exit(3);
+      console.error('Supabase query error on dcmms_subsequent_mails:', error);
+    } else {
+      console.log('Found rows:', data.length);
+      console.log(JSON.stringify(data, null, 2));
     }
-    console.log('Found rows:', Array.isArray(data) ? data.length : 0);
-    console.log(JSON.stringify(data, null, 2));
+
   } catch (err) {
     console.error('Script error:', err);
-    process.exit(1);
   }
 })();
