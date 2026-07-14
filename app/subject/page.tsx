@@ -16,6 +16,7 @@ interface Case {
   id: string;
   caseNo: string;
   assignedDate: string;
+  receivedDate: string;
   subject: string;
   priority: "high" | "medium" | "low";
   status: "In Progress" | "Closed" | "Pending";
@@ -112,12 +113,21 @@ export default function SubjectOfficerDashboard() {
             // Fetch letters assigned to this officer
             const { data: letters, error: lettersError } = await supabase
               .from("dcmms_daily_mail")
-              .select("ref_no")
+              .select("ref_no, received_date")
               .eq("officer_name", activeProfile.full_name);
 
             if (lettersError) throw lettersError;
 
-            const assignedRefNos = letters ? letters.map((l: any) => l.ref_no) : [];
+            const refToReceivedDate = new Map<string, string>();
+            if (letters) {
+              letters.forEach((l: any) => {
+                if (l.ref_no) {
+                  refToReceivedDate.set(l.ref_no, l.received_date);
+                }
+              });
+            }
+
+            const assignedRefNos = Array.from(refToReceivedDate.keys());
 
             if (assignedRefNos.length > 0) {
                const { data: casesData, error: casesError } = await supabase
@@ -141,6 +151,7 @@ export default function SubjectOfficerDashboard() {
                   id: item.id,
                   caseNo: item.case_no,
                   assignedDate: item.assigned_date,
+                  receivedDate: refToReceivedDate.get(item.case_no) || item.assigned_date,
                   subject: item.subject,
                   priority: item.priority,
                   status: item.status,
@@ -171,9 +182,16 @@ export default function SubjectOfficerDashboard() {
             const lettersList = JSON.parse(storedLetters);
 
             // Filter letters assigned to the active name
-            const assignedRefNos = lettersList
+            const refToReceivedDate = new Map<string, string>();
+            lettersList
               .filter((l: any) => l.officerName === activeName)
-              .map((l: any) => l.refNo);
+              .forEach((l: any) => {
+                if (l.refNo) {
+                  refToReceivedDate.set(l.refNo, l.receivedDate);
+                }
+              });
+
+            const assignedRefNos = Array.from(refToReceivedDate.keys());
 
             // Check actions in localStorage
             const storedActions = localStorage.getItem("dcmms_new_letter_current_case") || "[]";
@@ -190,6 +208,7 @@ export default function SubjectOfficerDashboard() {
               .filter((c: any) => assignedRefNos.includes(c.caseNo))
               .map((c: any) => ({
                 ...c,
+                receivedDate: refToReceivedDate.get(c.caseNo) || c.assignedDate,
                 isOld: casesWithActions.has(c.caseNo) || c.status === "Closed" || c.status === "Pending",
               }));
             setCases(filtered);
@@ -242,6 +261,72 @@ export default function SubjectOfficerDashboard() {
   const inProgressCasesCount = cases.filter((c) => c.status === "In Progress").length;
   const pendingCasesCount = cases.filter((c) => c.status === "Pending").length;
   const closedCasesCount = cases.filter((c) => c.status === "Closed").length;
+
+  // Helper to calculate case deadlines and reminders
+  const calculateReminder = (assignedDateStr: string, priority: "high" | "medium" | "low", status: string) => {
+    if (status === "Closed") return { text: "Completed", color: "gray", active: false };
+
+    const assigned = new Date(assignedDateStr);
+    const today = new Date();
+    const assignedMidnight = new Date(assigned.getFullYear(), assigned.getMonth(), assigned.getDate());
+    const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    
+    const diffTime = todayMidnight.getTime() - assignedMidnight.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+    const currentHour = today.getHours();
+
+    if (priority === "high") {
+      // High priority = today (red color)
+      // reminder is given at 10 a.m. and 2 p.m.
+      if (diffDays === 0) {
+        if (currentHour >= 14) {
+          return { text: "Reminder: High Priority (2:00 PM check)", color: "red", active: true };
+        } else if (currentHour >= 10) {
+          return { text: "Reminder: High Priority (10:00 AM check)", color: "red", active: true };
+        } else {
+          return { text: "Action Required Today", color: "red", active: false };
+        }
+      } else if (diffDays > 0) {
+        return { text: "Overdue (High Priority)", color: "red", active: true };
+      }
+      return { text: "Action Required Today", color: "red", active: false };
+    }
+
+    if (priority === "medium") {
+      // Medium priority = 3 days (orange color)
+      // Reminder on the last day (diffDays === 3)
+      const daysRemaining = 3 - diffDays;
+      if (daysRemaining === 0) {
+        return { text: "Reminder: Last Day to Submit!", color: "orange", active: true };
+      } else if (daysRemaining < 0) {
+        return { text: `Overdue by ${Math.abs(daysRemaining)} days`, color: "red", active: true };
+      } else {
+        return { text: `${daysRemaining} days remaining`, color: "orange", active: false };
+      }
+    }
+
+    if (priority === "low") {
+      // Low priority = 21 days (green color)
+      // Reminder on last 2 days (diffDays === 20 or 21)
+      const daysRemaining = 21 - diffDays;
+      if (daysRemaining <= 2 && daysRemaining >= 0) {
+        return { text: `Reminder: ${daysRemaining} days left!`, color: "green", active: true };
+      } else if (daysRemaining < 0) {
+        return { text: `Overdue by ${Math.abs(daysRemaining)} days`, color: "red", active: true };
+      } else {
+        return { text: `${daysRemaining} days remaining`, color: "green", active: false };
+      }
+    }
+
+    return { text: "No reminder", color: "gray", active: false };
+  };
+
+  // Get active reminders
+  const activeReminders = cases.map(c => {
+    const reminderInfo = calculateReminder(c.receivedDate, c.priority, c.status);
+    return { ...c, reminderInfo };
+  }).filter(r => r.reminderInfo.active);
 
   const totalPct = "100%";
   const inProgressPct = totalCasesCount > 0 ? `+${Math.round((inProgressCasesCount / totalCasesCount) * 100)}%` : "0%";
@@ -399,6 +484,25 @@ export default function SubjectOfficerDashboard() {
           <section className="welcome-greeting-section">
             <h3 className="greeting-text">{greeting}</h3>
           </section>
+
+          {/* Reminders Alert Widget */}
+          {activeReminders.length > 0 && (
+            <div className="reminders-alert-widget">
+              <div className="reminders-widget-header">
+                <svg className="reminders-bell-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                </svg>
+                <h4 className="reminders-widget-title">Active Reminders / Attention Required</h4>
+              </div>
+              <ul className="reminders-widget-list">
+                {activeReminders.map((r) => (
+                  <li key={r.id} className="reminders-widget-item">
+                    Case <strong>{r.caseNo}</strong> ({r.priority.toUpperCase()} priority) - {r.reminderInfo.text}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* Stats section */}
           <section className="dashboard-stats-grid subject-stats-grid">
@@ -560,6 +664,7 @@ export default function SubjectOfficerDashboard() {
                     <th scope="col">{t("priority")}</th>
                     <th scope="col">{t("status")}</th>
                     <th scope="col">{t("caseAge", "Case Age")}</th>
+                    <th scope="col">Reminder</th>
                     <th scope="col" className="text-center">{t("addDetails")}</th>
                   </tr>
                 </thead>
@@ -587,6 +692,21 @@ export default function SubjectOfficerDashboard() {
                             {item.isOld ? t("oldCase", "Old Case") : t("newCase", "New Case")}
                           </span>
                         </td>
+                        <td>
+                          {(() => {
+                            const rem = calculateReminder(item.assignedDate, item.priority, item.status);
+                            let colorClass = "reminder-gray";
+                            if (rem.color === "red") colorClass = "reminder-red";
+                            else if (rem.color === "orange") colorClass = "reminder-orange";
+                            else if (rem.color === "green") colorClass = "reminder-green";
+                            
+                            return (
+                              <span className={`reminder-tag ${colorClass}`}>
+                                {rem.text}
+                              </span>
+                            );
+                          })()}
+                        </td>
                         <td className="text-center actions-cell">
                           <Link
                             href={`/subject/add-details?caseNo=${item.caseNo}`}
@@ -599,15 +719,15 @@ export default function SubjectOfficerDashboard() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={7} className="text-center py-4 text-muted">
+                      <td colSpan={8} className="text-center py-4 text-muted">
                         No cases found matching search
                       </td>
                     </tr>
                   )}
                   {/* Mock placeholder stripes as shown in the screenshot */}
-                  <tr className="placeholder-stripe-row"><td colSpan={7} aria-hidden="true"></td></tr>
-                  <tr className="placeholder-stripe-row"><td colSpan={7} aria-hidden="true"></td></tr>
-                  <tr className="placeholder-stripe-row"><td colSpan={7} aria-hidden="true"></td></tr>
+                  <tr className="placeholder-stripe-row"><td colSpan={8} aria-hidden="true"></td></tr>
+                  <tr className="placeholder-stripe-row"><td colSpan={8} aria-hidden="true"></td></tr>
+                  <tr className="placeholder-stripe-row"><td colSpan={8} aria-hidden="true"></td></tr>
                 </tbody>
               </table>
             </div>
