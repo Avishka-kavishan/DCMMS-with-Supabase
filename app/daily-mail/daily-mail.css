@@ -1187,19 +1187,19 @@
 }
 
 .total-letters-card {
-  background: linear-gradient(135deg, #1e293b, #0f172a);
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
 }
 
 .todays-letters-card {
-  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  background: linear-gradient(135deg, #0ea5e9, #0284c7);
 }
 
 .pending-submission-card {
-  background: linear-gradient(135deg, #f59e0b, #d97706);
+  background: linear-gradient(135deg, #f59e0b, #ea580c);
 }
 
 .submitted-today-card {
-  background: linear-gradient(135deg, #10b981, #047857);
+  background: linear-gradient(135deg, #10b981, #059669);
 }
 
 .premium-card-top {
