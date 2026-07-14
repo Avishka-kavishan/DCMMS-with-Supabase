@@ -1,6 +1,7 @@
 "use client";
 
 import "../../i18n";
+import "../dashboard-common.css";
 import "./daily-mail.css";
 import { useState, useEffect } from "react";
 import Image from "next/image";
@@ -78,6 +79,29 @@ export default function DailyMailPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  // Letters listing state (initially empty, loaded from database)
+  const [letters, setLetters] = useState<Letter[]>([]);
+  const [casesWithDetails, setCasesWithDetails] = useState<Set<string>>(new Set());
+  const [subsequentMailIds, setSubsequentMailIds] = useState<Set<string>>(new Set());
+  const [subjectSubmissions, setSubjectSubmissions] = useState<Array<{ caseNo: string; createdAt?: string; receivedDate?: string }>>([]);
+
+  // Search & filter state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [priorityFilter, setPriorityFilter] = useState<"all" | "high" | "medium" | "low">("all");
+
+  // Success Notification Toast state
+  const [toastMessage, setToastMessage] = useState("");
+  const [showToast, setShowToast] = useState(false);
+
+  // Trigger toast notification helper
+  const triggerToast = (msg: string) => {
+    setToastMessage(msg);
+    setShowToast(true);
+    setTimeout(() => {
+      setShowToast(false);
+    }, 4000);
+  };
+
   // Sync document properties
   useEffect(() => {
     document.documentElement.lang = lang;
@@ -121,13 +145,30 @@ export default function DailyMailPage() {
           try {
             const { data: detailsData, error: detailsError } = await supabase
               .from("dcmms_subject_details")
-              .select("case_no");
+              .select("case_no, created_at, received_date");
 
             if (!detailsError && detailsData) {
               setCasesWithDetails(new Set(detailsData.map((d: any) => d.case_no)));
+              setSubjectSubmissions(detailsData.map((d: any) => ({
+                caseNo: d.case_no,
+                createdAt: d.created_at,
+                receivedDate: d.received_date
+              })));
             }
           } catch (e) {
             console.error("Failed to fetch subject details status", e);
+          }
+
+          // Fetch subsequent mails (dcmms_subsequent_mails) to identify "new" vs "old"
+          try {
+            const { data: subsequentData, error: subsequentError } = await supabase
+              .from("dcmms_subsequent_mails")
+              .select("id");
+            if (!subsequentError && subsequentData) {
+              setSubsequentMailIds(new Set(subsequentData.map((d: any) => d.id)));
+            }
+          } catch (e) {
+            console.error("Failed to fetch subsequent mails", e);
           }
 
           return;
@@ -156,10 +197,25 @@ export default function DailyMailPage() {
             const actionsList = JSON.parse(storedActions);
             if (Array.isArray(actionsList)) {
               setCasesWithDetails(new Set(actionsList.map((a: any) => a.caseNo)));
+              setSubjectSubmissions(actionsList.map((a: any) => ({
+                caseNo: a.caseNo,
+                createdAt: a.submittedAt || a.receivedDate || new Date().toISOString()
+              })));
             }
           } catch (e) {
             console.error("Error parsing stored actions", e);
           }
+        }
+
+        // Check for local storage subsequent mails
+        const storedSubsequent = localStorage.getItem("dcmms_new_mail_current_case");
+        if (storedSubsequent) {
+          try {
+            const list = JSON.parse(storedSubsequent);
+            if (Array.isArray(list)) {
+              setSubsequentMailIds(new Set(list.map((m: any) => m.id)));
+            }
+          } catch (e) {}
         }
       }
     };
@@ -170,6 +226,7 @@ export default function DailyMailPage() {
       .channel("daily-mail-realtime-changes")
       .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_daily_mail" }, fetchLetters)
       .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subject_details" }, fetchLetters)
+      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subsequent_mails" }, fetchLetters)
       .subscribe();
 
     // Fallback: auto-refresh every 5 seconds
@@ -194,27 +251,6 @@ export default function DailyMailPage() {
 
   const changeLanguage = (lng: string) => {
     i18n.changeLanguage(lng);
-  };
-
-  // Letters listing state (initially empty, loaded from database)
-  const [letters, setLetters] = useState<Letter[]>([]);
-  const [casesWithDetails, setCasesWithDetails] = useState<Set<string>>(new Set());
-
-  // Search & filter state
-  const [searchQuery, setSearchQuery] = useState("");
-  const [priorityFilter, setPriorityFilter] = useState<"all" | "high" | "medium" | "low">("all");
-
-  // Success Notification Toast state
-  const [toastMessage, setToastMessage] = useState("");
-  const [showToast, setShowToast] = useState(false);
-
-  // Trigger toast notification helper
-  const triggerToast = (msg: string) => {
-    setToastMessage(msg);
-    setShowToast(true);
-    setTimeout(() => {
-      setShowToast(false);
-    }, 4000);
   };
 
   // Session guard — redirect to login if not authenticated
@@ -395,10 +431,135 @@ export default function DailyMailPage() {
             </div>
           </header>
 
-          {/* ── Dynamic Welcome Banner Greeting ── */}
+          {/* ── Dynamic Welcome Greeting Banner ── */}
           <section className="welcome-greeting-section">
             <h3 className="greeting-text">{greeting}</h3>
           </section>
+
+          {/* ── Dashboard Stats Grid ── */}
+          {(() => {
+            const getTodayString = () => {
+              const d = new Date();
+              const yyyy = d.getFullYear();
+              const mm = String(d.getMonth() + 1).padStart(2, "0");
+              const dd = String(d.getDate()).padStart(2, "0");
+              return `${yyyy}-${mm}-${dd}`;
+            };
+            const todayStr = getTodayString();
+            const totalLettersCount = letters.length;
+            const todaysLetters = letters.filter((l) => l.receivedDate === todayStr);
+            const todaysNewLettersCount = todaysLetters.filter((l) => !subsequentMailIds.has(l.id)).length;
+            const todaysOldLettersCount = todaysLetters.filter((l) => subsequentMailIds.has(l.id)).length;
+            const todaysLettersCount = todaysLetters.length;
+            const pendingSubmissionCount = letters.filter((l) => !casesWithDetails.has(l.refNo)).length;
+            const submittedTodayCount = subjectSubmissions.filter((s) => {
+              const datePart = s.createdAt ? s.createdAt.slice(0, 10) : (s.receivedDate || "");
+              return datePart === todayStr;
+            }).length;
+
+            return (
+              <section className="dashboard-stats-grid">
+                {/* Total letters received */}
+                <div className="premium-stat-card total-letters-card">
+                  <div className="premium-card-top">
+                    <div className="premium-card-title-area">
+                      <svg className="premium-card-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      <span>{t("totalLettersReceived", "Total Letters Received")}</span>
+                    </div>
+                  </div>
+                  <div className="premium-card-bottom">
+                    <div className="premium-card-value-area">
+                      <span className="premium-card-value">{String(totalLettersCount).padStart(2, "0")}</span>
+                      <span className="premium-card-label">{t("letters", "letters")}</span>
+                    </div>
+                    <div className="premium-card-sparkline">
+                      <svg viewBox="0 0 100 30" width="80" height="24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M 5,22 Q 25,10 45,20 T 75,8 T 95,15" strokeLinecap="round" />
+                        <circle cx="75" cy="8" r="3" fill="#ffffff" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Today's letters */}
+                <div className="premium-stat-card todays-letters-card">
+                  <div className="premium-card-top">
+                    <div className="premium-card-title-area">
+                      <svg className="premium-card-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      <span>{t("todaysLetters", "Today's Letters")}</span>
+                    </div>
+                    <span className="premium-card-percentage">
+                      {todaysNewLettersCount} {t("newLetters", "New")} / {todaysOldLettersCount} {t("oldLetters", "Old")}
+                    </span>
+                  </div>
+                  <div className="premium-card-bottom">
+                    <div className="premium-card-value-area">
+                      <span className="premium-card-value">{String(todaysLettersCount).padStart(2, "0")}</span>
+                      <span className="premium-card-label">{t("letters", "letters")}</span>
+                    </div>
+                    <div className="premium-card-sparkline">
+                      <svg viewBox="0 0 100 30" width="80" height="24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M 5,20 Q 25,25 45,12 T 75,5 T 95,15" strokeLinecap="round" />
+                        <circle cx="75" cy="5" r="3" fill="#ffffff" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Pending submission */}
+                <div className="premium-stat-card pending-submission-card">
+                  <div className="premium-card-top">
+                    <div className="premium-card-title-area">
+                      <svg className="premium-card-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span>{t("pendingSubmission", "Pending Submission")}</span>
+                    </div>
+                  </div>
+                  <div className="premium-card-bottom">
+                    <div className="premium-card-value-area">
+                      <span className="premium-card-value">{String(pendingSubmissionCount).padStart(2, "0")}</span>
+                      <span className="premium-card-label">{t("letters", "letters")}</span>
+                    </div>
+                    <div className="premium-card-sparkline">
+                      <svg viewBox="0 0 100 30" width="80" height="24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M 5,15 Q 25,8 45,22 T 75,12 T 95,25" strokeLinecap="round" />
+                        <circle cx="75" cy="12" r="3" fill="#ffffff" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Submitted today */}
+                <div className="premium-stat-card submitted-today-card">
+                  <div className="premium-card-top">
+                    <div className="premium-card-title-area">
+                      <svg className="premium-card-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span>{t("submittedToday", "Submitted Today")}</span>
+                    </div>
+                  </div>
+                  <div className="premium-card-bottom">
+                    <div className="premium-card-value-area">
+                      <span className="premium-card-value">{String(submittedTodayCount).padStart(2, "0")}</span>
+                      <span className="premium-card-label">{t("cases", "cases")}</span>
+                    </div>
+                    <div className="premium-card-sparkline">
+                      <svg viewBox="0 0 100 30" width="80" height="24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M 5,10 Q 25,18 45,8 T 75,25 T 95,12" strokeLinecap="round" />
+                        <circle cx="75" cy="25" r="3" fill="#ffffff" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            );
+          })()}
 
           {/* ── Quick Action Hero Cards (Figma Hero Banner) ── */}
           <section className="hero-banner-card-section">

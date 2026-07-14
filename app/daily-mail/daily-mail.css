@@ -1170,3 +1170,98 @@
   color: #047857;
   border-color: #a7f3d0;
 }
+
+/* Premium Gradient Cards style rules */
+.premium-stat-card {
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 16px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  color: #ffffff;
+  position: relative;
+  overflow: hidden;
+  height: 120px;
+}
+
+.total-letters-card {
+  background: linear-gradient(135deg, #1e293b, #0f172a);
+}
+
+.todays-letters-card {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+}
+
+.pending-submission-card {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+}
+
+.submitted-today-card {
+  background: linear-gradient(135deg, #10b981, #047857);
+}
+
+.premium-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.premium-card-title-area {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.premium-card-icon {
+  width: 18px;
+  height: 18px;
+  opacity: 0.9;
+  stroke: currentColor;
+}
+
+.premium-card-title-area span {
+  font-size: calc(14px * var(--font-scale, 1));
+  font-weight: 500;
+  opacity: 0.9;
+}
+
+.premium-card-percentage {
+  font-size: calc(12px * var(--font-scale, 1));
+  font-weight: 600;
+  opacity: 0.9;
+  background-color: rgba(255, 255, 255, 0.2);
+  padding: 2px 8px;
+  border-radius: 9999px;
+}
+
+.premium-card-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  width: 100%;
+}
+
+.premium-card-value-area {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.premium-card-value {
+  font-size: calc(30px * var(--font-scale, 1));
+  font-weight: 700;
+  line-height: 1;
+}
+
+.premium-card-label {
+  font-size: calc(12px * var(--font-scale, 1));
+  font-weight: 500;
+  opacity: 0.8;
+}
+
+.premium-card-sparkline {
+  opacity: 0.85;
+}
