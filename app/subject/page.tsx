@@ -157,6 +157,12 @@ export default function SubjectOfficerDashboard() {
                   status: item.status,
                   isOld: casesWithDetails.has(item.case_no) || item.status === "Closed" || item.status === "Pending",
                 }));
+                mapped.sort((a: any, b: any) => {
+                  if (!!a.isOld !== !!b.isOld) {
+                    return a.isOld ? 1 : -1;
+                  }
+                  return new Date(b.receivedDate).getTime() - new Date(a.receivedDate).getTime();
+                });
                 setCases(mapped);
                 return;
               }
@@ -211,6 +217,12 @@ export default function SubjectOfficerDashboard() {
                 receivedDate: refToReceivedDate.get(c.caseNo) || c.assignedDate,
                 isOld: casesWithActions.has(c.caseNo) || c.status === "Closed" || c.status === "Pending",
               }));
+            filtered.sort((a: any, b: any) => {
+              if (!!a.isOld !== !!b.isOld) {
+                return a.isOld ? 1 : -1;
+              }
+              return new Date(b.receivedDate).getTime() - new Date(a.receivedDate).getTime();
+            });
             setCases(filtered);
           } catch (e) {
             console.error("Error parsing localStorage fallback data", e);
