@@ -83,11 +83,13 @@ export default function DailyMailPage() {
   const [letters, setLetters] = useState<Letter[]>([]);
   const [casesWithDetails, setCasesWithDetails] = useState<Set<string>>(new Set());
   const [subsequentMailIds, setSubsequentMailIds] = useState<Set<string>>(new Set());
-  const [subjectSubmissions, setSubjectSubmissions] = useState<Array<{ caseNo: string; createdAt?: string; receivedDate?: string }>>([]);
+  const [subjectSubmissions, setSubjectSubmissions] = useState<Array<{ caseNo: string; createdAt?: string; receivedDate?: string; reportState?: string; isDraft?: boolean }>>([]);
 
   // Search & filter state
   const [searchQuery, setSearchQuery] = useState("");
   const [priorityFilter, setPriorityFilter] = useState<"all" | "high" | "medium" | "low">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "today" | "pending" | "submitted-today">("all");
+  const [caseStatusFilter, setCaseStatusFilter] = useState<"all" | "new" | "old">("all");
 
   // Success Notification Toast state
   const [toastMessage, setToastMessage] = useState("");
@@ -145,14 +147,20 @@ export default function DailyMailPage() {
           try {
             const { data: detailsData, error: detailsError } = await supabase
               .from("dcmms_subject_details")
-              .select("case_no, created_at, received_date");
+              .select("case_no, report_state, created_at, received_date");
 
             if (!detailsError && detailsData) {
-              setCasesWithDetails(new Set(detailsData.map((d: any) => d.case_no)));
+              const submittedCaseNos = new Set(
+                detailsData
+                  .filter((d: any) => d.report_state !== "Pending")
+                  .map((d: any) => d.case_no)
+              );
+              setCasesWithDetails(submittedCaseNos);
               setSubjectSubmissions(detailsData.map((d: any) => ({
                 caseNo: d.case_no,
                 createdAt: d.created_at,
-                receivedDate: d.received_date
+                receivedDate: d.received_date,
+                reportState: d.report_state
               })));
             }
           } catch (e) {
@@ -196,10 +204,17 @@ export default function DailyMailPage() {
           try {
             const actionsList = JSON.parse(storedActions);
             if (Array.isArray(actionsList)) {
-              setCasesWithDetails(new Set(actionsList.map((a: any) => a.caseNo)));
+              const submittedCaseNos = new Set(
+                actionsList
+                  .filter((a: any) => !a.isDraft && a.reportState !== "Pending")
+                  .map((a: any) => a.caseNo)
+              );
+              setCasesWithDetails(submittedCaseNos);
               setSubjectSubmissions(actionsList.map((a: any) => ({
                 caseNo: a.caseNo,
-                createdAt: a.submittedAt || a.receivedDate || new Date().toISOString()
+                createdAt: a.submittedAt || a.receivedDate || new Date().toISOString(),
+                reportState: a.reportState,
+                isDraft: a.isDraft
               })));
             }
           } catch (e) {
@@ -267,6 +282,15 @@ export default function DailyMailPage() {
     router.push("/");
   };
 
+  // Helper to format today's date in local time YYYY-MM-DD
+  const getTodayString = () => {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
   // Filter letters list in real-time
   const filteredLetters = letters.filter((letter) => {
     const matchesSearch =
@@ -281,7 +305,25 @@ export default function DailyMailPage() {
 
     const matchesPriority = priorityFilter === "all" || letter.priority === priorityFilter;
 
-    return matchesSearch && matchesPriority;
+    const todayStr = getTodayString();
+    let matchesStatus = true;
+    if (statusFilter === "today") {
+      matchesStatus = letter.receivedDate === todayStr;
+    } else if (statusFilter === "pending") {
+      matchesStatus = letter.status === "pending";
+    } else if (statusFilter === "submitted-today") {
+      matchesStatus = letter.status !== "pending" && letter.receivedDate === todayStr;
+    }
+
+    let matchesCaseStatus = true;
+    const isSubsequent = subsequentMailIds.has(letter.id);
+    if (caseStatusFilter === "new") {
+      matchesCaseStatus = !isSubsequent;
+    } else if (caseStatusFilter === "old") {
+      matchesCaseStatus = isSubsequent;
+    }
+
+    return matchesSearch && matchesPriority && matchesStatus && matchesCaseStatus;
   });
 
   // Handle reset search filters
@@ -289,6 +331,8 @@ export default function DailyMailPage() {
     e.preventDefault();
     setSearchQuery("");
     setPriorityFilter("all");
+    setStatusFilter("all");
+    setCaseStatusFilter("all");
   };
 
   return (
@@ -438,24 +482,14 @@ export default function DailyMailPage() {
 
           {/* ── Dashboard Stats Grid ── */}
           {(() => {
-            const getTodayString = () => {
-              const d = new Date();
-              const yyyy = d.getFullYear();
-              const mm = String(d.getMonth() + 1).padStart(2, "0");
-              const dd = String(d.getDate()).padStart(2, "0");
-              return `${yyyy}-${mm}-${dd}`;
-            };
             const todayStr = getTodayString();
             const totalLettersCount = letters.length;
             const todaysLetters = letters.filter((l) => l.receivedDate === todayStr);
             const todaysNewLettersCount = todaysLetters.filter((l) => !subsequentMailIds.has(l.id)).length;
             const todaysOldLettersCount = todaysLetters.filter((l) => subsequentMailIds.has(l.id)).length;
             const todaysLettersCount = todaysLetters.length;
-            const pendingSubmissionCount = letters.filter((l) => !casesWithDetails.has(l.refNo)).length;
-            const submittedTodayCount = subjectSubmissions.filter((s) => {
-              const datePart = s.createdAt ? s.createdAt.slice(0, 10) : (s.receivedDate || "");
-              return datePart === todayStr;
-            }).length;
+            const pendingSubmissionCount = letters.filter((l) => l.status === "pending").length;
+            const submittedTodayCount = letters.filter((l) => l.status !== "pending" && l.receivedDate === todayStr).length;
 
             return (
               <section className="dashboard-stats-grid">
@@ -620,6 +654,41 @@ export default function DailyMailPage() {
                     <option value="high">High</option>
                     <option value="medium">Medium</option>
                     <option value="low">Low</option>
+                  </select>
+                </div>
+
+                {/* Submission Status Filter */}
+                <div className="filter-dropdown-wrapper">
+                  <svg className="filter-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                  </svg>
+                  <select
+                    value={statusFilter}
+                    onChange={(e: any) => setStatusFilter(e.target.value)}
+                    className="filter-priority-select"
+                    aria-label="Filter by Submission Status"
+                  >
+                    <option value="all">{t("allLetters", "All Letters")}</option>
+                    <option value="today">{t("todaySubmission", "Today's Submissions")}</option>
+                    <option value="pending">{t("pendingSubmissions", "Pending Submissions")}</option>
+                    <option value="submitted-today">{t("submittedToday", "Submitted Today")}</option>
+                  </select>
+                </div>
+
+                {/* Case Status (New / Old) Filter */}
+                <div className="filter-dropdown-wrapper">
+                  <svg className="filter-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                  </svg>
+                  <select
+                    value={caseStatusFilter}
+                    onChange={(e: any) => setCaseStatusFilter(e.target.value)}
+                    className="filter-priority-select"
+                    aria-label="Filter by Case Age Status"
+                  >
+                    <option value="all">{t("allCases", "All Case Status")}</option>
+                    <option value="new">{t("newCase", "New Case")}</option>
+                    <option value="old">{t("oldCase", "Old Case")}</option>
                   </select>
                 </div>
 

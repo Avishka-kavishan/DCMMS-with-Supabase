@@ -409,7 +409,7 @@ function RegisterComplaintForm() {
       receivedDate: formState.receivedDate || new Date().toISOString().split("T")[0],
       subject: formState.subject || "N/A", // maps to subject / title
       priority: formState.priority,
-      status: formState.status,
+      status: formState.officerName ? ("assigned" as const) : ("registered" as const),
       // Extra fields captured
       letterNo: formState.letterNo,
       letterType: formState.letterType,
@@ -644,7 +644,7 @@ function RegisterComplaintForm() {
       receivedDate: formState.receivedDate || new Date().toISOString().split("T")[0],
       subject: formState.subject || "Draft Complaint",
       priority: formState.priority,
-      status: formState.status,
+      status: "pending" as const,
       // Extra fields
       letterNo: formState.letterNo,
       letterType: formState.letterType,
