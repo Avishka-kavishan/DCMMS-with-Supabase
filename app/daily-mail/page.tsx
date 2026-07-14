@@ -711,7 +711,7 @@ export default function DailyMailPage() {
                     <th scope="col">{t("subjectCategory")}</th>
                     <th scope="col">{t("nameOfOfficer")}</th>
                     <th scope="col">{t("letterTitle")}</th>
-                    <th scope="col">{t("subjectOfficerStatusCol", "Subject Officer Status")}</th>
+                    <th scope="col">{t("letterStatusCol", "Letter Status")}</th>
                     <th scope="col" className="text-center">{t("edit", "Edit")}</th>
                   </tr>
                 </thead>

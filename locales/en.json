@@ -268,7 +268,7 @@
   "dailyMailOfficersDescAdmin": "Manage daily mail reporter accounts",
   "educationalInstitutes": "Educational Institutes",
   "educationalInstitutesDescAdmin": "Register and manage educational institutes",
-  "subjectOfficerStatusCol": "Subject Officer Status",
+  "letterStatusCol": "Letter Status",
   "detailsAdded": "Details Added",
   "pendingDetails": "Pending",
   "subjectOfficerActionsTitle": "Subject Officer Actions History",
