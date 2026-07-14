@@ -753,8 +753,8 @@ export default function DailyMailPage() {
                         </td>
                         <td className="subject-cell">{letter.subject}</td>
                         <td>
-                          <span className={`badge-badge ${casesWithDetails.has(letter.refNo) ? "badge-status-closed" : "badge-status-pending"}`}>
-                            {casesWithDetails.has(letter.refNo) ? t("detailsAdded", "Details Added") : t("pendingDetails", "Pending")}
+                          <span className={`badge-badge ${letter.status !== "pending" ? "badge-status-closed" : "badge-status-pending"}`}>
+                            {letter.status !== "pending" ? t("submitted", "Submitted") : t("pendingDetails", "Pending")}
                           </span>
                         </td>
                         <td className="text-center actions-cell">
