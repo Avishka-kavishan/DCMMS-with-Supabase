@@ -10,6 +10,7 @@ import { TextInput } from "@/components/TextInput";
 import { Button } from "@/components/Button";
 import { supabase } from "@/lib/supabase";
 import { dashboardPath, UserRole, getCurrentProfile } from "@/lib/auth";
+import { logLogin, logFailedLogin } from "@/lib/security";
 
 /* Font scale map — LGWS 4.0 mandates at least 3 sizes */
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
@@ -20,8 +21,19 @@ export default function Home() {
   const [fontScale, setFontScale] = useState<"small" | "medium" | "large">("medium");
   const [isLoading, setIsLoading] = useState(false);
   const [loginError, setLoginError] = useState("");
+  const [infoMessage, setInfoMessage] = useState("");
 
   const lang = i18n.language;
+
+  // Check search params for forced logout notice
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("reason") === "forced_logout") {
+        setInfoMessage("Your session was terminated by a system administrator.");
+      }
+    }
+  }, []);
 
   // If already signed in, redirect to correct dashboard
   useEffect(() => {
@@ -37,6 +49,7 @@ export default function Home() {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoginError("");
+    setInfoMessage("");
     const formData = new FormData(e.currentTarget);
     const email = formData.get("email") as string;
     const password = formData.get("password") as string;
@@ -59,9 +72,15 @@ export default function Home() {
         throw new Error("Your account has no role assigned. Please contact an administrator.");
       }
 
+      // Log successful login
+      await logLogin(data.user.id, profile.full_name, email);
+
       router.push(dashboardPath(profile.role as UserRole));
     } catch (err: any) {
-      setLoginError(err.message || "Invalid email or password.");
+      const errMsg = err.message || "Invalid email or password.";
+      setLoginError(errMsg);
+      // Log failed login
+      await logFailedLogin(email, errMsg);
     } finally {
       setIsLoading(false);
     }
@@ -322,6 +341,22 @@ export default function Home() {
                 {loginError && (
                   <div role="alert" className="login-error-banner">
                     {loginError}
+                  </div>
+                )}
+
+                {/* Info banner */}
+                {infoMessage && (
+                  <div role="alert" className="login-info-banner" style={{
+                    padding: "12px 16px",
+                    borderRadius: "8px",
+                    backgroundColor: "rgba(224, 86, 36, 0.15)",
+                    border: "1px solid rgb(224, 86, 36)",
+                    color: "rgb(224, 86, 36)",
+                    fontSize: "0.875rem",
+                    fontWeight: 500,
+                    marginBottom: "16px",
+                  }}>
+                    {infoMessage}
                   </div>
                 )}
 

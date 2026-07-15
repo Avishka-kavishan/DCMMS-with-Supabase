@@ -4,7 +4,8 @@ export type UserRole =
   | "admin"
   | "daily_mail"
   | "subject_officer"
-  | "investigation_officer";
+  | "investigation_officer"
+  | "system_admin";
 
 export interface UserProfile {
   id: string;
@@ -92,6 +93,8 @@ export function dashboardPath(role: UserRole): string {
       return "/subject";
     case "investigation_officer":
       return "/investigation";
+    case "system_admin":
+      return "/system-admin";
     default:
       return "/";
   }

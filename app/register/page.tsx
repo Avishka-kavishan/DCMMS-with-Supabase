@@ -75,16 +75,18 @@ export default function RegisterPage() {
       if (signUpError) throw signUpError;
       if (!data.user) throw new Error("Registration failed. Please try again.");
 
-      // 2. Insert profile row with role
-      const { error: profileError } = await supabase
-        .from("dcmms_profiles")
-        .upsert({
-          id: data.user.id,
-          full_name: fullName.trim(),
-          role,
-        });
+      // 2. Insert profile row with role (skip for system_admin to avoid db constraint error)
+      if (role !== "system_admin") {
+        const { error: profileError } = await supabase
+          .from("dcmms_profiles")
+          .upsert({
+            id: data.user.id,
+            full_name: fullName.trim(),
+            role,
+          });
 
-      if (profileError) throw profileError;
+        if (profileError) throw profileError;
+      }
 
       setSuccess(true);
 
@@ -104,6 +106,7 @@ export default function RegisterPage() {
     { value: "daily_mail", label: "Daily Mail Officer" },
     { value: "subject_officer", label: "Subject Officer" },
     { value: "investigation_officer", label: "Investigation Officer" },
+    { value: "system_admin", label: "System Administrator" },
   ];
 
   return (

@@ -15,7 +15,7 @@ interface SidebarProps {
   setIsSidebarOpen: (isOpen: boolean) => void;
   setIsModalOpen?: (isOpen: boolean) => void;
   handleLogout: (e: React.MouseEvent) => void;
-  role?: "admin" | "dailymail" | "subject" | "investigation";
+  role?: "admin" | "dailymail" | "subject" | "investigation" | "system_admin";
 }
 
 interface MenuItem {
@@ -43,11 +43,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
     role ||
     (pathname.includes("/admin")
       ? "admin"
-      : pathname.includes("/subject")
-        ? "subject"
-        : pathname.includes("/investigation")
-          ? "investigation"
-          : "dailymail");
+      : pathname.includes("/system-admin")
+        ? "system_admin"
+        : pathname.includes("/subject")
+          ? "subject"
+          : pathname.includes("/investigation")
+            ? "investigation"
+            : "dailymail");
 
   // Dynamic profile state
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -87,6 +89,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
       userName = t("investigationName");
       userEmail = t("investigationEmail");
       userInitials = "SS";
+    } else if (activeRole === "system_admin") {
+      userName = "System Admin";
+      userEmail = "sysadmin@moe.gov.lk";
+      userInitials = "SA";
     }
   } else {
     // Generate initials dynamically from the user's name
@@ -120,8 +126,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
     );
   }
 
-  // Navigation menu items list configuration
-  const menuItems: Record<"admin" | "dailymail" | "subject" | "investigation", MenuItem[]> = {
+  const menuItems: Record<
+    "admin" | "dailymail" | "subject" | "investigation" | "system_admin",
+    MenuItem[]
+  > = {
     dailymail: [],
     admin: [
       {
@@ -240,6 +248,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
         isActive: pathname.endsWith("/calendar"),
       },
     ],
+    system_admin: [
+      {
+        id: "dashboard",
+        label: "Dashboard",
+        href: `${basePath}/system-admin`,
+        icon: (
+          <svg className="menu-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+        ),
+        isActive: pathname.endsWith("/system-admin"),
+      },
+    ],
   };
 
   const activeMenuItems = menuItems[activeRole] || menuItems.dailymail;
@@ -323,7 +344,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <span className="user-email">{userEmail}</span>
             </div>
           </div>
-          <a href="#" className="logout-link" onClick={handleLogout}>
+          <a href="#" className="logout-link" onClick={async (e) => {
+            if (profile?.id) {
+              const { logLogout } = await import("@/lib/security");
+              await logLogout(profile.id);
+            } else {
+              const { supabase } = await import("@/lib/supabase");
+              const { data: { session } } = await supabase.auth.getSession();
+              if (session?.user?.id) {
+                const { logLogout } = await import("@/lib/security");
+                await logLogout(session.user.id);
+              }
+            }
+            handleLogout(e);
+          }}>
             <svg className="logout-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
               <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>

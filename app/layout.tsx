@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { LanguageSync } from "@/components/LanguageSync";
+import { SessionMonitor } from "@/components/SessionMonitor";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
@@ -27,6 +28,7 @@ export default function RootLayout({
       </head>
       <body className="antialiased">
         <LanguageSync />
+        <SessionMonitor />
         {children}
       </body>
     </html>

@@ -26,17 +26,28 @@ const path = require('path');
 
     const supabase = createClient(url, key);
     
-    console.log('--- Querying dcmms_subsequent_mails ---');
-    const { data, error } = await supabase
-      .from('dcmms_subsequent_mails')
+    console.log('--- Querying dcmms_user_sessions ---');
+    const { data: sessData, error: sessError } = await supabase
+      .from('dcmms_user_sessions')
       .select('*')
       .limit(5);
     
-    if (error) {
-      console.error('Supabase query error on dcmms_subsequent_mails:', error);
+    if (sessError) {
+      console.error('Supabase query error on dcmms_user_sessions:', sessError.message);
     } else {
-      console.log('Found rows:', data.length);
-      console.log(JSON.stringify(data, null, 2));
+      console.log('Found user sessions:', sessData.length);
+    }
+
+    console.log('--- Querying dcmms_audit_logs ---');
+    const { data: auditData, error: auditError } = await supabase
+      .from('dcmms_audit_logs')
+      .select('*')
+      .limit(5);
+    
+    if (auditError) {
+      console.error('Supabase query error on dcmms_audit_logs:', auditError.message);
+    } else {
+      console.log('Found audit logs:', auditData.length);
     }
 
   } catch (err) {
