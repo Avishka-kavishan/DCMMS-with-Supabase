@@ -16,7 +16,7 @@ export function SessionMonitor() {
     const checkStatus = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user?.id) {
-        const isForced = checkSessionStatus(session.user.id);
+        const isForced = await checkSessionStatus(session.user.id);
         if (isForced) {
           // Log out the user
           await supabase.auth.signOut();

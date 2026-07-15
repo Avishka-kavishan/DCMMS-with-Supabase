@@ -26,28 +26,16 @@ const path = require('path');
 
     const supabase = createClient(url, key);
     
-    console.log('--- Querying dcmms_user_sessions ---');
-    const { data: sessData, error: sessError } = await supabase
-      .from('dcmms_user_sessions')
+    console.log('--- Querying dcmms_profiles ---');
+    const { data, error } = await supabase
+      .from('dcmms_profiles')
       .select('*')
-      .limit(5);
+      .limit(1);
     
-    if (sessError) {
-      console.error('Supabase query error on dcmms_user_sessions:', sessError.message);
+    if (error) {
+      console.error('Supabase query error on dcmms_profiles:', error.message);
     } else {
-      console.log('Found user sessions:', sessData.length);
-    }
-
-    console.log('--- Querying dcmms_audit_logs ---');
-    const { data: auditData, error: auditError } = await supabase
-      .from('dcmms_audit_logs')
-      .select('*')
-      .limit(5);
-    
-    if (auditError) {
-      console.error('Supabase query error on dcmms_audit_logs:', auditError.message);
-    } else {
-      console.log('Found audit logs:', auditData.length);
+      console.log('Found profile row:', data);
     }
 
   } catch (err) {

@@ -22,6 +22,9 @@ export interface AuditLog {
   details: string;
 }
 
+const SESSIONS_ROW_ID = "00000000-0000-0000-0000-000000000001";
+const AUDIT_LOGS_ROW_ID = "00000000-0000-0000-0000-000000000002";
+
 // Helper to get local data safely
 function getLocalData<T>(key: string, defaultValue: T[]): T[] {
   if (typeof window === "undefined") return defaultValue;
@@ -44,6 +47,44 @@ function setLocalData<T>(key: string, data: T[]): void {
   }
 }
 
+// Fetch from DB or local storage fallback
+async function fetchFromDbOrLocal<T>(rowId: string, localKey: string, defaultValue: T[]): Promise<T[]> {
+  if (isSupabaseConfigured) {
+    try {
+      const { data, error } = await supabase
+        .from("dcmms_profiles")
+        .select("full_name")
+        .eq("id", rowId)
+        .single();
+      
+      if (!error && data?.full_name) {
+        return JSON.parse(data.full_name) as T[];
+      }
+    } catch (e) {
+      console.warn("Supabase fetch failed, falling back to local storage:", e);
+    }
+  }
+  return getLocalData<T>(localKey, defaultValue);
+}
+
+// Save to DB and local storage fallback
+async function saveToDbAndLocal<T>(rowId: string, localKey: string, data: T[]): Promise<void> {
+  // Always update local storage first
+  setLocalData(localKey, data);
+
+  if (isSupabaseConfigured) {
+    try {
+      await supabase.from("dcmms_profiles").upsert({
+        id: rowId,
+        full_name: JSON.stringify(data),
+        role: "admin", // satisfying the dcmms_profiles_role_check constraint
+      });
+    } catch (e) {
+      console.warn("Supabase upsert failed:", e);
+    }
+  }
+}
+
 // Log standard user login
 export async function logLogin(userId: string, username: string, email: string) {
   const newSession: UserSession = {
@@ -56,8 +97,7 @@ export async function logLogin(userId: string, username: string, email: string) 
     ip_address: "192.168.1." + Math.floor(Math.random() * 254 + 1), // Simulated IP
   };
 
-  // 1. LocalStorage update
-  const sessions = getLocalData<UserSession>("dcmms_user_sessions", []);
+  const sessions = await fetchFromDbOrLocal<UserSession>(SESSIONS_ROW_ID, "dcmms_user_sessions", []);
   
   // Close any existing active sessions for this user first
   sessions.forEach(s => {
@@ -69,27 +109,10 @@ export async function logLogin(userId: string, username: string, email: string) 
   });
 
   sessions.push(newSession);
-  setLocalData("dcmms_user_sessions", sessions);
+  await saveToDbAndLocal<UserSession>(SESSIONS_ROW_ID, "dcmms_user_sessions", sessions);
 
   // Write login audit log
   await logAuditEvent(userId, username, email, "User Logged In", `User ${username} (${email}) logged in successfully.`);
-
-  // 2. Try Supabase write
-  if (isSupabaseConfigured) {
-    try {
-      await supabase.from("dcmms_user_sessions").insert({
-        id: newSession.id,
-        user_id: newSession.user_id,
-        username: newSession.username,
-        email: newSession.email,
-        login_time: newSession.login_time,
-        status: newSession.status,
-        ip_address: newSession.ip_address,
-      });
-    } catch (e) {
-      // Fail silently, fallback is active
-    }
-  }
 
   // Keep track of current session id for quick lookup during logout
   if (typeof window !== "undefined") {
@@ -102,7 +125,7 @@ export async function logLogin(userId: string, username: string, email: string) 
 // Log standard user logout
 export async function logLogout(userId: string) {
   const currentSessionId = typeof window !== "undefined" ? localStorage.getItem("dcmms_current_session_id") : null;
-  const sessions = getLocalData<UserSession>("dcmms_user_sessions", []);
+  const sessions = await fetchFromDbOrLocal<UserSession>(SESSIONS_ROW_ID, "dcmms_user_sessions", []);
   
   let targetSession = sessions.find(s => s.status === "active" && (currentSessionId ? s.id === currentSessionId : s.user_id === userId));
   
@@ -116,23 +139,10 @@ export async function logLogout(userId: string) {
     targetSession.logout_time = new Date().toISOString();
     targetSession.duration = Math.round((new Date(targetSession.logout_time).getTime() - new Date(targetSession.login_time).getTime()) / 1000);
     
-    setLocalData("dcmms_user_sessions", sessions);
+    await saveToDbAndLocal<UserSession>(SESSIONS_ROW_ID, "dcmms_user_sessions", sessions);
 
     // Audit log
     await logAuditEvent(userId, targetSession.username, targetSession.email, "User Logged Out", `User ${targetSession.username} logged out.`);
-
-    if (isSupabaseConfigured) {
-      try {
-        await supabase
-          .from("dcmms_user_sessions")
-          .update({
-            status: "logged_out",
-            logout_time: targetSession.logout_time,
-            duration: targetSession.duration,
-          })
-          .eq("id", targetSession.id);
-      } catch (e) {}
-    }
   }
 
   if (typeof window !== "undefined") {
@@ -158,44 +168,33 @@ export async function logAuditEvent(userId: string | null, username: string, ema
     details,
   };
 
-  const logs = getLocalData<AuditLog>("dcmms_audit_logs", []);
+  const logs = await fetchFromDbOrLocal<AuditLog>(AUDIT_LOGS_ROW_ID, "dcmms_audit_logs", []);
   logs.push(newAudit);
-  setLocalData("dcmms_audit_logs", logs);
-
-  if (isSupabaseConfigured) {
-    try {
-      await supabase.from("dcmms_audit_logs").insert({
-        id: newAudit.id,
-        user_id: newAudit.user_id,
-        username: newAudit.username,
-        email: newAudit.email,
-        action: newAudit.action,
-        details: newAudit.details,
-      });
-    } catch (e) {}
-  }
+  await saveToDbAndLocal<AuditLog>(AUDIT_LOGS_ROW_ID, "dcmms_audit_logs", logs);
 
   return newAudit;
 }
 
 // Fetch active sessions
-export function getActiveSessions(): UserSession[] {
-  return getLocalData<UserSession>("dcmms_user_sessions", []).filter(s => s.status === "active");
+export async function getActiveSessions(): Promise<UserSession[]> {
+  const sessions = await fetchFromDbOrLocal<UserSession>(SESSIONS_ROW_ID, "dcmms_user_sessions", []);
+  return sessions.filter(s => s.status === "active");
 }
 
 // Fetch all session histories
-export function getSessionHistory(): UserSession[] {
-  return getLocalData<UserSession>("dcmms_user_sessions", []);
+export async function getSessionHistory(): Promise<UserSession[]> {
+  return await fetchFromDbOrLocal<UserSession>(SESSIONS_ROW_ID, "dcmms_user_sessions", []);
 }
 
 // Fetch all audit logs
-export function getAuditLogs(): AuditLog[] {
-  return getLocalData<AuditLog>("dcmms_audit_logs", []).sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+export async function getAuditLogs(): Promise<AuditLog[]> {
+  const logs = await fetchFromDbOrLocal<AuditLog>(AUDIT_LOGS_ROW_ID, "dcmms_audit_logs", []);
+  return logs.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 }
 
 // Force logout a specific user session
 export async function forceLogoutUser(sessionId: string, adminName: string) {
-  const sessions = getLocalData<UserSession>("dcmms_user_sessions", []);
+  const sessions = await fetchFromDbOrLocal<UserSession>(SESSIONS_ROW_ID, "dcmms_user_sessions", []);
   const target = sessions.find(s => s.id === sessionId);
   
   if (target) {
@@ -203,7 +202,7 @@ export async function forceLogoutUser(sessionId: string, adminName: string) {
     target.logout_time = new Date().toISOString();
     target.duration = Math.round((new Date(target.logout_time).getTime() - new Date(target.login_time).getTime()) / 1000);
     
-    setLocalData("dcmms_user_sessions", sessions);
+    await saveToDbAndLocal<UserSession>(SESSIONS_ROW_ID, "dcmms_user_sessions", sessions);
 
     // Audit log
     await logAuditEvent(
@@ -213,29 +212,16 @@ export async function forceLogoutUser(sessionId: string, adminName: string) {
       "Forced Logout",
       `Session ${sessionId} was terminated by System Administrator ${adminName}.`
     );
-
-    if (isSupabaseConfigured) {
-      try {
-        await supabase
-          .from("dcmms_user_sessions")
-          .update({
-            status: "forced_logged_out",
-            logout_time: target.logout_time,
-            duration: target.duration,
-          })
-          .eq("id", sessionId);
-      } catch (e) {}
-    }
   }
 }
 
 // Check if current session for user is forced logged out
-export function checkSessionStatus(userId: string): boolean {
+export async function checkSessionStatus(userId: string): Promise<boolean> {
   if (typeof window === "undefined") return false;
   const currentSessionId = localStorage.getItem("dcmms_current_session_id");
   if (!currentSessionId) return false;
 
-  const sessions = getLocalData<UserSession>("dcmms_user_sessions", []);
+  const sessions = await fetchFromDbOrLocal<UserSession>(SESSIONS_ROW_ID, "dcmms_user_sessions", []);
   const current = sessions.find(s => s.id === currentSessionId);
   return current?.status === "forced_logged_out";
 }

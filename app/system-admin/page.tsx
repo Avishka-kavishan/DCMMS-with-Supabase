@@ -71,9 +71,13 @@ export default function SystemAdminDashboard() {
     }
 
     // Load security data
-    setActiveSessions(getActiveSessions());
-    setSessionHistory(getSessionHistory());
-    setAuditLogs(getAuditLogs());
+    const active = await getActiveSessions();
+    const history = await getSessionHistory();
+    const logs = await getAuditLogs();
+    
+    setActiveSessions(active);
+    setSessionHistory(history);
+    setAuditLogs(logs);
   };
 
   useEffect(() => {
