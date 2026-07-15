@@ -8,6 +8,7 @@ import Link from "next/link";
 import { useTranslation } from "react-i18next";
 import { TextInput } from "@/components/TextInput";
 import { Button } from "@/components/Button";
+import { SiteFooter } from "@/components/SiteFooter";
 import { supabase } from "@/lib/supabase";
 import { dashboardPath, UserRole, getCurrentProfile } from "@/lib/auth";
 import { logLogin, logFailedLogin } from "@/lib/security";
@@ -400,9 +401,7 @@ export default function Home() {
       </main>
 
       {/* ── Footer ──────────────────────────────────────────── */}
-      <footer className="footer">
-        <p className="footer-text">{t("footerText")}</p>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

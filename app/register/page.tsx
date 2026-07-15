@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { dashboardPath, UserRole } from "@/lib/auth";
+import { SiteFooter } from "@/components/SiteFooter";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -273,9 +274,7 @@ export default function RegisterPage() {
         </div>
       </main>
 
-      <footer className="register-footer">
-        <p>© {new Date().getFullYear()} Ministry of Education, Sri Lanka — Discipline Branch. All rights reserved.</p>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

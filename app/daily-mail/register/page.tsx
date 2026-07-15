@@ -8,6 +8,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { Sidebar } from "@/components/Sidebar";
 import Link from "next/link";
+import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { getCurrentProfile } from "@/lib/auth";
 
@@ -1276,9 +1277,7 @@ function RegisterComplaintForm() {
           </section>
 
           {/* Footer Branding Notice */}
-          <footer className="dashboard-content-footer">
-            <p>{t("footerText")}</p>
-          </footer>
+          <SiteFooter />
         </main>
       </div>
     </div>

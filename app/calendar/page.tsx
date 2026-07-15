@@ -8,6 +8,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { Sidebar } from "@/components/Sidebar";
+import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { signOut } from "@/lib/auth";
 
@@ -627,11 +628,9 @@ export default function CalendarPage() {
                   </button>
                 </form>
               </div>
-
             </div>
-
           </div>
-
+          <SiteFooter />
         </main>
       </div>
     </div>

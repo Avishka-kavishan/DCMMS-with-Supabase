@@ -7,6 +7,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { Sidebar } from "@/components/Sidebar";
+import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { signOut, getCurrentProfile } from "@/lib/auth";
 
@@ -562,6 +563,7 @@ export default function InvestigationPage() {
               </table>
             </div>
           </section>
+          <SiteFooter />
         </main>
       </div>
     </div>

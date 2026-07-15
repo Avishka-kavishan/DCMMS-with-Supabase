@@ -10,6 +10,7 @@ import "../dashboard-common.css";
 import "./admin.css";
 import { Sidebar } from "@/components/Sidebar";
 import { signOut } from "@/lib/auth";
+import { SiteFooter } from "@/components/SiteFooter";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { t, i18n } = useTranslation();
@@ -211,9 +212,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
           {children}
           
-          <footer className="dashboard-content-footer">
-            <p>{t("footerText", "© 2026 Ministry of Education, Sri Lanka. All Rights Reserved.")}</p>
-          </footer>
+          <SiteFooter />
         </main>
       </div>
     </div>

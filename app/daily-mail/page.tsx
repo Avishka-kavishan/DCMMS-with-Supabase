@@ -8,6 +8,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { Sidebar } from "@/components/Sidebar";
+import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { signOut, getCurrentProfile } from "@/lib/auth";
 
@@ -802,9 +803,7 @@ export default function DailyMailPage() {
           </section>
 
           {/* ── Footer Branding Notice ── */}
-          <footer className="dashboard-content-footer">
-            <p>{t("footerText")}</p>
-          </footer>
+          <SiteFooter />
         </main>
       </div>
 
