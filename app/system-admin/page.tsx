@@ -94,7 +94,7 @@ export default function SystemAdminDashboard() {
   };
 
   const handleForceLogout = async (sessionId: string) => {
-    if (confirm("Are you sure you want to force logout this session? The user will be disconnected immediately.")) {
+    if (confirm(t("sysAdminConfirmForce"))) {
       await forceLogoutUser(sessionId, adminName);
       loadData();
     }
@@ -197,8 +197,8 @@ export default function SystemAdminDashboard() {
                 </svg>
               </button>
               <div className="dashboard-title-area">
-                <h2 className="dashboard-main-title">Security & Session Control Center</h2>
-                <p className="dashboard-main-subtitle">Monitor logins, active sessions, and system audit logs.</p>
+                <h2 className="dashboard-main-title">{t("sysAdminTitle")}</h2>
+                <p className="dashboard-main-subtitle">{t("sysAdminSubtitle")}</p>
               </div>
             </div>
 
@@ -221,10 +221,10 @@ export default function SystemAdminDashboard() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                   </svg>
                 </div>
-                <h3 className="stat-card-title">Currently Active Users</h3>
+                <h3 className="stat-card-title">{t("sysAdminActiveUsers")}</h3>
               </div>
               <div className="stat-card-value">{totalActive}</div>
-              <p className="stat-card-desc">Real-time active web sessions</p>
+              <p className="stat-card-desc">{t("sysAdminActiveUsersDesc")}</p>
             </div>
 
             <div className="sysadmin-stat-card">
@@ -234,10 +234,10 @@ export default function SystemAdminDashboard() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
                   </svg>
                 </div>
-                <h3 className="stat-card-title">Today&apos;s Logins</h3>
+                <h3 className="stat-card-title">{t("sysAdminLoginsToday")}</h3>
               </div>
               <div className="stat-card-value">{loginsToday}</div>
-              <p className="stat-card-desc">Successful logins since midnight</p>
+              <p className="stat-card-desc">{t("sysAdminLoginsTodayDesc")}</p>
             </div>
 
             <div className="sysadmin-stat-card">
@@ -247,10 +247,10 @@ export default function SystemAdminDashboard() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                   </svg>
                 </div>
-                <h3 className="stat-card-title">Today&apos;s Logouts</h3>
+                <h3 className="stat-card-title">{t("sysAdminLogoutsToday")}</h3>
               </div>
               <div className="stat-card-value">{logoutsToday}</div>
-              <p className="stat-card-desc">Graceful session terminations</p>
+              <p className="stat-card-desc">{t("sysAdminLogoutsTodayDesc")}</p>
             </div>
 
             <div className="sysadmin-stat-card danger">
@@ -260,16 +260,16 @@ export default function SystemAdminDashboard() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                   </svg>
                 </div>
-                <h3 className="stat-card-title">Failed Logins</h3>
+                <h3 className="stat-card-title">{t("sysAdminFailedLogins")}</h3>
               </div>
               <div className="stat-card-value">{failedAttemptsToday}</div>
-              <p className="stat-card-desc">Invalid credential events today</p>
+              <p className="stat-card-desc">{t("sysAdminFailedLoginsDesc")}</p>
             </div>
           </div>
 
           {/* Chart Section */}
           <div className="sysadmin-chart-card">
-            <h3 className="card-title-header">Login Attempt Metrics (Last 12 Hours)</h3>
+            <h3 className="card-title-header">{t("sysAdminChartTitle")}</h3>
             <div style={{ width: "100%", height: 260 }}>
               <ResponsiveContainer>
                 <AreaChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
@@ -301,18 +301,18 @@ export default function SystemAdminDashboard() {
               <svg className="card-title-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
               </svg>
-              Active User Sessions (Live Monitor)
+              {t("sysAdminActiveSessions")}
             </h3>
             {activeSessions.length > 0 ? (
               <div className="table-responsive-container">
                 <table className="sysadmin-data-table">
                   <thead>
                     <tr>
-                      <th>User Name</th>
-                      <th>Email Address</th>
-                      <th>Login Time</th>
-                      <th>Simulated IP</th>
-                      <th>Actions</th>
+                      <th>{t("sysAdminUserName")}</th>
+                      <th>{t("sysAdminEmail")}</th>
+                      <th>{t("sysAdminLoginTime")}</th>
+                      <th>{t("sysAdminIP")}</th>
+                      <th>{t("sysAdminActions")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -328,7 +328,7 @@ export default function SystemAdminDashboard() {
                             onClick={() => handleForceLogout(session.id)}
                             title="Terminate session immediately"
                           >
-                            Force Logout
+                            {t("sysAdminForceLogout")}
                           </button>
                         </td>
                       </tr>
@@ -337,7 +337,7 @@ export default function SystemAdminDashboard() {
                 </table>
               </div>
             ) : (
-              <p className="empty-state-text">No active user sessions detected.</p>
+              <p className="empty-state-text">{t("sysAdminNoActiveSessions")}</p>
             )}
           </div>
 
@@ -347,19 +347,19 @@ export default function SystemAdminDashboard() {
               <svg className="card-title-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              User Session History
+              {t("sysAdminHistoryTitle")}
             </h3>
             {sessionHistory.length > 0 ? (
               <div className="table-responsive-container">
                 <table className="sysadmin-data-table">
                   <thead>
                     <tr>
-                      <th>User Name</th>
-                      <th>Email</th>
-                      <th>Login Date/Time</th>
-                      <th>Logout Date/Time</th>
-                      <th>Session Duration</th>
-                      <th>Status</th>
+                      <th>{t("sysAdminUserName")}</th>
+                      <th>{t("sysAdminEmail")}</th>
+                      <th>{t("sysAdminLoginTime")}</th>
+                      <th>{t("sysAdminLogoutTime")}</th>
+                      <th>{t("sysAdminDuration")}</th>
+                      <th>{t("sysAdminStatus")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -386,7 +386,7 @@ export default function SystemAdminDashboard() {
                 </table>
               </div>
             ) : (
-              <p className="empty-state-text">No session history recorded.</p>
+              <p className="empty-state-text">{t("sysAdminNoHistory")}</p>
             )}
           </div>
 
@@ -396,7 +396,7 @@ export default function SystemAdminDashboard() {
               <svg className="card-title-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              System Audit Trail & Event Logs
+              {t("sysAdminAuditTitle")}
             </h3>
 
             {/* Filters Bar */}
@@ -404,7 +404,7 @@ export default function SystemAdminDashboard() {
               <input
                 type="text"
                 className="filter-input-search"
-                placeholder="Search audit trail..."
+                placeholder={t("sysAdminSearchPlaceholder")}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -413,9 +413,9 @@ export default function SystemAdminDashboard() {
                 value={logTypeFilter}
                 onChange={(e) => setLogTypeFilter(e.target.value)}
               >
-                <option value="all">All Events</option>
-                <option value="failures">Failed Attempts Only</option>
-                <option value="sessions">Session Activities Only</option>
+                <option value="all">{t("sysAdminAllEvents")}</option>
+                <option value="failures">{t("sysAdminFailuresOnly")}</option>
+                <option value="sessions">{t("sysAdminSessionsOnly")}</option>
               </select>
             </div>
 
@@ -424,10 +424,10 @@ export default function SystemAdminDashboard() {
                 <table className="sysadmin-data-table font-mono text-xs">
                   <thead>
                     <tr>
-                      <th style={{ width: "20%" }}>Timestamp</th>
-                      <th style={{ width: "15%" }}>User</th>
-                      <th style={{ width: "25%" }}>Event Action</th>
-                      <th style={{ width: "40%" }}>Detail Description</th>
+                      <th style={{ width: "20%" }}>{t("sysAdminTimestamp")}</th>
+                      <th style={{ width: "15%" }}>{t("sysAdminUser")}</th>
+                      <th style={{ width: "25%" }}>{t("sysAdminAction")}</th>
+                      <th style={{ width: "40%" }}>{t("sysAdminDetails")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -446,7 +446,7 @@ export default function SystemAdminDashboard() {
                 </table>
               </div>
             ) : (
-              <p className="empty-state-text">No audit log records match the search filter.</p>
+              <p className="empty-state-text">{t("sysAdminNoAuditMatches")}</p>
             )}
           </div>
 
