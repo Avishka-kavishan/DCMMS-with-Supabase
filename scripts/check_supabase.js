@@ -26,16 +26,23 @@ const path = require('path');
 
     const supabase = createClient(url, key);
     
-    console.log('--- Querying dcmms_profiles ---');
-    const { data, error } = await supabase
-      .from('dcmms_profiles')
-      .select('*')
-      .limit(1);
+    console.log('--- Testing Upsert on dcmms_daily_mail ---');
+    const { data: upsertData, error: upsertError } = await supabase
+      .from('dcmms_daily_mail')
+      .upsert({
+        id: 'sess-test-id-12345',
+        ref_no: 'AUDIT_LOG_OR_SESSION_REF',
+        sender_name: 'test_system',
+        subject: 'test_upsert',
+        priority: 'medium',
+        status: 'registered',
+        received_date: new Date().toISOString().split('T')[0]
+      });
     
-    if (error) {
-      console.error('Supabase query error on dcmms_profiles:', error.message);
+    if (upsertError) {
+      console.error('Upsert on dcmms_daily_mail failed:', upsertError.message || upsertError);
     } else {
-      console.log('Found profile row:', data);
+      console.log('Upsert on dcmms_daily_mail succeeded!');
     }
 
   } catch (err) {

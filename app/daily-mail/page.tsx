@@ -123,7 +123,9 @@ export default function DailyMailPage() {
           if (error) throw error;
 
           if (data) {
-            const mapped = data.map((db: any) => ({
+            const mapped = data
+              .filter((db: any) => !db.ref_no?.startsWith("__SECURITY_"))
+              .map((db: any) => ({
               id: db.id,
               refNo: db.ref_no,
               letterNo: db.letter_no || "",
