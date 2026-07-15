@@ -66,7 +66,7 @@ function RegisterComplaintForm() {
     refNo: "",
     letterDate: "",
     subject: "", // maps to Letter Title
-    regionProvince: "" as "region" | "province" | "",
+    regionProvince: "",
     receivedDate: "",
     priority: "medium" as "high" | "medium" | "low",
     status: "registered" as "registered" | "assigned" | "pending",
@@ -1079,35 +1079,31 @@ function RegisterComplaintForm() {
                     />
                   </div>
 
-                  {/* Row 1 - Column 3: Region/Province */}
+                  {/* Row 1 - Column 3: Classification of complaints */}
                   <div className="form-field-group">
-                    <span className="field-label">{t("regionProvince")}</span>
-                    <div className="radio-group-container">
-                      <label className="radio-option-label">
-                        <input
-                          type="radio"
-                          name="regionProvince"
-                          value="region"
-                          checked={formState.regionProvince === "region"}
-                          onChange={() => setFormState({ ...formState, regionProvince: "region" })}
-                          className="radio-input-styled"
-                          aria-label="Region"
-                        />
-                        {t("region")}
-                      </label>
-                      <label className="radio-option-label">
-                        <input
-                          type="radio"
-                          name="regionProvince"
-                          value="province"
-                          checked={formState.regionProvince === "province"}
-                          onChange={() => setFormState({ ...formState, regionProvince: "province" })}
-                          className="radio-input-styled"
-                          aria-label="Province"
-                        />
-                        {t("province")}
-                      </label>
-                    </div>
+                    <label htmlFor="regionProvince" className="field-label">{t("regionProvince")}</label>
+                    <select
+                      id="regionProvince"
+                      value={formState.regionProvince}
+                      onChange={(e) => setFormState({ ...formState, regionProvince: e.target.value })}
+                      className="field-select"
+                    >
+                      <option value="">{t("selectClassification", "Select Classification")}</option>
+                      <option value="Anonymous/Nominal letters">{t("classAnonymousNominal")}</option>
+                      <option value="Public Service Commission">{t("classPublicService")}</option>
+                      <option value="Educational Services Committee of the Public Service Commission">{t("classEdServices")}</option>
+                      <option value="Ministry of Public Administration, Provincial Councils and Local Government">{t("classMinistryPublicAdmin")}</option>
+                      <option value="Home Affairs Branch">{t("classHomeAffairs")}</option>
+                      <option value="President's Secretariat">{t("classPresidentsSec")}</option>
+                      <option value="Ministry Minister/Secretary">{t("classMinistryMinisterSec")}</option>
+                      <option value="Police Station">{t("classPolice")}</option>
+                      <option value="By Principals">{t("classByPrincipals")}</option>
+                      <option value="By Regional Offices">{t("classByRegionalOffices")}</option>
+                      <option value="Commission to Investigate Allegations of Bribery or Corruption">{t("classBriberyCorruption")}</option>
+                      <option value="Human Rights">{t("classHumanRights")}</option>
+                      <option value="Old Students' Associations">{t("classOldStudentsAssoc")}</option>
+                      <option value="Provincial Departments/Ministry">{t("classProvincialDept")}</option>
+                    </select>
                   </div>
 
                   {/* Row 2 - Column 1: Name of Subject Officer */}
