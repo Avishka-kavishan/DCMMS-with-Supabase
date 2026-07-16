@@ -28,10 +28,12 @@ interface LetterData {
 interface TrackingEntry {
   id: string;
   step: number;
+  role: string;
   officerName: string;
   action: string;
   date: string;
   time: string;
+  sortTs: number;
   status: "Completed" | "Current" | "Pending";
 }
 
@@ -73,8 +75,78 @@ function AdminViewCaseInner() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [letterData, setLetterData] = useState<LetterData | null>(null);
   const [trackingEntries, setTrackingEntries] = useState<TrackingEntry[]>([]);
+
+  // ── Fetch tracking entries (all sources merged) ─────────────────────
+  const fetchTracking = async (caseNo: string) => {
+    if (!isSupabaseConfigured || !caseNo) return;
+
+    const raw: Array<{
+      id: string; role: string; officerName: string;
+      action: string; date: string; sortTs: number;
+    }> = [];
+
+    // 1. Daily Mail registrations
+    try {
+      const { data: mailRows } = await supabase
+        .from("dcmms_daily_mail")
+        .select("id, received_date, letter_date, officer_name, sender_name, subject, letter_type, status")
+        .eq("ref_no", caseNo)
+        .order("received_date", { ascending: true });
+      if (mailRows) {
+        mailRows.forEach((d: any, i: number) => {
+          const dateStr = d.received_date || d.letter_date || "";
+          raw.push({
+            id: `dm-${d.id}`,
+            role: "Daily Reporter",
+            officerName: d.officer_name || "Daily Mail Officer",
+            action: i === 0
+              ? `Initial complaint received – ${d.subject || "Letter registered into the system"}`
+              : `Subsequent letter registered – ${d.subject || d.sender_name || "Letter received"}`,
+            date: dateStr,
+            sortTs: dateStr ? new Date(dateStr).getTime() : i,
+          });
+        });
+      }
+    } catch (e) { console.error("Failed to fetch daily_mail rows", e); }
+
+    // 2. Subject Officer actions
+    try {
+      const { data: actionRows } = await supabase
+        .from("dcmms_subject_details")
+        .select("id, received_date, subject_officer_name, step_taken, report_state")
+        .eq("case_no", caseNo)
+        .order("received_date", { ascending: true });
+      if (actionRows) {
+        actionRows.forEach((d: any) => {
+          const dateStr = d.received_date || "";
+          raw.push({
+            id: `so-${d.id}`,
+            role: "Subject Officer",
+            officerName: d.subject_officer_name || "Subject Officer",
+            action: d.step_taken || `Case update – ${d.report_state || "In Progress"}`,
+            date: dateStr,
+            sortTs: dateStr ? new Date(dateStr).getTime() : Date.now(),
+          });
+        });
+      }
+    } catch (e) { console.error("Failed to fetch subject_details rows", e); }
+
+    if (raw.length === 0) return;
+
+    raw.sort((a, b) => a.sortTs - b.sortTs);
+
+    setTrackingEntries(raw.map((r, idx) => ({
+      ...r,
+      step: idx + 1,
+      time: r.date
+        ? new Date(r.date).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false })
+        : "—",
+      status: (idx === raw.length - 1 ? "Current" : "Completed") as TrackingEntry["status"],
+    })));
+  };
 
   const getFormattedDate = () => {
     const date = new Date();
@@ -137,35 +209,13 @@ function AdminViewCaseInner() {
           } catch (e) { console.error(e); }
         }
 
-        // Build tracking entries
-        const entries: TrackingEntry[] = [];
+        // Build tracking
         if (isSupabaseConfigured) {
-          try {
-            const { data: actionsData } = await supabase
-              .from("dcmms_subject_details")
-              .select("*")
-              .eq("case_no", caseNoParam)
-              .order("received_date", { ascending: true });
-            if (actionsData && actionsData.length > 0) {
-              actionsData.forEach((d: any, idx: number) => {
-                const isLast = idx === actionsData.length - 1;
-                entries.push({
-                  id: d.id,
-                  step: idx + 1,
-                  officerName: d.subject_officer_name || "Subject Officer",
-                  action: d.step_taken || "Letter Registered in to the system",
-                  date: d.received_date || "—",
-                  time: d.received_date
-                    ? new Date(d.received_date).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false })
-                    : "—",
-                  status: d.report_state === "Closed" ? "Completed" : isLast ? "Current" : "Completed",
-                });
-              });
-            }
-          } catch (e) { console.error(e); }
+          await fetchTracking(caseNoParam);
         }
 
-        if (entries.length === 0 && typeof window !== "undefined") {
+        // LocalStorage fallback
+        if (trackingEntries.length === 0 && typeof window !== "undefined") {
           const storedActions = localStorage.getItem("dcmms_new_letter_current_case");
           if (storedActions) {
             try {
@@ -173,40 +223,20 @@ function AdminViewCaseInner() {
               const filtered = list
                 .filter((a) => a.caseNo === caseNoParam)
                 .sort((a, b) => new Date(a.receivedDate).getTime() - new Date(b.receivedDate).getTime());
-              filtered.forEach((a, idx) => {
-                const isLast = idx === filtered.length - 1;
-                entries.push({
-                  id: a.id || `${idx}`,
-                  step: idx + 1,
-                  officerName: a.subjectOfficerName || "Subject Officer",
-                  action: a.stepTaken || "Letter Registered in to the system",
-                  date: a.receivedDate || "—",
-                  time: "—",
-                  status: a.reportState === "Closed" ? "Completed" : isLast ? "Current" : "Completed",
-                });
-              });
+              setTrackingEntries(filtered.map((a, idx) => ({
+                id: a.id || `${idx}`,
+                step: idx + 1,
+                role: "Subject Officer",
+                officerName: a.subjectOfficerName || "Subject Officer",
+                action: a.stepTaken || "Letter Registered in to the system",
+                date: a.receivedDate || "—",
+                time: "—",
+                sortTs: a.receivedDate ? new Date(a.receivedDate).getTime() : idx,
+                status: (a.reportState === "Closed" ? "Completed" : idx === filtered.length - 1 ? "Current" : "Completed") as TrackingEntry["status"],
+              })));
             } catch { /* ignore */ }
           }
         }
-
-        // Placeholder if still empty
-        if (entries.length === 0) {
-          const today = new Date().toLocaleDateString("en-GB");
-          const roles = ["Daily Reporter", "Daily Reporter", "Daily Reporter", "Daily Reporter", "Daily Reporter", "Subject Officer", "Investigation Officer"];
-          roles.forEach((role, idx) => {
-            entries.push({
-              id: `placeholder-${idx}`,
-              step: idx + 1,
-              officerName: "A.K. Rathnaweera",
-              action: "Letter Registered in to the system",
-              date: today,
-              time: "15:02",
-              status: idx < 5 ? "Completed" : idx === 5 ? "Current" : "Pending",
-            });
-          });
-        }
-
-        setTrackingEntries(entries);
       }
 
       setCheckingAuth(false);
@@ -216,6 +246,32 @@ function AdminViewCaseInner() {
     verifyAndFetch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caseNoParam, router]);
+
+  // ── Supabase Realtime subscription ─────────────────────────────────────
+  useEffect(() => {
+    if (!isSupabaseConfigured || !caseNoParam) return;
+
+    const channel = supabase
+      .channel(`tracking-admin-${caseNoParam}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "dcmms_subject_details",
+          filter: `case_no=eq.${caseNoParam}`,
+        },
+        async () => {
+          setIsRefreshing(true);
+          await fetchTracking(caseNoParam);
+          setIsRefreshing(false);
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [caseNoParam]);
 
   const handleLogout = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -346,8 +402,19 @@ function AdminViewCaseInner() {
                 <div className="vc-section-card">
                   <div className="vc-section-header">
                     <div>
-                      <h2 className="vc-section-title">Progress Timeline</h2>
-                      <p className="vc-section-subtitle">Track the journey of this case through each stage</p>
+                      <h2 className="vc-section-title">
+                        Progress Timeline
+                        {isSupabaseConfigured && (
+                          <span style={{ marginLeft: 10, display: "inline-flex", alignItems: "center", gap: 5, fontSize: "11px", fontWeight: 500, color: "#16a34a", background: "#dcfce7", padding: "2px 8px", borderRadius: 20 }}>
+                            <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#16a34a", display: "inline-block", animation: "pulse 1.5s ease-in-out infinite" }} />
+                            Live
+                          </span>
+                        )}
+                      </h2>
+                      <p className="vc-section-subtitle">
+                        Track the journey of this case through each stage
+                        {isRefreshing && <span style={{ marginLeft: 8, color: "#6366f1", fontSize: "11px" }}>Refreshing…</span>}
+                      </p>
                     </div>
                     <span className="vc-step-counter">{currentStep}/{totalSteps}</span>
                   </div>
@@ -359,9 +426,12 @@ function AdminViewCaseInner() {
                         </div>
                         <div className="vc-timeline-right">
                           <div className={`vc-timeline-card${entry.status === "Current" ? " card-current" : entry.status === "Pending" ? " card-pending" : ""}`}>
-                            <div>
-                              <p className="vc-timeline-officer">{entry.officerName}</p>
-                              <p className="vc-timeline-name">A.K. Rithnaweera</p>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <p className="vc-timeline-officer">{entry.role}</p>
+                              <p className="vc-timeline-name">{entry.officerName}</p>
+                              <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "#475569", margin: "4px 0", wordBreak: "break-word" }}>
+                                {entry.action}
+                              </p>
                               <div className="vc-timeline-meta">
                                 <svg className="vc-timeline-clock" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                                   <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
@@ -393,6 +463,7 @@ function AdminViewCaseInner() {
                         <thead>
                           <tr>
                             <th>Step</th>
+                            <th>Role</th>
                             <th>Officer</th>
                             <th>Action</th>
                             <th>Date</th>
@@ -404,6 +475,16 @@ function AdminViewCaseInner() {
                           {trackingEntries.map((entry) => (
                             <tr key={entry.id}>
                               <td><span className="vc-step-badge">{entry.step}</span></td>
+                              <td>
+                                <span style={{
+                                  fontSize: "calc(11px * var(--font-scale))",
+                                  fontWeight: 600,
+                                  padding: "3px 10px",
+                                  borderRadius: 20,
+                                  background: entry.role === "Daily Reporter" ? "#eff6ff" : "#f0fdf4",
+                                  color: entry.role === "Daily Reporter" ? "#1d4ed8" : "#15803d",
+                                }}>{entry.role}</span>
+                              </td>
                               <td>{entry.officerName}</td>
                               <td>{entry.action}</td>
                               <td>{entry.date}</td>

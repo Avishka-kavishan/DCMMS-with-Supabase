@@ -131,7 +131,7 @@ export default function SubjectOfficerDashboard() {
             const assignedRefNos = Array.from(refToReceivedDate.keys());
 
             if (assignedRefNos.length > 0) {
-               const { data: casesData, error: casesError } = await supabase
+              const { data: casesData, error: casesError } = await supabase
                 .from("dcmms_subject")
                 .select("*")
                 .in("case_no", assignedRefNos)
@@ -203,9 +203,9 @@ export default function SubjectOfficerDashboard() {
             // Check actions in localStorage
             const storedActions = localStorage.getItem("dcmms_new_letter_current_case") || "[]";
             let actionsList = [];
-            try { actionsList = JSON.parse(storedActions); } catch (e) {}
+            try { actionsList = JSON.parse(storedActions); } catch (e) { }
             const casesWithActions = new Set(
-              Array.isArray(actionsList) 
+              Array.isArray(actionsList)
                 ? actionsList.map((a: any) => a.caseNo)
                 : []
             );
@@ -283,7 +283,7 @@ export default function SubjectOfficerDashboard() {
     const today = new Date();
     const assignedMidnight = new Date(assigned.getFullYear(), assigned.getMonth(), assigned.getDate());
     const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    
+
     const diffTime = todayMidnight.getTime() - assignedMidnight.getTime();
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
 
@@ -679,7 +679,6 @@ export default function SubjectOfficerDashboard() {
                     <th scope="col">{t("caseAge", "Case Age")}</th>
                     <th scope="col">Reminder</th>
                     <th scope="col" className="text-center">{t("addDetails")}</th>
-                    <th scope="col" className="text-center">{t("view", "View")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -693,12 +692,11 @@ export default function SubjectOfficerDashboard() {
                           {item.priority === "high" ? t("priorityHigh") : item.priority === "medium" ? t("priorityMedium") : t("priorityLow")}
                         </td>
                         <td>
-                          <span className={`badge-badge ${
-                            item.status === "In Progress" ? "badge-status-inprogress" :
-                            item.status === "Closed" ? "badge-status-closed" : "badge-status-pending"
-                          }`}>
+                          <span className={`badge-badge ${item.status === "In Progress" ? "badge-status-inprogress" :
+                              item.status === "Closed" ? "badge-status-closed" : "badge-status-pending"
+                            }`}>
                             {item.status === "In Progress" ? t("statusInProgress") :
-                             item.status === "Closed" ? t("statusClosed") : t("statusPending")}
+                              item.status === "Closed" ? t("statusClosed") : t("statusPending")}
                           </span>
                         </td>
                         <td>
@@ -713,7 +711,7 @@ export default function SubjectOfficerDashboard() {
                             if (rem.color === "red") colorClass = "reminder-red";
                             else if (rem.color === "orange") colorClass = "reminder-orange";
                             else if (rem.color === "green") colorClass = "reminder-green";
-                            
+
                             return (
                               <span className={`reminder-tag ${colorClass}`}>
                                 {rem.text}
@@ -729,20 +727,11 @@ export default function SubjectOfficerDashboard() {
                             {t("addDetails")}
                           </Link>
                         </td>
-                        <td className="text-center actions-cell">
-                          <Link
-                            href={`/subject/view-case?caseNo=${item.caseNo}`}
-                            className="add-details-link"
-                            style={{ background: "#e0e7ff", color: "#4338ca" }}
-                          >
-                            {t("view", "View")}
-                          </Link>
-                        </td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={9} className="text-center py-4 text-muted">
+                      <td colSpan={8} className="text-center py-4 text-muted">
                         No cases found matching search
                       </td>
                     </tr>

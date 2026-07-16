@@ -543,8 +543,8 @@ export default function AdminDashboard() {
                       {stat.role === "subject_officer"
                         ? t("roleSubjectOfficer", "Subject Officer")
                         : stat.role === "investigation_officer"
-                        ? t("roleInvestigationOfficer", "Investigation Officer")
-                        : t("roleDailyMail", "Daily Mail Officer")}
+                          ? t("roleInvestigationOfficer", "Investigation Officer")
+                          : t("roleDailyMail", "Daily Mail Officer")}
                     </td>
                     <td style={{ textAlign: "right" }}>
                       {stat.role === "daily_mail" ? "—" : (
@@ -632,40 +632,38 @@ export default function AdminDashboard() {
                     <td>{item.assignedTo}</td>
                     <td>
                       <span
-                        className={`badge-badge ${
-                          item.priority === "High"
+                        className={`badge-badge ${item.priority === "High"
                             ? "badge-priority-high"
                             : item.priority === "Medium"
-                            ? "badge-priority-medium"
-                            : "badge-priority-low"
-                        }`}
+                              ? "badge-priority-medium"
+                              : "badge-priority-low"
+                          }`}
                       >
                         {item.priority === "High"
                           ? t("priorityHigh", "High")
                           : item.priority === "Medium"
-                          ? t("priorityMedium", "Medium")
-                          : t("priorityLow", "Low")}
+                            ? t("priorityMedium", "Medium")
+                            : t("priorityLow", "Low")}
                       </span>
                     </td>
                     <td>
                       <span
-                        className={`badge-badge ${
-                          item.status === "Under Investigation"
+                        className={`badge-badge ${item.status === "Under Investigation"
                             ? "badge-status-inprogress"
                             : item.status === "Closed"
-                            ? "badge-status-closed"
-                            : "badge-status-pending"
-                        }`}
+                              ? "badge-status-closed"
+                              : "badge-status-pending"
+                          }`}
                       >
                         {item.status === "Under Investigation"
                           ? t("statusUnderInvestigation", "Under Investigation")
                           : item.status === "Closed"
-                          ? t("statusClosed", "Closed")
-                          : t("statusUnderSubjectOfficer", "Under Subject Officer")}
+                            ? t("statusClosed", "Closed")
+                            : t("statusUnderSubjectOfficer", "Under Subject Officer")}
                       </span>
                     </td>
                     <td className="admin-table-cell-center">
-                      <a href={`/admin/view-case?caseNo=${item.caseNo}`} className="add-details-link">{t("view", "View")}</a>
+                      <a href="#" className="add-details-link">{t("view", "View")}</a>
                     </td>
                   </tr>
                 ))
