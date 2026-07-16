@@ -679,6 +679,7 @@ export default function SubjectOfficerDashboard() {
                     <th scope="col">{t("caseAge", "Case Age")}</th>
                     <th scope="col">Reminder</th>
                     <th scope="col" className="text-center">{t("addDetails")}</th>
+                    <th scope="col" className="text-center">{t("view", "View")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -728,11 +729,20 @@ export default function SubjectOfficerDashboard() {
                             {t("addDetails")}
                           </Link>
                         </td>
+                        <td className="text-center actions-cell">
+                          <Link
+                            href={`/subject/view-case?caseNo=${item.caseNo}`}
+                            className="add-details-link"
+                            style={{ background: "#e0e7ff", color: "#4338ca" }}
+                          >
+                            {t("view", "View")}
+                          </Link>
+                        </td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={8} className="text-center py-4 text-muted">
+                      <td colSpan={9} className="text-center py-4 text-muted">
                         No cases found matching search
                       </td>
                     </tr>

@@ -665,7 +665,7 @@ export default function AdminDashboard() {
                       </span>
                     </td>
                     <td className="admin-table-cell-center">
-                      <a href="#" className="add-details-link">{t("view", "View")}</a>
+                      <a href={`/admin/view-case?caseNo=${item.caseNo}`} className="add-details-link">{t("view", "View")}</a>
                     </td>
                   </tr>
                 ))

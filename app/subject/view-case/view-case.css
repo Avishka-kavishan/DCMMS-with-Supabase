@@ -1,0 +1,390 @@
+/* ============================================================
+   VIEW CASE PAGE — Case Information, Progress Timeline, Tracking History
+   ============================================================ */
+
+/* ── Page wrapper ── */
+.view-case-wrapper {
+  padding: 24px 20px 0 20px;
+  max-width: 100%;
+}
+
+@media (min-width: 768px) {
+  .view-case-wrapper {
+    padding: 28px 32px 0 32px;
+  }
+}
+
+/* ── Page heading row ── */
+.view-case-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.view-case-title-group h1 {
+  font-size: calc(22px * var(--font-scale));
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0 0 4px 0;
+  line-height: 1.2;
+}
+
+.view-case-title-group p {
+  font-size: calc(12px * var(--font-scale));
+  color: #64748b;
+  margin: 0;
+}
+
+.btn-back-home {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: calc(13px * var(--font-scale));
+  font-weight: 500;
+  color: #374151;
+  text-decoration: none;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+
+.btn-back-home:hover {
+  background: #e2e8f0;
+}
+
+.btn-back-home-icon {
+  width: 16px;
+  height: 16px;
+}
+
+/* ── Case Information Card ── */
+.case-info-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 20px 24px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.case-info-card-title {
+  font-size: calc(15px * var(--font-scale));
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 16px 0;
+}
+
+.case-info-card-subtitle {
+  font-size: calc(11px * var(--font-scale));
+  color: #94a3b8;
+  font-weight: 400;
+  margin-left: 6px;
+}
+
+.case-info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px 32px;
+}
+
+@media (min-width: 768px) {
+  .case-info-grid {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+}
+
+.case-info-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.case-info-label {
+  font-size: calc(11px * var(--font-scale));
+  font-weight: 600;
+  color: #6366f1;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.case-info-value {
+  font-size: calc(13px * var(--font-scale));
+  font-weight: 600;
+  color: #1e293b;
+}
+
+/* ── Section Card (shared for timeline + tracking) ── */
+.vc-section-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 20px 24px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.vc-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.vc-section-title {
+  font-size: calc(15px * var(--font-scale));
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.vc-section-subtitle {
+  font-size: calc(11px * var(--font-scale));
+  color: #94a3b8;
+  margin: 2px 0 0 0;
+}
+
+.vc-step-counter {
+  font-size: calc(12px * var(--font-scale));
+  font-weight: 600;
+  color: #64748b;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  padding: 3px 12px;
+}
+
+/* ── Progress Timeline ── */
+.vc-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  position: relative;
+}
+
+.vc-timeline-item {
+  display: flex;
+  gap: 16px;
+  position: relative;
+}
+
+/* The vertical line */
+.vc-timeline-item:not(:last-child) .vc-timeline-left::after {
+  content: "";
+  position: absolute;
+  left: 14px;
+  top: 30px;
+  bottom: -20px;
+  width: 2px;
+  background: #e2e8f0;
+  z-index: 0;
+}
+
+.vc-timeline-left {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  flex-shrink: 0;
+  padding-bottom: 20px;
+}
+
+.vc-timeline-dot {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.vc-timeline-dot.dot-completed {
+  background: #22c55e;
+  border: 2px solid #16a34a;
+}
+
+.vc-timeline-dot.dot-current {
+  background: #f97316;
+  border: 2px solid #ea580c;
+}
+
+.vc-timeline-dot.dot-pending {
+  background: #cbd5e1;
+  border: 2px solid #94a3b8;
+}
+
+.vc-dot-check {
+  width: 15px;
+  height: 15px;
+  stroke: #fff;
+  stroke-width: 2.5;
+}
+
+.vc-timeline-right {
+  flex: 1;
+  padding-bottom: 20px;
+  min-width: 0;
+}
+
+.vc-timeline-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 16px;
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.vc-timeline-card.card-current {
+  background: #fff7ed;
+  border-color: #fed7aa;
+}
+
+.vc-timeline-card.card-pending {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  opacity: 0.7;
+}
+
+.vc-timeline-officer {
+  font-size: calc(13px * var(--font-scale));
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0 0 2px 0;
+}
+
+.vc-timeline-name {
+  font-size: calc(12px * var(--font-scale));
+  color: #64748b;
+  margin: 0 0 4px 0;
+}
+
+.vc-timeline-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: calc(11px * var(--font-scale));
+  color: #94a3b8;
+}
+
+.vc-timeline-clock {
+  width: 13px;
+  height: 13px;
+}
+
+/* ── Timeline Status Badges ── */
+.vc-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: calc(11px * var(--font-scale));
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.vc-status-badge.badge-completed {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.vc-status-badge.badge-current {
+  background: #ffedd5;
+  color: #c2410c;
+}
+
+.vc-status-badge.badge-pending {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+
+.vc-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* ── Tracking History Table ── */
+.vc-table-wrapper {
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.vc-tracking-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: calc(12px * var(--font-scale));
+}
+
+.vc-tracking-table thead tr {
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.vc-tracking-table th {
+  padding: 10px 16px;
+  text-align: left;
+  font-size: calc(11px * var(--font-scale));
+  font-weight: 700;
+  color: #475569;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+
+.vc-tracking-table td {
+  padding: 11px 16px;
+  color: #334155;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+}
+
+.vc-tracking-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.vc-tracking-table tbody tr:hover td {
+  background: #f8fafc;
+}
+
+.vc-step-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #e0e7ff;
+  color: #4338ca;
+  font-size: calc(11px * var(--font-scale));
+  font-weight: 700;
+}
+
+/* Empty state */
+.vc-empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: #94a3b8;
+  font-size: calc(13px * var(--font-scale));
+}
+
+.vc-loading {
+  text-align: center;
+  padding: 40px;
+  color: #64748b;
+  font-size: calc(13px * var(--font-scale));
+}
