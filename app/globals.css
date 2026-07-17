@@ -765,7 +765,7 @@ body {
     grid-template-columns: 1.5fr 1.1fr 1fr;
     gap: 40px;
     align-items: start;
-    margin-left: 80;
+    margin-left: 80px;
   }
 }
 
