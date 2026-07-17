@@ -87,9 +87,9 @@
   "receivedDate": "Date received by additional secretary",
   "subjectText": "Subject / Matter of the letter",
   "priority": "Priority",
-  "priorityLow": "Low",
-  "priorityMedium": "Medium",
-  "priorityHigh": "High",
+  "priorityLow": "Within 14/21 days (Green color)",
+  "priorityMedium": "Within 3 days (Orange color)",
+  "priorityHigh": "Today (Red color)",
   "status": "Status",
   "statusRegistered": "Registered",
   "statusAssigned": "Assigned",
@@ -364,6 +364,19 @@
   "editLetterTitle": "Edit Letter",
   "addMailForCase": "Add Mail for Case",
   "addSubsequentMailTitle": "Add subsequent mail for this case",
-  "edit": "Edit"
+  "edit": "Edit",
+  "subjectFileNo": "Subject File Number",
+  "subjectMatterTitle": "Subject Matter / Title",
+  "datePreparedSubmitted": "Date prepared and submitted for signature",
+  "instituteFileNo": "File number of the institute where letter was received",
+  "statusCallingReports": "Calling reports from Principal/Zone/Province/Police",
+  "statusCallingCourtReports": "Calling court reports",
+  "statusPreliminaryInvestigation": "Conducting preliminary investigations",
+  "statusInquiry": "Conducting an inquiry",
+  "statusReferOtherInstitute": "Referring letters not related to this ministry system to other institutes",
+  "statusConsultRelevantInstitutes": "Taking advice from relevant institutes for complaints",
+  "statusObtainStatements": "Proceeding by taking statements",
+  "statusUnclearAnonymous": "Unclear facts / Anonymous letters file",
+  "statusOther": "Other"
 }
 

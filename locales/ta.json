@@ -87,9 +87,9 @@
   "receivedDate": "கூடுதல் செயலாளரால் பெறப்பட்ட தேதி",
   "subjectText": "கடிதத்தின் பொருள் / தலைப்பு",
   "priority": "முன்னுரிமை",
-  "priorityLow": "குறைந்த",
-  "priorityMedium": "நடுத்தர",
-  "priorityHigh": "உயர்",
+  "priorityLow": "14/21 நாட்களுக்குள் (பச்சை நிறம்)",
+  "priorityMedium": "3 நாட்களுக்குள் (ஆரஞ்சு நிறம்)",
+  "priorityHigh": "இன்றே (சிவப்பு நிறம்)",
   "status": "நிலை",
   "statusRegistered": "பதிவு செய்யப்பட்டது",
   "statusAssigned": "ஒதுக்கப்பட்டது",
@@ -359,6 +359,19 @@
   "editLetterTitle": "கடிதத்தைத் தொகுக்க",
   "addMailForCase": "வழக்கிற்கு கடிதம் சேர்க்கவும்",
   "addSubsequentMailTitle": "இந்த வழக்கிற்கு அடுத்தடுத்த கடிதத்தைச் சேர்க்கவும்",
-  "edit": "தொகு"
+  "edit": "தொகு",
+  "subjectFileNo": "விடயக் கோப்பு எண்",
+  "subjectMatterTitle": "விடயப்பொருள் / தலைப்பு",
+  "datePreparedSubmitted": "கடிதம் தயாரிக்கப்பட்டு கையெழுத்திட சமர்ப்பிக்கப்பட்ட தேதி",
+  "instituteFileNo": "கடிதம் பெறப்பட்ட நிறுவனத்தின் கோப்பு எண்",
+  "statusCallingReports": "அதிபர்/வலயம்/மாகாணம்/பொலிஸ் அறிக்கைகளை அழைத்தல்",
+  "statusCallingCourtReports": "நீதிமன்ற அறிக்கைகளை அழைத்தல்",
+  "statusPreliminaryInvestigation": "முதற்கட்ட விசாரணைகளை நடத்துதல்",
+  "statusInquiry": "விசாரணை நடத்துதல்",
+  "statusReferOtherInstitute": "இந்த அமைச்சு முறைமையுடன் தொடர்பற்ற கடிதங்களை வேறு நிறுவனங்களுக்கு அனுப்புதல்",
+  "statusConsultRelevantInstitutes": "முறைப்பாடுகளுக்காக உரிய நிறுவனங்களிடமிருந்து ஆலோசனைகளைப் பெறுதல்",
+  "statusObtainStatements": "வாக்குமூலங்களைப் பெறுவதன் மூலம் மேலதிக நடவடிக்கைகளை மேற்கொள்ளல்",
+  "statusUnclearAnonymous": "தெளிவற்ற விபரங்கள் / அநாமதேய கடிதங்கள் கோப்பு",
+  "statusOther": "வேறு"
 }
 

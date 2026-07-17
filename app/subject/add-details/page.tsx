@@ -72,6 +72,7 @@ function CaseDetailsForm() {
   const [refNo, setRefNo] = useState(caseNoParam);
   const [fileRelated, setFileRelated] = useState("");
   const [specialNotes, setSpecialNotes] = useState("");
+  const [priority, setPriority] = useState("medium");
 
   // Form States - Right Card ("If officer concerned with the Complaint")
   const [isConcerned, setIsConcerned] = useState<"yes" | "no">("no");
@@ -134,6 +135,7 @@ function CaseDetailsForm() {
                 instituteName: data.institute_name,
                 regionProvince: data.region_province,
               });
+              setPriority(data.priority || "medium");
             }
           } catch (e) {
             console.error("Failed to fetch letter details from Supabase", e);
@@ -149,6 +151,7 @@ function CaseDetailsForm() {
               const found = list.find((item: any) => item.refNo === caseNoParam);
               if (found) {
                 setLetterData(found);
+                setPriority(found.priority || "medium");
               }
             } catch (e) {
               console.error("Failed to parse letters from local storage", e);
@@ -378,6 +381,12 @@ function CaseDetailsForm() {
             status: status || "In Progress",
           }, { onConflict: "case_no", ignoreDuplicates: true });
 
+        // Update the priority in dcmms_daily_mail as well
+        await supabase
+          .from("dcmms_daily_mail")
+          .update({ priority: priority })
+          .eq("ref_no", refNo);
+
         // Save action/letters details as a new row in dcmms_subject_details
         const { error: actionError } = await supabase
           .from("dcmms_subject_details")
@@ -493,6 +502,21 @@ function CaseDetailsForm() {
             return c;
           });
           localStorage.setItem("dcmms_cases", JSON.stringify(updated));
+        } catch (e) {}
+      }
+
+      // Also update daily mail letters priority in localStorage
+      const storedLetters = localStorage.getItem("dcmms_letters");
+      if (storedLetters) {
+        try {
+          const lettersList = JSON.parse(storedLetters);
+          const updatedLetters = lettersList.map((l: any) => {
+            if (l.refNo === refNo) {
+              return { ...l, priority: priority };
+            }
+            return l;
+          });
+          localStorage.setItem("dcmms_letters", JSON.stringify(updatedLetters));
         } catch (e) {}
       }
     }
@@ -865,41 +889,97 @@ function CaseDetailsForm() {
                         </div>
                       </div>
                     )}
-                    {/* Subject Officer Select */}
-                    <div className="form-field-group field-subject-officer">
-                      <label htmlFor="subjectOfficer" className="field-label">
-                        {t("subjectOfficerLabel")}
+                    {/* 1. Reference Number */}
+                    <div className="form-field-group">
+                      <label htmlFor="refNo" className="field-label">
+                        {t("refNo")} <span className="required-star">*</span>
                       </label>
-                      <div className="select-wrapper">
-                        <select
-                          id="subjectOfficer"
-                          value={subjectOfficer}
-                          onChange={(e) => setSubjectOfficer(e.target.value)}
-                          className="field-select"
-                        >
-                          <option value="">{t("selectRole")}</option>
-                          <option value="Kamal Perera">{t("optKamalPerera")}</option>
-                          <option value="Suresh Silva">{t("optSureshSilva")}</option>
-                          <option value="Aruni Rajapaksha">{t("optAruniRajapaksha")}</option>
-                        </select>
-                        <div className="select-arrow-container">
-                          <svg
-                            className="select-arrow-icon"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth="2.5"
+                      <input
+                        id="refNo"
+                        type="text"
+                        required
+                        readOnly
+                        value={refNo}
+                        className="field-input"
+                        style={{ backgroundColor: "#e2e8f0", cursor: "not-allowed" }}
+                      />
+                    </div>
+
+                    {/* 2. File number of the institute where letter was received */}
+                    <div className="form-field-group">
+                      <label htmlFor="fileRelated" className="field-label">
+                        {t("instituteFileNo")}
+                      </label>
+                      <input
+                        id="fileRelated"
+                        type="text"
+                        value={fileRelated}
+                        onChange={(e) => setFileRelated(e.target.value)}
+                        className="field-input"
+                        placeholder="e.g. EP/DM/01"
+                      />
+                    </div>
+
+                    {/* 3. Subject File Number */}
+                    <div className="form-field-group">
+                      <label htmlFor="specialNotes" className="field-label">
+                        {t("subjectFileNo")}
+                      </label>
+                      <input
+                        id="specialNotes"
+                        type="text"
+                        value={specialNotes}
+                        onChange={(e) => setSpecialNotes(e.target.value)}
+                        className="field-input"
+                        placeholder="e.g. SUB/FILE/102"
+                      />
+                    </div>
+
+                    {/* 4. Subject Matter / Title */}
+                    <div className="form-field-group">
+                      <label htmlFor="stepTaken" className="field-label">
+                        {t("subjectMatterTitle")}
+                      </label>
+                      <textarea
+                        id="stepTaken"
+                        value={stepTaken}
+                        onChange={(e) => setStepTaken(e.target.value)}
+                        className="field-textarea"
+                        placeholder="Enter subject details or title..."
+                      />
+                    </div>
+
+                    {/* 5. Priority */}
+                    <div className="form-field-group">
+                      <label htmlFor="priority" className="field-label">
+                        {t("priority")}
+                      </label>
+                      <div className="priority-select-wrapper">
+                        <span className={`priority-dot-indicator dot-${priority}`} />
+                        <div className="select-wrapper" style={{ flex: 1 }}>
+                          <select
+                            id="priority"
+                            value={priority}
+                            onChange={(e) => setPriority(e.target.value)}
+                            className="field-select"
                           >
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                          </svg>
+                            <option value="high" className="priority-option-high">{t("priorityHigh")}</option>
+                            <option value="medium" className="priority-option-medium">{t("priorityMedium")}</option>
+                            <option value="low" className="priority-option-low">{t("priorityLow")}</option>
+                          </select>
+                          <div className="select-arrow-container">
+                            <svg className="select-arrow-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </div>
                         </div>
                       </div>
                     </div>
 
-                    {/* Report State Select */}
-                    <div className="form-field-group field-report-state">
+                    {/* 6. Status */}
+                    <div className="form-field-group">
                       <label htmlFor="reportState" className="field-label">
-                        {t("reportState")}
+                        {t("status")}
                       </label>
                       <div className="select-wrapper">
                         <select
@@ -908,29 +988,29 @@ function CaseDetailsForm() {
                           onChange={(e) => setReportState(e.target.value)}
                           className="field-select"
                         >
-                          <option value="">Choose report state</option>
-                          <option value="In Progress">{t("statusInProgress")}</option>
-                          <option value="Pending">{t("statusPending")}</option>
-                          <option value="Closed">{t("statusClosed")}</option>
+                          <option value="">{t("Choose report state", "Select current status...")}</option>
+                          <option value="Calling Reports">{t("statusCallingReports")}</option>
+                          <option value="Calling Court Reports">{t("statusCallingCourtReports")}</option>
+                          <option value="Preliminary Investigation">{t("statusPreliminaryInvestigation")}</option>
+                          <option value="Inquiry">{t("statusInquiry")}</option>
+                          <option value="Refer Other Institute">{t("statusReferOtherInstitute")}</option>
+                          <option value="Consult Relevant Institutes">{t("statusConsultRelevantInstitutes")}</option>
+                          <option value="Obtain Statements">{t("statusObtainStatements")}</option>
+                          <option value="Unclear Anonymous">{t("statusUnclearAnonymous")}</option>
+                          <option value="Other">{t("statusOther")}</option>
                         </select>
                         <div className="select-arrow-container">
-                          <svg
-                            className="select-arrow-icon"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth="2.5"
-                          >
+                          <svg className="select-arrow-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                           </svg>
                         </div>
                       </div>
                     </div>
 
-                    {/* Received Date */}
-                    <div className="form-field-group field-received-date">
+                    {/* 7. Date prepared and submitted for signature */}
+                    <div className="form-field-group">
                       <label htmlFor="receivedDate" className="field-label">
-                        {t("receivedDate")}
+                        {t("datePreparedSubmitted")}
                       </label>
                       <div className="input-icon-wrapper">
                         <input
@@ -940,76 +1020,10 @@ function CaseDetailsForm() {
                           onChange={(e) => setReceivedDate(e.target.value)}
                           className="field-input input-with-right-icon"
                         />
-                        <svg
-                          className="input-right-icon"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                          />
+                        <svg className="input-right-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                         </svg>
                       </div>
-                    </div>
-
-                    {/* Step Taken */}
-                    <div className="form-field-group field-step-taken">
-                      <label htmlFor="stepTaken" className="field-label">
-                        {t("stepTaken")}
-                      </label>
-                      <textarea
-                        id="stepTaken"
-                        value={stepTaken}
-                        onChange={(e) => setStepTaken(e.target.value)}
-                        className="field-textarea"
-                      />
-                    </div>
-
-                    {/* Reference Number */}
-                    <div className="form-field-group field-reference-number">
-                      <label htmlFor="refNo" className="field-label">
-                        {t("refNo")} <span className="required-star">*</span>
-                      </label>
-                      <input
-                        id="refNo"
-                        type="text"
-                        required
-                        value={refNo}
-                        onChange={(e) => setRefNo(e.target.value)}
-                        className="field-input"
-                      />
-                    </div>
-
-                    {/* File related to Letter */}
-                    <div className="form-field-group field-file-related">
-                      <label htmlFor="fileRelated" className="field-label">
-                        {t("fileRelatedToLetter")}
-                      </label>
-                      <input
-                        id="fileRelated"
-                        type="text"
-                        value={fileRelated}
-                        onChange={(e) => setFileRelated(e.target.value)}
-                        className="field-input"
-                      />
-                    </div>
-
-                    {/* Special Notes */}
-                    <div className="form-field-group field-special-notes">
-                      <label htmlFor="specialNotes" className="field-label">
-                        {t("specialNotes")}
-                      </label>
-                      <input
-                        id="specialNotes"
-                        type="text"
-                        value={specialNotes}
-                        onChange={(e) => setSpecialNotes(e.target.value)}
-                        className="field-input"
-                      />
                     </div>
                   </div>
                 </div>
