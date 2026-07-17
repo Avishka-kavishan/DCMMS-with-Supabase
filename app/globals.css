@@ -765,6 +765,8 @@ body {
     grid-template-columns: 1.5fr 1.1fr 1fr;
     gap: 40px;
     align-items: start;
+    margin-left: 110;
+    margin-right: -70;
   }
 }
 
@@ -785,12 +787,16 @@ body {
 }
 
 @media (min-width: 768px) {
+
   .footer-column:nth-child(2),
   .footer-column:nth-child(3) {
-    padding-left: 20px; /* Slight indent to balance visual space */
+    padding-left: 20px;
+    /* Slight indent to balance visual space */
   }
 }
+
 @media (min-width: 1200px) {
+
   .footer-column:nth-child(2),
   .footer-column:nth-child(3) {
     padding-left: 40px;
