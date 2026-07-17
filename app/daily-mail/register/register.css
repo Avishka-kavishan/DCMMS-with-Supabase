@@ -448,3 +448,48 @@
   padding: 16px 0;
   margin: 0;
 }
+
+/* Priority colors styling and dot indicator */
+.priority-select-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.priority-dot-indicator {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.15);
+  transition: background-color 0.2s ease;
+}
+
+.priority-dot-indicator.dot-high {
+  background-color: #ef4444; /* Red color */
+}
+
+.priority-dot-indicator.dot-medium {
+  background-color: #f97316; /* Orange color */
+}
+
+.priority-dot-indicator.dot-low {
+  background-color: #22c55e; /* Green color */
+}
+
+.priority-option-high {
+  color: #ef4444;
+  font-weight: 600;
+}
+
+.priority-option-medium {
+  color: #f97316;
+  font-weight: 600;
+}
+
+.priority-option-low {
+  color: #22c55e;
+  font-weight: 600;
+}

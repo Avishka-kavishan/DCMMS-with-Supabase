@@ -36,6 +36,23 @@ function RegisterComplaintForm() {
     { value: "Other", labelKey: "natureOther" }
   ];
 
+  const letterClassifications = [
+    { value: "Anonymous/Nominal", labelKey: "classAnonymousNominal" },
+    { value: "Public Service Commission", labelKey: "classPSC" },
+    { value: "Education Service Committee", labelKey: "classESC" },
+    { value: "Ministry of Public Administration", labelKey: "classMinistryGov" },
+    { value: "Internal Branches", labelKey: "classInternalBranches" },
+    { value: "Presidential Secretariat", labelKey: "classPresidentSecretariat" },
+    { value: "Ministry Minister/Secretary", labelKey: "classMinistrySecretariat" },
+    { value: "Police Stations", labelKey: "classPoliceStations" },
+    { value: "By Principals", labelKey: "classByPrincipals" },
+    { value: "By Zonal Offices", labelKey: "classByZonalOffices" },
+    { value: "Bribery Commission", labelKey: "classBriberyCommission" },
+    { value: "Human Rights", labelKey: "classHumanRights" },
+    { value: "Old Boys Association", labelKey: "classOldBoysAssociation" },
+    { value: "Provincial Departments/Ministries", labelKey: "classProvincialDept" }
+  ];
+
   // Accessibility & language state
   const [fontScale, setFontScale] = useState<"small" | "medium" | "large">("medium");
   const lang = i18n.language;
@@ -79,7 +96,7 @@ function RegisterComplaintForm() {
     senderName: "",
     letterType: "",
     officerName: "",
-    subjectCategory: "Other", // Hidden but prefilled
+    subjectCategory: "", // Prefilled selector
     instituteName: "",
     refNo: "",
     letterDate: "",
@@ -1143,6 +1160,24 @@ function RegisterComplaintForm() {
                       {letterNatures.map((nature) => (
                         <option key={nature.value} value={nature.value}>
                           {t(nature.labelKey)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Row 2 - Column 3: Letter Classification */}
+                  <div className="form-field-group">
+                    <label htmlFor="subjectCategory" className="field-label">{t("subjectCategoryLabel")}</label>
+                    <select
+                      id="subjectCategory"
+                      value={formState.subjectCategory}
+                      onChange={(e) => setFormState({ ...formState, subjectCategory: e.target.value })}
+                      className="field-select"
+                    >
+                      <option value="">{t("selectCategory", "Select category...")}</option>
+                      {letterClassifications.map((item) => (
+                        <option key={item.value} value={item.value}>
+                          {t(item.labelKey)}
                         </option>
                       ))}
                     </select>
