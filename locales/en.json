@@ -378,20 +378,6 @@
   "statusObtainStatements": "Proceeding by taking statements",
   "statusUnclearAnonymous": "Unclear facts / Anonymous letters file",
   "statusOther": "Other",
-  "subjectCategoryLabel": "Letter Classification",
-  "classAnonymousNominal": "Anonymous / Nominal Letters",
-  "classPSC": "Public Service Commission",
-  "classESC": "Education Service Committee of the Public Service Commission",
-  "classMinistryGov": "Ministry of Public Administration, Provincial Councils and Local Government",
-  "classInternalBranches": "Internal Branches",
-  "classPresidentSecretariat": "Presidential Secretariat",
-  "classMinistrySecretariat": "Ministry Minister / Secretary Secretariat",
-  "classPoliceStations": "Police Stations",
-  "classByPrincipals": "By Principals",
-  "classByZonalOffices": "By Zonal Offices",
-  "classBriberyCommission": "Commission to Investigate Allegations of Bribery or Corruption",
-  "classHumanRights": "Human Rights",
-  "classOldBoysAssociation": "Old Boys / Past Pupils Associations",
-  "classProvincialDept": "Provincial Departments / Ministries"
+  "subjectCategoryLabel": "Letter Classification"
 }
 

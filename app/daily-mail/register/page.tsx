@@ -38,18 +38,18 @@ function RegisterComplaintForm() {
 
   const letterClassifications = [
     { value: "Anonymous/Nominal", labelKey: "classAnonymousNominal" },
-    { value: "Public Service Commission", labelKey: "classPSC" },
-    { value: "Education Service Committee", labelKey: "classESC" },
-    { value: "Ministry of Public Administration", labelKey: "classMinistryGov" },
-    { value: "Internal Branches", labelKey: "classInternalBranches" },
-    { value: "Presidential Secretariat", labelKey: "classPresidentSecretariat" },
-    { value: "Ministry Minister/Secretary", labelKey: "classMinistrySecretariat" },
-    { value: "Police Stations", labelKey: "classPoliceStations" },
+    { value: "Public Service Commission", labelKey: "classPublicService" },
+    { value: "Education Service Committee", labelKey: "classEdServices" },
+    { value: "Ministry of Public Administration", labelKey: "classMinistryPublicAdmin" },
+    { value: "Internal Branches", labelKey: "classHomeAffairs" },
+    { value: "Presidential Secretariat", labelKey: "classPresidentsSec" },
+    { value: "Ministry Minister/Secretary", labelKey: "classMinistryMinisterSec" },
+    { value: "Police Stations", labelKey: "classPolice" },
     { value: "By Principals", labelKey: "classByPrincipals" },
-    { value: "By Zonal Offices", labelKey: "classByZonalOffices" },
-    { value: "Bribery Commission", labelKey: "classBriberyCommission" },
+    { value: "By Zonal Offices", labelKey: "classByRegionalOffices" },
+    { value: "Bribery Commission", labelKey: "classBriberyCorruption" },
     { value: "Human Rights", labelKey: "classHumanRights" },
-    { value: "Old Boys Association", labelKey: "classOldBoysAssociation" },
+    { value: "Old Boys Association", labelKey: "classOldStudentsAssoc" },
     { value: "Provincial Departments/Ministries", labelKey: "classProvincialDept" }
   ];
 

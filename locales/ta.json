@@ -373,20 +373,6 @@
   "statusObtainStatements": "வாக்குமூலங்களைப் பெறுவதன் மூலம் மேலதிக நடவடிக்கைகளை மேற்கொள்ளல்",
   "statusUnclearAnonymous": "தெளிவற்ற விபரங்கள் / அநாமதேய கடிதங்கள் கோப்பு",
   "statusOther": "வேறு",
-  "subjectCategoryLabel": "கடித வகைப்பாடு",
-  "classAnonymousNominal": "அநாமதேய / பெயரளவு கடிதங்கள்",
-  "classPSC": "அரசு சேவை ஆணைக்குழு",
-  "classESC": "அரசு சேவை ஆணைக்குழுவின் கல்வி சேவை குழு",
-  "classMinistryGov": "பொது நிர்வாகம், மாகாண சபைகள் மற்றும் உள்ளூராட்சி அமைச்சு",
-  "classInternalBranches": "உள் கிளைகள்",
-  "classPresidentSecretariat": "ஜனாதிபதி செயலகம்",
-  "classMinistrySecretariat": "அமைச்சு அமைச்சர் / செயலாளர் செயலகம்",
-  "classPoliceStations": "பொலிஸ் நிலையங்கள்",
-  "classByPrincipals": "அதிபர்கள் மூலம்",
-  "classByZonalOffices": "வலய அலுவலகங்கள் மூலம்",
-  "classBriberyCommission": "இலஞ்சம் அல்லது ஊழல் குற்றச்சாட்டுகளை புலனாய்வு செய்யும் ஆணைக்குழு",
-  "classHumanRights": "மனித உரிமைகள்",
-  "classOldBoysAssociation": "பழைய மாணவர் சங்கங்கள்",
-  "classProvincialDept": "மாகாண திணைக்களங்கள் / அமைச்சுகள்"
+  "subjectCategoryLabel": "கடித வகைப்பாடு"
 }
 

@@ -373,19 +373,5 @@
   "statusObtainStatements": "ප්‍රකාශ ලබා ගැනීම මගින් ඉදිරි කටයුතු සිදු කිරීම",
   "statusUnclearAnonymous": "කරුණු අපහැදිලි/ නිර්නාමික ලිපි ගොනු",
   "statusOther": "වෙනත්",
-  "subjectCategoryLabel": "ලිපි වර්ග කිරීම",
-  "classAnonymousNominal": "නිර්නාමික/ නාමික ලිපි",
-  "classPSC": "රාජ්‍ය සේවා කොමිෂන් සභාව",
-  "classESC": "රාජ්‍ය සේවා කොමිෂන් සභාවේ අධ්‍යාපන සේවා කමිටුව",
-  "classMinistryGov": "රාජ්‍ය පරිපාලන, පළාත් සභා පළාත් පාලන අමාත්‍යාංශය",
-  "classInternalBranches": "අභ්‍යන්තර ශාඛා",
-  "classPresidentSecretariat": "ජනාධිපති ලේකම් කාර්යාලය",
-  "classMinistrySecretariat": "අමාත්‍යාංශ අමාත්‍ය/ ලේකම් කාර්යාලය",
-  "classPoliceStations": "පොලිස් ස්ථාන",
-  "classByPrincipals": "විදුහල්පතිවරුන් මගින්",
-  "classByZonalOffices": "කලාප කාර්යාල මගින්",
-  "classBriberyCommission": "අල්ලස් හෝ දූෂණ චෝදනා විමර්ශන කොමිෂන් සභාව",
-  "classHumanRights": "මානව හිමිකම්",
-  "classOldBoysAssociation": "ආදි ශිෂ්‍ය සංගම්",
-  "classProvincialDept": "පළාත් දෙපාර්තමේන්තු/ අමාත්‍යාංශ"
+  "subjectCategoryLabel": "ලිපි වර්ග කිරීම"
 }
