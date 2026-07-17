@@ -1248,6 +1248,31 @@ function RegisterComplaintForm() {
                     </select>
                   </div>
 
+                  {/* Row 4 - Column 2: Priority */}
+                  <div className="form-field-group">
+                    <label htmlFor="priority" className="field-label">{t("priority")}</label>
+                    <div className="priority-select-wrapper">
+                      <span className={`priority-dot-indicator dot-${formState.priority}`} />
+                      <div className="select-wrapper" style={{ flex: 1 }}>
+                        <select
+                          id="priority"
+                          value={formState.priority}
+                          onChange={(e) => setFormState({ ...formState, priority: e.target.value as any })}
+                          className="field-select"
+                        >
+                          <option value="high" className="priority-option-high">{t("priorityHigh")}</option>
+                          <option value="medium" className="priority-option-medium">{t("priorityMedium")}</option>
+                          <option value="low" className="priority-option-low">{t("priorityLow")}</option>
+                        </select>
+                        <div className="select-arrow-container">
+                          <svg className="select-arrow-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Form Action Buttons */}
                   <div className="register-form-actions">
                     <button
