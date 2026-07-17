@@ -1012,3 +1012,25 @@ html[lang="si"] [data-font-scale="large"] {
     --font-scale: 1.32 !important;
   }
 }
+
+/* Specifically target and scale up form text sizes for Sinhala (si) for maximum legibility */
+html[lang="si"] .field-label,
+html[lang="si"] label {
+  font-size: calc(13.5px * var(--font-scale, 1)) !important;
+}
+
+html[lang="si"] .field-input,
+html[lang="si"] .field-select,
+html[lang="si"] .field-textarea,
+html[lang="si"] input,
+html[lang="si"] select,
+html[lang="si"] textarea {
+  font-size: calc(14.5px * var(--font-scale, 1)) !important;
+}
+
+html[lang="si"] .btn-action-submit,
+html[lang="si"] .btn-action-cancel,
+html[lang="si"] .btn-action-draft,
+html[lang="si"] button[type="submit"] {
+  font-size: calc(14px * var(--font-scale, 1)) !important;
+}
