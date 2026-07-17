@@ -347,6 +347,23 @@
   "sysAdminNoActiveSessions": "No active user sessions detected.",
   "sysAdminNoHistory": "No session history recorded.",
   "sysAdminNoAuditMatches": "No audit log records match the search filter.",
-  "sysAdminConfirmForce": "Are you sure you want to force logout this session? The user will be disconnected immediately."
+  "sysAdminConfirmForce": "Are you sure you want to force logout this session? The user will be disconnected immediately.",
+  "totalLettersReceived": "Total Letters Received",
+  "letters": "letters",
+  "todaysLetters": "Today's Letters",
+  "newLetters": "New",
+  "oldLetters": "Old",
+  "pendingSubmission": "Pending Submission",
+  "submittedToday": "Submitted Today",
+  "heroActionDesc": "Easily log new incoming correspondence and files for dispatching to subject officers.",
+  "allLetters": "All Letters",
+  "todaySubmission": "Today's Submissions",
+  "pendingSubmissions": "Pending Submissions",
+  "allCases": "All Case Status",
+  "submitted": "Submitted",
+  "editLetterTitle": "Edit Letter",
+  "addMailForCase": "Add Mail for Case",
+  "addSubsequentMailTitle": "Add subsequent mail for this case",
+  "edit": "Edit"
 }
 

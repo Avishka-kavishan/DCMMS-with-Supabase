@@ -340,6 +340,25 @@
   "sysAdminNoActiveSessions": "செயலில் உள்ள அமர்வுகள் எதுவும் இல்லை.",
   "sysAdminNoHistory": "அமர்வு வரலாறு எதுவும் இல்லை.",
   "sysAdminNoAuditMatches": "தேடலுக்குரிய பதிவுகள் எதுவும் இல்லை.",
-  "sysAdminConfirmForce": "பயனரை வெளியேற்ற விரும்புகிறீர்களா?"
+  "sysAdminConfirmForce": "பயனரை வெளியேற்ற விரும்புகிறீர்களா?",
+  "totalLettersReceived": "பெறப்பட்ட மொத்த கடிதங்கள்",
+  "letters": "கடிதங்கள்",
+  "todaysLetters": "இன்றைய கடிதங்கள்",
+  "newLetters": "புதியவை",
+  "oldLetters": "பழையவை",
+  "pendingSubmission": "சமர்ப்பிக்கப்பட வேண்டியவை",
+  "submittedToday": "இன்று சமர்ப்பிக்கப்பட்டவை",
+  "heroActionDesc": "விடய உத்தியோகத்தர்களுக்கு அனுப்புவதற்காக புதிதாக வரும் கடிதங்கள் மற்றும் கோப்புகளை எளிதாகப் பதிவுசெய்யுங்கள்.",
+  "allLetters": "அனைத்து கடிதங்களும்",
+  "todaySubmission": "இன்றைய சமர்ப்பிப்புகள்",
+  "pendingSubmissions": "நிலுவையிலுள்ள சமர்ப்பிப்புகள்",
+  "allCases": "அனைத்து வழக்கு நிலைகளும்",
+  "letterStatusCol": "கடித நிலை",
+  "submitted": "சமர்ப்பிக்கப்பட்டது",
+  "pendingDetails": "நிலுவையில்",
+  "editLetterTitle": "கடிதத்தைத் தொகுக்க",
+  "addMailForCase": "வழக்கிற்கு கடிதம் சேர்க்கவும்",
+  "addSubsequentMailTitle": "இந்த வழக்கிற்கு அடுத்தடுத்த கடிதத்தைச் சேர்க்கவும்",
+  "edit": "தொகு"
 }
 

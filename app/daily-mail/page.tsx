@@ -611,7 +611,7 @@ export default function DailyMailPage() {
               <div className="hero-action-details">
                 <div className="sub-action">
                   <h4 className="hero-action-title">{t("registerLetterComplainBanner")}</h4>
-                  <p className="hero-action-description">Easily log new incoming correspondence and files for dispatching to subject officers.</p>
+                  <p className="hero-action-description">{t("heroActionDesc", "Easily log new incoming correspondence and files for dispatching to subject officers.")}</p>
                 </div>
                 <button className="btn-hero-action" onClick={() => router.push("/daily-mail/register")}>
                   {t("newLetterBtn")}
@@ -653,10 +653,10 @@ export default function DailyMailPage() {
                     className="filter-priority-select"
                     aria-label={t("priority")}
                   >
-                    <option value="all">All Priorities</option>
-                    <option value="high">High</option>
-                    <option value="medium">Medium</option>
-                    <option value="low">Low</option>
+                    <option value="all">{t("allPriorities", "All Priorities")}</option>
+                    <option value="high">{t("priorityHigh")}</option>
+                    <option value="medium">{t("priorityMedium")}</option>
+                    <option value="low">{t("priorityLow")}</option>
                   </select>
                 </div>
 
@@ -764,8 +764,8 @@ export default function DailyMailPage() {
                           <button
                             className="btn-action-view"
                             onClick={() => router.push(`/daily-mail/register?id=${letter.id}`)}
-                            title="Edit Letter"
-                            aria-label="Edit Letter"
+                            title={t("editLetterTitle", "Edit Letter")}
+                            aria-label={t("editLetterTitle", "Edit Letter")}
                           >
                             <svg className="action-row-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                               <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -776,7 +776,7 @@ export default function DailyMailPage() {
                             className="btn-action-add-subsequent"
                             onClick={() => router.push(`/daily-mail/register?caseNo=${letter.refNo}&subsequent=true`)}
                             title={t("addMailForCase", "Add Mail for Case")}
-                            aria-label="Add subsequent mail for this case"
+                            aria-label={t("addSubsequentMailTitle", "Add subsequent mail for this case")}
                           >
                             <svg className="action-row-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
                               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
