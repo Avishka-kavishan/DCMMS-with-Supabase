@@ -993,3 +993,22 @@ html[lang="si"] body {
 .login-register-hint a:hover {
   text-decoration: underline;
 }
+
+/* ============================================================
+   ACCESSIBILITY: SINHALA FONT SIZE OVERRIDES & RESPONSIVENESS
+   ============================================================ */
+html[lang="si"] [data-font-scale="medium"] {
+  --font-scale: 1.10 !important;
+}
+html[lang="si"] [data-font-scale="large"] {
+  --font-scale: 1.24 !important;
+}
+
+@media (min-width: 768px) {
+  html[lang="si"] [data-font-scale="medium"] {
+    --font-scale: 1.15 !important;
+  }
+  html[lang="si"] [data-font-scale="large"] {
+    --font-scale: 1.32 !important;
+  }
+}
