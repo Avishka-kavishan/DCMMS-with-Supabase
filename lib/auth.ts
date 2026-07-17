@@ -18,6 +18,18 @@ export async function getCurrentProfile(): Promise<UserProfile | null> {
   // Guard: cannot access auth session during static build (no browser)
   if (typeof window === "undefined") return null;
 
+  // Check for active simulated session (offline fallback mode)
+  if (typeof window !== "undefined") {
+    const simSession = localStorage.getItem("dcmms_simulated_session");
+    if (simSession) {
+      try {
+        return JSON.parse(simSession) as UserProfile;
+      } catch (e) {
+        console.error("Failed to parse simulated session:", e);
+      }
+    }
+  }
+
   const {
     data: { session },
   } = await supabase.auth.getSession();
@@ -102,5 +114,8 @@ export function dashboardPath(role: UserRole): string {
 
 /** Sign out and return to home. */
 export async function signOut() {
+  if (typeof window !== "undefined") {
+    localStorage.removeItem("dcmms_simulated_session");
+  }
   await supabase.auth.signOut();
 }

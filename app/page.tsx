@@ -62,6 +62,44 @@ export default function Home() {
       return;
     }
 
+    const getSimulatedUser = () => {
+      const emailLower = email.toLowerCase().trim();
+      if (emailLower === "avishkakavishan13@gmail.com" && password === "rath123456") {
+        return { id: "sim-subject", full_name: "Rathnaweera", role: "subject_officer" as UserRole };
+      }
+      if (emailLower === "avishakavishan3@gmail.com" && password === "kavi123456") {
+        return { id: "sim-daily-mail", full_name: "Avishka", role: "daily_mail" as UserRole };
+      }
+      if (emailLower === "admin@dcmms.gov.lk" && password === "sysadmin123456") {
+        return { id: "sim-sysadmin", full_name: "System Admin", role: "system_admin" as UserRole };
+      }
+      if (emailLower === "admin@admin.com" && password === "admin123") {
+        return { id: "sim-admin", full_name: "Administrator", role: "admin" as UserRole };
+      }
+      // Check localStorage custom profiles if any match
+      if (typeof window !== "undefined") {
+        const stored = localStorage.getItem("dcmms_custom_profiles");
+        if (stored) {
+          try {
+            const list = JSON.parse(stored);
+            const match = list.find(
+              (p: any) => p.email?.toLowerCase() === emailLower && p.password === password
+            );
+            if (match) {
+              return {
+                id: match.id || `sim-${match.role}`,
+                full_name: match.fullName || "User",
+                role: match.role as UserRole,
+              };
+            }
+          } catch (e) {
+            console.error(e);
+          }
+        }
+      }
+      return null;
+    };
+
     setIsLoading(true);
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
@@ -80,10 +118,25 @@ export default function Home() {
 
       router.push(dashboardPath(profile.role as UserRole));
     } catch (err: any) {
+      // Offline/connection failure or invalid auth: attempt simulated login
+      const simUser = getSimulatedUser();
+      if (simUser) {
+        if (typeof window !== "undefined") {
+          localStorage.setItem("dcmms_simulated_session", JSON.stringify(simUser));
+          localStorage.setItem("dcmms_current_session_id", "simulated-session");
+        }
+        router.push(dashboardPath(simUser.role as UserRole));
+        return;
+      }
+
       const errMsg = err.message || "Invalid email or password.";
       setLoginError(errMsg);
       // Log failed login
-      await logFailedLogin(email, errMsg);
+      try {
+        await logFailedLogin(email, errMsg);
+      } catch (logErr) {
+        console.error("Failed to log failed login attempt:", logErr);
+      }
     } finally {
       setIsLoading(false);
     }

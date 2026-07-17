@@ -5,7 +5,7 @@ import "./register.css";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { dashboardPath, UserRole } from "@/lib/auth";
 import { SiteFooter } from "@/components/SiteFooter";
 
@@ -64,6 +64,10 @@ export default function RegisterPage() {
 
     setIsLoading(true);
     try {
+      if (!isSupabaseConfigured) {
+        throw new Error("Failed to fetch"); // Force offline fallback
+      }
+
       // 1. Create Supabase Auth account
       const { data, error: signUpError } = await supabase.auth.signUp({
         email: email.trim(),
@@ -96,6 +100,40 @@ export default function RegisterPage() {
         setTimeout(() => router.replace(dashboardPath(role as UserRole)), 1500);
       }
     } catch (err: any) {
+      // Offline fallback: save user to localStorage so they can log in
+      if (err.message?.includes("fetch") || !isSupabaseConfigured) {
+        const stored = localStorage.getItem("dcmms_custom_profiles");
+        let list = [];
+        if (stored) {
+          try {
+            list = JSON.parse(stored);
+          } catch (e) {
+            console.error(e);
+          }
+        }
+        const newUser = {
+          id: `sim-user-${Date.now()}`,
+          email: email.trim(),
+          password,
+          fullName: fullName.trim(),
+          role,
+        };
+        list.push(newUser);
+        localStorage.setItem("dcmms_custom_profiles", JSON.stringify(list));
+
+        setSuccess(true);
+        // Simulate local session login
+        localStorage.setItem("dcmms_simulated_session", JSON.stringify({
+          id: newUser.id,
+          full_name: newUser.fullName,
+          role: newUser.role
+        }));
+        localStorage.setItem("dcmms_current_session_id", "simulated-session");
+
+        setTimeout(() => router.replace(dashboardPath(role as UserRole)), 1500);
+        return;
+      }
+
       setError(err.message || "Registration failed. Please try again.");
     } finally {
       setIsLoading(false);
