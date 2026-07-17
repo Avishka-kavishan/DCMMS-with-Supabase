@@ -19,6 +19,23 @@ function RegisterComplaintForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  const receiptModes = [
+    { value: "Post", labelKey: "receiptPost" },
+    { value: "Hand", labelKey: "receiptHand" },
+    { value: "Email", labelKey: "receiptEmail" },
+    { value: "Fax", labelKey: "receiptFax" },
+    { value: "Other", labelKey: "receiptOther" }
+  ];
+
+  const letterNatures = [
+    { value: "Complaint", labelKey: "natureComplaint" },
+    { value: "Inquiry", labelKey: "natureInquiry" },
+    { value: "Appeal", labelKey: "natureAppeal" },
+    { value: "Request", labelKey: "natureRequest" },
+    { value: "Notification", labelKey: "natureNotification" },
+    { value: "Other", labelKey: "natureOther" }
+  ];
+
   // Accessibility & language state
   const [fontScale, setFontScale] = useState<"small" | "medium" | "large">("medium");
   const lang = i18n.language;
@@ -62,7 +79,7 @@ function RegisterComplaintForm() {
     senderName: "",
     letterType: "",
     officerName: "",
-    subjectCategory: "",
+    subjectCategory: "Other", // Hidden but prefilled
     instituteName: "",
     refNo: "",
     letterDate: "",
@@ -340,7 +357,7 @@ function RegisterComplaintForm() {
               senderName: data.sender_name || "",
               letterType: data.letter_type || "",
               officerName: data.officer_name || "",
-              subjectCategory: data.subject_category || "",
+              subjectCategory: data.subject_category || "Other",
               instituteName: data.institute_name || "",
               refNo: data.ref_no || "",
               letterDate: data.letter_date || "",
@@ -370,7 +387,7 @@ function RegisterComplaintForm() {
                 senderName: found.senderName || "",
                 letterType: found.letterType || "",
                 officerName: found.officerName || "",
-                subjectCategory: found.subjectCategory || "",
+                subjectCategory: found.subjectCategory || "Other",
                 instituteName: found.instituteName || "",
                 refNo: found.refNo || "",
                 letterDate: found.letterDate || "",
@@ -396,8 +413,8 @@ function RegisterComplaintForm() {
     e.preventDefault();
 
     // Enforce required fields validation
-    if (!formState.senderName || !formState.subjectCategory || !formState.refNo) {
-      alert("Please fill in all required fields (Reference Number, Name of Sender, and Subject Category).");
+    if (!formState.senderName || !formState.refNo) {
+      alert("Please fill in all required fields (Reference Number and Sender's Party).");
       return;
     }
 
@@ -1053,111 +1070,7 @@ function RegisterComplaintForm() {
 
                 <form onSubmit={handleSubmit} className="register-grid-form">
                   
-                  {/* Row 1 - Column 1: Case No. */}
-                  <div className="form-field-group">
-                    <label htmlFor="letterNo" className="field-label">{t("letterNo")}</label>
-                    <input
-                      id="letterNo"
-                      type="text"
-                      value={formState.letterNo}
-                      onChange={(e) => setFormState({ ...formState, letterNo: e.target.value })}
-                      placeholder={t("placeholderLetterNo")}
-                      className="field-input"
-                    />
-                  </div>
-
-                  {/* Row 1 - Column 2: Name of Sender * */}
-                  <div className="form-field-group">
-                    <label htmlFor="senderName" className="field-label">{t("senderName")} <span className="required-star">*</span></label>
-                    <input
-                      id="senderName"
-                      type="text"
-                      required
-                      value={formState.senderName}
-                      onChange={(e) => setFormState({ ...formState, senderName: e.target.value })}
-                      placeholder={t("senderPlaceholder")}
-                      className="field-input"
-                    />
-                  </div>
-
-                  {/* Row 1 - Column 3: Classification of complaints */}
-                  <div className="form-field-group">
-                    <label htmlFor="regionProvince" className="field-label">{t("regionProvince")}</label>
-                    <select
-                      id="regionProvince"
-                      value={formState.regionProvince}
-                      onChange={(e) => setFormState({ ...formState, regionProvince: e.target.value })}
-                      className="field-select"
-                    >
-                      <option value="">{t("selectClassification", "Select Classification")}</option>
-                      <option value="Anonymous/Nominal letters">{t("classAnonymousNominal")}</option>
-                      <option value="Public Service Commission">{t("classPublicService")}</option>
-                      <option value="Educational Services Committee of the Public Service Commission">{t("classEdServices")}</option>
-                      <option value="Ministry of Public Administration, Provincial Councils and Local Government">{t("classMinistryPublicAdmin")}</option>
-                      <option value="Home Affairs Branch">{t("classHomeAffairs")}</option>
-                      <option value="President's Secretariat">{t("classPresidentsSec")}</option>
-                      <option value="Ministry Minister/Secretary">{t("classMinistryMinisterSec")}</option>
-                      <option value="Police Station">{t("classPolice")}</option>
-                      <option value="By Principals">{t("classByPrincipals")}</option>
-                      <option value="By Regional Offices">{t("classByRegionalOffices")}</option>
-                      <option value="Commission to Investigate Allegations of Bribery or Corruption">{t("classBriberyCorruption")}</option>
-                      <option value="Human Rights">{t("classHumanRights")}</option>
-                      <option value="Old Students' Associations">{t("classOldStudentsAssoc")}</option>
-                      <option value="Provincial Departments/Ministry">{t("classProvincialDept")}</option>
-                    </select>
-                  </div>
-
-                  {/* Row 2 - Column 1: Name of Subject Officer */}
-                  <div className="form-field-group">
-                    <label htmlFor="officerName" className="field-label">{t("nameOfOfficer")}</label>
-                    <select
-                      id="officerName"
-                      value={formState.officerName}
-                      onChange={(e) => setFormState({ ...formState, officerName: e.target.value })}
-                      className="field-select"
-                    >
-                      <option value="">{t("selectSubjectOfficer", "Select Subject Officer")}</option>
-                      {officerOptions.map((opt) => (
-                        <option key={opt} value={opt}>
-                          {opt}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Row 2 - Column 2: Subject Category * */}
-                  <div className="form-field-group">
-                    <label htmlFor="subjectCategory" className="field-label">{t("subjectCategory")} <span className="required-star">*</span></label>
-                    <select
-                      id="subjectCategory"
-                      required
-                      value={formState.subjectCategory}
-                      onChange={(e) => setFormState({ ...formState, subjectCategory: e.target.value })}
-                      className="field-select"
-                    >
-                      <option value="">{t("selectRole")}</option>
-                      <option value="Student Misconduct">{t("optStudentMisconduct")}</option>
-                      <option value="Teacher Absenteeism">{t("optTeacherAbsenteeism")}</option>
-                      <option value="Financial Mismanagement">{t("optFinancialMismanagement")}</option>
-                      <option value="Administrative Issues">{t("optAdministrativeIssues")}</option>
-                      <option value="Other">{t("optOther")}</option>
-                    </select>
-                  </div>
-
-                  {/* Row 2 - Column 3: Letter Type */}
-                  <div className="form-field-group">
-                    <label htmlFor="letterType" className="field-label">{t("letterType")}</label>
-                    <input
-                      id="letterType"
-                      type="text"
-                      value={formState.letterType}
-                      onChange={(e) => setFormState({ ...formState, letterType: e.target.value })}
-                      placeholder={t("placeholderLetterType")}
-                      className="field-input"
-                    />
-                  </div>
-
-                  {/* Row 3 - Column 1: Reference Number * */}
+                  {/* Row 1 - Column 1: Reference Number * */}
                   <div className="form-field-group">
                     <label htmlFor="refNo" className="field-label">{t("refNo")} <span className="required-star">*</span></label>
                     <input
@@ -1172,57 +1085,83 @@ function RegisterComplaintForm() {
                     />
                   </div>
 
-                  {/* Row 3 - Column 2: Letter Date. */}
+                  {/* Row 1 - Column 2: Letter Number */}
                   <div className="form-field-group">
-                    <label htmlFor="letterDate" className="field-label">{t("letterDate")}</label>
-                    <div className="input-icon-wrapper">
-                      <input
-                        id="letterDate"
-                        type="date"
-                        value={formState.letterDate}
-                        onChange={(e) => setFormState({ ...formState, letterDate: e.target.value })}
-                        className="field-input input-with-right-icon"
-                      />
-                      <svg className="input-right-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                    </div>
+                    <label htmlFor="letterNo" className="field-label">{t("letterNo")}</label>
+                    <input
+                      id="letterNo"
+                      type="text"
+                      value={formState.letterNo}
+                      onChange={(e) => setFormState({ ...formState, letterNo: e.target.value })}
+                      placeholder={t("placeholderLetterNo")}
+                      className="field-input"
+                    />
                   </div>
 
-                  {/* Row 3 - Column 3: Institute Name */}
+                  {/* Row 1 - Column 3: Mode of Receipt */}
                   <div className="form-field-group">
-                    <label htmlFor="instituteName" className="field-label">{t("instituteName")}</label>
+                    <label htmlFor="letterType" className="field-label">{t("letterType")}</label>
                     <select
-                      id="instituteName"
-                      value={formState.instituteName}
-                      onChange={(e) => setFormState({ ...formState, instituteName: e.target.value })}
+                      id="letterType"
+                      value={formState.letterType}
+                      onChange={(e) => setFormState({ ...formState, letterType: e.target.value })}
                       className="field-select"
                     >
-                      <option value="">{t("selectInstitute", "Select Institute")}</option>
-                      {instituteOptions.map((opt) => (
-                        <option key={opt} value={opt}>
-                          {opt}
+                      <option value="">{t("placeholderLetterType")}</option>
+                      {receiptModes.map((mode) => (
+                        <option key={mode.value} value={mode.value}>
+                          {t(mode.labelKey)}
                         </option>
                       ))}
                     </select>
                   </div>
 
-                  {/* Row 4 - Column 1: Priority */}
+                  {/* Row 2 - Column 1: Sender's Party * */}
                   <div className="form-field-group">
-                    <label htmlFor="priority" className="field-label">{t("priority")}</label>
+                    <label htmlFor="senderName" className="field-label">{t("senderName")} <span className="required-star">*</span></label>
+                    <input
+                      id="senderName"
+                      type="text"
+                      required
+                      value={formState.senderName}
+                      onChange={(e) => setFormState({ ...formState, senderName: e.target.value })}
+                      placeholder={t("senderPlaceholder")}
+                      className="field-input"
+                    />
+                  </div>
+
+                  {/* Row 2 - Column 2: Nature of the Letter */}
+                  <div className="form-field-group">
+                    <label htmlFor="regionProvince" className="field-label">{t("regionProvince")}</label>
                     <select
-                      id="priority"
-                      value={formState.priority}
-                      onChange={(e) => setFormState({ ...formState, priority: e.target.value as "high" | "medium" | "low" })}
+                      id="regionProvince"
+                      value={formState.regionProvince}
+                      onChange={(e) => setFormState({ ...formState, regionProvince: e.target.value })}
                       className="field-select"
                     >
-                      <option value="high">{t("priorityHigh")}</option>
-                      <option value="medium">{t("priorityMedium")}</option>
-                      <option value="low">{t("priorityLow")}</option>
+                      <option value="">{t("selectClassification")}</option>
+                      {letterNatures.map((nature) => (
+                        <option key={nature.value} value={nature.value}>
+                          {t(nature.labelKey)}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
-                  {/* Row 4 - Column 2: Received Date */}
+                  {/* Row 2 - Column 3: Subject / Matter of the Letter */}
+                  <div className="form-field-group">
+                    <label htmlFor="subject" className="field-label">{t("letterTitle")}</label>
+                    <input
+                      id="subject"
+                      type="text"
+                      value={formState.subject}
+                      onChange={(e) => setFormState({ ...formState, subject: e.target.value })}
+                      placeholder={t("subjectPlaceholder")}
+                      className="field-input"
+                    />
+                  </div>
+
+                  {/* Row 3 - Column 1: Date Received by Additional Secretary */}
                   <div className="form-field-group">
                     <label htmlFor="receivedDate" className="field-label">{t("receivedDate")}</label>
                     <div className="input-icon-wrapper">
@@ -1239,17 +1178,39 @@ function RegisterComplaintForm() {
                     </div>
                   </div>
 
-                  {/* Row 4 - Column 3: Letter Title */}
+                  {/* Row 3 - Column 2: Date Letter Handed Over to Disciplinary Branch */}
                   <div className="form-field-group">
-                    <label htmlFor="subject" className="field-label">{t("letterTitle")}</label>
-                    <input
-                      id="subject"
-                      type="text"
-                      value={formState.subject}
-                      onChange={(e) => setFormState({ ...formState, subject: e.target.value })}
-                      placeholder={t("subjectPlaceholder")}
-                      className="field-input"
-                    />
+                    <label htmlFor="letterDate" className="field-label">{t("letterDate")}</label>
+                    <div className="input-icon-wrapper">
+                      <input
+                        id="letterDate"
+                        type="date"
+                        value={formState.letterDate}
+                        onChange={(e) => setFormState({ ...formState, letterDate: e.target.value })}
+                        className="field-input input-with-right-icon"
+                      />
+                      <svg className="input-right-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                  </div>
+
+                  {/* Row 3 - Column 3: Subject Officer Name */}
+                  <div className="form-field-group">
+                    <label htmlFor="officerName" className="field-label">{t("nameOfOfficer")}</label>
+                    <select
+                      id="officerName"
+                      value={formState.officerName}
+                      onChange={(e) => setFormState({ ...formState, officerName: e.target.value })}
+                      className="field-select"
+                    >
+                      <option value="">{t("selectSubjectOfficer")}</option>
+                      {officerOptions.map((opt) => (
+                        <option key={opt} value={opt}>
+                          {opt}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   {/* Form Action Buttons */}
