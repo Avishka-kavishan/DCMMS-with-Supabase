@@ -120,37 +120,37 @@
     grid-template-columns: 1fr 1fr;
   }
 
-  .field-subject-officer {
+  .field-ref-no {
     grid-column: 1;
     grid-row: 1;
   }
 
-  .field-report-state {
+  .field-institute-file {
     grid-column: 2;
     grid-row: 1;
   }
 
-  .field-received-date {
+  .field-subject-file {
     grid-column: 1;
     grid-row: 2;
   }
 
-  .field-step-taken {
+  .field-subject-matter {
     grid-column: 2;
     grid-row: 2 / span 4;
   }
 
-  .field-reference-number {
+  .field-priority {
     grid-column: 1;
     grid-row: 3;
   }
 
-  .field-file-related {
+  .field-status {
     grid-column: 1;
     grid-row: 4;
   }
 
-  .field-special-notes {
+  .field-date-submitted {
     grid-column: 1;
     grid-row: 5;
   }

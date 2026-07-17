@@ -890,7 +890,7 @@ function CaseDetailsForm() {
                       </div>
                     )}
                     {/* 1. Reference Number */}
-                    <div className="form-field-group">
+                    <div className="form-field-group field-ref-no">
                       <label htmlFor="refNo" className="field-label">
                         {t("refNo")} <span className="required-star">*</span>
                       </label>
@@ -906,7 +906,7 @@ function CaseDetailsForm() {
                     </div>
 
                     {/* 2. File number of the institute where letter was received */}
-                    <div className="form-field-group">
+                    <div className="form-field-group field-institute-file">
                       <label htmlFor="fileRelated" className="field-label">
                         {t("instituteFileNo")}
                       </label>
@@ -921,7 +921,7 @@ function CaseDetailsForm() {
                     </div>
 
                     {/* 3. Subject File Number */}
-                    <div className="form-field-group">
+                    <div className="form-field-group field-subject-file">
                       <label htmlFor="specialNotes" className="field-label">
                         {t("subjectFileNo")}
                       </label>
@@ -936,7 +936,7 @@ function CaseDetailsForm() {
                     </div>
 
                     {/* 4. Subject Matter / Title */}
-                    <div className="form-field-group">
+                    <div className="form-field-group field-subject-matter">
                       <label htmlFor="stepTaken" className="field-label">
                         {t("subjectMatterTitle")}
                       </label>
@@ -950,7 +950,7 @@ function CaseDetailsForm() {
                     </div>
 
                     {/* 5. Priority */}
-                    <div className="form-field-group">
+                    <div className="form-field-group field-priority">
                       <label htmlFor="priority" className="field-label">
                         {t("priority")}
                       </label>
@@ -977,7 +977,7 @@ function CaseDetailsForm() {
                     </div>
 
                     {/* 6. Status */}
-                    <div className="form-field-group">
+                    <div className="form-field-group field-status">
                       <label htmlFor="reportState" className="field-label">
                         {t("status")}
                       </label>
@@ -1008,7 +1008,7 @@ function CaseDetailsForm() {
                     </div>
 
                     {/* 7. Date prepared and submitted for signature */}
-                    <div className="form-field-group">
+                    <div className="form-field-group field-date-submitted">
                       <label htmlFor="receivedDate" className="field-label">
                         {t("datePreparedSubmitted")}
                       </label>
