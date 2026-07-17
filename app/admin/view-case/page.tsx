@@ -3,7 +3,7 @@
 import "../../../i18n";
 import "../../daily-mail/daily-mail.css";
 import "../../dashboard-common.css";
-import "../../subject/view-case/view-case.css";
+import "./view-case.css";
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslation } from "react-i18next";
