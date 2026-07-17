@@ -11,8 +11,8 @@ i18n.use(initReactI18next).init({
     si: { translation: si },
     ta: { translation: ta },
   },
-  lng: "en",
-  fallbackLng: "en",
+  lng: "si",
+  fallbackLng: "si",
   interpolation: {
     escapeValue: false, // React already escapes output
   },
