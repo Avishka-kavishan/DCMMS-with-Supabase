@@ -32,6 +32,8 @@ export default function Home() {
       const params = new URLSearchParams(window.location.search);
       if (params.get("reason") === "forced_logout") {
         setInfoMessage("Your session was terminated by a system administrator.");
+      } else if (params.get("reason") === "inactivity_timeout") {
+        setInfoMessage("Your session has timed out due to inactivity. Please log in again.");
       }
     }
   }, []);
