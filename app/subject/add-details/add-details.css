@@ -694,7 +694,7 @@
 
 .current-details-title {
   margin: 0 0 20px 0;
-  font-size: calc(15px * var(--font-scale, 1));
+  font-size: calc(17px * var(--font-scale, 1));
   font-weight: 700;
   color: #0f172a;
   display: flex;
@@ -756,7 +756,7 @@
 }
 
 .detail-label-premium {
-  font-size: calc(10.5px * var(--font-scale, 1));
+  font-size: calc(12px * var(--font-scale, 1));
   font-weight: 600;
   color: #64748b;
   text-transform: uppercase;
@@ -764,7 +764,7 @@
 }
 
 .detail-value-premium {
-  font-size: calc(13px * var(--font-scale, 1));
+  font-size: calc(15px * var(--font-scale, 1));
   font-weight: 600;
   color: #0f172a;
 }
@@ -775,7 +775,7 @@
   align-items: center;
   padding: 3px 10px;
   border-radius: 9999px;
-  font-size: calc(11px * var(--font-scale, 1));
+  font-size: calc(12.5px * var(--font-scale, 1));
   font-weight: 700;
   width: fit-content;
 }
