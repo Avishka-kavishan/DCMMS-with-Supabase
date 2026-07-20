@@ -67,43 +67,114 @@
 }
 
 .entries-container {
-  background-color: #f5f6f8;
-  border-radius: 10px;
-  padding: 32px;
+  background-color: transparent;
+  border-radius: 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 0;
 }
 
 .entries-header {
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: calc(16px * var(--font-scale));
+  font-size: calc(18px * var(--font-scale));
   font-weight: 700;
-  color: #0e162f;
-  margin: 0;
+  color: #0f172a;
+  margin: 0 0 24px 0;
+  padding-bottom: 16px;
+  border-bottom: 2px solid #e2e8f0;
 }
 
 .entries-header-icon {
-  width: 22px;
-  height: 22px;
-  color: #0e162f;
+  width: 24px;
+  height: 24px;
+  color: #2563eb;
 }
 
-.register-grid-form {
+/* ── Step Card Layout ── */
+.register-step-card {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 28px;
+  align-items: flex-start;
+}
+
+.register-step-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  padding-top: 4px;
+}
+
+.register-step-number {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2563eb 0%, #1e3a8a 100%);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 3px 8px rgba(37, 99, 235, 0.35);
+  flex-shrink: 0;
+}
+
+.register-step-content {
+  flex: 1;
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-left: 3px solid #2563eb;
+  border-radius: 10px;
+  padding: 20px 24px;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.register-step-content:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.08);
+  border-left-color: #1d4ed8;
+}
+
+.register-step-title {
+  font-size: calc(15px * var(--font-scale));
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 16px 0;
+}
+
+.register-step-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 20px 24px;
+  gap: 16px 24px;
+}
+
+@media (min-width: 768px) {
+  .register-step-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1200px) {
+  .register-step-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* Legacy grid kept for action buttons spanning */
+.register-grid-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
 
 @media (min-width: 1024px) {
-  .register-grid-form {
-    grid-template-columns: repeat(3, 1fr);
-  }
-
-  .grid-row-span-2 {
-    grid-row: span 2;
+  .register-form-actions {
+    grid-column: unset;
   }
 }
 
@@ -262,11 +333,6 @@
   flex-wrap: wrap;
 }
 
-@media (min-width: 1024px) {
-  .register-form-actions {
-    grid-column: span 3;
-  }
-}
 
 .btn-action-cancel {
   background-color: #DC2626; /* Red */

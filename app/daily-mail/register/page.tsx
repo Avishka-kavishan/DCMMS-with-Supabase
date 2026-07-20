@@ -1086,189 +1086,241 @@ function RegisterComplaintForm() {
                 </h2>
 
                 <form onSubmit={handleSubmit} className="register-grid-form">
-                  
-                  {/* Row 1 - Column 1: Reference Number * */}
-                  <div className="form-field-group">
-                    <label htmlFor="refNo" className="field-label">{t("refNo")} <span className="required-star">*</span></label>
-                    <input
-                      id="refNo"
-                      type="text"
-                      required
-                      value={formState.refNo}
-                      onChange={(e) => setFormState({ ...formState, refNo: e.target.value })}
-                      placeholder={t("refPlaceholder")}
-                      className="field-input"
-                      readOnly={isSubsequentMode}
-                    />
-                  </div>
 
-                  {/* Row 1 - Column 2: Letter Number */}
-                  <div className="form-field-group">
-                    <label htmlFor="letterNo" className="field-label">{t("letterNo")}</label>
-                    <input
-                      id="letterNo"
-                      type="text"
-                      value={formState.letterNo}
-                      onChange={(e) => setFormState({ ...formState, letterNo: e.target.value })}
-                      placeholder={t("placeholderLetterNo")}
-                      className="field-input"
-                    />
-                  </div>
-
-                  {/* Row 1 - Column 3: Mode of Receipt */}
-                  <div className="form-field-group">
-                    <label htmlFor="letterType" className="field-label">{t("letterType")}</label>
-                    <select
-                      id="letterType"
-                      value={formState.letterType}
-                      onChange={(e) => setFormState({ ...formState, letterType: e.target.value })}
-                      className="field-select"
-                    >
-                      <option value="">{t("placeholderLetterType")}</option>
-                      {receiptModes.map((mode) => (
-                        <option key={mode.value} value={mode.value}>
-                          {t(mode.labelKey)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Row 2 - Column 1: Sender's Party * */}
-                  <div className="form-field-group">
-                    <label htmlFor="senderName" className="field-label">{t("senderName")} <span className="required-star">*</span></label>
-                    <input
-                      id="senderName"
-                      type="text"
-                      required
-                      value={formState.senderName}
-                      onChange={(e) => setFormState({ ...formState, senderName: e.target.value })}
-                      placeholder={t("senderPlaceholder")}
-                      className="field-input"
-                    />
-                  </div>
-
-                  {/* Row 2 - Column 2: Nature of the Letter */}
-                  <div className="form-field-group">
-                    <label htmlFor="regionProvince" className="field-label">{t("regionProvince")}</label>
-                    <select
-                      id="regionProvince"
-                      value={formState.regionProvince}
-                      onChange={(e) => setFormState({ ...formState, regionProvince: e.target.value })}
-                      className="field-select"
-                    >
-                      <option value="">{t("selectClassification")}</option>
-                      {letterNatures.map((nature) => (
-                        <option key={nature.value} value={nature.value}>
-                          {t(nature.labelKey)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Row 2 - Column 3: Letter Classification */}
-                  <div className="form-field-group">
-                    <label htmlFor="subjectCategory" className="field-label">{t("subjectCategoryLabel")}</label>
-                    <select
-                      id="subjectCategory"
-                      value={formState.subjectCategory}
-                      onChange={(e) => setFormState({ ...formState, subjectCategory: e.target.value })}
-                      className="field-select"
-                    >
-                      <option value="">{t("selectCategory", "Select category...")}</option>
-                      {letterClassifications.map((item) => (
-                        <option key={item.value} value={item.value}>
-                          {t(item.labelKey)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Row 2 - Column 3: Subject / Matter of the Letter */}
-                  <div className="form-field-group">
-                    <label htmlFor="subject" className="field-label">{t("letterTitle")}</label>
-                    <input
-                      id="subject"
-                      type="text"
-                      value={formState.subject}
-                      onChange={(e) => setFormState({ ...formState, subject: e.target.value })}
-                      placeholder={t("subjectPlaceholder")}
-                      className="field-input"
-                    />
-                  </div>
-
-                  {/* Row 3 - Column 1: Date Received by Additional Secretary */}
-                  <div className="form-field-group">
-                    <label htmlFor="receivedDate" className="field-label">{t("receivedDate")}</label>
-                    <div className="input-icon-wrapper">
-                      <input
-                        id="receivedDate"
-                        type="date"
-                        value={formState.receivedDate}
-                        onChange={(e) => setFormState({ ...formState, receivedDate: e.target.value })}
-                        className="field-input input-with-right-icon"
-                      />
-                      <svg className="input-right-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
+                  {/* ── Step 1: Letter Reference Information ── */}
+                  <div className="register-step-card">
+                    <div className="register-step-indicator">
+                      <span className="register-step-number">1</span>
                     </div>
-                  </div>
+                    <div className="register-step-content">
+                      <h3 className="register-step-title">{t("stepLetterReference", "Letter Reference Information")}</h3>
+                      <div className="register-step-grid">
 
-                  {/* Row 3 - Column 2: Date Letter Handed Over to Disciplinary Branch */}
-                  <div className="form-field-group">
-                    <label htmlFor="letterDate" className="field-label">{t("letterDate")}</label>
-                    <div className="input-icon-wrapper">
-                      <input
-                        id="letterDate"
-                        type="date"
-                        value={formState.letterDate}
-                        onChange={(e) => setFormState({ ...formState, letterDate: e.target.value })}
-                        className="field-input input-with-right-icon"
-                      />
-                      <svg className="input-right-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                    </div>
-                  </div>
-
-                  {/* Row 3 - Column 3: Subject Officer Name */}
-                  <div className="form-field-group">
-                    <label htmlFor="officerName" className="field-label">{t("nameOfOfficer")}</label>
-                    <select
-                      id="officerName"
-                      value={formState.officerName}
-                      onChange={(e) => setFormState({ ...formState, officerName: e.target.value })}
-                      className="field-select"
-                    >
-                      <option value="">{t("selectSubjectOfficer")}</option>
-                      {officerOptions.map((opt) => (
-                        <option key={opt} value={opt}>
-                          {opt}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Row 4 - Column 2: Priority */}
-                  <div className="form-field-group">
-                    <label htmlFor="priority" className="field-label">{t("priority")}</label>
-                    <div className="priority-select-wrapper">
-                      <span className={`priority-dot-indicator dot-${formState.priority}`} />
-                      <div className="select-wrapper" style={{ flex: 1 }}>
-                        <select
-                          id="priority"
-                          value={formState.priority}
-                          onChange={(e) => setFormState({ ...formState, priority: e.target.value as any })}
-                          className="field-select"
-                        >
-                          <option value="high" className="priority-option-high">{t("priorityHigh")}</option>
-                          <option value="medium" className="priority-option-medium">{t("priorityMedium")}</option>
-                          <option value="low" className="priority-option-low">{t("priorityLow")}</option>
-                        </select>
-                        <div className="select-arrow-container">
-                          <svg className="select-arrow-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                          </svg>
+                        {/* Reference Number * */}
+                        <div className="form-field-group">
+                          <label htmlFor="refNo" className="field-label">{t("refNo")} <span className="required-star">*</span></label>
+                          <input
+                            id="refNo"
+                            type="text"
+                            required
+                            value={formState.refNo}
+                            onChange={(e) => setFormState({ ...formState, refNo: e.target.value })}
+                            placeholder={t("refPlaceholder")}
+                            className="field-input"
+                            readOnly={isSubsequentMode}
+                          />
                         </div>
+
+                        {/* Letter Number */}
+                        <div className="form-field-group">
+                          <label htmlFor="letterNo" className="field-label">{t("letterNo")}</label>
+                          <input
+                            id="letterNo"
+                            type="text"
+                            value={formState.letterNo}
+                            onChange={(e) => setFormState({ ...formState, letterNo: e.target.value })}
+                            placeholder={t("placeholderLetterNo")}
+                            className="field-input"
+                          />
+                        </div>
+
+                        {/* Mode of Receipt */}
+                        <div className="form-field-group">
+                          <label htmlFor="letterType" className="field-label">{t("letterType")}</label>
+                          <select
+                            id="letterType"
+                            value={formState.letterType}
+                            onChange={(e) => setFormState({ ...formState, letterType: e.target.value })}
+                            className="field-select"
+                          >
+                            <option value="">{t("placeholderLetterType")}</option>
+                            {receiptModes.map((mode) => (
+                              <option key={mode.value} value={mode.value}>
+                                {t(mode.labelKey)}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── Step 2: Sender Details ── */}
+                  <div className="register-step-card">
+                    <div className="register-step-indicator">
+                      <span className="register-step-number">2</span>
+                    </div>
+                    <div className="register-step-content">
+                      <h3 className="register-step-title">{t("stepSenderDetails", "Sender Details")}</h3>
+                      <div className="register-step-grid">
+
+                        {/* Sender's Party * */}
+                        <div className="form-field-group">
+                          <label htmlFor="senderName" className="field-label">{t("senderName")} <span className="required-star">*</span></label>
+                          <input
+                            id="senderName"
+                            type="text"
+                            required
+                            value={formState.senderName}
+                            onChange={(e) => setFormState({ ...formState, senderName: e.target.value })}
+                            placeholder={t("senderPlaceholder")}
+                            className="field-input"
+                          />
+                        </div>
+
+                        {/* Nature of the Letter */}
+                        <div className="form-field-group">
+                          <label htmlFor="regionProvince" className="field-label">{t("regionProvince")}</label>
+                          <select
+                            id="regionProvince"
+                            value={formState.regionProvince}
+                            onChange={(e) => setFormState({ ...formState, regionProvince: e.target.value })}
+                            className="field-select"
+                          >
+                            <option value="">{t("selectClassification")}</option>
+                            {letterNatures.map((nature) => (
+                              <option key={nature.value} value={nature.value}>
+                                {t(nature.labelKey)}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Letter Classification */}
+                        <div className="form-field-group">
+                          <label htmlFor="subjectCategory" className="field-label">{t("subjectCategoryLabel")}</label>
+                          <select
+                            id="subjectCategory"
+                            value={formState.subjectCategory}
+                            onChange={(e) => setFormState({ ...formState, subjectCategory: e.target.value })}
+                            className="field-select"
+                          >
+                            <option value="">{t("selectCategory", "Select category...")}</option>
+                            {letterClassifications.map((item) => (
+                              <option key={item.value} value={item.value}>
+                                {t(item.labelKey)}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── Step 3: Letter Subject & Dates ── */}
+                  <div className="register-step-card">
+                    <div className="register-step-indicator">
+                      <span className="register-step-number">3</span>
+                    </div>
+                    <div className="register-step-content">
+                      <h3 className="register-step-title">{t("stepLetterSubjectDates", "Letter Subject & Dates")}</h3>
+                      <div className="register-step-grid">
+
+                        {/* Subject / Matter of the Letter */}
+                        <div className="form-field-group">
+                          <label htmlFor="subject" className="field-label">{t("letterTitle")}</label>
+                          <input
+                            id="subject"
+                            type="text"
+                            value={formState.subject}
+                            onChange={(e) => setFormState({ ...formState, subject: e.target.value })}
+                            placeholder={t("subjectPlaceholder")}
+                            className="field-input"
+                          />
+                        </div>
+
+                        {/* Date Received by Additional Secretary */}
+                        <div className="form-field-group">
+                          <label htmlFor="receivedDate" className="field-label">{t("receivedDate")}</label>
+                          <div className="input-icon-wrapper">
+                            <input
+                              id="receivedDate"
+                              type="date"
+                              value={formState.receivedDate}
+                              onChange={(e) => setFormState({ ...formState, receivedDate: e.target.value })}
+                              className="field-input input-with-right-icon"
+                            />
+                            <svg className="input-right-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                          </div>
+                        </div>
+
+                        {/* Date Letter Handed Over to Disciplinary Branch */}
+                        <div className="form-field-group">
+                          <label htmlFor="letterDate" className="field-label">{t("letterDate")}</label>
+                          <div className="input-icon-wrapper">
+                            <input
+                              id="letterDate"
+                              type="date"
+                              value={formState.letterDate}
+                              onChange={(e) => setFormState({ ...formState, letterDate: e.target.value })}
+                              className="field-input input-with-right-icon"
+                            />
+                            <svg className="input-right-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                          </div>
+                        </div>
+
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── Step 4: Assignment Details ── */}
+                  <div className="register-step-card">
+                    <div className="register-step-indicator">
+                      <span className="register-step-number">4</span>
+                    </div>
+                    <div className="register-step-content">
+                      <h3 className="register-step-title">{t("stepAssignmentDetails", "Assignment Details")}</h3>
+                      <div className="register-step-grid">
+
+                        {/* Subject Officer Name */}
+                        <div className="form-field-group">
+                          <label htmlFor="officerName" className="field-label">{t("nameOfOfficer")}</label>
+                          <select
+                            id="officerName"
+                            value={formState.officerName}
+                            onChange={(e) => setFormState({ ...formState, officerName: e.target.value })}
+                            className="field-select"
+                          >
+                            <option value="">{t("selectSubjectOfficer")}</option>
+                            {officerOptions.map((opt) => (
+                              <option key={opt} value={opt}>
+                                {opt}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Priority */}
+                        <div className="form-field-group">
+                          <label htmlFor="priority" className="field-label">{t("priority")}</label>
+                          <div className="priority-select-wrapper">
+                            <span className={`priority-dot-indicator dot-${formState.priority}`} />
+                            <div className="select-wrapper" style={{ flex: 1 }}>
+                              <select
+                                id="priority"
+                                value={formState.priority}
+                                onChange={(e) => setFormState({ ...formState, priority: e.target.value as any })}
+                                className="field-select"
+                              >
+                                <option value="high" className="priority-option-high">{t("priorityHigh")}</option>
+                                <option value="medium" className="priority-option-medium">{t("priorityMedium")}</option>
+                                <option value="low" className="priority-option-low">{t("priorityLow")}</option>
+                              </select>
+                              <div className="select-arrow-container">
+                                <svg className="select-arrow-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                                </svg>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
                       </div>
                     </div>
                   </div>

@@ -478,7 +478,7 @@ export default function DailyMailPage() {
             </div>
           </header>
 
-          {/* ── Dynamic Welcome Greeting Banner ── */}
+          {/* ── Dynamic Welcome Greeting ── */}
           <section className="welcome-greeting-section">
             <h3 className="greeting-text">{greeting}</h3>
           </section>
@@ -714,6 +714,7 @@ export default function DailyMailPage() {
                     <th scope="col">{t("subjectCategory")}</th>
                     <th scope="col">{t("nameOfOfficer")}</th>
                     <th scope="col">{t("letterTitle")}</th>
+                    <th scope="col">{t("priority")}</th>
                     <th scope="col">{t("letterStatusCol", "Letter Status")}</th>
                     <th scope="col" className="text-center">{t("edit", "Edit")}</th>
                   </tr>
@@ -756,6 +757,12 @@ export default function DailyMailPage() {
                         </td>
                         <td className="subject-cell">{letter.subject}</td>
                         <td>
+                          <span className={`dm-priority-text priority-${letter.priority}`}>
+                            <span className={`dm-priority-dot dot-${letter.priority}`} aria-hidden="true"></span>
+                            {letter.priority === "high" ? t("priorityHigh") : letter.priority === "medium" ? t("priorityMedium") : t("priorityLow")}
+                          </span>
+                        </td>
+                        <td>
                           <span className={`badge-badge ${letter.status !== "pending" ? "badge-status-closed" : "badge-status-pending"}`}>
                             {letter.status !== "pending" ? t("submitted", "Submitted") : t("pendingDetails", "Pending")}
                           </span>
@@ -787,7 +794,7 @@ export default function DailyMailPage() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={9} className="empty-table-state-cell">
+                      <td colSpan={10} className="empty-table-state-cell">
                         <div className="empty-state-card">
                           <svg className="empty-state-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M3 19v-8.93a2 2 0 01.89-1.664l8-5.333a2 2 0 012.22 0l8 5.333A2 2 0 0121 10.07V19M3 19a2 2 0 002-2h14a2 2 0 002-2M3 19l6.75-4.5M21 19l-6.75-4.5M3 10l6.75 4.5M21 10l-6.75 4.5m0 0l-2.25-1.5a2 2 0 00-2.22 0l-2.25 1.5" />

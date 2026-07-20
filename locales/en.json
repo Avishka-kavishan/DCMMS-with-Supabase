@@ -397,6 +397,11 @@
   "newLabel": "New",
   "oldLabel": "Old",
   "relatedPersonStatus": "Related Person & Status",
-  "subjectWelcomeMessage": "Welcome to your Case Management workspace. Keep track of assigned cases, priorities, and deadlines."
+  "subjectWelcomeMessage": "Welcome to your Case Management workspace. Keep track of assigned cases, priorities, and deadlines.",
+  "stepLetterReference": "Letter Reference Information",
+  "stepSenderDetails": "Sender Details",
+  "stepLetterSubjectDates": "Letter Subject & Dates",
+  "stepAssignmentDetails": "Assignment Details",
+  "dailyMailWelcomeMessage": "Manage your incoming correspondence efficiently. Register, track, and dispatch letters to subject officers."
 }
 
