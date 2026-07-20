@@ -396,6 +396,7 @@
   "complaintAgeLabel": "Complaint Status",
   "newLabel": "New",
   "oldLabel": "Old",
-  "relatedPersonStatus": "Related Person & Status"
+  "relatedPersonStatus": "Related Person & Status",
+  "subjectWelcomeMessage": "Welcome to your Case Management workspace. Keep track of assigned cases, priorities, and deadlines."
 }
 

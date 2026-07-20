@@ -391,6 +391,7 @@
   "complaintAgeLabel": "புகார் நிலை (Complaint Status)",
   "newLabel": "புதியது (New)",
   "oldLabel": "பழையது (Old)",
-  "relatedPersonStatus": "தொடர்புடைய நபர் மற்றும் நிலை (Related Person & Status)"
+  "relatedPersonStatus": "தொடர்புடைய நபர் மற்றும் நிலை (Related Person & Status)",
+  "subjectWelcomeMessage": "உங்கள் வழக்கு மேலாண்மை பணியிடத்திற்கு வரவேற்கிறோம். ஒதுக்கப்பட்ட வழக்குகள், முன்னுரிமைகள் மற்றும் காலக்கெடுவைக் கண்காணிக்கவும்."
 }
 

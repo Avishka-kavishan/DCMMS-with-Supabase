@@ -305,53 +305,58 @@
 
 /* Case status badges */
 .badge-status-inprogress {
-  background-color: #ffedd5 !important;
+  background-color: #fff7ed !important;
   color: #ea580c !important;
-  padding: 4px 8px;
-  border-radius: 9999px;
+  padding: 4px 12px;
+  border-radius: 8px;
   font-size: calc(12px * var(--font-scale, 1));
   font-weight: 600;
   display: inline-block;
+  border: 1px solid #ffedd5;
 }
 
 .badge-status-closed {
-  background-color: #dcfce7 !important;
+  background-color: #f0fdf4 !important;
   color: #16a34a !important;
-  padding: 4px 8px;
-  border-radius: 9999px;
+  padding: 4px 12px;
+  border-radius: 8px;
   font-size: calc(12px * var(--font-scale, 1));
   font-weight: 600;
   display: inline-block;
+  border: 1px solid #dcfce7;
 }
 
 .badge-status-pending {
-  background-color: #fef9c3 !important;
+  background-color: #fefce8 !important;
   color: #ca8a04 !important;
-  padding: 4px 8px;
-  border-radius: 9999px;
+  padding: 4px 12px;
+  border-radius: 8px;
   font-size: calc(12px * var(--font-scale, 1));
   font-weight: 600;
   display: inline-block;
+  border: 1px solid #fef9c3;
 }
 
 .badge-status-new {
-  background-color: #dbeafe !important;
+  background-color: #eff6ff !important;
   color: #2563eb !important;
-  padding: 4px 8px;
-  border-radius: 9999px;
+  padding: 4px 12px;
+  border-radius: 8px;
   font-size: calc(12px * var(--font-scale, 1));
   font-weight: 600;
   display: inline-block;
+  border: 1px solid #bfdbfe;
 }
 
 .badge-status-old {
-  background-color: #e2e8f0 !important;
+  background-color: #f1f5f9 !important;
   color: #475569 !important;
-  padding: 4px 8px;
-  border-radius: 9999px;
+  padding: 4px 12px;
+  border-radius: 8px;
   font-size: calc(12px * var(--font-scale, 1));
   font-weight: 600;
   display: inline-block;
+  border: 1px solid #cbd5e1;
 }
 
 /* Placeholder stripes mimicking the mockup screenshot */
@@ -440,5 +445,165 @@
 
 .reminders-widget-item {
   margin-bottom: 4px;
+}
+
+/* Dynamic Welcome Banner Greeting Styling */
+.welcome-greeting-section {
+  margin-bottom: 24px;
+}
+
+.greeting-text {
+  margin: 0;
+  font-size: calc(20px * var(--font-scale, 1));
+  font-weight: 700;
+  color: #0f172a;
+}
+
+/* Premium Stat Cards Styles */
+.premium-stat-card {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.premium-stat-card:hover {
+  transform: translateY(-4px);
+}
+
+.total-cases-card:hover {
+  box-shadow: 0 12px 24px -1px rgba(15, 23, 42, 0.22);
+}
+
+.inprogress-cases-card:hover {
+  box-shadow: 0 12px 24px -1px rgba(249, 115, 22, 0.25);
+}
+
+.pending-cases-card:hover {
+  box-shadow: 0 12px 24px -1px rgba(234, 179, 8, 0.25);
+}
+
+.closed-cases-card:hover {
+  box-shadow: 0 12px 24px -1px rgba(16, 185, 129, 0.25);
+}
+
+.premium-card-sparkline svg path {
+  filter: drop-shadow(0 2px 4px rgba(255, 255, 255, 0.4));
+}
+
+/* Priority Text & Dot Styling inside table */
+.priority-text-container {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: calc(13px * var(--font-scale, 1));
+  white-space: nowrap;
+}
+
+.priority-text-high {
+  color: #ef4444; /* High priority is RED */
+}
+
+.priority-text-medium {
+  color: #ea580c; /* Medium priority is ORANGE */
+}
+
+.priority-text-low {
+  color: #16a34a; /* Low priority is GREEN */
+}
+
+.priority-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.priority-dot.dot-high {
+  background-color: #ef4444;
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
+}
+
+.priority-dot.dot-medium {
+  background-color: #ea580c;
+  box-shadow: 0 0 6px rgba(234, 88, 12, 0.6);
+}
+
+.priority-dot.dot-low {
+  background-color: #16a34a;
+  box-shadow: 0 0 6px rgba(22, 163, 74, 0.6);
+}
+
+/* Reminder Text & Dot Styling inside table */
+.reminder-text-container {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: calc(13px * var(--font-scale, 1));
+  white-space: nowrap;
+}
+
+.reminder-text-red {
+  color: #ef4444;
+}
+
+.reminder-text-orange {
+  color: #ea580c;
+}
+
+.reminder-text-green {
+  color: #16a34a;
+}
+
+.reminder-text-gray {
+  color: #64748b;
+}
+
+.reminder-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.reminder-dot.dot-red {
+  background-color: #ef4444;
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
+}
+
+.reminder-dot.dot-orange {
+  background-color: #ea580c;
+  box-shadow: 0 0 6px rgba(234, 88, 12, 0.6);
+}
+
+.reminder-dot.dot-green {
+  background-color: #16a34a;
+  box-shadow: 0 0 6px rgba(22, 163, 74, 0.6);
+}
+
+.reminder-dot.dot-gray {
+  background-color: #64748b;
+}
+
+/* Add Details Link styled as pill button */
+.add-details-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #2563eb;
+  color: #ffffff !important;
+  padding: 6px 16px;
+  border-radius: 9999px;
+  font-size: calc(12px * var(--font-scale, 1)) !important;
+  font-weight: 600 !important;
+  text-decoration: none !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 4px rgba(37, 99, 235, 0.1);
+}
+
+.add-details-link:hover {
+  background-color: #1d4ed8 !important;
+  box-shadow: 0 4px 8px rgba(37, 99, 235, 0.2);
+  transform: translateY(-1px);
+  text-decoration: none !important;
 }
 

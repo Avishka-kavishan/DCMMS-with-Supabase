@@ -692,35 +692,41 @@ export default function SubjectOfficerDashboard() {
                   {filteredCases.length > 0 ? (
                     filteredCases.map((item) => (
                       <tr key={item.id} className="letter-table-row">
-                        <td className="font-semibold text-primary">{item.caseNo}</td>
+                        <td className="font-semibold">{item.caseNo}</td>
                         <td>{item.assignedDate}</td>
                         <td className="subject-cell">{item.subject}</td>
                         <td>
-                          {item.priority === "high" ? t("priorityHigh") : item.priority === "medium" ? t("priorityMedium") : t("priorityLow")}
-                        </td>
-                        <td>
-                          <span className={`badge-badge ${item.status === "In Progress" ? "badge-status-inprogress" :
-                              item.status === "Closed" ? "badge-status-closed" : "badge-status-pending"
-                            }`}>
-                            {item.status === "In Progress" ? t("statusInProgress") :
-                              item.status === "Closed" ? t("statusClosed") : t("statusPending")}
+                          <span className={`priority-text-container priority-text-${item.priority}`}>
+                            <span className={`priority-dot dot-${item.priority}`} aria-hidden="true"></span>
+                            {item.priority === "high" ? t("priorityHigh") : item.priority === "medium" ? t("priorityMedium") : t("priorityLow")}
                           </span>
                         </td>
                         <td>
-                          <span className={`badge-badge ${item.isOld ? "badge-status-old" : "badge-status-new"}`}>
-                            {item.isOld ? t("oldCase", "Old Case") : t("newCase", "New Case")}
-                          </span>
+                          {item.status === "In Progress" ? t("statusInProgress") :
+                            item.status === "Closed" ? t("statusClosed") : t("statusPending")}
+                        </td>
+                        <td>
+                          {item.isOld ? t("oldCase", "Old Case") : t("newCase", "New Case")}
                         </td>
                         <td>
                           {(() => {
                             const rem = calculateReminder(item.assignedDate, item.priority, item.status);
-                            let colorClass = "reminder-gray";
-                            if (rem.color === "red") colorClass = "reminder-red";
-                            else if (rem.color === "orange") colorClass = "reminder-orange";
-                            else if (rem.color === "green") colorClass = "reminder-green";
+                            let colorClass = "reminder-text-gray";
+                            let dotClass = "dot-gray";
+                            if (rem.color === "red") {
+                              colorClass = "reminder-text-red";
+                              dotClass = "dot-red";
+                            } else if (rem.color === "orange") {
+                              colorClass = "reminder-text-orange";
+                              dotClass = "dot-orange";
+                            } else if (rem.color === "green") {
+                              colorClass = "reminder-text-green";
+                              dotClass = "dot-green";
+                            }
 
                             return (
-                              <span className={`reminder-tag ${colorClass}`}>
+                              <span className={`reminder-text-container ${colorClass}`}>
+                                <span className={`reminder-dot ${dotClass}`} aria-hidden="true"></span>
                                 {rem.text}
                               </span>
                             );
