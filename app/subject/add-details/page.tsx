@@ -63,16 +63,39 @@ function CaseDetailsForm() {
   // Sync letter data with flowchart states on load
   useEffect(() => {
     if (letterData) {
-      setComplainantName(letterData.senderName || "");
-      setComplainantAddress(letterData.senderAddress || "");
-      setSchoolName(letterData.instituteName || "");
-      setComplaintMatter(letterData.subject || "");
+      const cleanVal = (val: string | null | undefined) => {
+        if (!val) return "";
+        const trimmed = val.trim();
+        if (trimmed.toUpperCase() === "N/A" || trimmed === "—" || trimmed === "-") return "";
+        return trimmed;
+      };
+
+      setComplainantName(cleanVal(letterData.senderName));
+      setComplainantAddress(cleanVal(letterData.senderAddress));
+      setSchoolName(cleanVal(letterData.instituteName));
+      setComplaintMatter(cleanVal(letterData.subject));
       
       const isAnon = !letterData.senderName || 
                      letterData.senderName.toLowerCase().includes("anonymous") || 
                      letterData.senderName.toLowerCase().includes("නිර්නාමික") ||
                      letterData.regionProvince?.toLowerCase().includes("anonymous");
       setClassification(isAnon ? "anonymous" : "nominal");
+
+      // Check if case is old
+      let localIsOld = false;
+      if (typeof window !== "undefined") {
+        const storedCases = localStorage.getItem("dcmms_cases");
+        if (storedCases) {
+          try {
+            const casesList = JSON.parse(storedCases);
+            const foundCase = casesList.find((c: any) => c.caseNo === letterData.refNo);
+            if (foundCase) {
+              localIsOld = !!foundCase.isOld;
+            }
+          } catch (e) {}
+        }
+      }
+      setComplaintAge(localIsOld ? "old" : "new");
     }
   }, [letterData]);
 
@@ -97,6 +120,7 @@ function CaseDetailsForm() {
   const [schoolName, setSchoolName] = useState("");
   const [schoolAddress, setSchoolAddress] = useState("");
   const [complaintMatter, setComplaintMatter] = useState("");
+  const [complaintAge, setComplaintAge] = useState<"new" | "old">("new");
 
   // Form States - Right Card ("If officer concerned with the Complaint")
   const [isConcerned, setIsConcerned] = useState<"yes" | "no">("no");
@@ -248,16 +272,22 @@ function CaseDetailsForm() {
             if (concernedError && concernedError.code !== "PGRST116") throw concernedError;
 
             if (concernedData) {
+              const cleanVal = (val: string | null | undefined) => {
+                if (!val) return "";
+                const trimmed = val.trim();
+                if (trimmed.toUpperCase() === "N/A" || trimmed === "—" || trimmed === "-") return "";
+                return trimmed;
+              };
               setIsConcerned(concernedData.officer_name ? "yes" : "no");
-              setOfficerName(concernedData.officer_name || "");
-              setOfficerPosition(concernedData.position || "");
-              setOfficerApptDate(concernedData.appointment_date || "");
-              setOfficerAddress(concernedData.address || "");
-              setFileRelated(concernedData.institute_name || ""); // institute name fallback
-              setOfficerDob((concernedData as any).dob || "");
-              setOfficerNic((concernedData as any).nic || "");
+              setOfficerName(cleanVal(concernedData.officer_name));
+              setOfficerPosition(cleanVal(concernedData.position));
+              setOfficerApptDate(cleanVal(concernedData.appointment_date));
+              setOfficerAddress(cleanVal(concernedData.address));
+              setFileRelated(cleanVal(concernedData.institute_name));
+              setOfficerDob(cleanVal((concernedData as any).dob));
+              setOfficerNic(cleanVal((concernedData as any).nic));
               if (concernedData.institute_name) {
-                setSchoolName(concernedData.institute_name);
+                setSchoolName(cleanVal(concernedData.institute_name));
               }
               if (concernedData.institute_address) {
                 setSchoolAddress(concernedData.institute_address);
@@ -329,19 +359,25 @@ function CaseDetailsForm() {
               const concernedMap = JSON.parse(storedConcerned);
               const existingConcerned = concernedMap[caseNoParam];
               if (existingConcerned) {
+                const cleanVal = (val: string | null | undefined) => {
+                  if (!val) return "";
+                  const trimmed = val.trim();
+                  if (trimmed.toUpperCase() === "N/A" || trimmed === "—" || trimmed === "-") return "";
+                  return trimmed;
+                };
                 setIsConcerned(existingConcerned.officerName ? "yes" : "no");
-                setOfficerName(existingConcerned.officerName || "");
-                setOfficerPosition(existingConcerned.position || "");
-                setOfficerApptDate(existingConcerned.appointmentDate || "");
-                setOfficerAddress(existingConcerned.address || "");
-                setFileRelated(existingConcerned.instituteName || "");
-                setOfficerDob(existingConcerned.dob || "");
-                setOfficerNic(existingConcerned.nic || "");
+                setOfficerName(cleanVal(existingConcerned.officerName));
+                setOfficerPosition(cleanVal(existingConcerned.position));
+                setOfficerApptDate(cleanVal(existingConcerned.appointmentDate));
+                setOfficerAddress(cleanVal(existingConcerned.address));
+                setFileRelated(cleanVal(existingConcerned.instituteName));
+                setOfficerDob(cleanVal(existingConcerned.dob));
+                setOfficerNic(cleanVal(existingConcerned.nic));
                 if (existingConcerned.instituteName) {
-                  setSchoolName(existingConcerned.instituteName);
+                  setSchoolName(cleanVal(existingConcerned.instituteName));
                 }
                 if (existingConcerned.schoolAddress) {
-                  setSchoolAddress(existingConcerned.schoolAddress);
+                  setSchoolAddress(cleanVal(existingConcerned.schoolAddress));
                 }
               }
             } catch (e) {
@@ -529,7 +565,7 @@ function CaseDetailsForm() {
           const casesList = JSON.parse(storedCases);
           const updated = casesList.map((c: any) => {
             if (c.caseNo === refNo) {
-              return { ...c, status: status || c.status };
+              return { ...c, status: status || c.status, isOld: complaintAge === "old" };
             }
             return c;
           });
@@ -800,41 +836,93 @@ function CaseDetailsForm() {
                   </div>
                 </div>
 
-                {letterData && (
+                 {letterData && (
                   <div className="current-case-details-card">
-                    <h3 className="current-details-title">{t("currentDetails", "Current details")}</h3>
+                    <h3 className="current-details-title">
+                      <svg className="card-title-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2" style={{ color: "#2563eb" }}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      {t("currentDetails", "Current details")}
+                    </h3>
                     <div className="case-details-grid">
-                      <div className="case-details-column">
-                        <div className="case-detail-item">
-                          <span className="detail-label">{t("caseNoLabel", "Case No. :")}</span>
-                          <span className="detail-value">{letterData.letterNo || ""}</span>
+                      {/* Case No */}
+                      <div className="case-detail-item-premium">
+                        <div className="detail-icon-container">
+                          <svg className="detail-svg-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
+                          </svg>
                         </div>
-                        <div className="case-detail-item">
-                          <span className="detail-label">{t("priorityLabel", "Priority :")}</span>
-                          <span className="detail-value">
-                            {letterData.priority ? (t(`priority${letterData.priority.charAt(0).toUpperCase() + letterData.priority.slice(1).toLowerCase()}`, letterData.priority) as string) : ""}
+                        <div className="detail-content-container">
+                          <span className="detail-label-premium">{t("caseNoLabel", "Case No.")}</span>
+                          <span className="detail-value-premium">{letterData.letterNo || "—"}</span>
+                        </div>
+                      </div>
+
+                      {/* Name of Subject Officer */}
+                      <div className="case-detail-item-premium">
+                        <div className="detail-icon-container">
+                          <svg className="detail-svg-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                        </div>
+                        <div className="detail-content-container">
+                          <span className="detail-label-premium">{t("officerNameLabel", "Name of Subject Officer")}</span>
+                          <span className="detail-value-premium">{letterData.officerName || "—"}</span>
+                        </div>
+                      </div>
+
+                      {/* Reference Number */}
+                      <div className="case-detail-item-premium">
+                        <div className="detail-icon-container">
+                          <svg className="detail-svg-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                        </div>
+                        <div className="detail-content-container">
+                          <span className="detail-label-premium">{t("refNoLabel", "Reference Number")}</span>
+                          <span className="detail-value-premium">{letterData.refNo || "—"}</span>
+                        </div>
+                      </div>
+
+                      {/* Priority */}
+                      <div className="case-detail-item-premium">
+                        <div className="detail-icon-container">
+                          <svg className="detail-svg-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
+                        </div>
+                        <div className="detail-content-container">
+                          <span className="detail-label-premium">{t("priorityLabel", "Priority")}</span>
+                          <span className={`detail-priority-pill pill-${letterData.priority?.toLowerCase()}`}>
+                            {letterData.priority ? (t(`priority${letterData.priority.charAt(0).toUpperCase() + letterData.priority.slice(1).toLowerCase()}`, letterData.priority) as string) : "—"}
                           </span>
                         </div>
                       </div>
-                      <div className="case-details-column">
-                        <div className="case-detail-item">
-                          <span className="detail-label">{t("officerNameLabel", "Name of Subject Officer :")}</span>
-                          <span className="detail-value">{letterData.officerName || ""}</span>
+
+                      {/* Received Date */}
+                      <div className="case-detail-item-premium">
+                        <div className="detail-icon-container">
+                          <svg className="detail-svg-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
                         </div>
-                        <div className="case-detail-item">
-                          <span className="detail-label">{t("receivedDateLabel", "Received Date :")}</span>
-                          <span className="detail-value">{letterData.receivedDate || ""}</span>
+                        <div className="detail-content-container">
+                          <span className="detail-label-premium">{t("receivedDateLabel", "Received Date")}</span>
+                          <span className="detail-value-premium">{letterData.receivedDate || "—"}</span>
                         </div>
                       </div>
-                      <div className="case-details-column">
-                        <div className="case-detail-item">
-                          <span className="detail-label">{t("refNoLabel", "Reference Number :")}</span>
-                          <span className="detail-value">{letterData.refNo || ""}</span>
+
+                      {/* Letter Type */}
+                      <div className="case-detail-item-premium">
+                        <div className="detail-icon-container">
+                          <svg className="detail-svg-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                          </svg>
                         </div>
-                        <div className="case-detail-item">
-                          <span className="detail-label">{t("letterTypeLabel", "Letter Type :")}</span>
-                          <span className="detail-value">
-                            {letterData.letterType ? t(letterData.letterType) : ""}
+                        <div className="detail-content-container">
+                          <span className="detail-label-premium">{t("letterTypeLabel", "Letter Type")}</span>
+                          <span className="detail-value-premium">
+                            {letterData.letterType ? t(letterData.letterType) : "—"}
                           </span>
                         </div>
                       </div>
@@ -890,9 +978,146 @@ function CaseDetailsForm() {
                     </h2>
 
                     <div className="flowchart-container">
-                      {/* Step 1: Classification */}
+                      {/* Step 1: Case Administration */}
                       <div className="flowchart-step">
                         <div className="step-indicator">1</div>
+                        <div className="step-content">
+                          <h3 className="step-section-title">{t("caseAdministration", "Case Administration")}</h3>
+                          
+                          <div className="form-grid-2">
+                            {/* Reference Number */}
+                            <div className="form-field-group">
+                              <label htmlFor="refNo" className="field-label">
+                                {t("refNo")} <span className="required-star">*</span>
+                              </label>
+                              <input
+                                id="refNo"
+                                type="text"
+                                required
+                                readOnly
+                                value={refNo}
+                                className="field-input"
+                                style={{ backgroundColor: "#e2e8f0", cursor: "not-allowed" }}
+                              />
+                            </div>
+
+                            {/* File number of the institute where letter was received */}
+                            <div className="form-field-group">
+                              <label htmlFor="fileRelated" className="field-label">
+                                {t("instituteFileNo")}
+                              </label>
+                              <input
+                                id="fileRelated"
+                                type="text"
+                                value={fileRelated}
+                                onChange={(e) => setFileRelated(e.target.value)}
+                                className="field-input"
+                                placeholder="e.g. EP/DM/01"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="form-grid-2 mt-3">
+                            {/* Subject File Number (විෂය ගොනු අංකය) */}
+                            <div className="form-field-group">
+                              <label htmlFor="specialNotes" className="field-label">
+                                {t("subjectFileNo")}
+                              </label>
+                              <input
+                                id="specialNotes"
+                                type="text"
+                                value={specialNotes}
+                                onChange={(e) => setSpecialNotes(e.target.value)}
+                                className="field-input"
+                                placeholder="e.g. SUB/FILE/102"
+                              />
+                            </div>
+
+                            {/* Priority */}
+                            <div className="form-field-group">
+                              <label htmlFor="priority" className="field-label">
+                                {t("priority")}
+                              </label>
+                              <div className="priority-select-wrapper">
+                                <span className={`priority-dot-indicator dot-${priority}`} />
+                                <div className="select-wrapper" style={{ flex: 1 }}>
+                                  <select
+                                    id="priority"
+                                    value={priority}
+                                    onChange={(e) => setPriority(e.target.value)}
+                                    className="field-select"
+                                  >
+                                    <option value="high" className="priority-option-high">{t("priorityHigh")}</option>
+                                    <option value="medium" className="priority-option-medium">{t("priorityMedium")}</option>
+                                    <option value="low" className="priority-option-low">{t("priorityLow")}</option>
+                                  </select>
+                                  <div className="select-arrow-container">
+                                    <svg className="select-arrow-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="form-grid-2 mt-3">
+                            {/* Status (තත්ත්වය) */}
+                            <div className="form-field-group">
+                              <label htmlFor="reportState" className="field-label">
+                                {t("status")}
+                              </label>
+                              <div className="select-wrapper">
+                                <select
+                                  id="reportState"
+                                  value={reportState}
+                                  onChange={(e) => setReportState(e.target.value)}
+                                  className="field-select"
+                                >
+                                  <option value="">{t("Choose report state", "Select current status...")}</option>
+                                  <option value="Calling Reports">{t("statusCallingReports")}</option>
+                                  <option value="Calling Court Reports">{t("statusCallingCourtReports")}</option>
+                                  <option value="Preliminary Investigation">{t("statusPreliminaryInvestigation")}</option>
+                                  <option value="Inquiry">{t("statusInquiry")}</option>
+                                  <option value="Refer Other Institute">{t("statusReferOtherInstitute")}</option>
+                                  <option value="Consult Relevant Institutes">{t("statusConsultRelevantInstitutes")}</option>
+                                  <option value="Obtain Statements">{t("statusObtainStatements")}</option>
+                                  <option value="Unclear Anonymous">{t("statusUnclearAnonymous")}</option>
+                                  <option value="Other">{t("statusOther")}</option>
+                                </select>
+                                <div className="select-arrow-container">
+                                  <svg className="select-arrow-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                                  </svg>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Date prepared and submitted for signature (ලිපිය සකසා අත්සනට ඉදිරිපත් කළ දිනය) */}
+                            <div className="form-field-group">
+                              <label htmlFor="receivedDate" className="field-label">
+                                {t("datePreparedSubmitted")}
+                              </label>
+                              <div className="input-icon-wrapper">
+                                <input
+                                  id="receivedDate"
+                                  type="date"
+                                  value={receivedDate}
+                                  onChange={(e) => setReceivedDate(e.target.value)}
+                                  className="field-input input-with-right-icon"
+                                />
+                                <svg className="input-right-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Step 2: Classification */}
+                      <div className="flowchart-step">
+                        <div className="step-indicator">2</div>
                         <div className="step-content">
                           <span className="field-label" style={{ display: "block", marginBottom: "8px" }}>
                             {t("complaintClassification", "Classification of complaint letter")} <span className="required-star">*</span>
@@ -920,10 +1145,10 @@ function CaseDetailsForm() {
                         </div>
                       </div>
 
-                      {/* Step 2: Complainant Details (Shown only if nominal) */}
+                      {/* Step 3: Complainant Details (Shown only if nominal) */}
                       {classification === "nominal" && (
                         <div className="flowchart-step animated-fade-in">
-                          <div className="step-indicator">2</div>
+                          <div className="step-indicator">3</div>
                           <div className="step-content">
                             <h3 className="step-section-title">{t("complainantDetailsTitle", "Complainant Details")}</h3>
                             <div className="form-grid-2">
@@ -959,67 +1184,22 @@ function CaseDetailsForm() {
                         </div>
                       )}
 
-                      {/* Step 3: School Details */}
-                      <div className="flowchart-step">
-                        <div className="step-indicator">{classification === "nominal" ? "3" : "2"}</div>
-                        <div className="step-content">
-                          <h3 className="step-section-title">{t("schoolDetailsTitle", "School Details")}</h3>
-                          <div className="form-grid-2">
-                            <div className="form-field-group">
-                              <label htmlFor="schoolName" className="field-label">
-                                {t("schoolName", "School Name")} <span className="required-star">*</span>
-                              </label>
-                              <input
-                                id="schoolName"
-                                type="text"
-                                required
-                                value={schoolName}
-                                onChange={(e) => setSchoolName(e.target.value)}
-                                className="field-input"
-                                placeholder="Enter school name..."
-                              />
-                            </div>
-                            <div className="form-field-group">
-                              <label htmlFor="schoolAddress" className="field-label">
-                                {t("schoolAddress", "School Address")}
-                              </label>
-                              <input
-                                id="schoolAddress"
-                                type="text"
-                                value={schoolAddress}
-                                onChange={(e) => setSchoolAddress(e.target.value)}
-                                className="field-input"
-                                placeholder="Enter school address..."
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
+                    </div>
+                  </div>
 
-                      {/* Step 4: Subject Matter */}
+                  {/* ───────────────── Right Card ("Related Person & Status" Flowchart) ───────────────── */}
+                  <div className="add-details-card">
+                    <h2 className="card-title-header">
+                      <svg className="card-title-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                      </svg>
+                      {t("relatedPersonStatus", "Related Person & Status")}
+                    </h2>
+
+                    <div className="flowchart-container">
+                      {/* Step 4: Concerned Person */}
                       <div className="flowchart-step">
                         <div className="step-indicator">{classification === "nominal" ? "4" : "3"}</div>
-                        <div className="step-content">
-                          <div className="form-field-group">
-                            <label htmlFor="complaintMatter" className="field-label">
-                              {t("complaintMatterLabel", "Matter related to the complaint")} <span className="required-star">*</span>
-                            </label>
-                            <textarea
-                              id="complaintMatter"
-                              required
-                              value={complaintMatter}
-                              onChange={(e) => setComplaintMatter(e.target.value)}
-                              className="field-textarea"
-                              placeholder="Enter details of the complaint matter..."
-                              rows={4}
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Step 5: Concerned Person */}
-                      <div className="flowchart-step">
-                        <div className="step-indicator">{classification === "nominal" ? "5" : "4"}</div>
                         <div className="step-content">
                           <span className="field-label" style={{ display: "block", marginBottom: "8px" }}>
                             {t("personRelatedQuestion", "Is there a person related to the complaint?")}
@@ -1078,7 +1258,7 @@ function CaseDetailsForm() {
                                 </div>
                               </div>
 
-                              <div className="form-grid-4 mt-3">
+                              <div className="form-grid-2 mt-3">
                                 <div className="form-field-group">
                                   <label htmlFor="officerDob" className="field-label">{t("dateOfBirth")}</label>
                                   <input
@@ -1100,6 +1280,9 @@ function CaseDetailsForm() {
                                     placeholder="NIC number"
                                   />
                                 </div>
+                              </div>
+
+                              <div className="form-grid-2 mt-3">
                                 <div className="form-field-group">
                                   <label htmlFor="officerApptDate" className="field-label">{t("appointmentDate")}</label>
                                   <input
@@ -1126,172 +1309,125 @@ function CaseDetailsForm() {
                           )}
                         </div>
                       </div>
-                    </div>
-                  </div>
 
-                  {/* ───────────────── Right Card ("Case Administration & History") ───────────────── */}
-                  <div className="add-details-card">
-                    <h2 className="card-title-header">
-                      <svg className="card-title-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-                      </svg>
-                      {t("caseAdministration", "Case Administration")}
-                    </h2>
-
-                    <div className="right-card-form">
-                      {/* 1. Reference Number */}
-                      <div className="form-field-group">
-                        <label htmlFor="refNo" className="field-label">
-                          {t("refNo")} <span className="required-star">*</span>
-                        </label>
-                        <input
-                          id="refNo"
-                          type="text"
-                          required
-                          readOnly
-                          value={refNo}
-                          className="field-input"
-                          style={{ backgroundColor: "#e2e8f0", cursor: "not-allowed" }}
-                        />
-                      </div>
-
-                      {/* 2. File number of the institute where letter was received */}
-                      <div className="form-field-group">
-                        <label htmlFor="fileRelated" className="field-label">
-                          {t("instituteFileNo")}
-                        </label>
-                        <input
-                          id="fileRelated"
-                          type="text"
-                          value={fileRelated}
-                          onChange={(e) => setFileRelated(e.target.value)}
-                          className="field-input"
-                          placeholder="e.g. EP/DM/01"
-                        />
-                      </div>
-
-                      {/* 3. Subject File Number (විෂය ගොනු අංකය) */}
-                      <div className="form-field-group">
-                        <label htmlFor="specialNotes" className="field-label">
-                          {t("subjectFileNo")}
-                        </label>
-                        <input
-                          id="specialNotes"
-                          type="text"
-                          value={specialNotes}
-                          onChange={(e) => setSpecialNotes(e.target.value)}
-                          className="field-input"
-                          placeholder="e.g. SUB/FILE/102"
-                        />
-                      </div>
-
-                      {/* 4. Priority */}
-                      <div className="form-field-group">
-                        <label htmlFor="priority" className="field-label">
-                          {t("priority")}
-                        </label>
-                        <div className="priority-select-wrapper">
-                          <span className={`priority-dot-indicator dot-${priority}`} />
-                          <div className="select-wrapper" style={{ flex: 1 }}>
-                            <select
-                              id="priority"
-                              value={priority}
-                              onChange={(e) => setPriority(e.target.value)}
-                              className="field-select"
-                            >
-                              <option value="high" className="priority-option-high">{t("priorityHigh")}</option>
-                              <option value="medium" className="priority-option-medium">{t("priorityMedium")}</option>
-                              <option value="low" className="priority-option-low">{t("priorityLow")}</option>
-                            </select>
-                            <div className="select-arrow-container">
-                              <svg className="select-arrow-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                              </svg>
+                      {/* Step 5: School Details */}
+                      <div className="flowchart-step">
+                        <div className="step-indicator">{classification === "nominal" ? "5" : "4"}</div>
+                        <div className="step-content">
+                          <h3 className="step-section-title">{t("schoolDetailsTitle", "School Details")}</h3>
+                          <div className="form-grid-2">
+                            <div className="form-field-group">
+                              <label htmlFor="schoolName" className="field-label">
+                                {t("schoolName", "School Name")} <span className="required-star">*</span>
+                              </label>
+                              <input
+                                id="schoolName"
+                                type="text"
+                                required
+                                value={schoolName}
+                                onChange={(e) => setSchoolName(e.target.value)}
+                                className="field-input"
+                                placeholder="Enter school name..."
+                              />
+                            </div>
+                            <div className="form-field-group">
+                              <label htmlFor="schoolAddress" className="field-label">
+                                {t("schoolAddress", "School Address")}
+                              </label>
+                              <input
+                                id="schoolAddress"
+                                type="text"
+                                value={schoolAddress}
+                                onChange={(e) => setSchoolAddress(e.target.value)}
+                                className="field-input"
+                                placeholder="Enter school address..."
+                              />
                             </div>
                           </div>
                         </div>
                       </div>
 
-                      {/* 5. Status (තත්ත්වය) */}
-                      <div className="form-field-group">
-                        <label htmlFor="reportState" className="field-label">
-                          {t("status")}
-                        </label>
-                        <div className="select-wrapper">
-                          <select
-                            id="reportState"
-                            value={reportState}
-                            onChange={(e) => setReportState(e.target.value)}
-                            className="field-select"
-                          >
-                            <option value="">{t("Choose report state", "Select current status...")}</option>
-                            <option value="Calling Reports">{t("statusCallingReports")}</option>
-                            <option value="Calling Court Reports">{t("statusCallingCourtReports")}</option>
-                            <option value="Preliminary Investigation">{t("statusPreliminaryInvestigation")}</option>
-                            <option value="Inquiry">{t("statusInquiry")}</option>
-                            <option value="Refer Other Institute">{t("statusReferOtherInstitute")}</option>
-                            <option value="Consult Relevant Institutes">{t("statusConsultRelevantInstitutes")}</option>
-                            <option value="Obtain Statements">{t("statusObtainStatements")}</option>
-                            <option value="Unclear Anonymous">{t("statusUnclearAnonymous")}</option>
-                            <option value="Other">{t("statusOther")}</option>
-                          </select>
-                          <div className="select-arrow-container">
-                            <svg className="select-arrow-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                            </svg>
+                      {/* Step 6: Subject Matter */}
+                      <div className="flowchart-step">
+                        <div className="step-indicator">{classification === "nominal" ? "6" : "5"}</div>
+                        <div className="step-content">
+                          <div className="form-field-group">
+                            <label htmlFor="complaintMatter" className="field-label">
+                              {t("complaintMatterLabel", "Matter related to the complaint")} <span className="required-star">*</span>
+                            </label>
+                            <textarea
+                              id="complaintMatter"
+                              required
+                              value={complaintMatter}
+                              onChange={(e) => setComplaintMatter(e.target.value)}
+                              className="field-textarea"
+                              placeholder="Enter details of the complaint matter..."
+                              rows={4}
+                            />
                           </div>
                         </div>
                       </div>
 
-                      {/* 6. Date prepared and submitted for signature (ලිපිය සකසා අත්සනට ඉදිරිපත් කළ දිනය) */}
-                      <div className="form-field-group">
-                        <label htmlFor="receivedDate" className="field-label">
-                          {t("datePreparedSubmitted")}
-                        </label>
-                        <div className="input-icon-wrapper">
-                          <input
-                            id="receivedDate"
-                            type="date"
-                            value={receivedDate}
-                            onChange={(e) => setReceivedDate(e.target.value)}
-                            className="field-input input-with-right-icon"
-                          />
-                          <svg className="input-right-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                          </svg>
-                        </div>
-                      </div>
-
-                      {/* Timeline of actions taken */}
-                      {previousActions && previousActions.length > 0 && (
-                        <div className="previous-actions-timeline" style={{ marginTop: "24px", paddingTop: "20px", borderTop: "1.5px solid #e2e8f0" }}>
-                          <h3 className="timeline-title" style={{ fontSize: "14px", fontWeight: "700" }}>
-                            <svg className="action-row-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            {t("previousActionsHistory", "History of Actions Taken")}
-                          </h3>
-                          <div className="timeline-items-wrapper">
-                            {previousActions.map((act: any, idx: number) => (
-                              <div key={act.id || idx} className="timeline-item">
-                                <div className="timeline-header">
-                                  <span>{act.receivedDate}</span>
-                                  <span className={`timeline-status timeline-status-${act.reportState?.toLowerCase().replace(/\s+/g, "") || "pending"}`}>
-                                    {t(act.reportState || "Pending")}
-                                  </span>
-                                </div>
-                                <p className="timeline-step">{act.stepTaken}</p>
-                                {act.specialNotes && (
-                                  <p className="timeline-notes">
-                                    {t("notes", "Notes")}: {act.specialNotes}
-                                  </p>
-                                )}
-                              </div>
-                            ))}
+                      {/* Step 7: Complaint Status */}
+                      <div className="flowchart-step">
+                        <div className="step-indicator">{classification === "nominal" ? "7" : "6"}</div>
+                        <div className="step-content">
+                          <span className="field-label" style={{ display: "block", marginBottom: "8px" }}>
+                            {t("complaintAgeLabel", "Complaint Status")} <span className="required-star">*</span>
+                          </span>
+                          <div className="classification-toggle-group" role="radiogroup" aria-label="Complaint Status Toggle">
+                            <button
+                              type="button"
+                              className={`toggle-btn ${complaintAge === "new" ? "active" : ""}`}
+                              onClick={() => setComplaintAge("new")}
+                              aria-checked={complaintAge === "new"}
+                              role="radio"
+                            >
+                              {t("newLabel", "New")}
+                            </button>
+                            <button
+                              type="button"
+                              className={`toggle-btn ${complaintAge === "old" ? "active" : ""}`}
+                              onClick={() => setComplaintAge("old")}
+                              aria-checked={complaintAge === "old"}
+                              role="radio"
+                            >
+                              {t("oldLabel", "Old")}
+                            </button>
                           </div>
                         </div>
-                      )}
+                      </div>
                     </div>
+
+                    {/* Timeline of actions taken (placed at the bottom of the card) */}
+                    {previousActions && previousActions.length > 0 && (
+                      <div className="previous-actions-timeline" style={{ marginTop: "32px", paddingTop: "24px", borderTop: "2px solid #e2e8f0" }}>
+                        <h3 className="timeline-title" style={{ fontSize: "15px", fontWeight: "700" }}>
+                          <svg className="action-row-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          {t("previousActionsHistory", "History of Actions Taken")}
+                        </h3>
+                        <div className="timeline-items-wrapper">
+                          {previousActions.map((act: any, idx: number) => (
+                            <div key={act.id || idx} className="timeline-item">
+                              <div className="timeline-header">
+                                <span>{act.receivedDate}</span>
+                                <span className={`timeline-status timeline-status-${act.reportState?.toLowerCase().replace(/\s+/g, "") || "pending"}`}>
+                                  {t(act.reportState || "Pending")}
+                                </span>
+                              </div>
+                              <p className="timeline-step">{act.stepTaken}</p>
+                              {act.specialNotes && (
+                                <p className="timeline-notes">
+                                  {t("notes", "Notes")}: {act.specialNotes}
+                                </p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 

@@ -392,6 +392,10 @@
   "personRelatedQuestion": "Is there a person related to the complaint?",
   "personRelatedDetails": "Concerned Person Details",
   "personName": "Person's Name",
-  "personDesignation": "Person's Designation / Position"
+  "personDesignation": "Person's Designation / Position",
+  "complaintAgeLabel": "Complaint Status",
+  "newLabel": "New",
+  "oldLabel": "Old",
+  "relatedPersonStatus": "Related Person & Status"
 }
 

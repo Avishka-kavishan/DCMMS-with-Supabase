@@ -156,7 +156,14 @@ export default function SubjectOfficerDashboard() {
                   subject: item.subject,
                   priority: item.priority,
                   status: item.status,
-                  isOld: casesWithDetails.has(item.case_no) || item.status === "Closed" || item.status === "Pending",
+                  isOld: (typeof window !== "undefined" && (() => {
+                    try {
+                      const localCases = JSON.parse(localStorage.getItem("dcmms_cases") || "[]");
+                      const found = localCases.find((lc: any) => lc.caseNo === item.case_no);
+                      if (found && found.isOld !== undefined) return found.isOld;
+                    } catch (e) {}
+                    return casesWithDetails.has(item.case_no) || item.status === "Closed" || item.status === "Pending";
+                  })()),
                 }));
                 mapped.sort((a: any, b: any) => {
                   if (!!a.isOld !== !!b.isOld) {
@@ -216,7 +223,7 @@ export default function SubjectOfficerDashboard() {
               .map((c: any) => ({
                 ...c,
                 receivedDate: refToReceivedDate.get(c.caseNo) || c.assignedDate,
-                isOld: casesWithActions.has(c.caseNo) || c.status === "Closed" || c.status === "Pending",
+                isOld: c.isOld !== undefined ? c.isOld : (casesWithActions.has(c.caseNo) || c.status === "Closed" || c.status === "Pending"),
               }));
             filtered.sort((a: any, b: any) => {
               if (!!a.isOld !== !!b.isOld) {

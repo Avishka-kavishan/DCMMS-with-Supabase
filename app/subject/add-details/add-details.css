@@ -77,7 +77,7 @@
 
 @media (min-width: 1024px) {
   .add-details-cards-grid {
-    grid-template-columns: 1.25fr 1fr; /* Left card is slightly wider */
+    grid-template-columns: 1.2fr 1fr; /* Left card is slightly wider */
   }
 }
 
@@ -681,6 +681,27 @@
   margin: 0 0 16px 0;
 }
 
+/* Premium Case Details Card Styling */
+.current-case-details-card {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-left: 5px solid #2563eb;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
+}
+
+.current-details-title {
+  margin: 0 0 20px 0;
+  font-size: calc(15px * var(--font-scale, 1));
+  font-weight: 700;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .case-details-grid {
   display: grid;
   grid-template-columns: 1fr;
@@ -690,32 +711,91 @@
 @media (min-width: 768px) {
   .case-details-grid {
     grid-template-columns: repeat(3, 1fr);
-    gap: 16px 40px;
+    gap: 16px;
   }
 }
 
-.case-details-column {
+.case-detail-item-premium {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background-color: #f8fafc;
+  border: 1px solid #f1f5f9;
+  border-radius: 10px;
+  padding: 12px 16px;
+  transition: all 0.2s ease-in-out;
+}
+
+.case-detail-item-premium:hover {
+  background-color: #ffffff;
+  border-color: #e2e8f0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+}
+
+.detail-icon-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  background-color: #eff6ff;
+  color: #2563eb;
+  flex-shrink: 0;
+}
+
+.detail-svg-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.detail-content-container {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 3px;
 }
 
-.case-detail-item {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
+.detail-label-premium {
+  font-size: calc(10.5px * var(--font-scale, 1));
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.detail-value-premium {
   font-size: calc(13px * var(--font-scale, 1));
+  font-weight: 600;
+  color: #0f172a;
 }
 
-.detail-label {
+/* Priority pills for current details */
+.detail-priority-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  font-size: calc(11px * var(--font-scale, 1));
   font-weight: 700;
-  color: #0e162f;
-  white-space: nowrap;
+  width: fit-content;
 }
 
-.detail-value {
-  color: #0e162f;
-  font-weight: 500;
+.detail-priority-pill.pill-high {
+  background-color: #fff7ed;
+  color: #ea580c;
+  border: 1px solid #ffedd5;
+}
+
+.detail-priority-pill.pill-medium {
+  background-color: #fefce8;
+  color: #ca8a04;
+  border: 1px solid #fef9c3;
+}
+
+.detail-priority-pill.pill-low {
+  background-color: #f0fdf4;
+  color: #16a34a;
+  border: 1px solid #dcfce7;
 }
 
 /* ============================================================
@@ -756,11 +836,11 @@
 }
 
 .priority-dot-indicator.dot-high {
-  background-color: #ef4444; /* Red color */
+  background-color: #f97316; /* Orange color */
 }
 
 .priority-dot-indicator.dot-medium {
-  background-color: #f97316; /* Orange color */
+  background-color: #eab308; /* Yellow/Amber color */
 }
 
 .priority-dot-indicator.dot-low {
@@ -768,12 +848,12 @@
 }
 
 .priority-option-high {
-  color: #ef4444;
+  color: #f97316;
   font-weight: 600;
 }
 
 .priority-option-medium {
-  color: #f97316;
+  color: #eab308;
   font-weight: 600;
 }
 
@@ -799,11 +879,11 @@
 .flowchart-container::before {
   content: "";
   position: absolute;
-  left: 12px;
-  top: 24px;
-  bottom: 24px;
+  left: 41px;
+  top: 25px;
+  bottom: 75px;
   width: 2px;
-  background: linear-gradient(to bottom, #3b82f6, #e2e8f0 80%);
+  background: linear-gradient(to bottom, #3b82f6, #cbd5e1 90%);
   z-index: 0;
 }
 
@@ -815,10 +895,10 @@
 }
 
 .step-indicator {
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
-  background-color: #3b82f6;
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
   color: #ffffff;
   display: flex;
   aria-hidden: true;
@@ -827,30 +907,35 @@
   font-size: 13px;
   font-weight: 700;
   flex-shrink: 0;
-  box-shadow: 0 0 0 5px #dbeafe;
+  box-shadow: 0 0 0 5px rgba(59, 130, 246, 0.15);
+  margin-top: 10px;
+  transition: all 0.3s ease;
 }
 
 .step-content {
   flex: 1;
   background: #ffffff;
-  border: 1.5px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.03), 0 2px 4px -1px rgba(0, 0, 0, 0.02);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid #e2e8f0;
+  border-left: 4px solid #3b82f6;
+  border-radius: 8px;
+  padding: 20px 24px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .step-content:hover {
-  border-color: #3b82f6;
-  box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.08), 0 4px 6px -2px rgba(59, 130, 246, 0.04);
+  border-color: #2563eb;
+  border-left-color: #2563eb;
+  box-shadow: 0 10px 20px rgba(59, 130, 246, 0.06);
+  transform: translateY(-2px);
 }
 
 .step-section-title {
   margin: 0 0 16px 0;
   font-size: calc(14px * var(--font-scale, 1));
   font-weight: 700;
-  color: #0e162f;
-  border-left: 4px solid #3b82f6;
+  color: #0f172a;
+  border-left: 4px solid #2563eb;
   padding-left: 10px;
 }
 
@@ -864,27 +949,28 @@
 .classification-toggle-group .toggle-btn {
   flex: 1;
   padding: 12px 20px;
-  border: 2px solid #e2e8f0;
-  background: #f8fafc;
+  border: 1.5px solid #e2e8f0;
+  background: #ffffff;
   color: #475569;
   font-weight: 600;
   border-radius: 8px;
   cursor: pointer;
-  transition: all 0.2s ease-in-out;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   font-family: inherit;
   font-size: calc(13px * var(--font-scale, 1));
 }
 
 .classification-toggle-group .toggle-btn:hover {
-  border-color: #cbd5e1;
-  background: #f1f5f9;
+  border-color: #3b82f6;
+  color: #2563eb;
+  background: #f8fafc;
 }
 
 .classification-toggle-group .toggle-btn.active {
   border-color: #3b82f6;
   background: #eff6ff;
   color: #1d4ed8;
-  box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.1);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
 }
 
 /* Multi-column grid styles inside steps */

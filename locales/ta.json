@@ -387,6 +387,10 @@
   "personRelatedQuestion": "புகாருடன் தொடர்புடைய நபர் யாராவது இருக்கிறாரா?",
   "personRelatedDetails": "தொடர்புடைய நபரின் விபரங்கள்",
   "personName": "நபரின் பெயர்",
-  "personDesignation": "பதவி"
+  "personDesignation": "பதவி",
+  "complaintAgeLabel": "புகார் நிலை (Complaint Status)",
+  "newLabel": "புதியது (New)",
+  "oldLabel": "பழையது (Old)",
+  "relatedPersonStatus": "தொடர்புடைய நபர் மற்றும் நிலை (Related Person & Status)"
 }
 

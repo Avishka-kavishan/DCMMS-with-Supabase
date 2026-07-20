@@ -387,5 +387,9 @@
   "personRelatedQuestion": "පැමිණිල්ලට අදාළව පුද්ගලයෙකු සිටීද?",
   "personRelatedDetails": "අදාළ පුද්ගලයාගේ තොරතුරු",
   "personName": "පුද්ගලයාගේ නම",
-  "personDesignation": "තනතුර"
+  "personDesignation": "තනතුර",
+  "complaintAgeLabel": "පැමිණිල්ලේ තත්වය",
+  "newLabel": "අලුත්",
+  "oldLabel": "පරණ",
+  "relatedPersonStatus": "අදාළ පුද්ගලයා සහ තත්ත්වය"
 }
