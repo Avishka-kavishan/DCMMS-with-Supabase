@@ -372,6 +372,8 @@
   "statusCallingReports": "Calling reports from Principal/Zone/Province/Police",
   "statusCallingCourtReports": "Calling court reports",
   "statusPreliminaryInvestigation": "Conducting preliminary investigations",
+  "statusInstitutionalPreliminary": "Institutional Preliminary Investigation",
+  "statusProvincialPreliminary": "Delegation of authority to conduct a provincial preliminary investigation",
   "statusInquiry": "Conducting an inquiry",
   "statusReferOtherInstitute": "Referring letters not related to this ministry system to other institutes",
   "statusConsultRelevantInstitutes": "Taking advice from relevant institutes for complaints",
@@ -402,6 +404,8 @@
   "stepSenderDetails": "Sender Details",
   "stepLetterSubjectDates": "Letter Subject & Dates",
   "stepAssignmentDetails": "Assignment Details",
-  "dailyMailWelcomeMessage": "Manage your incoming correspondence efficiently. Register, track, and dispatch letters to subject officers."
+  "dailyMailWelcomeMessage": "Manage your incoming correspondence efficiently. Register, track, and dispatch letters to subject officers.",
+  "eduSecretaryApproval": "Education Secretary's Approval",
+  "approvalDate": "Approved Date"
 }
 

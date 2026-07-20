@@ -367,6 +367,8 @@
   "statusCallingReports": "அதிபர்/வலயம்/மாகாணம்/பொலிஸ் அறிக்கைகளை அழைத்தல்",
   "statusCallingCourtReports": "நீதிமன்ற அறிக்கைகளை அழைத்தல்",
   "statusPreliminaryInvestigation": "முதற்கட்ட விசாரணைகளை நடத்துதல்",
+  "statusInstitutionalPreliminary": "நிறுவன முதற்கட்ட விசாரணை",
+  "statusProvincialPreliminary": "மாகாண முதற்கட்ட விசாரணையை நடத்துவதற்கு அதிகாரத்தை வழங்குதல்",
   "statusInquiry": "விசாரணை நடத்துதல்",
   "statusReferOtherInstitute": "இந்த அமைச்சு முறைமையுடன் தொடர்பற்ற கடிதங்களை வேறு நிறுவனங்களுக்கு அனுப்புதல்",
   "statusConsultRelevantInstitutes": "முறைப்பாடுகளுக்காக உரிய நிறுவனங்களிடமிருந்து ஆலோசனைகளைப் பெறுதல்",
@@ -397,6 +399,8 @@
   "stepSenderDetails": "அனுப்புநர் விவரங்கள்",
   "stepLetterSubjectDates": "கடிதப் பொருள் & திகதிகள்",
   "stepAssignmentDetails": "ஒதுக்கீட்டு விவரங்கள்",
-  "dailyMailWelcomeMessage": "உங்கள் உள்வரும் கடிதங்களை திறமையாக நிர்வகிக்கவும். கடிதங்களைப் பதிவு செய்து, கண்காணித்து, பொறுப்பு அதிகாரிகளுக்கு அனுப்பவும்."
+  "dailyMailWelcomeMessage": "உங்கள் உள்வரும் கடிதங்களை திறமையாக நிர்வகிக்கவும். கடிதங்களைப் பதிவு செய்து, கண்காணித்து, பொறுப்பு அதிகாரிகளுக்கு அனுப்பவும்.",
+  "eduSecretaryApproval": "கல்விச் செயலாளரின் அனுமதி",
+  "approvalDate": "அனுமதி வழங்கப்பட்ட திகதி"
 }
 

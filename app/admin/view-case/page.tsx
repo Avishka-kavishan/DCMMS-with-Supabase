@@ -13,6 +13,21 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { getCurrentProfile, dashboardPath } from "@/lib/auth";
 
+const formatStepTaken = (step: string, t: any) => {
+  if (!step) return "";
+  if (step.startsWith("[EduSecApproval:")) {
+    const isApproved = step.includes("EduSecApproval:yes");
+    const dateMatch = step.match(/Date:([^\]\s]+)/);
+    const dateStr = dateMatch ? dateMatch[1] : "";
+    if (isApproved) {
+      return `${t("eduSecretaryApproval")}: ${t("yesLabel")} (${t("approvalDate")}: ${dateStr})`;
+    } else {
+      return `${t("eduSecretaryApproval")}: ${t("noLabel")}`;
+    }
+  }
+  return step;
+};
+
 interface LetterData {
   refNo: string;
   senderName?: string;
@@ -126,7 +141,7 @@ function AdminViewCaseInner() {
             id: `so-${d.id}`,
             role: "Subject Officer",
             officerName: d.subject_officer_name || "Subject Officer",
-            action: d.step_taken || `Case update – ${d.report_state || "In Progress"}`,
+            action: d.step_taken ? formatStepTaken(d.step_taken, t) : `Case update – ${d.report_state || "In Progress"}`,
             date: dateStr,
             sortTs: dateStr ? new Date(dateStr).getTime() : Date.now(),
           });

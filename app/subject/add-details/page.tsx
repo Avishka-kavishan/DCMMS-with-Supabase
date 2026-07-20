@@ -13,6 +13,20 @@ import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { getCurrentProfile, dashboardPath } from "@/lib/auth";
+const formatStepTaken = (step: string, t: any) => {
+  if (!step) return "";
+  if (step.startsWith("[EduSecApproval:")) {
+    const isApproved = step.includes("EduSecApproval:yes");
+    const dateMatch = step.match(/Date:([^\]\s]+)/);
+    const dateStr = dateMatch ? dateMatch[1] : "";
+    if (isApproved) {
+      return `${t("eduSecretaryApproval")}: ${t("yesLabel")} (${t("approvalDate")}: ${dateStr})`;
+    } else {
+      return `${t("eduSecretaryApproval")}: ${t("noLabel")}`;
+    }
+  }
+  return step;
+};
 
 function CaseDetailsForm() {
   const { t, i18n } = useTranslation();
@@ -124,6 +138,8 @@ function CaseDetailsForm() {
 
   // Form States - Right Card ("If officer concerned with the Complaint")
   const [isConcerned, setIsConcerned] = useState<"yes" | "no">("no");
+  const [eduSecretaryApproval, setEduSecretaryApproval] = useState<"yes" | "no">("no");
+  const [approvalDate, setApprovalDate] = useState("");
   const [officerName, setOfficerName] = useState("");
   const [officerDob, setOfficerDob] = useState("");
   const [officerNic, setOfficerNic] = useState("");
@@ -256,7 +272,20 @@ function CaseDetailsForm() {
                 setSubjectOfficer(latest.subjectOfficerName || "");
                 setReportState(latest.reportState || "");
                 setReceivedDate(latest.receivedDate || "2026-06-23");
-                setStepTaken(latest.stepTaken || "");
+                
+                const rawStep = latest.stepTaken || "";
+                if (rawStep.startsWith("[EduSecApproval:")) {
+                  const isApproved = rawStep.includes("EduSecApproval:yes");
+                  setEduSecretaryApproval(isApproved ? "yes" : "no");
+                  const dateMatch = rawStep.match(/Date:([^\]\s]+)/);
+                  setApprovalDate(dateMatch ? dateMatch[1] : "");
+                  setStepTaken("");
+                } else {
+                  setEduSecretaryApproval("no");
+                  setApprovalDate("");
+                  setStepTaken(rawStep);
+                }
+                
                 setRefNo(latest.caseNo || caseNoParam);
                 setSpecialNotes(latest.specialNotes || "");
               }
@@ -344,7 +373,20 @@ function CaseDetailsForm() {
                 setSubjectOfficer(latest.subjectOfficerName || "");
                 setReportState(latest.reportState || "");
                 setReceivedDate(latest.receivedDate || "2026-06-23");
-                setStepTaken(latest.stepTaken || "");
+                
+                const rawStep = latest.stepTaken || "";
+                if (rawStep.startsWith("[EduSecApproval:")) {
+                  const isApproved = rawStep.includes("EduSecApproval:yes");
+                  setEduSecretaryApproval(isApproved ? "yes" : "no");
+                  const dateMatch = rawStep.match(/Date:([^\]\s]+)/);
+                  setApprovalDate(dateMatch ? dateMatch[1] : "");
+                  setStepTaken("");
+                } else {
+                  setEduSecretaryApproval("no");
+                  setApprovalDate("");
+                  setStepTaken(rawStep);
+                }
+                
                 setRefNo(latest.caseNo || caseNoParam);
                 setSpecialNotes(latest.specialNotes || "");
               }
@@ -442,6 +484,8 @@ function CaseDetailsForm() {
 
   const saveCaseData = async (status: string, isDraftMode = false) => {
     const actionId = `action-${refNo}-${Date.now()}`;
+    const serializedStepTaken = `[EduSecApproval:${eduSecretaryApproval}${eduSecretaryApproval === "yes" && approvalDate ? `|Date:${approvalDate}` : ""}]`;
+
     if (isSupabaseConfigured) {
       try {
         // Ensure the case row exists (needed for FK constraint)
@@ -476,7 +520,7 @@ function CaseDetailsForm() {
             report_state: status || "Pending",
             special_notes: specialNotes || null,
             subject_officer_name: subjectOfficer || null,
-            step_taken: stepTaken || null,
+            step_taken: serializedStepTaken,
           });
 
         if (actionError) throw actionError;
@@ -535,7 +579,7 @@ function CaseDetailsForm() {
         subjectOfficerName: subjectOfficer,
         reportState: status,
         receivedDate,
-        stepTaken,
+        stepTaken: serializedStepTaken,
         specialNotes,
         isDraft: isDraftMode,
       });
@@ -1059,37 +1103,31 @@ function CaseDetailsForm() {
                                 </div>
                               </div>
                             </div>
-                          </div>
 
-                          <div className="form-grid-2 mt-3">
                             {/* Status (තත්ත්වය) */}
-                            <div className="form-field-group">
-                              <label htmlFor="reportState" className="field-label">
-                                {t("status")}
-                              </label>
-                              <div className="select-wrapper">
-                                <select
-                                  id="reportState"
-                                  value={reportState}
-                                  onChange={(e) => setReportState(e.target.value)}
-                                  className="field-select"
+                            <div className="form-field-group" style={{ gridColumn: "span 2", gap: "4px" }}>
+                              <span className="field-label" style={{ display: "block" }}>
+                                {t("status")} <span className="required-star">*</span>
+                              </span>
+                              <div className="classification-toggle-group" style={{ marginTop: "0px" }} role="radiogroup" aria-label="Report Status Toggle">
+                                <button
+                                  type="button"
+                                  className={`toggle-btn ${reportState === "Institutional Preliminary Investigation" ? "active" : ""}`}
+                                  onClick={() => setReportState("Institutional Preliminary Investigation")}
+                                  aria-checked={reportState === "Institutional Preliminary Investigation"}
+                                  role="radio"
                                 >
-                                  <option value="">{t("Choose report state", "Select current status...")}</option>
-                                  <option value="Calling Reports">{t("statusCallingReports")}</option>
-                                  <option value="Calling Court Reports">{t("statusCallingCourtReports")}</option>
-                                  <option value="Preliminary Investigation">{t("statusPreliminaryInvestigation")}</option>
-                                  <option value="Inquiry">{t("statusInquiry")}</option>
-                                  <option value="Refer Other Institute">{t("statusReferOtherInstitute")}</option>
-                                  <option value="Consult Relevant Institutes">{t("statusConsultRelevantInstitutes")}</option>
-                                  <option value="Obtain Statements">{t("statusObtainStatements")}</option>
-                                  <option value="Unclear Anonymous">{t("statusUnclearAnonymous")}</option>
-                                  <option value="Other">{t("statusOther")}</option>
-                                </select>
-                                <div className="select-arrow-container">
-                                  <svg className="select-arrow-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                                  </svg>
-                                </div>
+                                  {t("statusInstitutionalPreliminary")}
+                                </button>
+                                <button
+                                  type="button"
+                                  className={`toggle-btn ${reportState === "Provincial Preliminary Investigation" ? "active" : ""}`}
+                                  onClick={() => setReportState("Provincial Preliminary Investigation")}
+                                  aria-checked={reportState === "Provincial Preliminary Investigation"}
+                                  role="radio"
+                                >
+                                  {t("statusProvincialPreliminary")}
+                                </button>
                               </div>
                             </div>
 
@@ -1368,35 +1406,52 @@ function CaseDetailsForm() {
                         </div>
                       </div>
 
-                      {/* Step 7: Complaint Status */}
+                      {/* Step 7: Education Secretary's Approval */}
                       <div className="flowchart-step">
                         <div className="step-indicator">{classification === "nominal" ? "7" : "6"}</div>
                         <div className="step-content">
                           <span className="field-label" style={{ display: "block", marginBottom: "8px" }}>
-                            {t("complaintAgeLabel", "Complaint Status")} <span className="required-star">*</span>
+                            {t("eduSecretaryApproval", "Education Secretary's Approval")} <span className="required-star">*</span>
                           </span>
-                          <div className="classification-toggle-group" role="radiogroup" aria-label="Complaint Status Toggle">
+                          <div className="classification-toggle-group" role="radiogroup" aria-label="Education Secretary Approval Toggle">
                             <button
                               type="button"
-                              className={`toggle-btn ${complaintAge === "new" ? "active" : ""}`}
-                              onClick={() => setComplaintAge("new")}
-                              aria-checked={complaintAge === "new"}
+                              className={`toggle-btn ${eduSecretaryApproval === "yes" ? "active" : ""}`}
+                              onClick={() => setEduSecretaryApproval("yes")}
+                              aria-checked={eduSecretaryApproval === "yes"}
                               role="radio"
                             >
-                              {t("newLabel", "New")}
+                              {t("yesLabel", "Yes")}
                             </button>
                             <button
                               type="button"
-                              className={`toggle-btn ${complaintAge === "old" ? "active" : ""}`}
-                              onClick={() => setComplaintAge("old")}
-                              aria-checked={complaintAge === "old"}
+                              className={`toggle-btn ${eduSecretaryApproval === "no" ? "active" : ""}`}
+                              onClick={() => setEduSecretaryApproval("no")}
+                              aria-checked={eduSecretaryApproval === "no"}
                               role="radio"
                             >
-                              {t("oldLabel", "Old")}
+                              {t("noLabel", "No")}
                             </button>
                           </div>
+
+                          {eduSecretaryApproval === "yes" && (
+                            <div className="form-field-group animated-fade-in" style={{ marginTop: "16px" }}>
+                              <label htmlFor="approvalDate" className="field-label">
+                                {t("approvalDate", "Approved Date")} <span className="required-star">*</span>
+                              </label>
+                              <input
+                                id="approvalDate"
+                                type="date"
+                                required={eduSecretaryApproval === "yes"}
+                                value={approvalDate}
+                                onChange={(e) => setApprovalDate(e.target.value)}
+                                className="field-input"
+                              />
+                            </div>
+                          )}
                         </div>
                       </div>
+
                     </div>
 
                     {/* Timeline of actions taken (placed at the bottom of the card) */}
@@ -1417,7 +1472,7 @@ function CaseDetailsForm() {
                                   {t(act.reportState || "Pending")}
                                 </span>
                               </div>
-                              <p className="timeline-step">{act.stepTaken}</p>
+                              <p className="timeline-step">{formatStepTaken(act.stepTaken, t)}</p>
                               {act.specialNotes && (
                                 <p className="timeline-notes">
                                   {t("notes", "Notes")}: {act.specialNotes}

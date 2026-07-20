@@ -367,6 +367,8 @@
   "statusCallingReports": "විදුහල්පති/ කලාප/ පළාත්/ පොලිස් වාර්තා කැදවීම",
   "statusCallingCourtReports": "අදිකරණ වාර්තා කැදවීම",
   "statusPreliminaryInvestigation": "මූලික විමර්ශන සිදු කිරීම",
+  "statusInstitutionalPreliminary": "ආයතනික මූලික විමර්ශනය",
+  "statusProvincialPreliminary": "පළාත් මූලික විමර්ශනයක් සිදු කිරීමට බලය පැවරීම",
   "statusInquiry": "පරීක්ෂණයක් සිදු කිරීම",
   "statusReferOtherInstitute": "මෙම අමාත්‍යංශ පද්ධතියට අදාළ නොවන ලිපි වෙනත් ආයතන වෙත යොමු කිරීම",
   "statusConsultRelevantInstitutes": "පැමිණිලි සඳහා අදාළ ආයතන වලින් උපදෙස් ගැනීම",
@@ -397,5 +399,7 @@
   "stepSenderDetails": "යවන පාර්ශ්වයේ තොරතුරු",
   "stepLetterSubjectDates": "ලිපි විෂය සහ දින",
   "stepAssignmentDetails": "පැවරුම් තොරතුරු",
-  "dailyMailWelcomeMessage": "ඔබගේ ලිපි ලේඛන කාර්යක්ෂමව කළමනාකරණය කරන්න. ලිපි ලියාපදිංචි කරන්න, නිරීක්ෂණය කරන්න, සහ විෂය භාර නිලධාරීන්ට යොමු කරන්න."
+  "dailyMailWelcomeMessage": "ඔබගේ ලිපි ලේඛන කාර්යක්ෂමව කළමනාකරණය කරන්න. ලිපි ලියාපදිංචි කරන්න, නිරීක්ෂණය කරන්න, සහ විෂය භාර නිලධාරීන්ට යොමු කරන්න.",
+  "eduSecretaryApproval": "අධ්‍යාපන ලේකම්ගේ අනුමැතිය",
+  "approvalDate": "අනුමැතිය ලද දිනය"
 }
