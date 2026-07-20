@@ -60,6 +60,22 @@ function CaseDetailsForm() {
     document.title = `${t("addSubjectDetailsTitle")} | DCMMS`;
   }, [lang, t]);
 
+  // Sync letter data with flowchart states on load
+  useEffect(() => {
+    if (letterData) {
+      setComplainantName(letterData.senderName || "");
+      setComplainantAddress(letterData.senderAddress || "");
+      setSchoolName(letterData.instituteName || "");
+      setComplaintMatter(letterData.subject || "");
+      
+      const isAnon = !letterData.senderName || 
+                     letterData.senderName.toLowerCase().includes("anonymous") || 
+                     letterData.senderName.toLowerCase().includes("නිර්නාමික") ||
+                     letterData.regionProvince?.toLowerCase().includes("anonymous");
+      setClassification(isAnon ? "anonymous" : "nominal");
+    }
+  }, [letterData]);
+
   const changeLanguage = (lng: string) => {
     i18n.changeLanguage(lng);
   };
@@ -73,6 +89,14 @@ function CaseDetailsForm() {
   const [fileRelated, setFileRelated] = useState("");
   const [specialNotes, setSpecialNotes] = useState("");
   const [priority, setPriority] = useState("medium");
+
+  // Flowchart Form States (as in the flowchart diagram)
+  const [classification, setClassification] = useState<"nominal" | "anonymous">("nominal");
+  const [complainantName, setComplainantName] = useState("");
+  const [complainantAddress, setComplainantAddress] = useState("");
+  const [schoolName, setSchoolName] = useState("");
+  const [schoolAddress, setSchoolAddress] = useState("");
+  const [complaintMatter, setComplaintMatter] = useState("");
 
   // Form States - Right Card ("If officer concerned with the Complaint")
   const [isConcerned, setIsConcerned] = useState<"yes" | "no">("no");
@@ -224,7 +248,7 @@ function CaseDetailsForm() {
             if (concernedError && concernedError.code !== "PGRST116") throw concernedError;
 
             if (concernedData) {
-              setIsConcerned("yes");
+              setIsConcerned(concernedData.officer_name ? "yes" : "no");
               setOfficerName(concernedData.officer_name || "");
               setOfficerPosition(concernedData.position || "");
               setOfficerApptDate(concernedData.appointment_date || "");
@@ -232,6 +256,12 @@ function CaseDetailsForm() {
               setFileRelated(concernedData.institute_name || ""); // institute name fallback
               setOfficerDob((concernedData as any).dob || "");
               setOfficerNic((concernedData as any).nic || "");
+              if (concernedData.institute_name) {
+                setSchoolName(concernedData.institute_name);
+              }
+              if (concernedData.institute_address) {
+                setSchoolAddress(concernedData.institute_address);
+              }
             } else {
               setIsConcerned("no");
             }
@@ -299,7 +329,7 @@ function CaseDetailsForm() {
               const concernedMap = JSON.parse(storedConcerned);
               const existingConcerned = concernedMap[caseNoParam];
               if (existingConcerned) {
-                setIsConcerned("yes");
+                setIsConcerned(existingConcerned.officerName ? "yes" : "no");
                 setOfficerName(existingConcerned.officerName || "");
                 setOfficerPosition(existingConcerned.position || "");
                 setOfficerApptDate(existingConcerned.appointmentDate || "");
@@ -307,6 +337,12 @@ function CaseDetailsForm() {
                 setFileRelated(existingConcerned.instituteName || "");
                 setOfficerDob(existingConcerned.dob || "");
                 setOfficerNic(existingConcerned.nic || "");
+                if (existingConcerned.instituteName) {
+                  setSchoolName(existingConcerned.instituteName);
+                }
+                if (existingConcerned.schoolAddress) {
+                  setSchoolAddress(existingConcerned.schoolAddress);
+                }
               }
             } catch (e) {
               console.error("Failed to parse concerned officer from localStorage", e);
@@ -381,10 +417,17 @@ function CaseDetailsForm() {
             status: status || "In Progress",
           }, { onConflict: "case_no", ignoreDuplicates: true });
 
-        // Update the priority in dcmms_daily_mail as well
+        // Update the priority, complainant, school and classification in dcmms_daily_mail as well
         await supabase
           .from("dcmms_daily_mail")
-          .update({ priority: priority })
+          .update({
+            priority: priority,
+            sender_name: classification === "anonymous" ? "Anonymous" : (complainantName || null),
+            sender_address: classification === "anonymous" ? "N/A" : (complainantAddress || null),
+            institute_name: schoolName || null,
+            subject: complaintMatter || null,
+            region_province: classification === "anonymous" ? "Anonymous" : "Nominal",
+          })
           .eq("ref_no", refNo);
 
         // Save action/letters details as a new row in dcmms_subject_details
@@ -402,30 +445,22 @@ function CaseDetailsForm() {
 
         if (actionError) throw actionError;
 
-        // Save concerned officer details (if concerned is yes)
-        if (isConcerned === "yes") {
-          const { error: concernedError } = await supabase
-            .from("dcmms_concerned_officers")
-            .upsert({
-              id: `concerned-${refNo}`,
-              case_no: refNo,
-              officer_name: officerName || null,
-              institute_name: fileRelated || null,
-              institute_address: "N/A",
-              position: officerPosition || null,
-              address: officerAddress || null,
-              appointment_date: officerApptDate || null,
-              dob: officerDob || null,
-              nic: officerNic || null,
-            });
-          if (concernedError) throw concernedError;
-        } else {
-          // Delete from dcmms_concerned_officers if not concerned
-          await supabase
-            .from("dcmms_concerned_officers")
-            .delete()
-            .eq("case_no", refNo);
-        }
+        // Save concerned officer details and school details to dcmms_concerned_officers
+        const { error: concernedError } = await supabase
+          .from("dcmms_concerned_officers")
+          .upsert({
+            id: `concerned-${refNo}`,
+            case_no: refNo,
+            officer_name: isConcerned === "yes" ? (officerName || null) : null,
+            institute_name: schoolName || null,
+            institute_address: schoolAddress || null,
+            position: isConcerned === "yes" ? (officerPosition || null) : null,
+            address: isConcerned === "yes" ? (officerAddress || null) : null,
+            appointment_date: isConcerned === "yes" ? (officerApptDate || null) : null,
+            dob: isConcerned === "yes" ? (officerDob || null) : null,
+            nic: isConcerned === "yes" ? (officerNic || null) : null,
+          });
+        if (concernedError) throw concernedError;
 
         // Update main case status
         const { data: caseData, error: fetchError } = await supabase
@@ -474,20 +509,17 @@ function CaseDetailsForm() {
       const storedConcerned = localStorage.getItem("dcmms_officer_concerned") || "{}";
       let concernedMap = {};
       try { concernedMap = JSON.parse(storedConcerned); } catch (e) {}
-      if (isConcerned === "yes") {
-        (concernedMap as any)[refNo] = {
-          caseNo: refNo,
-          officerName,
-          position: officerPosition,
-          appointmentDate: officerApptDate,
-          address: officerAddress,
-          instituteName: fileRelated,
-          dob: officerDob,
-          nic: officerNic,
-        };
-      } else {
-        delete (concernedMap as any)[refNo];
-      }
+      (concernedMap as any)[refNo] = {
+        caseNo: refNo,
+        officerName: isConcerned === "yes" ? officerName : "",
+        position: isConcerned === "yes" ? officerPosition : "",
+        appointmentDate: isConcerned === "yes" ? officerApptDate : "",
+        address: isConcerned === "yes" ? officerAddress : "",
+        dob: isConcerned === "yes" ? officerDob : "",
+        nic: isConcerned === "yes" ? officerNic : "",
+        instituteName: schoolName,
+        schoolAddress: schoolAddress,
+      };
       localStorage.setItem("dcmms_officer_concerned", JSON.stringify(concernedMap));
 
       // Update case status locally
@@ -505,14 +537,22 @@ function CaseDetailsForm() {
         } catch (e) {}
       }
 
-      // Also update daily mail letters priority in localStorage
+      // Also update daily mail letters details in localStorage
       const storedLetters = localStorage.getItem("dcmms_letters");
       if (storedLetters) {
         try {
           const lettersList = JSON.parse(storedLetters);
           const updatedLetters = lettersList.map((l: any) => {
             if (l.refNo === refNo) {
-              return { ...l, priority: priority };
+              return {
+                ...l,
+                priority: priority,
+                senderName: classification === "anonymous" ? "Anonymous" : complainantName,
+                senderAddress: classification === "anonymous" ? "N/A" : complainantAddress,
+                instituteName: schoolName,
+                subject: complaintMatter,
+                regionProvince: classification === "anonymous" ? "Anonymous" : "Nominal",
+              };
             }
             return l;
           });
@@ -840,132 +880,360 @@ function CaseDetailsForm() {
                 )}
 
                 <div className="add-details-cards-grid">
-                {/* ───────────────── Left Card ("Add Details") ───────────────── */}
-                <div className="add-details-card">
-                  <h2 className="card-title-header">
-                    <svg
-                      className="card-title-icon"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                      />
-                    </svg>
-                    {t("addDetails")}
-                  </h2>
+                  {/* ───────────────── Left Card ("Complaint Information" Flowchart) ───────────────── */}
+                  <div className="add-details-card">
+                    <h2 className="card-title-header">
+                      <svg className="card-title-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      {t("complaintClassification", "Classification of Complaint")}
+                    </h2>
 
-                  <div className="left-card-form">
-                    {/* Previous Actions History Timeline */}
-                    {previousActions && previousActions.length > 0 && (
-                      <div className="previous-actions-timeline">
-                        <h3 className="timeline-title">
-                          <svg className="action-row-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          {t("previousActionsHistory", "History of Actions Taken")}
-                        </h3>
-                        <div className="timeline-items-wrapper">
-                          {previousActions.map((act: any, idx: number) => (
-                            <div key={act.id || idx} className="timeline-item">
-                              <div className="timeline-header">
-                                <span>{act.receivedDate}</span>
-                                <span className={`timeline-status timeline-status-${act.reportState?.toLowerCase().replace(/\s+/g, "") || "pending"}`}>
-                                  {t(act.reportState || "Pending")}
-                                </span>
-                              </div>
-                              <p className="timeline-step">{act.stepTaken}</p>
-                              {act.specialNotes && (
-                                <p className="timeline-notes">
-                                  {t("notes", "Notes")}: {act.specialNotes}
-                                </p>
-                              )}
-                            </div>
-                          ))}
+                    <div className="flowchart-container">
+                      {/* Step 1: Classification */}
+                      <div className="flowchart-step">
+                        <div className="step-indicator">1</div>
+                        <div className="step-content">
+                          <span className="field-label" style={{ display: "block", marginBottom: "8px" }}>
+                            {t("complaintClassification", "Classification of complaint letter")} <span className="required-star">*</span>
+                          </span>
+                          <div className="classification-toggle-group" role="radiogroup" aria-label="Complaint Classification">
+                            <button
+                              type="button"
+                              className={`toggle-btn ${classification === "nominal" ? "active" : ""}`}
+                              onClick={() => setClassification("nominal")}
+                              aria-checked={classification === "nominal"}
+                              role="radio"
+                            >
+                              {t("nominalLabel", "Nominal")}
+                            </button>
+                            <button
+                              type="button"
+                              className={`toggle-btn ${classification === "anonymous" ? "active" : ""}`}
+                              onClick={() => setClassification("anonymous")}
+                              aria-checked={classification === "anonymous"}
+                              role="radio"
+                            >
+                              {t("anonymousLabel", "Anonymous")}
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    )}
-                    {/* 1. Reference Number */}
-                    <div className="form-field-group field-ref-no">
-                      <label htmlFor="refNo" className="field-label">
-                        {t("refNo")} <span className="required-star">*</span>
-                      </label>
-                      <input
-                        id="refNo"
-                        type="text"
-                        required
-                        readOnly
-                        value={refNo}
-                        className="field-input"
-                        style={{ backgroundColor: "#e2e8f0", cursor: "not-allowed" }}
-                      />
-                    </div>
 
-                    {/* 2. File number of the institute where letter was received */}
-                    <div className="form-field-group field-institute-file">
-                      <label htmlFor="fileRelated" className="field-label">
-                        {t("instituteFileNo")}
-                      </label>
-                      <input
-                        id="fileRelated"
-                        type="text"
-                        value={fileRelated}
-                        onChange={(e) => setFileRelated(e.target.value)}
-                        className="field-input"
-                        placeholder="e.g. EP/DM/01"
-                      />
-                    </div>
+                      {/* Step 2: Complainant Details (Shown only if nominal) */}
+                      {classification === "nominal" && (
+                        <div className="flowchart-step animated-fade-in">
+                          <div className="step-indicator">2</div>
+                          <div className="step-content">
+                            <h3 className="step-section-title">{t("complainantDetailsTitle", "Complainant Details")}</h3>
+                            <div className="form-grid-2">
+                              <div className="form-field-group">
+                                <label htmlFor="complainantName" className="field-label">
+                                  {t("complainantName", "Name of the person presenting the complaint")} <span className="required-star">*</span>
+                                </label>
+                                <input
+                                  id="complainantName"
+                                  type="text"
+                                  required={classification === "nominal"}
+                                  value={complainantName}
+                                  onChange={(e) => setComplainantName(e.target.value)}
+                                  className="field-input"
+                                  placeholder="Enter name..."
+                                />
+                              </div>
+                              <div className="form-field-group">
+                                <label htmlFor="complainantAddress" className="field-label">
+                                  {t("complainantAddress", "Address of the person presenting the complaint")}
+                                </label>
+                                <input
+                                  id="complainantAddress"
+                                  type="text"
+                                  value={complainantAddress}
+                                  onChange={(e) => setComplainantAddress(e.target.value)}
+                                  className="field-input"
+                                  placeholder="Enter address..."
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
-                    {/* 3. Subject File Number */}
-                    <div className="form-field-group field-subject-file">
-                      <label htmlFor="specialNotes" className="field-label">
-                        {t("subjectFileNo")}
-                      </label>
-                      <input
-                        id="specialNotes"
-                        type="text"
-                        value={specialNotes}
-                        onChange={(e) => setSpecialNotes(e.target.value)}
-                        className="field-input"
-                        placeholder="e.g. SUB/FILE/102"
-                      />
-                    </div>
+                      {/* Step 3: School Details */}
+                      <div className="flowchart-step">
+                        <div className="step-indicator">{classification === "nominal" ? "3" : "2"}</div>
+                        <div className="step-content">
+                          <h3 className="step-section-title">{t("schoolDetailsTitle", "School Details")}</h3>
+                          <div className="form-grid-2">
+                            <div className="form-field-group">
+                              <label htmlFor="schoolName" className="field-label">
+                                {t("schoolName", "School Name")} <span className="required-star">*</span>
+                              </label>
+                              <input
+                                id="schoolName"
+                                type="text"
+                                required
+                                value={schoolName}
+                                onChange={(e) => setSchoolName(e.target.value)}
+                                className="field-input"
+                                placeholder="Enter school name..."
+                              />
+                            </div>
+                            <div className="form-field-group">
+                              <label htmlFor="schoolAddress" className="field-label">
+                                {t("schoolAddress", "School Address")}
+                              </label>
+                              <input
+                                id="schoolAddress"
+                                type="text"
+                                value={schoolAddress}
+                                onChange={(e) => setSchoolAddress(e.target.value)}
+                                className="field-input"
+                                placeholder="Enter school address..."
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
 
-                    {/* 4. Subject Matter / Title */}
-                    <div className="form-field-group field-subject-matter">
-                      <label htmlFor="stepTaken" className="field-label">
-                        {t("subjectMatterTitle")}
-                      </label>
-                      <textarea
-                        id="stepTaken"
-                        value={stepTaken}
-                        onChange={(e) => setStepTaken(e.target.value)}
-                        className="field-textarea"
-                        placeholder="Enter subject details or title..."
-                      />
-                    </div>
+                      {/* Step 4: Subject Matter */}
+                      <div className="flowchart-step">
+                        <div className="step-indicator">{classification === "nominal" ? "4" : "3"}</div>
+                        <div className="step-content">
+                          <div className="form-field-group">
+                            <label htmlFor="complaintMatter" className="field-label">
+                              {t("complaintMatterLabel", "Matter related to the complaint")} <span className="required-star">*</span>
+                            </label>
+                            <textarea
+                              id="complaintMatter"
+                              required
+                              value={complaintMatter}
+                              onChange={(e) => setComplaintMatter(e.target.value)}
+                              className="field-textarea"
+                              placeholder="Enter details of the complaint matter..."
+                              rows={4}
+                            />
+                          </div>
+                        </div>
+                      </div>
 
-                    {/* 5. Priority */}
-                    <div className="form-field-group field-priority">
-                      <label htmlFor="priority" className="field-label">
-                        {t("priority")}
-                      </label>
-                      <div className="priority-select-wrapper">
-                        <span className={`priority-dot-indicator dot-${priority}`} />
-                        <div className="select-wrapper" style={{ flex: 1 }}>
+                      {/* Step 5: Concerned Person */}
+                      <div className="flowchart-step">
+                        <div className="step-indicator">{classification === "nominal" ? "5" : "4"}</div>
+                        <div className="step-content">
+                          <span className="field-label" style={{ display: "block", marginBottom: "8px" }}>
+                            {t("personRelatedQuestion", "Is there a person related to the complaint?")}
+                          </span>
+                          <div className="classification-toggle-group" role="radiogroup" aria-label="Concerned Person Toggle">
+                            <button
+                              type="button"
+                              className={`toggle-btn ${isConcerned === "yes" ? "active" : ""}`}
+                              onClick={() => setIsConcerned("yes")}
+                              aria-checked={isConcerned === "yes"}
+                              role="radio"
+                            >
+                              {t("yesLabel", "Yes")}
+                            </button>
+                            <button
+                              type="button"
+                              className={`toggle-btn ${isConcerned === "no" ? "active" : ""}`}
+                              onClick={() => setIsConcerned("no")}
+                              aria-checked={isConcerned === "no"}
+                              role="radio"
+                            >
+                              {t("noLabel", "No")}
+                            </button>
+                          </div>
+
+                          {isConcerned === "yes" && (
+                            <div className="concerned-person-fields animated-fade-in" style={{ marginTop: "20px" }}>
+                              <h3 className="step-section-title">{t("personRelatedDetails", "Concerned Person Details")}</h3>
+                              <div className="form-grid-2">
+                                <div className="form-field-group">
+                                  <label htmlFor="officerName" className="field-label">
+                                    {t("personName", "Person's Name")} <span className="required-star">*</span>
+                                  </label>
+                                  <input
+                                    id="officerName"
+                                    type="text"
+                                    required={isConcerned === "yes"}
+                                    value={officerName}
+                                    onChange={(e) => setOfficerName(e.target.value)}
+                                    className="field-input"
+                                    placeholder="Enter name..."
+                                  />
+                                </div>
+                                <div className="form-field-group">
+                                  <label htmlFor="officerPosition" className="field-label">
+                                    {t("personDesignation", "Person's Designation / Position")}
+                                  </label>
+                                  <input
+                                    id="officerPosition"
+                                    type="text"
+                                    value={officerPosition}
+                                    onChange={(e) => setOfficerPosition(e.target.value)}
+                                    className="field-input"
+                                    placeholder="Enter position..."
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="form-grid-4 mt-3">
+                                <div className="form-field-group">
+                                  <label htmlFor="officerDob" className="field-label">{t("dateOfBirth")}</label>
+                                  <input
+                                    id="officerDob"
+                                    type="date"
+                                    value={officerDob}
+                                    onChange={(e) => setOfficerDob(e.target.value)}
+                                    className="field-input"
+                                  />
+                                </div>
+                                <div className="form-field-group">
+                                  <label htmlFor="officerNic" className="field-label">{t("nicNumber")}</label>
+                                  <input
+                                    id="officerNic"
+                                    type="text"
+                                    value={officerNic}
+                                    onChange={(e) => setOfficerNic(e.target.value)}
+                                    className="field-input"
+                                    placeholder="NIC number"
+                                  />
+                                </div>
+                                <div className="form-field-group">
+                                  <label htmlFor="officerApptDate" className="field-label">{t("appointmentDate")}</label>
+                                  <input
+                                    id="officerApptDate"
+                                    type="date"
+                                    value={officerApptDate}
+                                    onChange={(e) => setOfficerApptDate(e.target.value)}
+                                    className="field-input"
+                                  />
+                                </div>
+                                <div className="form-field-group">
+                                  <label htmlFor="officerAddress" className="field-label">{t("addressLabel")}</label>
+                                  <input
+                                    id="officerAddress"
+                                    type="text"
+                                    value={officerAddress}
+                                    onChange={(e) => setOfficerAddress(e.target.value)}
+                                    className="field-input"
+                                    placeholder="Address"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ───────────────── Right Card ("Case Administration & History") ───────────────── */}
+                  <div className="add-details-card">
+                    <h2 className="card-title-header">
+                      <svg className="card-title-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                      </svg>
+                      {t("caseAdministration", "Case Administration")}
+                    </h2>
+
+                    <div className="right-card-form">
+                      {/* 1. Reference Number */}
+                      <div className="form-field-group">
+                        <label htmlFor="refNo" className="field-label">
+                          {t("refNo")} <span className="required-star">*</span>
+                        </label>
+                        <input
+                          id="refNo"
+                          type="text"
+                          required
+                          readOnly
+                          value={refNo}
+                          className="field-input"
+                          style={{ backgroundColor: "#e2e8f0", cursor: "not-allowed" }}
+                        />
+                      </div>
+
+                      {/* 2. File number of the institute where letter was received */}
+                      <div className="form-field-group">
+                        <label htmlFor="fileRelated" className="field-label">
+                          {t("instituteFileNo")}
+                        </label>
+                        <input
+                          id="fileRelated"
+                          type="text"
+                          value={fileRelated}
+                          onChange={(e) => setFileRelated(e.target.value)}
+                          className="field-input"
+                          placeholder="e.g. EP/DM/01"
+                        />
+                      </div>
+
+                      {/* 3. Subject File Number (විෂය ගොනු අංකය) */}
+                      <div className="form-field-group">
+                        <label htmlFor="specialNotes" className="field-label">
+                          {t("subjectFileNo")}
+                        </label>
+                        <input
+                          id="specialNotes"
+                          type="text"
+                          value={specialNotes}
+                          onChange={(e) => setSpecialNotes(e.target.value)}
+                          className="field-input"
+                          placeholder="e.g. SUB/FILE/102"
+                        />
+                      </div>
+
+                      {/* 4. Priority */}
+                      <div className="form-field-group">
+                        <label htmlFor="priority" className="field-label">
+                          {t("priority")}
+                        </label>
+                        <div className="priority-select-wrapper">
+                          <span className={`priority-dot-indicator dot-${priority}`} />
+                          <div className="select-wrapper" style={{ flex: 1 }}>
+                            <select
+                              id="priority"
+                              value={priority}
+                              onChange={(e) => setPriority(e.target.value)}
+                              className="field-select"
+                            >
+                              <option value="high" className="priority-option-high">{t("priorityHigh")}</option>
+                              <option value="medium" className="priority-option-medium">{t("priorityMedium")}</option>
+                              <option value="low" className="priority-option-low">{t("priorityLow")}</option>
+                            </select>
+                            <div className="select-arrow-container">
+                              <svg className="select-arrow-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 5. Status (තත්ත්වය) */}
+                      <div className="form-field-group">
+                        <label htmlFor="reportState" className="field-label">
+                          {t("status")}
+                        </label>
+                        <div className="select-wrapper">
                           <select
-                            id="priority"
-                            value={priority}
-                            onChange={(e) => setPriority(e.target.value)}
+                            id="reportState"
+                            value={reportState}
+                            onChange={(e) => setReportState(e.target.value)}
                             className="field-select"
                           >
-                            <option value="high" className="priority-option-high">{t("priorityHigh")}</option>
-                            <option value="medium" className="priority-option-medium">{t("priorityMedium")}</option>
-                            <option value="low" className="priority-option-low">{t("priorityLow")}</option>
+                            <option value="">{t("Choose report state", "Select current status...")}</option>
+                            <option value="Calling Reports">{t("statusCallingReports")}</option>
+                            <option value="Calling Court Reports">{t("statusCallingCourtReports")}</option>
+                            <option value="Preliminary Investigation">{t("statusPreliminaryInvestigation")}</option>
+                            <option value="Inquiry">{t("statusInquiry")}</option>
+                            <option value="Refer Other Institute">{t("statusReferOtherInstitute")}</option>
+                            <option value="Consult Relevant Institutes">{t("statusConsultRelevantInstitutes")}</option>
+                            <option value="Obtain Statements">{t("statusObtainStatements")}</option>
+                            <option value="Unclear Anonymous">{t("statusUnclearAnonymous")}</option>
+                            <option value="Other">{t("statusOther")}</option>
                           </select>
                           <div className="select-arrow-container">
                             <svg className="select-arrow-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
@@ -974,209 +1242,58 @@ function CaseDetailsForm() {
                           </div>
                         </div>
                       </div>
-                    </div>
 
-                    {/* 6. Status */}
-                    <div className="form-field-group field-status">
-                      <label htmlFor="reportState" className="field-label">
-                        {t("status")}
-                      </label>
-                      <div className="select-wrapper">
-                        <select
-                          id="reportState"
-                          value={reportState}
-                          onChange={(e) => setReportState(e.target.value)}
-                          className="field-select"
-                        >
-                          <option value="">{t("Choose report state", "Select current status...")}</option>
-                          <option value="Calling Reports">{t("statusCallingReports")}</option>
-                          <option value="Calling Court Reports">{t("statusCallingCourtReports")}</option>
-                          <option value="Preliminary Investigation">{t("statusPreliminaryInvestigation")}</option>
-                          <option value="Inquiry">{t("statusInquiry")}</option>
-                          <option value="Refer Other Institute">{t("statusReferOtherInstitute")}</option>
-                          <option value="Consult Relevant Institutes">{t("statusConsultRelevantInstitutes")}</option>
-                          <option value="Obtain Statements">{t("statusObtainStatements")}</option>
-                          <option value="Unclear Anonymous">{t("statusUnclearAnonymous")}</option>
-                          <option value="Other">{t("statusOther")}</option>
-                        </select>
-                        <div className="select-arrow-container">
-                          <svg className="select-arrow-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                          </svg>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* 7. Date prepared and submitted for signature */}
-                    <div className="form-field-group field-date-submitted">
-                      <label htmlFor="receivedDate" className="field-label">
-                        {t("datePreparedSubmitted")}
-                      </label>
-                      <div className="input-icon-wrapper">
-                        <input
-                          id="receivedDate"
-                          type="date"
-                          value={receivedDate}
-                          onChange={(e) => setReceivedDate(e.target.value)}
-                          className="field-input input-with-right-icon"
-                        />
-                        <svg className="input-right-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* ───────────────── Right Card ("If officer concerned with Complaint") ───────────────── */}
-                <div className="add-details-card">
-                  <div className="right-card-form">
-                    {/* Concern Question and square checkbox-style radios */}
-                    <div className="form-field-group">
-                      <span className="field-label">{t("officerConcernedQuestion")}</span>
-                      <div className="radio-group-container">
-                        <label className="radio-option-label">
-                          <input
-                            type="radio"
-                            name="isConcerned"
-                            value="yes"
-                            checked={isConcerned === "yes"}
-                            onChange={() => setIsConcerned("yes")}
-                            className="radio-input-square"
-                          />
-                          {t("yesLabel")}
-                        </label>
-                        <label className="radio-option-label">
-                          <input
-                            type="radio"
-                            name="isConcerned"
-                            value="no"
-                            checked={isConcerned === "no"}
-                            onChange={() => setIsConcerned("no")}
-                            className="radio-input-square"
-                          />
-                          {t("noLabel")}
-                        </label>
-                      </div>
-                    </div>
-
-                    {/* Name */}
-                    <div className="form-field-group">
-                      <label htmlFor="officerName" className="field-label">
-                        {t("concernedName")}
-                      </label>
-                      <input
-                        id="officerName"
-                        type="text"
-                        value={officerName}
-                        onChange={(e) => setOfficerName(e.target.value)}
-                        className="field-input"
-                      />
-                    </div>
-
-                    {/* Date of Birth and NIC Number side-by-side */}
-                    <div className="dob-nic-row">
+                      {/* 6. Date prepared and submitted for signature (ලිපිය සකසා අත්සනට ඉදිරිපත් කළ දිනය) */}
                       <div className="form-field-group">
-                        <label htmlFor="officerDob" className="field-label">
-                          {t("dateOfBirth")}
+                        <label htmlFor="receivedDate" className="field-label">
+                          {t("datePreparedSubmitted")}
                         </label>
                         <div className="input-icon-wrapper">
                           <input
-                            id="officerDob"
+                            id="receivedDate"
                             type="date"
-                            value={officerDob}
-                            onChange={(e) => setOfficerDob(e.target.value)}
+                            value={receivedDate}
+                            onChange={(e) => setReceivedDate(e.target.value)}
                             className="field-input input-with-right-icon"
                           />
-                          <svg
-                            className="input-right-icon"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                            />
+                          <svg className="input-right-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                           </svg>
                         </div>
                       </div>
 
-                      <div className="form-field-group">
-                        <label htmlFor="officerNic" className="field-label">
-                          {t("nicNumber")}
-                        </label>
-                        <input
-                          id="officerNic"
-                          type="text"
-                          value={officerNic}
-                          onChange={(e) => setOfficerNic(e.target.value)}
-                          className="field-input"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Position */}
-                    <div className="form-field-group">
-                      <label htmlFor="officerPosition" className="field-label">
-                        {t("positionLabel")}
-                      </label>
-                      <input
-                        id="officerPosition"
-                        type="text"
-                        value={officerPosition}
-                        onChange={(e) => setOfficerPosition(e.target.value)}
-                        className="field-input"
-                      />
-                    </div>
-
-                    {/* Appointment Date */}
-                    <div className="form-field-group">
-                      <label htmlFor="officerApptDate" className="field-label">
-                        {t("appointmentDate")}
-                      </label>
-                      <div className="input-icon-wrapper">
-                        <input
-                          id="officerApptDate"
-                          type="date"
-                          value={officerApptDate}
-                          onChange={(e) => setOfficerApptDate(e.target.value)}
-                          className="field-input input-with-right-icon"
-                        />
-                        <svg
-                          className="input-right-icon"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                          />
-                        </svg>
-                      </div>
-                    </div>
-
-                    {/* Address */}
-                    <div className="form-field-group">
-                      <label htmlFor="officerAddress" className="field-label">
-                        {t("addressLabel")}
-                      </label>
-                      <input
-                        id="officerAddress"
-                        type="text"
-                        value={officerAddress}
-                        onChange={(e) => setOfficerAddress(e.target.value)}
-                        className="field-input"
-                      />
+                      {/* Timeline of actions taken */}
+                      {previousActions && previousActions.length > 0 && (
+                        <div className="previous-actions-timeline" style={{ marginTop: "24px", paddingTop: "20px", borderTop: "1.5px solid #e2e8f0" }}>
+                          <h3 className="timeline-title" style={{ fontSize: "14px", fontWeight: "700" }}>
+                            <svg className="action-row-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            {t("previousActionsHistory", "History of Actions Taken")}
+                          </h3>
+                          <div className="timeline-items-wrapper">
+                            {previousActions.map((act: any, idx: number) => (
+                              <div key={act.id || idx} className="timeline-item">
+                                <div className="timeline-header">
+                                  <span>{act.receivedDate}</span>
+                                  <span className={`timeline-status timeline-status-${act.reportState?.toLowerCase().replace(/\s+/g, "") || "pending"}`}>
+                                    {t(act.reportState || "Pending")}
+                                  </span>
+                                </div>
+                                <p className="timeline-step">{act.stepTaken}</p>
+                                {act.specialNotes && (
+                                  <p className="timeline-notes">
+                                    {t("notes", "Notes")}: {act.specialNotes}
+                                  </p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
-              </div>
 
               {/* Action Buttons Row */}
               <div className="add-details-form-actions">

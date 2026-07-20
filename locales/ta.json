@@ -373,6 +373,20 @@
   "statusObtainStatements": "வாக்குமூலங்களைப் பெறுவதன் மூலம் மேலதிக நடவடிக்கைகளை மேற்கொள்ளல்",
   "statusUnclearAnonymous": "தெளிவற்ற விபரங்கள் / அநாமதேய கடிதங்கள் கோப்பு",
   "statusOther": "வேறு",
-  "subjectCategoryLabel": "கடித வகைப்பாடு"
+  "subjectCategoryLabel": "கடித வகைப்பாடு",
+  "complaintClassification": "புகார் கடித வகைப்பாடு",
+  "nominalLabel": "பெயரிடப்பட்ட (Nominal)",
+  "anonymousLabel": "பெயரற்ற (Anonymous)",
+  "complainantDetailsTitle": "புகார் அளித்தவரின் விபரங்கள்",
+  "complainantName": "புகார் சமர்ப்பித்தவரின் பெயர்",
+  "complainantAddress": "புகார் சமர்ப்பித்தவரின் முகவரி",
+  "schoolDetailsTitle": "புகாருடன் தொடர்புடைய பள்ளியின் விபரங்கள்",
+  "schoolName": "பள்ளியின் பெயர்",
+  "schoolAddress": "பள்ளியின் முகவரி",
+  "complaintMatterLabel": "புகார் தொடர்பான விடயம்",
+  "personRelatedQuestion": "புகாருடன் தொடர்புடைய நபர் யாராவது இருக்கிறாரா?",
+  "personRelatedDetails": "தொடர்புடைய நபரின் விபரங்கள்",
+  "personName": "நபரின் பெயர்",
+  "personDesignation": "பதவி"
 }
 

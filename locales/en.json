@@ -378,6 +378,20 @@
   "statusObtainStatements": "Proceeding by taking statements",
   "statusUnclearAnonymous": "Unclear facts / Anonymous letters file",
   "statusOther": "Other",
-  "subjectCategoryLabel": "Letter Classification"
+  "subjectCategoryLabel": "Letter Classification",
+  "complaintClassification": "Classification of Complaint Letter",
+  "nominalLabel": "Nominal",
+  "anonymousLabel": "Anonymous",
+  "complainantDetailsTitle": "Complainant Details",
+  "complainantName": "Name of the person presenting the complaint",
+  "complainantAddress": "Address of the person presenting the complaint",
+  "schoolDetailsTitle": "School Details",
+  "schoolName": "School Name",
+  "schoolAddress": "School Address",
+  "complaintMatterLabel": "Matter related to the complaint",
+  "personRelatedQuestion": "Is there a person related to the complaint?",
+  "personRelatedDetails": "Concerned Person Details",
+  "personName": "Person's Name",
+  "personDesignation": "Person's Designation / Position"
 }
 

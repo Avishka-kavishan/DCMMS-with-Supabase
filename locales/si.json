@@ -373,5 +373,19 @@
   "statusObtainStatements": "ප්‍රකාශ ලබා ගැනීම මගින් ඉදිරි කටයුතු සිදු කිරීම",
   "statusUnclearAnonymous": "කරුණු අපහැදිලි/ නිර්නාමික ලිපි ගොනු",
   "statusOther": "වෙනත්",
-  "subjectCategoryLabel": "ලිපි වර්ග කිරීම"
+  "subjectCategoryLabel": "ලිපි වර්ග කිරීම",
+  "complaintClassification": "පැමිණිලි ලිපිය වර්ග කිරීම",
+  "nominalLabel": "නාමික",
+  "anonymousLabel": "නිර්නාමික",
+  "complainantDetailsTitle": "පැමිණිල්ල ඉදිරිපත් කළ පුද්ගලයාගේ තොරතුරු",
+  "complainantName": "පැමිණිල්ල ඉදිරිපත් කළ පුද්ගලයාගේ නම",
+  "complainantAddress": "පැමිණිල්ල ඉදිරිපත් කළ පුද්ගලයාගේ ලිපිනය",
+  "schoolDetailsTitle": "පැමිණිල්ලට අදාළ පාසලේ තොරතුරු",
+  "schoolName": "පාසලේ නම",
+  "schoolAddress": "පාසලේ ලිපිනය",
+  "complaintMatterLabel": "පැමිණිල්ලට අදාළ කාරණාව",
+  "personRelatedQuestion": "පැමිණිල්ලට අදාළව පුද්ගලයෙකු සිටීද?",
+  "personRelatedDetails": "අදාළ පුද්ගලයාගේ තොරතුරු",
+  "personName": "පුද්ගලයාගේ නම",
+  "personDesignation": "තනතුර"
 }
