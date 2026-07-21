@@ -399,24 +399,8 @@
   min-width: 120px;
 }
 
-.btn-action-close-case {
-  background-color: #EA580C; /* Orange */
-  color: #ffffff;
-  border: none;
-  border-radius: 24px;
-  padding: 10px 32px;
-  font-family: inherit;
-  font-size: calc(13px * var(--font-scale, 1));
-  font-weight: 600;
-  cursor: pointer;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  transition: all 0.2s;
-  min-width: 120px;
-}
-
 .btn-action-cancel:hover,
 .btn-action-draft-top:hover,
-.btn-action-close-case:hover,
 .btn-action-submit:hover {
   filter: brightness(0.9);
   transform: translateY(-1px);
@@ -424,7 +408,6 @@
 
 .btn-action-cancel:active,
 .btn-action-draft-top:active,
-.btn-action-close-case:active,
 .btn-action-submit:active {
   transform: translateY(0);
 }
@@ -447,7 +430,6 @@
   }
 
   .add-details-form-actions .btn-action-cancel,
-  .add-details-form-actions .btn-action-close-case,
   .add-details-form-actions .btn-action-submit {
     width: 100%;
     box-sizing: border-box;
@@ -901,7 +883,6 @@
   background: linear-gradient(135deg, #3b82f6, #1d4ed8);
   color: #ffffff;
   display: flex;
-  aria-hidden: true;
   align-items: center;
   justify-content: center;
   font-size: 13px;

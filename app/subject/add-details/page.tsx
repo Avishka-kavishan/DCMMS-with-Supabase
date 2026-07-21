@@ -674,23 +674,7 @@ function CaseDetailsForm() {
     router.push("/subject");
   };
 
-  // Close case handler
-  const handleCloseCase = async (e: React.MouseEvent) => {
-    e.preventDefault();
 
-    if (!refNo) {
-      alert("Reference Number is required.");
-      return;
-    }
-
-    if (officerApptDate) {
-      syncCalendar(officerApptDate);
-    }
-
-    await saveCaseData("Closed", false);
-    alert("Case closed and submitted successfully!");
-    router.push("/subject");
-  };
 
   if (checkingAuth) {
     return (
@@ -1495,13 +1479,7 @@ function CaseDetailsForm() {
                 >
                   {t("cancelBtn")}
                 </button>
-                <button
-                  type="button"
-                  className="btn-action-close-case"
-                  onClick={handleCloseCase}
-                >
-                  {t("caseClosedBtn")}
-                </button>
+
                 <button
                   type="submit"
                   className="btn-action-submit"
