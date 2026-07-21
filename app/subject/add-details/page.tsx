@@ -1105,29 +1105,29 @@ function CaseDetailsForm() {
                             </div>
 
                             {/* Status (තත්ත්වය) */}
-                            <div className="form-field-group" style={{ gridColumn: "span 2", gap: "4px" }}>
-                              <span className="field-label" style={{ display: "block" }}>
+                            <div className="form-field-group">
+                              <label htmlFor="reportState" className="field-label">
                                 {t("status")} <span className="required-star">*</span>
-                              </span>
-                              <div className="classification-toggle-group" style={{ marginTop: "0px" }} role="radiogroup" aria-label="Report Status Toggle">
-                                <button
-                                  type="button"
-                                  className={`toggle-btn ${reportState === "Institutional Preliminary Investigation" ? "active" : ""}`}
-                                  onClick={() => setReportState("Institutional Preliminary Investigation")}
-                                  aria-checked={reportState === "Institutional Preliminary Investigation"}
-                                  role="radio"
+                              </label>
+                              <div className="select-wrapper">
+                                <select
+                                  id="reportState"
+                                  value={reportState}
+                                  onChange={(e) => setReportState(e.target.value)}
+                                  className="field-select"
+                                  required
                                 >
-                                  {t("statusInstitutionalPreliminary")}
-                                </button>
-                                <button
-                                  type="button"
-                                  className={`toggle-btn ${reportState === "Provincial Preliminary Investigation" ? "active" : ""}`}
-                                  onClick={() => setReportState("Provincial Preliminary Investigation")}
-                                  aria-checked={reportState === "Provincial Preliminary Investigation"}
-                                  role="radio"
-                                >
-                                  {t("statusProvincialPreliminary")}
-                                </button>
+                                  <option value="">{t("Choose report state", "Select current status...")}</option>
+                                  <option value="File Closed">{t("statusFileClosed")}</option>
+                                  <option value="Implementation of Recommendations">{t("statusImplementRecommendations")}</option>
+                                  <option value="Institutional Preliminary Investigation">{t("statusInstitutionalPreliminary")}</option>
+                                  <option value="Provincial Preliminary Investigation">{t("statusProvincialPreliminary")}</option>
+                                </select>
+                                <div className="select-arrow-container">
+                                  <svg className="select-arrow-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                                  </svg>
+                                </div>
                               </div>
                             </div>
 

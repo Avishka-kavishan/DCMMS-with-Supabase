@@ -369,6 +369,8 @@
   "statusPreliminaryInvestigation": "මූලික විමර්ශන සිදු කිරීම",
   "statusInstitutionalPreliminary": "ආයතනික මූලික විමර්ශනය",
   "statusProvincialPreliminary": "පළාත් මූලික විමර්ශනයක් සිදු කිරීමට බලය පැවරීම",
+  "statusFileClosed": "ගොනුව අවසන් කිරීම",
+  "statusImplementRecommendations": "නිර්දේශ ක්‍රියාත්මක කිරීම",
   "statusInquiry": "පරීක්ෂණයක් සිදු කිරීම",
   "statusReferOtherInstitute": "මෙම අමාත්‍යංශ පද්ධතියට අදාළ නොවන ලිපි වෙනත් ආයතන වෙත යොමු කිරීම",
   "statusConsultRelevantInstitutes": "පැමිණිලි සඳහා අදාළ ආයතන වලින් උපදෙස් ගැනීම",
