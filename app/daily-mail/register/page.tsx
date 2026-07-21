@@ -218,6 +218,57 @@ function RegisterComplaintForm() {
     const caseNo = searchParams.get("caseNo");
     const subsequent = searchParams.get("subsequent") === "true";
 
+    // Auto-calculate next letterNo (අනු අංකය) starting from 1 if this is a new letter/entry (not edit mode)
+    if (!id) {
+      const calculateNextLetterNo = async () => {
+        let maxNo = 0;
+        if (isSupabaseConfigured) {
+          try {
+            const { data, error } = await supabase
+              .from("dcmms_daily_mail")
+              .select("letter_no");
+            if (!error && data) {
+              data.forEach((d: any) => {
+                if (d.letter_no) {
+                  const match = String(d.letter_no).match(/\d+/);
+                  const no = match ? parseInt(match[0], 10) : 0;
+                  if (no > maxNo) maxNo = no;
+                }
+              });
+            }
+          } catch (e) {
+            console.error("Failed to fetch letter numbers from Supabase", e);
+          }
+        }
+
+        if (typeof window !== "undefined") {
+          const stored = localStorage.getItem("dcmms_letters");
+          if (stored) {
+            try {
+              const list = JSON.parse(stored);
+              list.forEach((item: any) => {
+                const letterVal = item.letterNo || item.letter_no;
+                if (letterVal) {
+                  const match = String(letterVal).match(/\d+/);
+                  const no = match ? parseInt(match[0], 10) : 0;
+                  if (no > maxNo) maxNo = no;
+                }
+              });
+            } catch (e) {
+              console.error("Failed to parse local letters", e);
+            }
+          }
+        }
+
+        setFormState((prev) => ({
+          ...prev,
+          letterNo: (maxNo + 1).toString(),
+        }));
+      };
+
+      calculateNextLetterNo();
+    }
+
     if (subsequent && caseNo) {
       setIsSubsequentMode(true);
       setFormState((prev) => ({
@@ -1093,6 +1144,19 @@ function RegisterComplaintForm() {
                       <h3 className="register-step-title">{t("stepLetterReference", "Letter Reference Information")}</h3>
                       <div className="register-step-grid">
 
+                        {/* Letter Number */}
+                        <div className="form-field-group">
+                          <label htmlFor="letterNo" className="field-label">{t("letterNo")}</label>
+                          <input
+                            id="letterNo"
+                            type="text"
+                            value={formState.letterNo}
+                            onChange={(e) => setFormState({ ...formState, letterNo: e.target.value })}
+                            placeholder={t("placeholderLetterNo")}
+                            className="field-input"
+                          />
+                        </div>
+
                         {/* Reference Number * */}
                         <div className="form-field-group">
                           <label htmlFor="refNo" className="field-label">{t("refNo")} <span className="required-star">*</span></label>
@@ -1105,19 +1169,6 @@ function RegisterComplaintForm() {
                             placeholder={t("refPlaceholder")}
                             className="field-input"
                             readOnly={isSubsequentMode}
-                          />
-                        </div>
-
-                        {/* Letter Number */}
-                        <div className="form-field-group">
-                          <label htmlFor="letterNo" className="field-label">{t("letterNo")}</label>
-                          <input
-                            id="letterNo"
-                            type="text"
-                            value={formState.letterNo}
-                            onChange={(e) => setFormState({ ...formState, letterNo: e.target.value })}
-                            placeholder={t("placeholderLetterNo")}
-                            className="field-input"
                           />
                         </div>
 
