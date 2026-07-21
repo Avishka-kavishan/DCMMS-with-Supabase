@@ -555,6 +555,9 @@ function RegisterComplaintForm() {
     }
 
     if (isSupabaseConfigured) {
+      const { data: { session: dbgSession } } = await supabase.auth.getSession();
+      console.log("[DMMS Debug] isSupabaseConfigured:", isSupabaseConfigured);
+      console.log("[DMMS Debug] Session at submit:", dbgSession ? `✓ user=${dbgSession.user.email}` : "✗ NO SESSION (anon)");
       try {
         const { data: upserted, error } = await supabase
           .from("dcmms_daily_mail")
@@ -606,15 +609,11 @@ function RegisterComplaintForm() {
         router.push(nextUrl);
         return;
       } catch (err: any) {
-        // Better logging for client-side debugging
-        try {
-          console.error("Failed to save to Supabase, falling back to localStorage", err?.message ?? JSON.stringify(err));
-        } catch (e) {
-          console.error("Failed to save to Supabase, falling back to localStorage", err);
-        }
-        // show user-friendly alert (optional)
+        const errCode = err?.code ?? "";
+        const errMsg = err?.message ?? JSON.stringify(err);
+        console.error("Supabase save failed:", errCode, errMsg);
         if (typeof window !== "undefined") {
-          alert("Failed to save to Supabase. Your changes will be stored locally.");
+          alert(`Supabase save failed (${errCode || "error"}): ${errMsg}\n\nData has been saved locally as a fallback.`);
         }
       }
     }
@@ -722,13 +721,11 @@ function RegisterComplaintForm() {
         router.push("/daily-mail");
         return;
       } catch (err: any) {
-        try {
-          console.error("Supabase draft write error, falling back to localStorage", err?.message ?? JSON.stringify(err));
-        } catch (e) {
-          console.error("Supabase draft write error, falling back to localStorage", err);
-        }
+        const errCode = err?.code ?? "";
+        const errMsg = err?.message ?? JSON.stringify(err);
+        console.error("Supabase draft save failed:", errCode, errMsg);
         if (typeof window !== "undefined") {
-          alert("Failed to save draft to Supabase. Your draft will be stored locally.");
+          alert(`Supabase draft save failed (${errCode || "error"}): ${errMsg}\n\nDraft saved locally as fallback.`);
         }
       }
     }
