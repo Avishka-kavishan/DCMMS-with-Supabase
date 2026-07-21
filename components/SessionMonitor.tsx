@@ -64,7 +64,6 @@ export function SessionMonitor() {
               await supabase.auth.signOut();
               localStorage.removeItem("dcmms_current_session_id");
               localStorage.removeItem("dcmms_last_activity");
-              alert("Session Expired: You have been logged out due to inactivity (10 minutes).");
               router.replace("/?reason=inactivity_timeout");
               return;
             }
