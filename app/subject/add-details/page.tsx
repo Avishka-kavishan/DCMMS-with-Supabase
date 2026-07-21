@@ -1484,7 +1484,7 @@ function CaseDetailsForm() {
                   type="submit"
                   className="btn-action-submit"
                 >
-                  {t("submitBtn")}
+                  {t("submitToPrelimBtn")}
                 </button>
               </div>
             </form>
