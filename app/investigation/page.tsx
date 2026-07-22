@@ -72,6 +72,7 @@ export default function InvestigationPage() {
   const [isCaseModalOpen, setIsCaseModalOpen] = useState(false);
   const [selectedCase, setSelectedCase] = useState<Inquiry | null>(null);
   const [concernedOfficer, setConcernedOfficer] = useState<any>(null);
+  const [concernedOfficersList, setConcernedOfficersList] = useState<any[]>([]);
   const [subjectActions, setSubjectActions] = useState<any[]>([]);
   const [isDetailsLoading, setIsDetailsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -457,6 +458,7 @@ export default function InvestigationPage() {
     setFileRefNoForm("");
     
     let concernedData: any = null;
+    let concernedList: any[] = [];
     let detailList: any[] = [];
 
     // 1. Fetch from Supabase
@@ -465,9 +467,11 @@ export default function InvestigationPage() {
         const { data: cData } = await supabase
           .from("dcmms_concerned_officers")
           .select("*")
-          .eq("case_no", inq.inquiryNo)
-          .maybeSingle();
-        if (cData) concernedData = cData;
+          .eq("case_no", inq.inquiryNo);
+        if (cData && cData.length > 0) {
+          concernedList = cData;
+          concernedData = cData[0];
+        }
 
         const { data: dData } = await supabase
           .from("dcmms_subject_details")
@@ -482,12 +486,38 @@ export default function InvestigationPage() {
 
     // 2. Fallback to localStorage
     if (typeof window !== "undefined") {
-      if (!concernedData) {
+      if (concernedList.length === 0) {
         try {
           const storedConcerned = localStorage.getItem("dcmms_officer_concerned");
           if (storedConcerned) {
             const map = JSON.parse(storedConcerned);
-            if (map[inq.inquiryNo]) concernedData = map[inq.inquiryNo];
+            const item = map[inq.inquiryNo];
+            if (item) {
+              concernedData = item;
+              if (Array.isArray(item.persons) && item.persons.length > 0) {
+                concernedList = item.persons.map((p: any) => ({
+                  officer_name: p.name,
+                  position: p.position,
+                  dob: p.dob,
+                  nic: p.nic,
+                  appointment_date: p.appointmentDate,
+                  address: p.address,
+                  institute_name: item.instituteName,
+                  institute_address: item.schoolAddress,
+                }));
+              } else if (item.officerName) {
+                concernedList = [{
+                  officer_name: item.officerName,
+                  position: item.position,
+                  dob: item.dob,
+                  nic: item.nic,
+                  appointment_date: item.appointmentDate,
+                  address: item.address,
+                  institute_name: item.instituteName,
+                  institute_address: item.schoolAddress,
+                }];
+              }
+            }
           }
         } catch (e) {}
       }
@@ -527,6 +557,7 @@ export default function InvestigationPage() {
     }
 
     setConcernedOfficer(concernedData);
+    setConcernedOfficersList(concernedList);
     setSubjectActions(detailList);
     setIsDetailsLoading(false);
   };
@@ -668,6 +699,7 @@ export default function InvestigationPage() {
       try {
         const payload: any = {
           full_name: officer.fullName,
+          email: officer.email,
           role: "investigation_officer",
           status: officer.status
         };
@@ -1455,49 +1487,60 @@ export default function InvestigationPage() {
                       <span>{lang === "si" ? "චෝදනා ලැබූ නිලධාරියාගේ තොරතුරු (විෂයභාර අංශයෙන්)" : "Accused Officer Details (From Subject Branch)"}</span>
                     </h4>
 
-                    {concernedOfficer ? (
-                      <div className="details-grid-3col" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px" }}>
-                        <div className="detail-field" style={{ backgroundColor: "#f8fafc", padding: "10px 12px", borderRadius: "8px", border: "1px solid #f1f5f9" }}>
-                          <span style={{ fontSize: "11px", color: "#64748b", display: "flex", alignItems: "center", gap: "4px", marginBottom: "2px" }}>
-                            <User size={12} /> {lang === "si" ? "නිලධාරියාගේ නම" : "Officer Name"}
-                          </span>
-                          <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "13px" }}>{concernedOfficer.officerName || "—"}</span>
-                        </div>
+                    {concernedOfficersList && concernedOfficersList.length > 0 ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                        {concernedOfficersList.map((officer, idx) => (
+                          <div key={idx} style={{ backgroundColor: "#f8fafc", padding: "12px 14px", borderRadius: "10px", border: "1px solid #e2e8f0" }}>
+                            {concernedOfficersList.length > 1 && (
+                              <span style={{ fontSize: "12px", fontWeight: 700, color: "#4f46e5", display: "block", marginBottom: "8px" }}>
+                                {lang === "si" ? `පුද්ගලයා #${idx + 1}` : `Person #${idx + 1}`}
+                              </span>
+                            )}
+                            <div className="details-grid-3col" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "10px" }}>
+                              <div className="detail-field">
+                                <span style={{ fontSize: "11px", color: "#64748b", display: "flex", alignItems: "center", gap: "4px", marginBottom: "2px" }}>
+                                  <User size={12} /> {lang === "si" ? "නිලධාරියාගේ නම" : "Officer Name"}
+                                </span>
+                                <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "13px" }}>{officer.officer_name || officer.officerName || "—"}</span>
+                              </div>
 
-                        <div className="detail-field" style={{ backgroundColor: "#f8fafc", padding: "10px 12px", borderRadius: "8px", border: "1px solid #f1f5f9" }}>
-                          <span style={{ fontSize: "11px", color: "#64748b", display: "flex", alignItems: "center", gap: "4px", marginBottom: "2px" }}>
-                            <CreditCard size={12} /> {lang === "si" ? "ජාතික හැඳුනුම්පත් අංකය" : "NIC Number"}
-                          </span>
-                          <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "13px" }}>{concernedOfficer.nic || "—"}</span>
-                        </div>
+                              <div className="detail-field">
+                                <span style={{ fontSize: "11px", color: "#64748b", display: "flex", alignItems: "center", gap: "4px", marginBottom: "2px" }}>
+                                  <CreditCard size={12} /> {lang === "si" ? "ජාතික හැඳුනුම්පත් අංකය" : "NIC Number"}
+                                </span>
+                                <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "13px" }}>{officer.nic || "—"}</span>
+                              </div>
 
-                        <div className="detail-field" style={{ backgroundColor: "#f8fafc", padding: "10px 12px", borderRadius: "8px", border: "1px solid #f1f5f9" }}>
-                          <span style={{ fontSize: "11px", color: "#64748b", display: "flex", alignItems: "center", gap: "4px", marginBottom: "2px" }}>
-                            <Award size={12} /> {lang === "si" ? "තනතුර" : "Designation"}
-                          </span>
-                          <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "13px" }}>{concernedOfficer.position || "—"}</span>
-                        </div>
+                              <div className="detail-field">
+                                <span style={{ fontSize: "11px", color: "#64748b", display: "flex", alignItems: "center", gap: "4px", marginBottom: "2px" }}>
+                                  <Award size={12} /> {lang === "si" ? "තනතුර" : "Designation"}
+                                </span>
+                                <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "13px" }}>{officer.position || "—"}</span>
+                              </div>
 
-                        <div className="detail-field" style={{ backgroundColor: "#f8fafc", padding: "10px 12px", borderRadius: "8px", border: "1px solid #f1f5f9" }}>
-                          <span style={{ fontSize: "11px", color: "#64748b", display: "flex", alignItems: "center", gap: "4px", marginBottom: "2px" }}>
-                            <Building size={12} /> {lang === "si" ? "පාසල / ආයතනය" : "School / Institute"}
-                          </span>
-                          <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "13px" }}>{concernedOfficer.instituteName || "—"}</span>
-                        </div>
+                              <div className="detail-field">
+                                <span style={{ fontSize: "11px", color: "#64748b", display: "flex", alignItems: "center", gap: "4px", marginBottom: "2px" }}>
+                                  <Building size={12} /> {lang === "si" ? "පාසල / ආයතනය" : "School / Institute"}
+                                </span>
+                                <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "13px" }}>{officer.institute_name || officer.instituteName || "—"}</span>
+                              </div>
 
-                        <div className="detail-field" style={{ backgroundColor: "#f8fafc", padding: "10px 12px", borderRadius: "8px", border: "1px solid #f1f5f9" }}>
-                          <span style={{ fontSize: "11px", color: "#64748b", display: "flex", alignItems: "center", gap: "4px", marginBottom: "2px" }}>
-                            <MapPin size={12} /> {lang === "si" ? "ලිපිනය" : "Address"}
-                          </span>
-                          <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "13px" }}>{concernedOfficer.address || "—"}</span>
-                        </div>
+                              <div className="detail-field">
+                                <span style={{ fontSize: "11px", color: "#64748b", display: "flex", alignItems: "center", gap: "4px", marginBottom: "2px" }}>
+                                  <MapPin size={12} /> {lang === "si" ? "ලිපිනය" : "Address"}
+                                </span>
+                                <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "13px" }}>{officer.address || "—"}</span>
+                              </div>
 
-                        <div className="detail-field" style={{ backgroundColor: "#f8fafc", padding: "10px 12px", borderRadius: "8px", border: "1px solid #f1f5f9" }}>
-                          <span style={{ fontSize: "11px", color: "#64748b", display: "flex", alignItems: "center", gap: "4px", marginBottom: "2px" }}>
-                            <CalendarIcon size={12} /> {lang === "si" ? "විනය ශාඛාවට ලද දිනය" : "Date Received"}
-                          </span>
-                          <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "13px" }}>{concernedOfficer.appointmentDate || "—"}</span>
-                        </div>
+                              <div className="detail-field">
+                                <span style={{ fontSize: "11px", color: "#64748b", display: "flex", alignItems: "center", gap: "4px", marginBottom: "2px" }}>
+                                  <CalendarIcon size={12} /> {lang === "si" ? "පත්වීම් දිනය" : "Appointment Date"}
+                                </span>
+                                <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "13px" }}>{officer.appointment_date || officer.appointmentDate || "—"}</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     ) : (
                       <div style={{ display: "flex", gap: "10px", alignItems: "center", padding: "12px 16px", backgroundColor: "#fffbeb", color: "#b45309", borderRadius: "8px", border: "1px solid #fef3c7" }}>

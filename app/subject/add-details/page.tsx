@@ -137,15 +137,42 @@ function CaseDetailsForm() {
   const [complaintAge, setComplaintAge] = useState<"new" | "old">("new");
 
   // Form States - Right Card ("If officer concerned with the Complaint")
+  interface ConcernedPerson {
+    id?: string;
+    name: string;
+    position: string;
+    dob: string;
+    nic: string;
+    appointmentDate: string;
+    address: string;
+  }
+
   const [isConcerned, setIsConcerned] = useState<"yes" | "no">("no");
   const [eduSecretaryApproval, setEduSecretaryApproval] = useState<"yes" | "no">("no");
   const [approvalDate, setApprovalDate] = useState("");
-  const [officerName, setOfficerName] = useState("");
-  const [officerDob, setOfficerDob] = useState("");
-  const [officerNic, setOfficerNic] = useState("");
-  const [officerPosition, setOfficerPosition] = useState("");
-  const [officerApptDate, setOfficerApptDate] = useState("");
-  const [officerAddress, setOfficerAddress] = useState("");
+  const [concernedPersons, setConcernedPersons] = useState<ConcernedPerson[]>([
+    { name: "", position: "", dob: "", nic: "", appointmentDate: "", address: "" }
+  ]);
+
+  const handleAddPerson = () => {
+    setConcernedPersons((prev) => [
+      ...prev,
+      { name: "", position: "", dob: "", nic: "", appointmentDate: "", address: "" }
+    ]);
+  };
+
+  const handleRemovePerson = (index: number) => {
+    if (concernedPersons.length <= 1) return;
+    setConcernedPersons((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handlePersonChange = (index: number, field: keyof ConcernedPerson, value: string) => {
+    setConcernedPersons((prev) => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  };
 
   // Verify role and pre-populate fields on mount
   useEffect(() => {
@@ -292,34 +319,34 @@ function CaseDetailsForm() {
             }
 
             // Load concerned officer details
-            const { data: concernedData, error: concernedError } = await supabase
+            const { data: concernedDataList, error: concernedError } = await supabase
               .from("dcmms_concerned_officers")
               .select("*")
-              .eq("case_no", caseNoParam)
-              .single();
+              .eq("case_no", caseNoParam);
 
-            if (concernedError && concernedError.code !== "PGRST116") throw concernedError;
-
-            if (concernedData) {
+            if (!concernedError && concernedDataList && concernedDataList.length > 0) {
               const cleanVal = (val: string | null | undefined) => {
                 if (!val) return "";
                 const trimmed = val.trim();
                 if (trimmed.toUpperCase() === "N/A" || trimmed === "—" || trimmed === "-") return "";
                 return trimmed;
               };
-              setIsConcerned(concernedData.officer_name ? "yes" : "no");
-              setOfficerName(cleanVal(concernedData.officer_name));
-              setOfficerPosition(cleanVal(concernedData.position));
-              setOfficerApptDate(cleanVal(concernedData.appointment_date));
-              setOfficerAddress(cleanVal(concernedData.address));
-              setFileRelated(cleanVal(concernedData.institute_name));
-              setOfficerDob(cleanVal((concernedData as any).dob));
-              setOfficerNic(cleanVal((concernedData as any).nic));
-              if (concernedData.institute_name) {
-                setSchoolName(cleanVal(concernedData.institute_name));
+              const mappedPersons: ConcernedPerson[] = concernedDataList.map((cd: any) => ({
+                id: cd.id,
+                name: cleanVal(cd.officer_name),
+                position: cleanVal(cd.position),
+                dob: cleanVal(cd.dob),
+                nic: cleanVal(cd.nic),
+                appointmentDate: cleanVal(cd.appointment_date),
+                address: cleanVal(cd.address),
+              }));
+              setConcernedPersons(mappedPersons);
+              setIsConcerned(mappedPersons.some(p => p.name) ? "yes" : "no");
+              if (concernedDataList[0]?.institute_name) {
+                setSchoolName(cleanVal(concernedDataList[0].institute_name));
               }
-              if (concernedData.institute_address) {
-                setSchoolAddress(concernedData.institute_address);
+              if (concernedDataList[0]?.institute_address) {
+                setSchoolAddress(cleanVal(concernedDataList[0].institute_address));
               }
             } else {
               setIsConcerned("no");
@@ -407,14 +434,20 @@ function CaseDetailsForm() {
                   if (trimmed.toUpperCase() === "N/A" || trimmed === "—" || trimmed === "-") return "";
                   return trimmed;
                 };
-                setIsConcerned(existingConcerned.officerName ? "yes" : "no");
-                setOfficerName(cleanVal(existingConcerned.officerName));
-                setOfficerPosition(cleanVal(existingConcerned.position));
-                setOfficerApptDate(cleanVal(existingConcerned.appointmentDate));
-                setOfficerAddress(cleanVal(existingConcerned.address));
-                setFileRelated(cleanVal(existingConcerned.instituteName));
-                setOfficerDob(cleanVal(existingConcerned.dob));
-                setOfficerNic(cleanVal(existingConcerned.nic));
+                if (Array.isArray(existingConcerned.persons) && existingConcerned.persons.length > 0) {
+                  setConcernedPersons(existingConcerned.persons);
+                  setIsConcerned("yes");
+                } else if (existingConcerned.officerName) {
+                  setConcernedPersons([{
+                    name: cleanVal(existingConcerned.officerName),
+                    position: cleanVal(existingConcerned.position),
+                    dob: cleanVal(existingConcerned.dob),
+                    nic: cleanVal(existingConcerned.nic),
+                    appointmentDate: cleanVal(existingConcerned.appointmentDate),
+                    address: cleanVal(existingConcerned.address),
+                  }]);
+                  setIsConcerned("yes");
+                }
                 if (existingConcerned.instituteName) {
                   setSchoolName(cleanVal(existingConcerned.instituteName));
                 }
@@ -445,10 +478,10 @@ function CaseDetailsForm() {
     const newEvent = {
       id: `mock-${Date.now()}`,
       summary: `Officer Appointment: ${refNo}`,
-      description: `Appointment date for Inquiry Officer ${officerName || ""} for Subject: ${subjectOfficer || ""}.`,
+      description: `Appointment date for Inquiry Officer ${concernedPersons[0]?.name || ""} for Subject: ${subjectOfficer || ""}.`,
       start: { dateTime: `${apptDate}T09:00:00+05:30` },
       end: { dateTime: `${apptDate}T10:00:00+05:30` },
-      location: officerAddress || "Discipline Branch, Isurupaya",
+      location: concernedPersons[0]?.address || "Discipline Branch, Isurupaya",
       source: "Officer Appointment Date",
     };
 
@@ -526,21 +559,35 @@ function CaseDetailsForm() {
         if (actionError) throw actionError;
 
         // Save concerned officer details and school details to dcmms_concerned_officers
-        const { error: concernedError } = await supabase
-          .from("dcmms_concerned_officers")
-          .upsert({
-            id: `concerned-${refNo}`,
-            case_no: refNo,
-            officer_name: isConcerned === "yes" ? (officerName || null) : null,
-            institute_name: schoolName || null,
-            institute_address: schoolAddress || null,
-            position: isConcerned === "yes" ? (officerPosition || null) : null,
-            address: isConcerned === "yes" ? (officerAddress || null) : null,
-            appointment_date: isConcerned === "yes" ? (officerApptDate || null) : null,
-            dob: isConcerned === "yes" ? (officerDob || null) : null,
-            nic: isConcerned === "yes" ? (officerNic || null) : null,
-          });
-        if (concernedError) throw concernedError;
+        if (isConcerned === "yes") {
+          try {
+            await supabase.from("dcmms_concerned_officers").delete().eq("case_no", refNo);
+
+            const validPersons = concernedPersons.filter(p => p.name.trim() !== "" || p.position.trim() !== "");
+            if (validPersons.length > 0) {
+              const payloadList = validPersons.map((p, idx) => ({
+                id: `concerned-${refNo}-${idx}-${Date.now()}`,
+                case_no: refNo,
+                officer_name: p.name || null,
+                institute_name: schoolName || null,
+                institute_address: schoolAddress || null,
+                position: p.position || null,
+                address: p.address || null,
+                appointment_date: p.appointmentDate || null,
+                dob: p.dob || null,
+                nic: p.nic || null,
+              }));
+              const { error: concernedError } = await supabase.from("dcmms_concerned_officers").insert(payloadList);
+              if (concernedError) console.warn("Concerned officer insert warning:", concernedError);
+            }
+          } catch (err) {
+            console.error("Failed to update concerned officers in Supabase:", err);
+          }
+        } else {
+          try {
+            await supabase.from("dcmms_concerned_officers").delete().eq("case_no", refNo);
+          } catch (e) {}
+        }
 
         // Update main case status
         const { data: caseData, error: fetchError } = await supabase
@@ -585,18 +632,19 @@ function CaseDetailsForm() {
       });
       localStorage.setItem("dcmms_new_letter_current_case", JSON.stringify(cleanList));
 
-      // Save concerned
+      // Save concerned officer list
       const storedConcerned = localStorage.getItem("dcmms_officer_concerned") || "{}";
       let concernedMap = {};
       try { concernedMap = JSON.parse(storedConcerned); } catch (e) {}
       (concernedMap as any)[refNo] = {
         caseNo: refNo,
-        officerName: isConcerned === "yes" ? officerName : "",
-        position: isConcerned === "yes" ? officerPosition : "",
-        appointmentDate: isConcerned === "yes" ? officerApptDate : "",
-        address: isConcerned === "yes" ? officerAddress : "",
-        dob: isConcerned === "yes" ? officerDob : "",
-        nic: isConcerned === "yes" ? officerNic : "",
+        persons: isConcerned === "yes" ? concernedPersons : [],
+        officerName: isConcerned === "yes" ? (concernedPersons[0]?.name || "") : "",
+        position: isConcerned === "yes" ? (concernedPersons[0]?.position || "") : "",
+        appointmentDate: isConcerned === "yes" ? (concernedPersons[0]?.appointmentDate || "") : "",
+        address: isConcerned === "yes" ? (concernedPersons[0]?.address || "") : "",
+        dob: isConcerned === "yes" ? (concernedPersons[0]?.dob || "") : "",
+        nic: isConcerned === "yes" ? (concernedPersons[0]?.nic || "") : "",
         instituteName: schoolName,
         schoolAddress: schoolAddress,
       };
@@ -646,8 +694,8 @@ function CaseDetailsForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (officerApptDate) {
-      syncCalendar(officerApptDate);
+    if (concernedPersons[0]?.appointmentDate) {
+      syncCalendar(concernedPersons[0].appointmentDate);
     }
 
     if (!refNo) {
@@ -1029,23 +1077,6 @@ function CaseDetailsForm() {
                               />
                             </div>
 
-                            {/* File number of the institute where letter was received */}
-                            <div className="form-field-group">
-                              <label htmlFor="fileRelated" className="field-label">
-                                {t("instituteFileNo")}
-                              </label>
-                              <input
-                                id="fileRelated"
-                                type="text"
-                                value={fileRelated}
-                                onChange={(e) => setFileRelated(e.target.value)}
-                                className="field-input"
-                                placeholder="e.g. EP/DM/01"
-                              />
-                            </div>
-                          </div>
-
-                          <div className="form-grid-2 mt-3">
                             {/* Subject File Number (විෂය ගොනු අංකය) */}
                             <div className="form-field-group">
                               <label htmlFor="specialNotes" className="field-label">
@@ -1060,33 +1091,9 @@ function CaseDetailsForm() {
                                 placeholder="e.g. SUB/FILE/102"
                               />
                             </div>
+                          </div>
 
-                            {/* Priority */}
-                            <div className="form-field-group">
-                              <label htmlFor="priority" className="field-label">
-                                {t("priority")}
-                              </label>
-                              <div className="priority-select-wrapper">
-                                <span className={`priority-dot-indicator dot-${priority}`} />
-                                <div className="select-wrapper" style={{ flex: 1 }}>
-                                  <select
-                                    id="priority"
-                                    value={priority}
-                                    onChange={(e) => setPriority(e.target.value)}
-                                    className="field-select"
-                                  >
-                                    <option value="high" className="priority-option-high">{t("priorityHigh")}</option>
-                                    <option value="medium" className="priority-option-medium">{t("priorityMedium")}</option>
-                                    <option value="low" className="priority-option-low">{t("priorityLow")}</option>
-                                  </select>
-                                  <div className="select-arrow-container">
-                                    <svg className="select-arrow-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                                    </svg>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
+                          <div className="form-grid-2 mt-3">
 
                             {/* Status (තත්ත්වය) */}
                             <div className="form-field-group">
@@ -1248,85 +1255,157 @@ function CaseDetailsForm() {
                           </div>
 
                           {isConcerned === "yes" && (
-                            <div className="concerned-person-fields animated-fade-in" style={{ marginTop: "20px" }}>
-                              <h3 className="step-section-title">{t("personRelatedDetails", "Concerned Person Details")}</h3>
-                              <div className="form-grid-2">
-                                <div className="form-field-group">
-                                  <label htmlFor="officerName" className="field-label">
-                                    {t("personName", "Person's Name")} <span className="required-star">*</span>
-                                  </label>
-                                  <input
-                                    id="officerName"
-                                    type="text"
-                                    required={isConcerned === "yes"}
-                                    value={officerName}
-                                    onChange={(e) => setOfficerName(e.target.value)}
-                                    className="field-input"
-                                    placeholder="Enter name..."
-                                  />
-                                </div>
-                                <div className="form-field-group">
-                                  <label htmlFor="officerPosition" className="field-label">
-                                    {t("personDesignation", "Person's Designation / Position")}
-                                  </label>
-                                  <input
-                                    id="officerPosition"
-                                    type="text"
-                                    value={officerPosition}
-                                    onChange={(e) => setOfficerPosition(e.target.value)}
-                                    className="field-input"
-                                    placeholder="Enter position..."
-                                  />
-                                </div>
-                              </div>
+                            <div className="concerned-person-fields animated-fade-in" style={{ marginTop: "20px", display: "flex", flexDirection: "column", gap: "20px" }}>
+                              {concernedPersons.map((person, index) => (
+                                <div 
+                                  key={index} 
+                                  style={{ 
+                                    backgroundColor: "#f8fafc", 
+                                    padding: "16px", 
+                                    borderRadius: "10px", 
+                                    border: "1px solid #cbd5e1"
+                                  }}
+                                >
+                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", borderBottom: "1px solid #e2e8f0", paddingBottom: "8px" }}>
+                                    <h3 className="step-section-title" style={{ margin: 0 }}>
+                                      {t("personRelatedDetails", "Concerned Person Details")} {concernedPersons.length > 1 ? `#${index + 1}` : ""}
+                                    </h3>
+                                    {concernedPersons.length > 1 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRemovePerson(index)}
+                                        title="Remove Person"
+                                        style={{
+                                          background: "none",
+                                          border: "1px solid #fca5a5",
+                                          color: "#ef4444",
+                                          cursor: "pointer",
+                                          padding: "4px 10px",
+                                          borderRadius: "6px",
+                                          display: "inline-flex",
+                                          alignItems: "center",
+                                          gap: "4px",
+                                          fontSize: "12px",
+                                          fontWeight: 600,
+                                          backgroundColor: "#fef2f2"
+                                        }}
+                                      >
+                                        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                        <span>{lang === "si" ? "ඉවත් කරන්න" : "Remove"}</span>
+                                      </button>
+                                    )}
+                                  </div>
 
-                              <div className="form-grid-2 mt-3">
-                                <div className="form-field-group">
-                                  <label htmlFor="officerDob" className="field-label">{t("dateOfBirth")}</label>
-                                  <input
-                                    id="officerDob"
-                                    type="date"
-                                    value={officerDob}
-                                    onChange={(e) => setOfficerDob(e.target.value)}
-                                    className="field-input"
-                                  />
-                                </div>
-                                <div className="form-field-group">
-                                  <label htmlFor="officerNic" className="field-label">{t("nicNumber")}</label>
-                                  <input
-                                    id="officerNic"
-                                    type="text"
-                                    value={officerNic}
-                                    onChange={(e) => setOfficerNic(e.target.value)}
-                                    className="field-input"
-                                    placeholder="NIC number"
-                                  />
-                                </div>
-                              </div>
+                                  <div className="form-grid-2">
+                                    <div className="form-field-group">
+                                      <label htmlFor={`officerName_${index}`} className="field-label">
+                                        {t("personName", "Person's Name")} <span className="required-star">*</span>
+                                      </label>
+                                      <input
+                                        id={`officerName_${index}`}
+                                        type="text"
+                                        required={isConcerned === "yes"}
+                                        value={person.name}
+                                        onChange={(e) => handlePersonChange(index, "name", e.target.value)}
+                                        className="field-input"
+                                        placeholder="Enter name..."
+                                      />
+                                    </div>
+                                    <div className="form-field-group">
+                                      <label htmlFor={`officerPosition_${index}`} className="field-label">
+                                        {t("personDesignation", "Person's Designation / Position")}
+                                      </label>
+                                      <input
+                                        id={`officerPosition_${index}`}
+                                        type="text"
+                                        value={person.position}
+                                        onChange={(e) => handlePersonChange(index, "position", e.target.value)}
+                                        className="field-input"
+                                        placeholder="Enter position..."
+                                      />
+                                    </div>
+                                  </div>
 
-                              <div className="form-grid-2 mt-3">
-                                <div className="form-field-group">
-                                  <label htmlFor="officerApptDate" className="field-label">{t("appointmentDate")}</label>
-                                  <input
-                                    id="officerApptDate"
-                                    type="date"
-                                    value={officerApptDate}
-                                    onChange={(e) => setOfficerApptDate(e.target.value)}
-                                    className="field-input"
-                                  />
+                                  <div className="form-grid-2 mt-3">
+                                    <div className="form-field-group">
+                                      <label htmlFor={`officerDob_${index}`} className="field-label">{t("dateOfBirth")}</label>
+                                      <input
+                                        id={`officerDob_${index}`}
+                                        type="date"
+                                        value={person.dob}
+                                        onChange={(e) => handlePersonChange(index, "dob", e.target.value)}
+                                        className="field-input"
+                                      />
+                                    </div>
+                                    <div className="form-field-group">
+                                      <label htmlFor={`officerNic_${index}`} className="field-label">{t("nicNumber")}</label>
+                                      <input
+                                        id={`officerNic_${index}`}
+                                        type="text"
+                                        value={person.nic}
+                                        onChange={(e) => handlePersonChange(index, "nic", e.target.value)}
+                                        className="field-input"
+                                        placeholder="NIC number"
+                                      />
+                                    </div>
+                                  </div>
+
+                                  <div className="form-grid-2 mt-3">
+                                    <div className="form-field-group">
+                                      <label htmlFor={`officerApptDate_${index}`} className="field-label">{t("appointmentDate")}</label>
+                                      <input
+                                        id={`officerApptDate_${index}`}
+                                        type="date"
+                                        value={person.appointmentDate}
+                                        onChange={(e) => handlePersonChange(index, "appointmentDate", e.target.value)}
+                                        className="field-input"
+                                      />
+                                    </div>
+                                    <div className="form-field-group">
+                                      <label htmlFor={`officerAddress_${index}`} className="field-label">{t("addressLabel")}</label>
+                                      <input
+                                        id={`officerAddress_${index}`}
+                                        type="text"
+                                        value={person.address}
+                                        onChange={(e) => handlePersonChange(index, "address", e.target.value)}
+                                        className="field-input"
+                                        placeholder="Address"
+                                      />
+                                    </div>
+                                  </div>
                                 </div>
-                                <div className="form-field-group">
-                                  <label htmlFor="officerAddress" className="field-label">{t("addressLabel")}</label>
-                                  <input
-                                    id="officerAddress"
-                                    type="text"
-                                    value={officerAddress}
-                                    onChange={(e) => setOfficerAddress(e.target.value)}
-                                    className="field-input"
-                                    placeholder="Address"
-                                  />
-                                </div>
-                              </div>
+                              ))}
+
+                              {/* Plus Button to add another person */}
+                              <button
+                                type="button"
+                                onClick={handleAddPerson}
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  gap: "8px",
+                                  padding: "10px 18px",
+                                  backgroundColor: "#eff6ff",
+                                  color: "#1d4ed8",
+                                  border: "1.5px dashed #93c5fd",
+                                  borderRadius: "8px",
+                                  fontWeight: 700,
+                                  fontSize: "14px",
+                                  cursor: "pointer",
+                                  transition: "all 0.2s ease",
+                                  marginTop: "4px"
+                                }}
+                              >
+                                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                                </svg>
+                                <span>
+                                  {lang === "si" ? "+ තවත් පුද්ගලයෙකු එක් කරන්න" : "+ Add Another Person"}
+                                </span>
+                              </button>
                             </div>
                           )}
                         </div>
