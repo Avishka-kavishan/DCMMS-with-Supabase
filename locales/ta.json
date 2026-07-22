@@ -418,13 +418,11 @@
   "targetCompletionDate": "இலக்கு முடிவுத் திகதி",
   "daysRemaining": "நாட்கள் மீதமுள்ளன",
   "overdueBy": "தாமதமான நாட்கள்",
-  "assignedOfficer": "ஒதுக்கப்பட்ட விசாரணை அதிகாரி",
   "fileRefNo": "கோப்பு குறிப்பு எண்",
   "clearAssignment": "ஒதுக்கப்படவில்லை",
   "officerName": "அதிகாரியின் முழுப் பெயர்",
   "registeredDate": "பதிவு செய்யப்பட்ட திகதி",
   "searchInquiries": "குறிப்பு எண், விடயம் அல்லது அதிகாரி மூலம் தேடவும்...",
-  "showingResults": "{{total}} இல் {{count}} வழக்குகள் காட்டப்படுகின்றன",
-  "noCasesFound": "பொருந்தக்கூடிய வழக்குகள் எதுவும் கிடைக்கவில்லை"
+  "showingResults": "{{total}} இல் {{count}} வழக்குகள் காட்டப்படுகின்றன"
 }
 

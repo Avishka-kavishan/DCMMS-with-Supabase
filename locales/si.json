@@ -418,12 +418,10 @@
   "targetCompletionDate": "ඉලක්කගත අවසන් දිනය",
   "daysRemaining": "දින ඉතිරිව ඇත",
   "overdueBy": "ප්‍රමාදිත දින",
-  "assignedOfficer": "පැවරූ විමර්ශන නිලධාරියා",
   "fileRefNo": "භෞතික/ඩිජිටල් ගොනු යොමු අංකය",
   "clearAssignment": "නොපවරන ලද",
   "officerName": "නිලධාරියාගේ සම්පූර්ණ නම",
   "registeredDate": "ලියාපදිංචි කළ දිනය",
   "searchInquiries": "යොමු අංකය, විෂය හෝ නිලධාරියා අනුව සොයන්න...",
-  "showingResults": "නඩු {{total}} න් {{count}} ක් පෙන්වයි",
-  "noCasesFound": "ගැලපෙන විමර්ශන නඩු කිසිවක් හමු නොවීය"
+  "showingResults": "නඩු {{total}} න් {{count}} ක් පෙන්වයි"
 }

@@ -421,13 +421,11 @@
   "targetCompletionDate": "Target Completion Date",
   "daysRemaining": "days remaining",
   "overdueBy": "Overdue by",
-  "assignedOfficer": "Assigned Officer",
   "fileRefNo": "Physical/Digital File Ref No.",
   "clearAssignment": "Unassigned",
   "officerName": "Officer Full Name",
   "registeredDate": "Date Registered",
   "searchInquiries": "Search inquiries by ref, subject, officer...",
-  "showingResults": "Showing {{count}} of {{total}} cases",
-  "noCasesFound": "No matching cases found"
+  "showingResults": "Showing {{count}} of {{total}} cases"
 }
 
