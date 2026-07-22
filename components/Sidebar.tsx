@@ -120,8 +120,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
     );
   } else if (activeRole === "investigation") {
     quickActionButton = (
-      <button className="btn-sidebar-action" onClick={() => alert("New Inquiry setup coming soon!")}>
-        <span className="plus-icon">+</span> New Inquiry
+      <button 
+        className="btn-sidebar-action" 
+        onClick={() => {
+          if (setIsModalOpen) {
+            setIsModalOpen(true);
+          } else {
+            // fallback if sidebar used elsewhere
+            window.location.hash = "#register-officer";
+            const btn = document.querySelector(".btn-new-letter");
+            if (btn) (btn as HTMLButtonElement).click();
+          }
+        }}
+      >
+        <span className="plus-icon">+</span> Register Officer
       </button>
     );
   }

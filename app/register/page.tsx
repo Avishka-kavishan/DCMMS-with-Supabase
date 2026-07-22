@@ -144,7 +144,7 @@ export default function RegisterPage() {
     { value: "admin", label: "Administrator" },
     { value: "daily_mail", label: "Daily Mail Officer" },
     { value: "subject_officer", label: "Subject Officer" },
-    { value: "investigation_officer", label: "Investigation Officer" },
+    { value: "investigation_officer", label: "Investigation Administrator" },
     { value: "system_admin", label: "System Administrator" },
   ];
 

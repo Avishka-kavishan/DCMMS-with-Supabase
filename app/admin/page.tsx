@@ -543,7 +543,7 @@ export default function AdminDashboard() {
                       {stat.role === "subject_officer"
                         ? t("roleSubjectOfficer", "Subject Officer")
                         : stat.role === "investigation_officer"
-                          ? t("roleInvestigationOfficer", "Investigation Officer")
+                          ? t("roleInvestigationOfficer", "Investigation Administrator")
                           : t("roleDailyMail", "Daily Mail Officer")}
                     </td>
                     <td style={{ textAlign: "right" }}>
