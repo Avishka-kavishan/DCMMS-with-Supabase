@@ -142,7 +142,28 @@ export default function InvestigationOfficersPage() {
 
   useEffect(() => {
     fetchOfficers();
+
+    if (isSupabaseConfigured) {
+      const channel = supabase
+        .channel("investigation-officers-realtime")
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "dcmms_profiles" },
+          () => {
+            fetchOfficers();
+          }
+        )
+        .subscribe();
+
+      const interval = setInterval(fetchOfficers, 4000);
+
+      return () => {
+        supabase.removeChannel(channel);
+        clearInterval(interval);
+      };
+    }
   }, []);
+
 
   // ── Validation ─────────────────────────────────────────────────────────────
   const validateForm = () => {

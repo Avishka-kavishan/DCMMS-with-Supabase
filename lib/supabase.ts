@@ -28,3 +28,29 @@ export const supabase = createClient(
     },
   }
 );
+
+// Standardized real-time listener subscription helper
+export function subscribeToTables(
+  channelName: string,
+  tables: string[],
+  onChange: () => void
+) {
+  if (!isSupabaseConfigured) return () => {};
+
+  let channel = supabase.channel(channelName);
+  tables.forEach((table) => {
+    channel = channel.on(
+      "postgres_changes",
+      { event: "*", schema: "public", table },
+      () => {
+        onChange();
+      }
+    );
+  });
+
+  channel.subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}

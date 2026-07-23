@@ -139,8 +139,29 @@ export default function CalendarPage() {
   useEffect(() => {
     if (mounted) {
       fetchEvents();
+
+      if (isSupabaseConfigured) {
+        const channel = supabase
+          .channel("calendar-realtime")
+          .on(
+            "postgres_changes",
+            { event: "*", schema: "public", table: "dcmms_calendar" },
+            () => {
+              fetchEvents();
+            }
+          )
+          .subscribe();
+
+        const interval = setInterval(fetchEvents, 5000);
+
+        return () => {
+          supabase.removeChannel(channel);
+          clearInterval(interval);
+        };
+      }
     }
   }, [mounted]);
+
 
   // Sync document page title & HTML element lang
   useEffect(() => {

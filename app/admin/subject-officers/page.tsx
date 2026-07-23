@@ -85,7 +85,30 @@ export default function SubjectOfficersPage() {
     setIsLoading(false);
   };
 
-  useEffect(() => { fetchOfficers(); }, []);
+  useEffect(() => {
+    fetchOfficers();
+
+    if (isSupabaseConfigured) {
+      const channel = supabase
+        .channel("subject-officers-realtime")
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "dcmms_profiles" },
+          () => {
+            fetchOfficers();
+          }
+        )
+        .subscribe();
+
+      const interval = setInterval(fetchOfficers, 4000);
+
+      return () => {
+        supabase.removeChannel(channel);
+        clearInterval(interval);
+      };
+    }
+  }, []);
+
 
   // ── Validation ─────────────────────────────────────────────────────────────
   const validateForm = () => {

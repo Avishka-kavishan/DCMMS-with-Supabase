@@ -82,10 +82,40 @@ export default function SystemAdminDashboard() {
 
   useEffect(() => {
     loadData();
-    // Refresh security dashboard data every 4 seconds
-    const interval = setInterval(loadData, 4000);
-    return () => clearInterval(interval);
+
+    const channel = supabase
+      .channel("system-admin-security-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "dcmms_sessions" },
+        () => {
+          loadData();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "dcmms_audit_logs" },
+        () => {
+          loadData();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "dcmms_profiles" },
+        () => {
+          loadData();
+        }
+      )
+      .subscribe();
+
+    const interval = setInterval(loadData, 3000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(interval);
+    };
   }, []);
+
 
   const handleLogout = (e: React.MouseEvent) => {
     e.preventDefault();

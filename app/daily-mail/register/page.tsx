@@ -14,6 +14,27 @@ import { getCurrentProfile } from "@/lib/auth";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
+const mapRegionProvince = (val?: string): "province" | "region" | null => {
+  if (!val) return null;
+  const lower = val.toLowerCase().trim();
+  if (lower === "province" || lower === "region") return lower as any;
+  if (
+    lower.includes("province") ||
+    lower.includes("western") ||
+    lower.includes("central") ||
+    lower.includes("southern") ||
+    lower.includes("northern") ||
+    lower.includes("eastern") ||
+    lower.includes("uva") ||
+    lower.includes("sabaragamuwa")
+  ) {
+    return "province";
+  }
+  if (lower.includes("region") || lower.includes("zone")) return "region";
+  return "province";
+};
+
+
 function RegisterComplaintForm() {
   const { t, i18n } = useTranslation();
   const router = useRouter();
@@ -557,7 +578,7 @@ function RegisterComplaintForm() {
               officer_name: newLetter.officerName || null,
               subject_category: newLetter.subjectCategory || null,
               institute_name: newLetter.instituteName || null,
-              region_province: newLetter.regionProvince || null,
+              region_province: mapRegionProvince(newLetter.regionProvince),
             });
 
           if (mailError) {
@@ -627,7 +648,7 @@ function RegisterComplaintForm() {
             officer_name: newLetter.officerName || null,
             subject_category: newLetter.subjectCategory || null,
             institute_name: newLetter.instituteName || null,
-            region_province: newLetter.regionProvince || null,
+            region_province: mapRegionProvince(newLetter.regionProvince),
           })
           .select();
 
@@ -758,7 +779,7 @@ function RegisterComplaintForm() {
             officer_name: draftLetter.officerName || null,
             subject_category: draftLetter.subjectCategory || null,
             institute_name: draftLetter.instituteName || null,
-            region_province: draftLetter.regionProvince || null,
+            region_province: mapRegionProvince(draftLetter.regionProvince),
           })
           .select();
 

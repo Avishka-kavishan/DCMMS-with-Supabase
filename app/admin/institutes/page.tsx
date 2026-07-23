@@ -121,7 +121,28 @@ export default function EducationalInstitutesPage() {
 
   useEffect(() => {
     fetchInstitutes();
+
+    if (isSupabaseConfigured) {
+      const channel = supabase
+        .channel("institutes-realtime")
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "dcmms_institutes" },
+          () => {
+            fetchInstitutes();
+          }
+        )
+        .subscribe();
+
+      const interval = setInterval(fetchInstitutes, 4000);
+
+      return () => {
+        supabase.removeChannel(channel);
+        clearInterval(interval);
+      };
+    }
   }, []);
+
 
   // Validation
   const validateForm = () => {

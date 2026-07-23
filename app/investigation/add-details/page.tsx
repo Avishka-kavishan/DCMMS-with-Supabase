@@ -379,6 +379,60 @@ function InvestigationCaseDetailsContent() {
     e.preventDefault();
     setIsSaving(true);
 
+    const now = new Date().toISOString().slice(0, 10);
+    const actionId = `act-${Date.now()}`;
+    const desc = `Inquiry progress updated (${status}). Assigned: ${assignee || "Officer"}. ${inquiryNotes}`;
+
+    if (isSupabaseConfigured) {
+      try {
+        // 1. Update main case status and target date in dcmms_subject
+        await supabase
+          .from("dcmms_subject")
+          .update({
+            status: status,
+            assigned_date: targetDate || null,
+          })
+          .eq("case_no", caseNoParam);
+
+        // 2. Assign letter to Subject Officer in dcmms_daily_mail so it appears on their dashboard
+        if (assignee) {
+          await supabase
+            .from("dcmms_daily_mail")
+            .update({
+              officer_name: assignee,
+              status: "assigned",
+            })
+            .eq("ref_no", caseNoParam);
+        }
+
+        // 3. Insert new action log to dcmms_subject_details
+        await supabase
+          .from("dcmms_subject_details")
+          .insert({
+            id: actionId,
+            case_no: caseNoParam,
+            received_date: now,
+            report_state: status,
+            special_notes: inquiryNotes || null,
+            subject_officer_name: assignee || "Investigation Administrator",
+            step_taken: desc,
+          });
+
+        // 4. Upsert inquiry investigation record in dcmms_investigation
+        await supabase.from("dcmms_investigation").upsert({
+          id: `inv-${caseNoParam}`,
+          case_no: caseNoParam,
+          inquiry_no: caseNoParam,
+          target_date: targetDate || null,
+          status: status,
+          assigned_officer: assignee || null,
+          notes: inquiryNotes || null,
+        });
+      } catch (err) {
+        console.error("Failed to save investigation details to Supabase:", err);
+      }
+    }
+
     if (typeof window !== "undefined") {
       const storedCases = localStorage.getItem("dcmms_cases");
       if (storedCases) {
@@ -401,15 +455,35 @@ function InvestigationCaseDetailsContent() {
         } catch (e) {}
       }
 
+      if (assignee) {
+        try {
+          const storedLetters = localStorage.getItem("dcmms_letters");
+          if (storedLetters) {
+            const list = JSON.parse(storedLetters);
+            const updated = list.map((l: any) => {
+              if (l.refNo === caseNoParam) {
+                return {
+                  ...l,
+                  officerName: assignee,
+                  status: "assigned",
+                };
+              }
+              return l;
+            });
+            localStorage.setItem("dcmms_letters", JSON.stringify(updated));
+          }
+        } catch (e) {}
+      }
+
       // Save action entry into previous actions history
       const newActionItem = {
-        id: `act-${Date.now()}`,
+        id: actionId,
         caseNo: caseNoParam,
-        receivedDate: new Date().toISOString().slice(0, 10),
+        receivedDate: now,
         reportState: status,
         specialNotes: inquiryNotes,
         subjectOfficerName: assignee || "Investigation Officer",
-        stepTaken: `Inquiry progress updated (${status}). Assigned: ${assignee || "Officer"}.`,
+        stepTaken: desc,
       };
 
       const storedActions = localStorage.getItem("dcmms_new_letter_current_case") || "[]";
@@ -422,11 +496,12 @@ function InvestigationCaseDetailsContent() {
     }
 
     setIsSaving(false);
-    showToast("Investigation record saved successfully!");
+    showToast(lang === "si" ? "විමර්ශන තොරතුරු සාර්ථකව යාවත්කාලීන කර අදාළ විෂය නිලධාරියා වෙත යවන ලදී!" : "Investigation record saved and sent to the case subject officer!");
     setTimeout(() => {
       router.push("/investigation");
     }, 1000);
   };
+
 
   if (isLoading) {
     return (
