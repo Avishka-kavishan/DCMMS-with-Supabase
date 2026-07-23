@@ -88,6 +88,30 @@ export default function InvestigationPage() {
   const [investigationNotes, setInvestigationNotes] = useState("");
   const [fileRefNoForm, setFileRefNoForm] = useState("");
 
+  // Subject Officer Assignment Data Flow state (Investigation Admin <-> Subject Officer)
+  const [subjOfficerName, setSubjOfficerName] = useState("");
+  const [subjAppointmentDate, setSubjAppointmentDate] = useState("");
+  const [subjReportDueDate, setSubjReportDueDate] = useState("");
+  const [subjExtensionTerm, setSubjExtensionTerm] = useState<"None" | "First" | "Second" | "Third">("None");
+  const [subjExtensionStartDate, setSubjExtensionStartDate] = useState("");
+  const [subjExtensionEndDate, setSubjExtensionEndDate] = useState("");
+  const [existingAssignment, setExistingAssignment] = useState<any>(null);
+
+  // Sequential 4-Step Workflow state
+  const [workflowStep, setWorkflowStep] = useState<number>(1);
+  const [step1AssignedOfficers, setStep1AssignedOfficers] = useState<string[]>([]);
+  const [step2AppointmentDate, setStep2AppointmentDate] = useState("");
+  const [step2ReportDueDate, setStep2ReportDueDate] = useState("");
+  const [step2Submitted, setStep2Submitted] = useState(false);
+  const [step3ExtensionTerm, setStep3ExtensionTerm] = useState<"None" | "First" | "Second" | "Third">("None");
+  const [step3ExtensionStartDate, setStep3ExtensionStartDate] = useState("");
+  const [step3ExtensionEndDate, setStep3ExtensionEndDate] = useState("");
+  const [step3ExtensionRequested, setStep3ExtensionRequested] = useState(false);
+  const [step3ExtensionCertified, setStep3ExtensionCertified] = useState(false);
+  const [step4FinalReport, setStep4FinalReport] = useState("");
+  const [step4ApprovalDate, setStep4ApprovalDate] = useState("");
+  const [step4Completed, setStep4Completed] = useState(false);
+
   // Officer form modal state
   const [isOfficerModalOpen, setIsOfficerModalOpen] = useState(false);
   const [isOfficerEditMode, setIsOfficerEditMode] = useState(false);
@@ -506,6 +530,74 @@ export default function InvestigationPage() {
     setInvestigationStatus(inq.status || "In Progress");
     setInvestigationNotes("");
     setFileRefNoForm("");
+
+    // Load existing Subject Officer assignment (Data Flow)
+    if (typeof window !== "undefined") {
+      try {
+        const storedAssignments = localStorage.getItem("dcmms_subject_assignments");
+        if (storedAssignments) {
+          const list = JSON.parse(storedAssignments);
+          const found = list.find((a: any) => a.caseNo === inq.inquiryNo);
+          if (found) {
+            setExistingAssignment(found);
+            setSubjOfficerName(found.subjectOfficerName || inq.assignedOfficer || "");
+            setSubjAppointmentDate(found.appointmentDate || "");
+            setSubjReportDueDate(found.reportDueDate || inq.targetDate || "");
+            setSubjExtensionTerm(found.extensionTerm || "None");
+            setSubjExtensionStartDate(found.extensionStartDate || "");
+            setSubjExtensionEndDate(found.extensionEndDate || "");
+
+            // Sequential workflow states
+            setWorkflowStep(found.currentStep || (found.reportApprovedByAdmin ? 5 : (found.datesSubmittedBySubject ? 3 : (found.subjectOfficerName ? 2 : 1))));
+            setStep1AssignedOfficers(Array.isArray(found.assignedOfficers) ? found.assignedOfficers : (found.subjectOfficerName ? [found.subjectOfficerName] : []));
+            setStep2AppointmentDate(found.appointmentDate || "");
+            setStep2ReportDueDate(found.reportDueDate || "");
+            setStep2Submitted(!!found.datesSubmittedBySubject);
+            setStep3ExtensionTerm(found.extensionTerm || "None");
+            setStep3ExtensionStartDate(found.extensionStartDate || "");
+            setStep3ExtensionEndDate(found.extensionEndDate || "");
+            setStep3ExtensionRequested(!!found.extensionRequestedByAdmin);
+            setStep3ExtensionCertified(!!found.certificationSubmitted);
+            setStep4FinalReport(found.finalReportContent || found.reportContent || "");
+            setStep4ApprovalDate(found.approvalDate || "");
+            setStep4Completed(!!found.reportApprovedByAdmin);
+          } else {
+            setExistingAssignment(null);
+            setSubjOfficerName(inq.assignedOfficer || "");
+            setSubjAppointmentDate("");
+            setSubjReportDueDate(inq.targetDate || "");
+            setSubjExtensionTerm("None");
+            setSubjExtensionStartDate("");
+            setSubjExtensionEndDate("");
+
+            // Sequential workflow defaults
+            setWorkflowStep(inq.assignedOfficer ? 2 : 1);
+            setStep1AssignedOfficers(inq.assignedOfficer ? [inq.assignedOfficer] : []);
+            setStep2AppointmentDate("");
+            setStep2ReportDueDate(inq.targetDate || "");
+            setStep2Submitted(false);
+            setStep3ExtensionTerm("None");
+            setStep3ExtensionStartDate("");
+            setStep3ExtensionEndDate("");
+            setStep3ExtensionRequested(false);
+            setStep3ExtensionCertified(false);
+            setStep4FinalReport("");
+            setStep4ApprovalDate("");
+            setStep4Completed(false);
+          }
+        } else {
+          setExistingAssignment(null);
+          setSubjOfficerName(inq.assignedOfficer || "");
+          setSubjAppointmentDate("");
+          setSubjReportDueDate(inq.targetDate || "");
+          setSubjExtensionTerm("None");
+          setSubjExtensionStartDate("");
+          setSubjExtensionEndDate("");
+        }
+      } catch (e) {
+        console.error("Failed to load assignment data", e);
+      }
+    }
     
     let concernedData: any = null;
     let concernedList: any[] = [];
@@ -620,6 +712,128 @@ export default function InvestigationPage() {
       setInvestigationNotes((prev) => `${prev}\n• ${presetText}`);
     }
   };
+  // ── Step 1 Handler: Admin Submits Assigned Officers ───────────────────────
+  const handleStep1SubmitOfficers = async () => {
+    if (!subjOfficerName.trim()) {
+      showToast("Please select/enter the assigned officer first!");
+      return;
+    }
+    const caseNo = selectedCase?.inquiryNo;
+    if (!caseNo) return;
+    const now = new Date().toISOString().slice(0, 10);
+
+    const updatedRecord = {
+      ...(existingAssignment || {}),
+      id: existingAssignment?.id || `asgn-${caseNo}-${Date.now()}`,
+      caseNo,
+      subjectOfficerName: subjOfficerName.trim(),
+      assignedOfficers: [subjOfficerName.trim()],
+      currentStep: 2,
+      assignedDate: now,
+      status: "Officers Assigned",
+      updatedAt: now
+    };
+
+    setExistingAssignment(updatedRecord);
+    setWorkflowStep(2);
+
+    if (typeof window !== "undefined") {
+      try {
+        const storedAssignments = localStorage.getItem("dcmms_subject_assignments") || "[]";
+        let list = JSON.parse(storedAssignments);
+        list = list.filter((a: any) => a.caseNo !== caseNo);
+        list.push(updatedRecord);
+        localStorage.setItem("dcmms_subject_assignments", JSON.stringify(list));
+      } catch (e) {}
+    }
+    showToast("Step 1 Complete: Assigned Officer submitted! Step 2 unlocked for Subject Officer.");
+  };
+
+  // ── Step 3 Handler: Admin Requests Extension ──────────────────────────────
+  const handleStep3RequestExtension = async () => {
+    if (step3ExtensionTerm === "None") {
+      showToast("Please select an Extension Term (First, Second, or Third)!");
+      return;
+    }
+    if (!step3ExtensionStartDate || !step3ExtensionEndDate) {
+      showToast("Please select both Extension Start Date and End Date!");
+      return;
+    }
+    const caseNo = selectedCase?.inquiryNo;
+    if (!caseNo) return;
+    const now = new Date().toISOString().slice(0, 10);
+
+    const updatedRecord = {
+      ...(existingAssignment || {}),
+      id: existingAssignment?.id || `asgn-${caseNo}-${Date.now()}`,
+      caseNo,
+      extensionTerm: step3ExtensionTerm,
+      extensionStartDate: step3ExtensionStartDate,
+      extensionEndDate: step3ExtensionEndDate,
+      extensionRequestedByAdmin: true,
+      currentStep: 3,
+      status: "Extension Requested",
+      updatedAt: now
+    };
+
+    setExistingAssignment(updatedRecord);
+    setStep3ExtensionRequested(true);
+    setWorkflowStep(3);
+
+    if (typeof window !== "undefined") {
+      try {
+        const storedAssignments = localStorage.getItem("dcmms_subject_assignments") || "[]";
+        let list = JSON.parse(storedAssignments);
+        list = list.filter((a: any) => a.caseNo !== caseNo);
+        list.push(updatedRecord);
+        localStorage.setItem("dcmms_subject_assignments", JSON.stringify(list));
+      } catch (e) {}
+    }
+    showToast("Step 3 Complete: Extension request sent to Subject Officer for certification!");
+  };
+
+  // ── Step 4 Handler: Admin Submits Final Report & Approval Date ─────────────
+  const handleStep4SubmitFinalReport = async () => {
+    if (!step4FinalReport.trim()) {
+      showToast("Please enter the Final Investigation Report findings!");
+      return;
+    }
+    if (!step4ApprovalDate) {
+      showToast("Please select the Approval Date!");
+      return;
+    }
+    const caseNo = selectedCase?.inquiryNo;
+    if (!caseNo) return;
+    const now = new Date().toISOString().slice(0, 10);
+
+    const updatedRecord = {
+      ...(existingAssignment || {}),
+      id: existingAssignment?.id || `asgn-${caseNo}-${Date.now()}`,
+      caseNo,
+      finalReportContent: step4FinalReport.trim(),
+      approvalDate: step4ApprovalDate,
+      reportApprovedByAdmin: true,
+      approvalTimestamp: now,
+      currentStep: 5,
+      status: "Completed & Approved",
+      updatedAt: now
+    };
+
+    setExistingAssignment(updatedRecord);
+    setStep4Completed(true);
+    setWorkflowStep(5);
+
+    if (typeof window !== "undefined") {
+      try {
+        const storedAssignments = localStorage.getItem("dcmms_subject_assignments") || "[]";
+        let list = JSON.parse(storedAssignments);
+        list = list.filter((a: any) => a.caseNo !== caseNo);
+        list.push(updatedRecord);
+        localStorage.setItem("dcmms_subject_assignments", JSON.stringify(list));
+      } catch (e) {}
+    }
+    showToast("Step 4 Complete: Final Investigation Report & Approval Date submitted to Subject Officer!");
+  };
 
   // ── Save Investigation Details ──
   const handleSaveInvestigationDetails = async (e: React.FormEvent) => {
@@ -707,6 +921,61 @@ export default function InvestigationPage() {
       } catch (e) {}
     }
 
+    // Save/Update Subject Officer Assignment Data Flow record (Diagram: Investigation Admin <-> Subject Officer)
+    const targetOfficer = subjOfficerName.trim() || assignee.trim();
+    if (targetOfficer) {
+      const assignmentRecord = {
+        id: existingAssignment?.id || `asgn-${caseNo}-${Date.now()}`,
+        caseNo: caseNo,
+        subjectOfficerName: targetOfficer,
+        appointmentDate: subjAppointmentDate || now,
+        reportDueDate: subjReportDueDate || targetDate || "",
+        extensionTerm: subjExtensionTerm,
+        extensionStartDate: subjExtensionStartDate || "",
+        extensionEndDate: subjExtensionEndDate || "",
+        certificationSubmitted: existingAssignment?.certificationSubmitted || false,
+        certificationDate: existingAssignment?.certificationDate || "",
+        reportSubmitDate: existingAssignment?.reportSubmitDate || "",
+        reportContent: existingAssignment?.reportContent || "",
+        status: existingAssignment?.status || "Assigned",
+        updatedAt: now,
+      };
+
+      if (typeof window !== "undefined") {
+        try {
+          const storedAssignments = localStorage.getItem("dcmms_subject_assignments") || "[]";
+          let list = JSON.parse(storedAssignments);
+          list = list.filter((a: any) => a.caseNo !== caseNo);
+          list.push(assignmentRecord);
+          localStorage.setItem("dcmms_subject_assignments", JSON.stringify(list));
+        } catch (e) {
+          console.error("Failed to save assignment to localStorage", e);
+        }
+      }
+
+      if (isSupabaseConfigured) {
+        try {
+          await supabase.from("dcmms_subject_assignments").upsert({
+            id: assignmentRecord.id,
+            case_no: assignmentRecord.caseNo,
+            subject_officer_name: assignmentRecord.subjectOfficerName,
+            appointment_date: assignmentRecord.appointmentDate,
+            report_due_date: assignmentRecord.reportDueDate,
+            extension_term: assignmentRecord.extensionTerm,
+            extension_start_date: assignmentRecord.extensionStartDate,
+            extension_end_date: assignmentRecord.extensionEndDate,
+            certification_submitted: assignmentRecord.certificationSubmitted,
+            certification_date: assignmentRecord.certificationDate,
+            report_submit_date: assignmentRecord.reportSubmitDate,
+            report_content: assignmentRecord.reportContent,
+            status: assignmentRecord.status,
+          });
+        } catch (e) {
+          console.warn("Supabase assignment save warning:", e);
+        }
+      }
+    }
+
     setIsSaving(false);
     showToast(lang === "si" ? "විමර්ශන තොරතුරු සාර්ථකව යාවත්කාලීන කරන ලදී!" : "Investigation details updated successfully!");
     setIsCaseModalOpen(false);
@@ -791,22 +1060,31 @@ export default function InvestigationPage() {
   const handleDeleteOfficer = async (officer: Officer) => {
     if (!confirm(`Are you sure you want to delete ${officer.fullName}?`)) return;
 
-    if (isSupabaseConfigured && !officer.id.startsWith("inv-")) {
+    if (isSupabaseConfigured && officer.id && !officer.id.startsWith("inv-") && !officer.id.startsWith("off-")) {
       try {
-        const { error } = await supabase.from("dcmms_profiles").delete().eq("id", officer.id);
-        if (error) throw error;
+        await supabase.from("dcmms_profiles").delete().eq("id", officer.id);
+        await supabase.from("dcmms_investigation_officers").delete().eq("id", officer.id);
       } catch (err) {
-        console.error("Failed to delete from Supabase:", err);
+        console.warn("Supabase deletion warning:", err);
       }
     }
 
     if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("dcmms_custom_profiles");
-      if (stored) {
+      const storedCustom = localStorage.getItem("dcmms_custom_profiles");
+      if (storedCustom) {
         try {
-          let list = JSON.parse(stored);
-          list = list.filter((o: any) => o.id !== officer.id);
+          let list = JSON.parse(storedCustom);
+          list = list.filter((o: any) => o.id !== officer.id && o.fullName !== officer.fullName);
           localStorage.setItem("dcmms_custom_profiles", JSON.stringify(list));
+        } catch (e) {}
+      }
+
+      const storedInv = localStorage.getItem("dcmms_investigation_officers");
+      if (storedInv) {
+        try {
+          let list = JSON.parse(storedInv);
+          list = list.filter((o: any) => o.id !== officer.id && o.fullName !== officer.fullName);
+          localStorage.setItem("dcmms_investigation_officers", JSON.stringify(list));
         } catch (e) {}
       }
     }
@@ -1316,7 +1594,7 @@ export default function InvestigationPage() {
                             <td className="text-center actions-cell">
                               <button
                                 className="btn-action-view"
-                                onClick={() => handleOpenCaseModal(item)}
+                                onClick={() => router.push(`/investigation/add-details?caseNo=${item.inquiryNo}`)}
                                 title="Update Investigation Details"
                                 style={{ display: "inline-flex", gap: "6px", alignItems: "center", padding: "8px 14px", backgroundColor: "#4f46e5", color: "#ffffff", borderRadius: "6px", fontWeight: 600 }}
                               >
@@ -1366,28 +1644,40 @@ export default function InvestigationPage() {
                       className="search-input"
                     />
                   </div>
-                  <button
-                    className="btn-new-letter"
-                    onClick={() => {
-                      setIsOfficerEditMode(false);
-                      setEditingOfficerId(null);
-                      setOfficerNameForm("");
-                      setOfficerNicForm("");
-                      setOfficerRoleTypeForm("Member");
-                      setStudiedSchoolsForm([]);
-                      setNewStudiedSchoolInput("");
-                      setChildrenSchoolsForm([]);
-                      setNewChildrenSchoolInput("");
-                      setOfficerEmailForm("");
-                      setOfficerStatusForm("Active");
-                      setOfficerErrors({});
-                      setIsOfficerModalOpen(true);
-                    }}
-                    style={{ padding: "10px 18px", fontSize: "14px", display: "inline-flex", alignItems: "center", gap: "8px" }}
-                  >
-                    <UserPlus size={16} />
-                    <span>{lang === "si" ? "නිලධාරියෙකු ලියාපදිංචි කරන්න" : "Register Officer"}</span>
-                  </button>
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      className="btn-new-letter"
+                      onClick={() => router.push("/investigation/officer-registration")}
+                      style={{ padding: "10px 18px", fontSize: "14px", display: "inline-flex", alignItems: "center", gap: "8px", backgroundColor: "#4f46e5", color: "#ffffff" }}
+                    >
+                      <UserPlus size={16} />
+                      <span>{lang === "si" ? "ලියාපදිංචි කිරීමේ වෙනම පිටුව" : "Register Officer (Separate Page)"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-new-letter"
+                      onClick={() => {
+                        setIsOfficerEditMode(false);
+                        setEditingOfficerId(null);
+                        setOfficerNameForm("");
+                        setOfficerNicForm("");
+                        setOfficerRoleTypeForm("Member");
+                        setStudiedSchoolsForm([]);
+                        setNewStudiedSchoolInput("");
+                        setChildrenSchoolsForm([]);
+                        setNewChildrenSchoolInput("");
+                        setOfficerEmailForm("");
+                        setOfficerStatusForm("Active");
+                        setOfficerErrors({});
+                        setIsOfficerModalOpen(true);
+                      }}
+                      style={{ padding: "10px 18px", fontSize: "14px", display: "inline-flex", alignItems: "center", gap: "8px", backgroundColor: "#f1f5f9", color: "#334155", border: "1px solid #cbd5e1" }}
+                    >
+                      <UserPlus size={16} />
+                      <span>{lang === "si" ? "ඉක්මන් ඇතුළත් කිරීම" : "Quick Add Modal"}</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -1630,13 +1920,6 @@ export default function InvestigationPage() {
                                 </span>
                                 <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "13px" }}>{officer.address || "—"}</span>
                               </div>
-
-                              <div className="detail-field">
-                                <span style={{ fontSize: "11px", color: "#64748b", display: "flex", alignItems: "center", gap: "4px", marginBottom: "2px" }}>
-                                  <CalendarIcon size={12} /> {lang === "si" ? "පත්වීම් දිනය" : "Appointment Date"}
-                                </span>
-                                <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "13px" }}>{officer.appointment_date || officer.appointmentDate || "—"}</span>
-                              </div>
                             </div>
                           </div>
                         ))}
@@ -1647,31 +1930,150 @@ export default function InvestigationPage() {
                         <span style={{ fontSize: "13px" }}>No specific accused officer personal record registered for this inquiry yet.</span>
                       </div>
                     )}
+                  </div>
 
-                    {/* Timeline Action Logs */}
-                    {subjectActions.length > 0 && (
-                      <div style={{ marginTop: "18px", borderTop: "1px solid #e2e8f0", paddingTop: "14px" }}>
-                        <span style={{ fontSize: "12px", color: "#475569", display: "block", marginBottom: "10px", fontWeight: 700 }}>
-                          {lang === "si" ? "පූර්ව ක්‍රියාමාර්ග ඉතිහාසය" : "Subject Branch Action History Log"}
-                        </span>
-                        <div style={{ maxHeight: "140px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "8px" }}>
-                          {subjectActions.map((act, i) => (
-                            <div key={i} style={{ fontSize: "12px", display: "flex", alignItems: "flex-start", gap: "10px", backgroundColor: "#f8fafc", padding: "8px 12px", borderRadius: "6px", border: "1px solid #e2e8f0" }}>
-                              <span style={{ color: "#64748b", fontWeight: 600, whiteSpace: "nowrap", backgroundColor: "#e2e8f0", padding: "2px 6px", borderRadius: "4px" }}>
-                                {act.received_date || act.receivedDate || "Logged"}
-                              </span>
-                              <div>
-                                <span style={{ fontWeight: 700, color: "#1e293b", marginRight: "6px" }}>
-                                  [{act.report_state || act.reportState}]:
-                                </span>
-                                <span style={{ color: "#334155" }}>{act.step_taken || act.stepTaken}</span>
-                                {act.special_notes && <div style={{ color: "#64748b", fontStyle: "italic", marginTop: "2px" }}>Note: {act.special_notes}</div>}
-                              </div>
-                            </div>
-                          ))}
+                  {/* ==================== INVESTIGATION ADMIN <-> SUBJECT OFFICER DATA FLOW ==================== */}
+                  <div style={{ backgroundColor: "#ffffff", padding: "18px", borderRadius: "12px", border: "1px solid #cbd5e1", display: "flex", flexDirection: "column", gap: "14px" }}>
+                    
+                    {/* Header */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #e2e8f0", paddingBottom: "10px" }}>
+                      <h4 style={{ margin: 0, fontSize: "15px", color: "#0369a1", fontWeight: 700, display: "flex", alignItems: "center", gap: "8px" }}>
+                        <Send size={18} style={{ color: "#0284c7" }} />
+                        <span>Investigation Administrator &amp; Subject Officer Data Flow</span>
+                      </h4>
+                      <span style={{ fontSize: "11px", fontWeight: 700, padding: "3px 10px", borderRadius: "12px", backgroundColor: existingAssignment?.reportContent ? "#dcfce7" : "#e0f2fe", color: existingAssignment?.reportContent ? "#166534" : "#0369a1" }}>
+                        {existingAssignment?.reportContent ? "✓ Report Added to Case" : "Data Flow In Progress"}
+                      </span>
+                    </div>
+
+                    {/* FLOW 1: Submit Assigned Officers (Investigation Admin -> Subject Officer) */}
+                    <div style={{ backgroundColor: "#f8fafc", padding: "12px", borderRadius: "8px", border: "1px solid #e2e8f0", display: "flex", flexDirection: "column", gap: "8px" }}>
+                      <div style={{ fontSize: "12px", fontWeight: 700, color: "#1e1b4b", display: "flex", alignItems: "center", gap: "6px" }}>
+                        <UserPlus size={14} style={{ color: "#4f46e5" }} />
+                        <span>1. Submit Assigned Officers (Admin ➔ Subject Officer)</span>
+                      </div>
+                      <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                        <input
+                          type="text"
+                          placeholder="Enter / Select assigned officer name..."
+                          value={subjOfficerName}
+                          onChange={(e) => setSubjOfficerName(e.target.value)}
+                          style={{ flex: 1, minWidth: "200px", padding: "7px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "12px", backgroundColor: "#ffffff" }}
+                        />
+                        <button
+                          type="button"
+                          onClick={handleStep1SubmitOfficers}
+                          style={{ padding: "7px 14px", backgroundColor: "#4f46e5", color: "#ffffff", border: "none", borderRadius: "6px", fontWeight: 600, fontSize: "12px", cursor: "pointer" }}
+                        >
+                          Submit Assigned Officers
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* FLOW 2: Appointment Date & Report Due Date (Subject Officer ➔ Investigation Admin) */}
+                    <div style={{ backgroundColor: "#f0f9ff", padding: "12px", borderRadius: "8px", border: "1px solid #bae6fd", display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <div style={{ fontSize: "12px", fontWeight: 700, color: "#0369a1", display: "flex", alignItems: "center", gap: "6px" }}>
+                        <CalendarIcon size={14} style={{ color: "#0284c7" }} />
+                        <span>2. Appointment Date &amp; Report Due Date (Received from Subject Officer)</span>
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", fontSize: "12px", color: "#334155" }}>
+                        <div>📅 Appointment Date: <strong style={{ color: "#0369a1" }}>{step2AppointmentDate || existingAssignment?.appointmentDate || "Pending Subject Officer"}</strong></div>
+                        <div>⏳ Report Due Date: <strong style={{ color: "#0369a1" }}>{step2ReportDueDate || existingAssignment?.reportDueDate || "Pending Subject Officer"}</strong></div>
+                      </div>
+                    </div>
+
+                    {/* FLOW 3 & 4: Extension of Dates (Admin ➔ Subject) & Certification (Subject ➔ Admin) */}
+                    <div style={{ backgroundColor: "#fffbeb", padding: "12px", borderRadius: "8px", border: "1px solid #fef3c7", display: "flex", flexDirection: "column", gap: "8px" }}>
+                      <div style={{ fontSize: "12px", fontWeight: 700, color: "#b45309", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <Clock size={14} />
+                          <span>3 &amp; 4. Extension of Dates (Start/End Date, Term: First/Second/Third) &amp; Certification</span>
+                        </div>
+                        {step3ExtensionCertified && (
+                          <span style={{ fontSize: "11px", color: "#166534", backgroundColor: "#dcfce7", padding: "2px 8px", borderRadius: "6px" }}>
+                            ✓ Extension Certified
+                          </span>
+                        )}
+                      </div>
+
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "8px" }}>
+                        <div>
+                          <label style={{ fontSize: "11px", fontWeight: 600, color: "#475569" }}>Extension Term</label>
+                          <select
+                            value={step3ExtensionTerm}
+                            onChange={(e) => setStep3ExtensionTerm(e.target.value as any)}
+                            style={{ width: "100%", padding: "6px 8px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "12px", backgroundColor: "#ffffff" }}
+                          >
+                            <option value="None">None</option>
+                            <option value="First">First Term (පළමු වාරය)</option>
+                            <option value="Second">Second Term (දෙවන වාරය)</option>
+                            <option value="Third">Third Term (තෙවන වාරය)</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label style={{ fontSize: "11px", fontWeight: 600, color: "#475569" }}>Start Date</label>
+                          <input
+                            type="date"
+                            value={step3ExtensionStartDate}
+                            onChange={(e) => setStep3ExtensionStartDate(e.target.value)}
+                            style={{ width: "100%", padding: "6px 8px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "12px", backgroundColor: "#ffffff" }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: "11px", fontWeight: 600, color: "#475569" }}>End Date</label>
+                          <input
+                            type="date"
+                            value={step3ExtensionEndDate}
+                            onChange={(e) => setStep3ExtensionEndDate(e.target.value)}
+                            style={{ width: "100%", padding: "6px 8px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "12px", backgroundColor: "#ffffff" }}
+                          />
                         </div>
                       </div>
+
+                      <button
+                        type="button"
+                        onClick={handleStep3RequestExtension}
+                        style={{ padding: "6px 12px", backgroundColor: "#d97706", color: "#ffffff", border: "none", borderRadius: "6px", fontWeight: 600, fontSize: "12px", cursor: "pointer", alignSelf: "flex-start" }}
+                      >
+                        Send Extension Request to Subject Officer
+                      </button>
+                    </div>
+
+                    {/* FLOW 5: Report Submit Date (Admin ➔ Subject Officer) */}
+                    <div style={{ backgroundColor: "#f0fdf4", padding: "12px", borderRadius: "8px", border: "1px solid #bbf7d0", display: "flex", flexDirection: "column", gap: "8px" }}>
+                      <div style={{ fontSize: "12px", fontWeight: 700, color: "#166534", display: "flex", alignItems: "center", gap: "6px" }}>
+                        <FileCheck size={14} />
+                        <span>5. Send Report Submit Date (Admin ➔ Subject Officer)</span>
+                      </div>
+                      <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                        <input
+                          type="date"
+                          value={step4ApprovalDate}
+                          onChange={(e) => setStep4ApprovalDate(e.target.value)}
+                          style={{ padding: "7px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "12px", backgroundColor: "#ffffff" }}
+                        />
+                        <button
+                          type="button"
+                          onClick={handleStep4SubmitFinalReport}
+                          style={{ padding: "7px 14px", backgroundColor: "#16a34a", color: "#ffffff", border: "none", borderRadius: "6px", fontWeight: 600, fontSize: "12px", cursor: "pointer" }}
+                        >
+                          Send Report Submit Date
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* DISPLAY SUBMITTED REPORT FROM SUBJECT OFFICER (FLOW 6) */}
+                    {existingAssignment?.reportContent && (
+                      <div style={{ backgroundColor: "#ffffff", padding: "12px 14px", borderRadius: "8px", border: "1px solid #4f46e5" }}>
+                        <div style={{ fontWeight: 700, color: "#4338ca", fontSize: "12px", marginBottom: "4px" }}>
+                          📄 Investigation Report Added by Subject Officer (Submitted on {existingAssignment.reportSubmitDate || "recent"}):
+                        </div>
+                        <p style={{ margin: 0, fontSize: "13px", color: "#1e293b", whiteSpace: "pre-wrap" }}>
+                          {existingAssignment.reportContent}
+                        </p>
+                      </div>
                     )}
+
                   </div>
 
                   {/* Add/Update Investigation Progress Form Section */}
@@ -1840,22 +2242,22 @@ export default function InvestigationPage() {
 
       {/* ==================== OFFICER REGISTER/EDIT MODAL ==================== */}
       {isOfficerModalOpen && (
-        <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="officer-modal-title">
-          <div className="modal-content-wrapper premium-modal" style={{ maxWidth: "600px", width: "95%", borderRadius: "16px", overflow: "hidden", backgroundColor: "#ffffff", boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)" }}>
+        <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="officer-modal-title" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div className="modal-content-wrapper premium-modal" style={{ maxWidth: "780px", width: "95%", maxHeight: "92vh", borderRadius: "16px", overflow: "hidden", backgroundColor: "#ffffff", boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)", display: "flex", flexDirection: "column" }}>
             
             {/* Modal Header */}
-            <header className="modal-header" style={{ padding: "18px 24px", backgroundColor: "#1e1b4b", color: "#ffffff", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-                <div style={{ width: "40px", height: "40px", borderRadius: "10px", backgroundColor: "rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <UserPlus size={22} style={{ color: "#818cf8" }} />
+            <header className="modal-header" style={{ padding: "14px 20px", backgroundColor: "#1e1b4b", color: "#ffffff", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
+              <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                <div style={{ width: "36px", height: "36px", borderRadius: "8px", backgroundColor: "rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <UserPlus size={20} style={{ color: "#818cf8" }} />
                 </div>
                 <div>
-                  <h3 id="officer-modal-title" className="modal-title" style={{ color: "#ffffff", margin: 0, fontSize: "17px", fontWeight: 700 }}>
+                  <h3 id="officer-modal-title" className="modal-title" style={{ color: "#ffffff", margin: 0, fontSize: "16px", fontWeight: 700 }}>
                     {isOfficerEditMode 
                       ? (lang === "si" ? "නිලධාරී තොරතුරු සංස්කරණය" : "Edit Investigation Officer") 
                       : (lang === "si" ? "නව විමර්ශන නිලධාරී ලියාපදිංචිය" : "Register Investigation Officer")}
                   </h3>
-                  <p style={{ margin: 0, fontSize: "12px", color: "#cbd5e1" }}>
+                  <p style={{ margin: 0, fontSize: "11px", color: "#cbd5e1" }}>
                     {lang === "si" ? "පහත තොරතුරු සම්පූර්ණ කර පද්ධතියට එක් කරන්න" : "Fill out officer credentials & school details below"}
                   </p>
                 </div>
@@ -1865,29 +2267,29 @@ export default function InvestigationPage() {
                 className="modal-close-btn"
                 onClick={() => setIsOfficerModalOpen(false)}
                 aria-label="Close modal"
-                style={{ color: "#ffffff", backgroundColor: "rgba(255,255,255,0.1)", border: "none", padding: "8px", borderRadius: "50%", cursor: "pointer", transition: "background-color 0.2s" }}
+                style={{ color: "#ffffff", backgroundColor: "rgba(255,255,255,0.1)", border: "none", padding: "6px", borderRadius: "50%", cursor: "pointer" }}
               >
-                <X size={18} />
+                <X size={16} />
               </button>
             </header>
 
-            <form onSubmit={handleSaveOfficer} style={{ padding: "20px 24px", backgroundColor: "#ffffff" }}>
+            <form onSubmit={handleSaveOfficer} style={{ padding: "16px 20px", backgroundColor: "#ffffff", display: "flex", flexDirection: "column", overflowY: "auto" }}>
               
-              {/* Dynamic Live Preview Header Card */}
-              <div style={{ display: "flex", alignItems: "center", gap: "14px", backgroundColor: "#f8fafc", padding: "14px 16px", borderRadius: "12px", border: "1px solid #e2e8f0", marginBottom: "20px" }}>
-                <div style={{ width: "48px", height: "48px", borderRadius: "50%", backgroundColor: officerRoleTypeForm === "Chairman" ? "#d97706" : "#4f46e5", color: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "16px", flexShrink: 0, boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }}>
+              {/* Dynamic Live Preview Header Banner */}
+              <div style={{ display: "flex", alignItems: "center", gap: "12px", backgroundColor: "#f8fafc", padding: "10px 14px", borderRadius: "10px", border: "1px solid #e2e8f0", marginBottom: "14px" }}>
+                <div style={{ width: "40px", height: "40px", borderRadius: "50%", backgroundColor: officerRoleTypeForm === "Chairman" ? "#d97706" : "#4f46e5", color: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "15px", flexShrink: 0 }}>
                   {getInitials(officerNameForm)}
                 </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-                    <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "15px" }}>
+                <div style={{ flex: 1, minWidth: 0, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "14px", marginRight: "8px" }}>
                       {officerNameForm || (lang === "si" ? "නව නිලධාරියාගේ නම" : "New Officer Name")}
                     </span>
                     <span style={{ fontSize: "11px", backgroundColor: officerRoleTypeForm === "Chairman" ? "#fef3c7" : "#e0e7ff", color: officerRoleTypeForm === "Chairman" ? "#92400e" : "#3730a3", padding: "2px 8px", borderRadius: "12px", fontWeight: 700 }}>
                       {officerRoleTypeForm}
                     </span>
                   </div>
-                  <div style={{ display: "flex", gap: "12px", marginTop: "4px", fontSize: "12px", color: "#64748b" }}>
+                  <div style={{ display: "flex", gap: "10px", fontSize: "12px", color: "#64748b" }}>
                     <span>NIC: <strong style={{ color: "#334155" }}>{officerNicForm || "N/A"}</strong></span>
                     <span>•</span>
                     <span>Status: <strong style={{ color: officerStatusForm === "Active" ? "#16a34a" : "#dc2626" }}>{officerStatusForm}</strong></span>
@@ -1895,251 +2297,240 @@ export default function InvestigationPage() {
                 </div>
               </div>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
+              {/* Side-by-Side 2-Column Main Form Grid (NO SCROLL NEEDED) */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", alignItems: "start" }}>
                 
-                {/* Section 1: Basic Information */}
-                <div>
-                  <h4 style={{ fontSize: "13px", fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "12px", display: "flex", alignItems: "center", gap: "6px" }}>
-                    <User size={15} style={{ color: "#4f46e5" }} />
-                    {lang === "si" ? "1. මූලික තොරතුරු" : "1. Basic Details"}
+                {/* LEFT COLUMN: Basic Information */}
+                <div style={{ backgroundColor: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "14px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                  <h4 style={{ fontSize: "12px", fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 4px 0", display: "flex", alignItems: "center", gap: "6px" }}>
+                    <User size={14} style={{ color: "#4f46e5" }} />
+                    {lang === "si" ? "1. මූලික තොරතුරු" : "1. Basic Credentials"}
                   </h4>
 
-                  <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                    
-                    {/* Officer Name */}
+                  {/* Officer Name */}
+                  <div className="form-field-group">
+                    <label htmlFor="formOfficerName" className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "12px" }}>
+                      {lang === "si" ? "නිලධාරියාගේ නම" : "Officer Name"} <span style={{ color: "#dc2626" }}>*</span>
+                    </label>
+                    <input
+                      id="formOfficerName"
+                      type="text"
+                      value={officerNameForm}
+                      onChange={(e) => setOfficerNameForm(e.target.value)}
+                      placeholder="e.g., Ranjith Bandara"
+                      className={`field-input${officerErrors.name ? " error" : ""}`}
+                      style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", width: "100%", fontSize: "13px" }}
+                    />
+                    {officerErrors.name && <span style={{ color: "#ef4444", fontSize: "11px", marginTop: "2px", display: "block" }}>{officerErrors.name}</span>}
+                  </div>
+
+                  {/* NIC No & Role Grid Row */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                    {/* NIC No */}
                     <div className="form-field-group">
-                      <label htmlFor="formOfficerName" className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "13px" }}>
-                        {lang === "si" ? "නිලධාරියාගේ නම" : "Officer Name"} <span style={{ color: "#dc2626" }}>*</span>
+                      <label htmlFor="formOfficerNic" className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "12px" }}>
+                        {lang === "si" ? "NIC අංකය" : "NIC No"} <span style={{ color: "#dc2626" }}>*</span>
                       </label>
                       <input
-                        id="formOfficerName"
+                        id="formOfficerNic"
                         type="text"
-                        value={officerNameForm}
-                        onChange={(e) => setOfficerNameForm(e.target.value)}
-                        placeholder="e.g., Ranjith Bandara"
-                        className={`field-input${officerErrors.name ? " error" : ""}`}
-                        style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", width: "100%", fontSize: "14px" }}
+                        value={officerNicForm}
+                        onChange={(e) => setOfficerNicForm(e.target.value)}
+                        placeholder="e.g., 198512345678"
+                        className={`field-input${officerErrors.nic ? " error" : ""}`}
+                        style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", width: "100%", fontSize: "13px" }}
                       />
-                      {officerErrors.name && <span style={{ color: "#ef4444", fontSize: "12px", marginTop: "4px", display: "block" }}>{officerErrors.name}</span>}
+                      {officerErrors.nic && <span style={{ color: "#ef4444", fontSize: "11px", marginTop: "2px", display: "block" }}>{officerErrors.nic}</span>}
                     </div>
 
-                    {/* NIC No & Role Grid Row */}
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                      
-                      {/* NIC No */}
-                      <div className="form-field-group">
-                        <label htmlFor="formOfficerNic" className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "13px" }}>
-                          {lang === "si" ? "ජාතික හැඳුනුම්පත් අංකය (NIC No)" : "NIC No"} <span style={{ color: "#dc2626" }}>*</span>
-                        </label>
-                        <input
-                          id="formOfficerNic"
-                          type="text"
-                          value={officerNicForm}
-                          onChange={(e) => setOfficerNicForm(e.target.value)}
-                          placeholder="e.g., 198512345678"
-                          className={`field-input${officerErrors.nic ? " error" : ""}`}
-                          style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", width: "100%", fontSize: "14px" }}
-                        />
-                        {officerErrors.nic && <span style={{ color: "#ef4444", fontSize: "12px", marginTop: "4px", display: "block" }}>{officerErrors.nic}</span>}
-                      </div>
-
-                      {/* Role / Position */}
-                      <div className="form-field-group">
-                        <label htmlFor="formOfficerRoleType" className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "13px" }}>
-                          {lang === "si" ? "තනතුර / කාර්යභාරය" : "Role / Position"} <span style={{ color: "#dc2626" }}>*</span>
-                        </label>
-                        <select
-                          id="formOfficerRoleType"
-                          value={officerRoleTypeForm}
-                          onChange={(e) => setOfficerRoleTypeForm(e.target.value as "Chairman" | "Member")}
-                          className="field-select"
-                          style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", width: "100%", backgroundColor: "#ffffff", fontSize: "14px", fontWeight: 600 }}
-                        >
-                          <option value="Chairman">{lang === "si" ? "සභාපති (Chairman)" : "Chairman"}</option>
-                          <option value="Member">{lang === "si" ? "සාමාජික (Member)" : "Member"}</option>
-                        </select>
-                      </div>
+                    {/* Role / Position */}
+                    <div className="form-field-group">
+                      <label htmlFor="formOfficerRoleType" className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "12px" }}>
+                        {lang === "si" ? "තනතුර (Role)" : "Role / Position"} <span style={{ color: "#dc2626" }}>*</span>
+                      </label>
+                      <select
+                        id="formOfficerRoleType"
+                        value={officerRoleTypeForm}
+                        onChange={(e) => setOfficerRoleTypeForm(e.target.value as "Chairman" | "Member")}
+                        className="field-select"
+                        style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", width: "100%", backgroundColor: "#ffffff", fontSize: "13px", fontWeight: 600 }}
+                      >
+                        <option value="Chairman">Chairman</option>
+                        <option value="Member">Member</option>
+                      </select>
                     </div>
-
-                    {/* Email & Status Grid Row */}
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                      
-                      {/* Email Address */}
-                      <div className="form-field-group">
-                        <label htmlFor="formOfficerEmail" className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "13px" }}>
-                          {lang === "si" ? "විද්‍යුත් තැපැල් ලිපිනය" : "Email Address"} <span style={{ color: "#dc2626" }}>*</span>
-                        </label>
-                        <input
-                          id="formOfficerEmail"
-                          type="text"
-                          value={officerEmailForm}
-                          onChange={(e) => setOfficerEmailForm(e.target.value)}
-                          placeholder="e.g., ranjith@moe.gov.lk"
-                          className={`field-input${officerErrors.email ? " error" : ""}`}
-                          disabled={isOfficerEditMode}
-                          style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", width: "100%", fontSize: "14px" }}
-                        />
-                        {officerErrors.email && <span style={{ color: "#ef4444", fontSize: "12px", marginTop: "4px", display: "block" }}>{officerErrors.email}</span>}
-                      </div>
-
-                      {/* Status */}
-                      <div className="form-field-group">
-                        <label htmlFor="formOfficerStatus" className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "13px" }}>
-                          {lang === "si" ? "තත්ත්වය" : "Account Status"}
-                        </label>
-                        <select
-                          id="formOfficerStatus"
-                          value={officerStatusForm}
-                          onChange={(e) => setOfficerStatusForm(e.target.value as any)}
-                          className="field-select"
-                          style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", width: "100%", backgroundColor: "#ffffff", fontSize: "14px" }}
-                        >
-                          <option value="Active">Active</option>
-                          <option value="Inactive">Inactive</option>
-                        </select>
-                      </div>
-                    </div>
-
                   </div>
+
+                  {/* Email & Status Grid Row */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                    {/* Email Address */}
+                    <div className="form-field-group">
+                      <label htmlFor="formOfficerEmail" className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "12px" }}>
+                        {lang === "si" ? "ඊමේල් ලිපිනය" : "Email Address"} <span style={{ color: "#dc2626" }}>*</span>
+                      </label>
+                      <input
+                        id="formOfficerEmail"
+                        type="text"
+                        value={officerEmailForm}
+                        onChange={(e) => setOfficerEmailForm(e.target.value)}
+                        placeholder="ranjith@moe.gov.lk"
+                        className={`field-input${officerErrors.email ? " error" : ""}`}
+                        disabled={isOfficerEditMode}
+                        style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", width: "100%", fontSize: "13px" }}
+                      />
+                      {officerErrors.email && <span style={{ color: "#ef4444", fontSize: "11px", marginTop: "2px", display: "block" }}>{officerErrors.email}</span>}
+                    </div>
+
+                    {/* Status */}
+                    <div className="form-field-group">
+                      <label htmlFor="formOfficerStatus" className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "12px" }}>
+                        {lang === "si" ? "තත්ත්වය" : "Status"}
+                      </label>
+                      <select
+                        id="formOfficerStatus"
+                        value={officerStatusForm}
+                        onChange={(e) => setOfficerStatusForm(e.target.value as any)}
+                        className="field-select"
+                        style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", width: "100%", backgroundColor: "#ffffff", fontSize: "13px" }}
+                      >
+                        <option value="Active">Active</option>
+                        <option value="Inactive">Inactive</option>
+                      </select>
+                    </div>
+                  </div>
+
                 </div>
 
-                <div style={{ height: "1px", backgroundColor: "#e2e8f0" }} />
-
-                {/* Section 2: Educational & Background Details */}
-                <div>
-                  <h4 style={{ fontSize: "13px", fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "12px", display: "flex", alignItems: "center", gap: "6px" }}>
-                    <GraduationCap size={16} style={{ color: "#0284c7" }} />
+                {/* RIGHT COLUMN: Educational & School Details */}
+                <div style={{ backgroundColor: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "14px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                  <h4 style={{ fontSize: "12px", fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 4px 0", display: "flex", alignItems: "center", gap: "6px" }}>
+                    <GraduationCap size={15} style={{ color: "#0284c7" }} />
                     {lang === "si" ? "2. අධ්‍යාපනික සහ පාසල් තොරතුරු" : "2. School Background"}
                   </h4>
 
-                  <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-                    
-                    {/* Studied Schools (Dynamic list) */}
-                    <div className="form-field-group">
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-                        <label className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "13px", margin: 0 }}>
-                          {lang === "si" ? "ඉගෙනුම ලැබූ පාසල්" : "Studied Schools"}
-                        </label>
-                        <span style={{ fontSize: "11px", color: "#0284c7", fontWeight: 600, backgroundColor: "#e0f2fe", padding: "1px 8px", borderRadius: "10px" }}>
-                          {studiedSchoolsForm.length} {lang === "si" ? "එක්කළ පාසල්" : "added"}
-                        </span>
-                      </div>
-
-                      <div style={{ display: "flex", gap: "8px" }}>
-                        <input
-                          type="text"
-                          value={newStudiedSchoolInput}
-                          onChange={(e) => setNewStudiedSchoolInput(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              handleAddStudiedSchool();
-                            }
-                          }}
-                          placeholder={lang === "si" ? "පාසලක නමක් ඇතුළත් කර Enter ඔබන්න..." : "Type school name & press Enter..."}
-                          style={{ padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", flex: 1, fontSize: "13px" }}
-                        />
-                        <button
-                          type="button"
-                          onClick={handleAddStudiedSchool}
-                          style={{ padding: "9px 16px", borderRadius: "8px", backgroundColor: "#0284c7", color: "#ffffff", border: "none", fontWeight: 600, fontSize: "13px", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "4px" }}
-                        >
-                          {lang === "si" ? "+ එකතු කරන්න" : "+ Add School"}
-                        </button>
-                      </div>
-
-                      {studiedSchoolsForm.length > 0 ? (
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", backgroundColor: "#f8fafc", padding: "10px", borderRadius: "8px", border: "1px solid #e2e8f0", marginTop: "8px" }}>
-                          {studiedSchoolsForm.map((school, index) => (
-                            <span key={index} style={{ display: "inline-flex", alignItems: "center", gap: "6px", backgroundColor: "#e0f2fe", color: "#0369a1", padding: "4px 10px", borderRadius: "16px", fontSize: "12px", fontWeight: 600 }}>
-                              {school}
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveStudiedSchool(index)}
-                                title="Remove school"
-                                style={{ background: "none", border: "none", color: "#0369a1", cursor: "pointer", display: "flex", alignItems: "center", padding: 0 }}
-                              >
-                                <X size={13} />
-                              </button>
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <span style={{ fontSize: "12px", color: "#94a3b8", display: "block", marginTop: "4px", fontStyle: "italic" }}>
-                          {lang === "si" ? "පාසල් ඇතුළත් කර නොමැත." : "No schools added yet."}
-                        </span>
-                      )}
+                  {/* Studied Schools */}
+                  <div className="form-field-group">
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                      <label className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "12px", margin: 0 }}>
+                        {lang === "si" ? "ඉගෙනුම ලැබූ පාසල්" : "Studied Schools"}
+                      </label>
+                      <span style={{ fontSize: "10px", color: "#0284c7", fontWeight: 700, backgroundColor: "#e0f2fe", padding: "1px 6px", borderRadius: "8px" }}>
+                        {studiedSchoolsForm.length} added
+                      </span>
                     </div>
 
-                    {/* Children's Schools (Dynamic list) */}
-                    <div className="form-field-group">
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-                        <label className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "13px", margin: 0 }}>
-                          {lang === "si" ? "දරුවන්ගේ පාසල්" : "Children's Schools"}
-                        </label>
-                        <span style={{ fontSize: "11px", color: "#d97706", fontWeight: 600, backgroundColor: "#fef3c7", padding: "1px 8px", borderRadius: "10px" }}>
-                          {childrenSchoolsForm.length} {lang === "si" ? "එක්කළ පාසල්" : "added"}
-                        </span>
-                      </div>
-
-                      <div style={{ display: "flex", gap: "8px" }}>
-                        <input
-                          type="text"
-                          value={newChildrenSchoolInput}
-                          onChange={(e) => setNewChildrenSchoolInput(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              handleAddChildrenSchool();
-                            }
-                          }}
-                          placeholder={lang === "si" ? "දරුවාගේ පාසලක නමක් ඇතුළත් කරන්න..." : "Type school name & press Enter..."}
-                          style={{ padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", flex: 1, fontSize: "13px" }}
-                        />
-                        <button
-                          type="button"
-                          onClick={handleAddChildrenSchool}
-                          style={{ padding: "9px 16px", borderRadius: "8px", backgroundColor: "#d97706", color: "#ffffff", border: "none", fontWeight: 600, fontSize: "13px", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "4px" }}
-                        >
-                          {lang === "si" ? "+ එකතු කරන්න" : "+ Add School"}
-                        </button>
-                      </div>
-
-                      {childrenSchoolsForm.length > 0 ? (
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", backgroundColor: "#f8fafc", padding: "10px", borderRadius: "8px", border: "1px solid #e2e8f0", marginTop: "8px" }}>
-                          {childrenSchoolsForm.map((school, index) => (
-                            <span key={index} style={{ display: "inline-flex", alignItems: "center", gap: "6px", backgroundColor: "#fef3c7", color: "#b45309", padding: "4px 10px", borderRadius: "16px", fontSize: "12px", fontWeight: 600 }}>
-                              {school}
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveChildrenSchool(index)}
-                                title="Remove school"
-                                style={{ background: "none", border: "none", color: "#b45309", cursor: "pointer", display: "flex", alignItems: "center", padding: 0 }}
-                              >
-                                <X size={13} />
-                              </button>
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <span style={{ fontSize: "12px", color: "#94a3b8", display: "block", marginTop: "4px", fontStyle: "italic" }}>
-                          {lang === "si" ? "පාසල් ඇතුළත් කර නොමැත." : "No schools added yet."}
-                        </span>
-                      )}
+                    <div style={{ display: "flex", gap: "6px" }}>
+                      <input
+                        type="text"
+                        value={newStudiedSchoolInput}
+                        onChange={(e) => setNewStudiedSchoolInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleAddStudiedSchool();
+                          }
+                        }}
+                        placeholder={lang === "si" ? "පාසල + Enter" : "School name & Enter..."}
+                        style={{ padding: "7px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", flex: 1, fontSize: "12px" }}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddStudiedSchool}
+                        style={{ padding: "7px 12px", borderRadius: "6px", backgroundColor: "#0284c7", color: "#ffffff", border: "none", fontWeight: 600, fontSize: "12px", cursor: "pointer" }}
+                      >
+                        + Add
+                      </button>
                     </div>
 
+                    {studiedSchoolsForm.length > 0 ? (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", backgroundColor: "#f8fafc", padding: "6px 8px", borderRadius: "6px", border: "1px solid #e2e8f0", marginTop: "6px", maxHeight: "54px", overflowY: "auto" }}>
+                        {studiedSchoolsForm.map((school, index) => (
+                          <span key={index} style={{ display: "inline-flex", alignItems: "center", gap: "4px", backgroundColor: "#e0f2fe", color: "#0369a1", padding: "2px 8px", borderRadius: "12px", fontSize: "11px", fontWeight: 600 }}>
+                            {school}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveStudiedSchool(index)}
+                              style={{ background: "none", border: "none", color: "#0369a1", cursor: "pointer", display: "flex", padding: 0 }}
+                            >
+                              <X size={12} />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span style={{ fontSize: "11px", color: "#94a3b8", display: "block", marginTop: "3px", fontStyle: "italic" }}>
+                        No schools added yet.
+                      </span>
+                    )}
                   </div>
+
+                  {/* Children's Schools */}
+                  <div className="form-field-group">
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                      <label className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "12px", margin: 0 }}>
+                        {lang === "si" ? "දරුවන්ගේ පාසල්" : "Children's Schools"}
+                      </label>
+                      <span style={{ fontSize: "10px", color: "#d97706", fontWeight: 700, backgroundColor: "#fef3c7", padding: "1px 6px", borderRadius: "8px" }}>
+                        {childrenSchoolsForm.length} added
+                      </span>
+                    </div>
+
+                    <div style={{ display: "flex", gap: "6px" }}>
+                      <input
+                        type="text"
+                        value={newChildrenSchoolInput}
+                        onChange={(e) => setNewChildrenSchoolInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleAddChildrenSchool();
+                          }
+                        }}
+                        placeholder={lang === "si" ? "පාසල + Enter" : "School name & Enter..."}
+                        style={{ padding: "7px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", flex: 1, fontSize: "12px" }}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddChildrenSchool}
+                        style={{ padding: "7px 12px", borderRadius: "6px", backgroundColor: "#d97706", color: "#ffffff", border: "none", fontWeight: 600, fontSize: "12px", cursor: "pointer" }}
+                      >
+                        + Add
+                      </button>
+                    </div>
+
+                    {childrenSchoolsForm.length > 0 ? (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", backgroundColor: "#f8fafc", padding: "6px 8px", borderRadius: "6px", border: "1px solid #e2e8f0", marginTop: "6px", maxHeight: "54px", overflowY: "auto" }}>
+                        {childrenSchoolsForm.map((school, index) => (
+                          <span key={index} style={{ display: "inline-flex", alignItems: "center", gap: "4px", backgroundColor: "#fef3c7", color: "#b45309", padding: "2px 8px", borderRadius: "12px", fontSize: "11px", fontWeight: 600 }}>
+                            {school}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveChildrenSchool(index)}
+                              style={{ background: "none", border: "none", color: "#b45309", cursor: "pointer", display: "flex", padding: 0 }}
+                            >
+                              <X size={12} />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span style={{ fontSize: "11px", color: "#94a3b8", display: "block", marginTop: "3px", fontStyle: "italic" }}>
+                        No schools added yet.
+                      </span>
+                    )}
+                  </div>
+
                 </div>
 
               </div>
 
               {/* Form Footer Buttons */}
-              <footer className="modal-footer" style={{ marginTop: "24px", paddingTop: "16px", borderTop: "1px solid #e2e8f0", display: "flex", justifyContent: "flex-end", gap: "12px" }}>
+              <footer className="modal-footer" style={{ marginTop: "14px", paddingTop: "12px", borderTop: "1px solid #e2e8f0", display: "flex", justifyContent: "flex-end", gap: "10px" }}>
                 <button 
                   type="button" 
                   className="btn-action-cancel"
                   onClick={() => setIsOfficerModalOpen(false)}
-                  style={{ padding: "10px 20px", borderRadius: "8px", backgroundColor: "#f1f5f9", border: "1px solid #cbd5e1", color: "#475569", fontWeight: 600, fontSize: "14px" }}
+                  style={{ padding: "8px 18px", borderRadius: "6px", backgroundColor: "#f1f5f9", border: "1px solid #cbd5e1", color: "#475569", fontWeight: 600, fontSize: "13px" }}
                 >
                   {t("cancelBtn")}
                 </button>
@@ -2147,7 +2538,7 @@ export default function InvestigationPage() {
                   type="submit" 
                   disabled={isSaving}
                   className="btn-new-letter"
-                  style={{ padding: "10px 26px", borderRadius: "8px", backgroundColor: "#4f46e5", color: "#ffffff", fontWeight: 600, fontSize: "14px", display: "inline-flex", alignItems: "center", gap: "8px", boxShadow: "0 2px 4px rgba(79,70,229,0.2)" }}
+                  style={{ padding: "8px 24px", borderRadius: "6px", backgroundColor: "#4f46e5", color: "#ffffff", fontWeight: 600, fontSize: "13px", display: "inline-flex", alignItems: "center", gap: "6px", boxShadow: "0 2px 4px rgba(79,70,229,0.2)" }}
                 >
                   {isSaving ? "Saving..." : (lang === "si" ? "සුරකින්න" : "Save Officer")}
                 </button>

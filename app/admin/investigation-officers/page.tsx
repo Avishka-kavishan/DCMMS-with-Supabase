@@ -2,7 +2,8 @@
 import React, { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import "../../../i18n";
-import { UserPlus, X, Edit, Trash2, Check } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { UserPlus, X, Edit, Trash2, Check, GraduationCap } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 
 interface Officer {
@@ -20,6 +21,7 @@ interface Officer {
 
 export default function InvestigationOfficersPage() {
   const { t } = useTranslation();
+  const router = useRouter();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [officers, setOfficers] = useState<Officer[]>([]);
@@ -40,6 +42,7 @@ export default function InvestigationOfficersPage() {
   const [formEmail, setFormEmail] = useState("");
   const [formStatus, setFormStatus] = useState<"Active" | "Inactive">("Active");
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleAddStudiedSchool = () => {
     const trimmed = newStudiedInput.trim();
@@ -260,26 +263,33 @@ export default function InvestigationOfficersPage() {
     if (!confirm("Are you sure you want to delete this officer?")) return;
 
     // 1. Delete from Supabase if it has a real (non-temp) id
-    if (isSupabaseConfigured && !officer.id.startsWith("inv-")) {
+    if (isSupabaseConfigured && officer.id && !officer.id.startsWith("inv-") && !officer.id.startsWith("off-")) {
       try {
-        const { error } = await supabase.from("dcmms_profiles").delete().eq("id", officer.id);
-        if (error) throw error;
+        await supabase.from("dcmms_profiles").delete().eq("id", officer.id);
+        await supabase.from("dcmms_investigation_officers").delete().eq("id", officer.id);
       } catch (err: any) {
-        console.error("Supabase delete failed:", err?.message ?? err);
+        console.warn("Supabase delete info:", err?.message ?? err);
       }
     }
 
     // 2. Remove from localStorage
     if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("dcmms_custom_profiles");
-      if (stored) {
+      const storedCustom = localStorage.getItem("dcmms_custom_profiles");
+      if (storedCustom) {
         try {
-          let list = JSON.parse(stored) as Officer[];
-          list = list.filter((o) => o.id !== officer.id);
+          let list = JSON.parse(storedCustom) as Officer[];
+          list = list.filter((o) => o.id !== officer.id && o.fullName !== officer.fullName);
           localStorage.setItem("dcmms_custom_profiles", JSON.stringify(list));
-        } catch {
-          /* ignore */
-        }
+        } catch {}
+      }
+
+      const storedInv = localStorage.getItem("dcmms_investigation_officers");
+      if (storedInv) {
+        try {
+          let list = JSON.parse(storedInv);
+          list = list.filter((o: any) => o.id !== officer.id && o.fullName !== officer.fullName);
+          localStorage.setItem("dcmms_investigation_officers", JSON.stringify(list));
+        } catch {}
       }
     }
 
@@ -334,10 +344,16 @@ export default function InvestigationOfficersPage() {
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
-        <button className="btn-admin-add" onClick={openAddModal}>
-          <UserPlus size={18} />
-          {t("addInvestigationOfficer", "Add Investigation Officer")}
-        </button>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          <button className="btn-admin-add" onClick={() => router.push("/admin/investigation-officers/register")} style={{ backgroundColor: "#4f46e5", color: "#ffffff" }}>
+            <UserPlus size={18} />
+            <span>Register Officer (Separate Page)</span>
+          </button>
+          <button className="btn-admin-add" onClick={openAddModal} style={{ backgroundColor: "#f1f5f9", color: "#334155", border: "1px solid #cbd5e1" }}>
+            <UserPlus size={18} />
+            <span>Quick Add Modal</span>
+          </button>
+        </div>
       </div>
 
       {/* Officers Table */}
@@ -436,48 +452,48 @@ export default function InvestigationOfficersPage() {
         </div>
       </section>
 
-      {/* Add/Edit Modal */}
+      {/* Add / Edit Modal */}
       {isModalOpen && (
-        <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-          <div className="modal-card" style={{ backgroundColor: "#ffffff", maxWidth: "600px", width: "95%", borderRadius: "16px", overflow: "hidden", boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)", padding: 0 }}>
+        <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div className="modal-card" style={{ backgroundColor: "#ffffff", maxWidth: "780px", width: "95%", maxHeight: "92vh", borderRadius: "16px", overflow: "hidden", boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)", padding: 0, display: "flex", flexDirection: "column" }}>
             
             {/* Header */}
-            <header style={{ padding: "18px 24px", backgroundColor: "#1e1b4b", color: "#ffffff", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-                <div style={{ width: "40px", height: "40px", borderRadius: "10px", backgroundColor: "rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <UserPlus size={22} style={{ color: "#818cf8" }} />
+            <header style={{ padding: "14px 20px", backgroundColor: "#1e1b4b", color: "#ffffff", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
+              <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                <div style={{ width: "36px", height: "36px", borderRadius: "8px", backgroundColor: "rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <UserPlus size={20} style={{ color: "#818cf8" }} />
                 </div>
                 <div>
-                  <h2 id="modal-title" style={{ color: "#ffffff", margin: 0, fontSize: "17px", fontWeight: 700 }}>
+                  <h2 id="modal-title" style={{ color: "#ffffff", margin: 0, fontSize: "16px", fontWeight: 700 }}>
                     {isEditMode ? "Edit Investigation Officer" : t("addStaffAccountTitle", "Register Investigation Officer")}
                   </h2>
-                  <p style={{ margin: 0, fontSize: "12px", color: "#cbd5e1" }}>
+                  <p style={{ margin: 0, fontSize: "11px", color: "#cbd5e1" }}>
                     Fill out officer credentials &amp; school details below
                   </p>
                 </div>
               </div>
-              <button className="btn-modal-close" onClick={() => setIsModalOpen(false)} aria-label="Close modal" style={{ color: "#ffffff", backgroundColor: "rgba(255,255,255,0.1)", border: "none", padding: "8px", borderRadius: "50%", cursor: "pointer" }}>
-                <X size={20} />
+              <button className="btn-modal-close" onClick={() => setIsModalOpen(false)} aria-label="Close modal" style={{ color: "#ffffff", backgroundColor: "rgba(255,255,255,0.1)", border: "none", padding: "6px", borderRadius: "50%", cursor: "pointer" }}>
+                <X size={16} />
               </button>
             </header>
 
-            <form onSubmit={handleSave} style={{ padding: "20px 24px", backgroundColor: "#ffffff" }}>
+            <form onSubmit={handleSave} style={{ padding: "16px 20px", backgroundColor: "#ffffff", display: "flex", flexDirection: "column", overflowY: "auto" }}>
 
-              {/* Live Preview Card */}
-              <div style={{ display: "flex", alignItems: "center", gap: "14px", backgroundColor: "#f8fafc", padding: "14px 16px", borderRadius: "12px", border: "1px solid #e2e8f0", marginBottom: "20px" }}>
-                <div style={{ width: "48px", height: "48px", borderRadius: "50%", backgroundColor: formOfficerRole === "Chairman" ? "#d97706" : "#4f46e5", color: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "16px", flexShrink: 0, boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }}>
+              {/* Live Preview Card Header */}
+              <div style={{ display: "flex", alignItems: "center", gap: "12px", backgroundColor: "#f8fafc", padding: "10px 14px", borderRadius: "10px", border: "1px solid #e2e8f0", marginBottom: "14px" }}>
+                <div style={{ width: "40px", height: "40px", borderRadius: "50%", backgroundColor: formOfficerRole === "Chairman" ? "#d97706" : "#4f46e5", color: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "15px", flexShrink: 0 }}>
                   {formName ? formName.trim().split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase() : "?"}
                 </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-                    <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "15px" }}>
+                <div style={{ flex: 1, minWidth: 0, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "14px", marginRight: "8px" }}>
                       {formName || "New Officer Name"}
                     </span>
                     <span style={{ fontSize: "11px", backgroundColor: formOfficerRole === "Chairman" ? "#fef3c7" : "#e0e7ff", color: formOfficerRole === "Chairman" ? "#92400e" : "#3730a3", padding: "2px 8px", borderRadius: "12px", fontWeight: 700 }}>
                       {formOfficerRole}
                     </span>
                   </div>
-                  <div style={{ display: "flex", gap: "12px", marginTop: "4px", fontSize: "12px", color: "#64748b" }}>
+                  <div style={{ display: "flex", gap: "10px", fontSize: "12px", color: "#64748b" }}>
                     <span>NIC: <strong style={{ color: "#334155" }}>{formNic || "N/A"}</strong></span>
                     <span>•</span>
                     <span>Status: <strong style={{ color: formStatus === "Active" ? "#16a34a" : "#dc2626" }}>{formStatus}</strong></span>
@@ -485,214 +501,217 @@ export default function InvestigationOfficersPage() {
                 </div>
               </div>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
+              {/* Side-by-Side 2-Column Main Form Grid (NO SCROLL NEEDED) */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", alignItems: "start" }}>
 
-                {/* Section 1: Basic Details */}
-                <div>
-                  <h4 style={{ fontSize: "13px", fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "12px", display: "flex", alignItems: "center", gap: "6px", margin: "0 0 12px" }}>
-                    <UserPlus size={15} style={{ color: "#4f46e5" }} />
+                {/* LEFT COLUMN: Basic Details */}
+                <div style={{ backgroundColor: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "14px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                  <h4 style={{ fontSize: "12px", fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 4px 0", display: "flex", alignItems: "center", gap: "6px" }}>
+                    <UserPlus size={14} style={{ color: "#4f46e5" }} />
                     1. Basic Details
                   </h4>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
 
-                    {/* Officer Name */}
+                  {/* Officer Name */}
+                  <div className="form-field-group">
+                    <label htmlFor="fullName" className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "12px" }}>
+                      Officer Name <span className="required-star">*</span>
+                    </label>
+                    <input
+                      id="fullName"
+                      type="text"
+                      placeholder="e.g. Ranjith Bandara"
+                      value={formName}
+                      onChange={(e) => setFormName(e.target.value)}
+                      className={`field-input ${errors.name ? "field-input-invalid" : ""}`}
+                      style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", width: "100%", fontSize: "13px" }}
+                    />
+                    {errors.name && <span className="field-error-text" style={{ fontSize: "11px", color: "#ef4444" }}>{errors.name}</span>}
+                  </div>
+
+                  {/* NIC No & Role - 2 columns */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
                     <div className="form-field-group">
-                      <label htmlFor="fullName" className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "13px" }}>
-                        Officer Name <span className="required-star">*</span>
+                      <label htmlFor="nicNo" className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "12px" }}>
+                        NIC No <span className="required-star">*</span>
                       </label>
                       <input
-                        id="fullName"
+                        id="nicNo"
                         type="text"
-                        placeholder="e.g. Ranjith Bandara"
-                        value={formName}
-                        onChange={(e) => setFormName(e.target.value)}
-                        className={`field-input ${errors.name ? "field-input-invalid" : ""}`}
-                        style={{ fontSize: "14px" }}
+                        placeholder="e.g. 198512345678"
+                        value={formNic}
+                        onChange={(e) => setFormNic(e.target.value)}
+                        className={`field-input ${errors.nic ? "field-input-invalid" : ""}`}
+                        style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", width: "100%", fontSize: "13px" }}
                       />
-                      {errors.name && <span className="field-error-text">{errors.name}</span>}
+                      {errors.nic && <span className="field-error-text" style={{ fontSize: "11px", color: "#ef4444" }}>{errors.nic}</span>}
                     </div>
-
-                    {/* NIC No & Role - 2 columns */}
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                      <div className="form-field-group">
-                        <label htmlFor="nicNo" className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "13px" }}>
-                          NIC No <span className="required-star">*</span>
-                        </label>
-                        <input
-                          id="nicNo"
-                          type="text"
-                          placeholder="e.g. 198512345678"
-                          value={formNic}
-                          onChange={(e) => setFormNic(e.target.value)}
-                          className={`field-input ${errors.nic ? "field-input-invalid" : ""}`}
-                          style={{ fontSize: "14px" }}
-                        />
-                        {errors.nic && <span className="field-error-text">{errors.nic}</span>}
-                      </div>
-                      <div className="form-field-group">
-                        <label htmlFor="officerRoleSelect" className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "13px" }}>
-                          Role / Position <span className="required-star">*</span>
-                        </label>
-                        <select
-                          id="officerRoleSelect"
-                          value={formOfficerRole}
-                          onChange={(e) => setFormOfficerRole(e.target.value as "Chairman" | "Member")}
-                          className="field-select"
-                          style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", width: "100%", backgroundColor: "#ffffff", fontSize: "14px", fontWeight: 600 }}
-                        >
-                          <option value="Chairman">Chairman</option>
-                          <option value="Member">Member</option>
-                        </select>
-                      </div>
+                    <div className="form-field-group">
+                      <label htmlFor="officerRoleSelect" className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "12px" }}>
+                        Role / Position <span className="required-star">*</span>
+                      </label>
+                      <select
+                        id="officerRoleSelect"
+                        value={formOfficerRole}
+                        onChange={(e) => setFormOfficerRole(e.target.value as "Chairman" | "Member")}
+                        className="field-select"
+                        style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", width: "100%", backgroundColor: "#ffffff", fontSize: "13px", fontWeight: 600 }}
+                      >
+                        <option value="Chairman">Chairman</option>
+                        <option value="Member">Member</option>
+                      </select>
                     </div>
-
-                    {/* Email & Status - 2 columns */}
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                      <div className="form-field-group">
-                        <label htmlFor="email" className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "13px" }}>
-                          {t("emailAddress", "Email Address")} <span className="required-star">*</span>
-                        </label>
-                        <input
-                          id="email"
-                          type="email"
-                          placeholder="e.g. ranjith@moe.gov.lk"
-                          value={formEmail}
-                          onChange={(e) => setFormEmail(e.target.value)}
-                          className={`field-input ${errors.email ? "field-input-invalid" : ""}`}
-                          style={{ fontSize: "14px" }}
-                        />
-                        {errors.email && <span className="field-error-text">{errors.email}</span>}
-                      </div>
-                      <div className="form-field-group">
-                        <label htmlFor="status" className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "13px" }}>{t("status", "Account Status")}</label>
-                        <select
-                          id="status"
-                          value={formStatus}
-                          onChange={(e) => setFormStatus(e.target.value as "Active" | "Inactive")}
-                          className="field-select"
-                          style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", width: "100%", backgroundColor: "#ffffff", fontSize: "14px" }}
-                        >
-                          <option value="Active">{t("active", "Active")}</option>
-                          <option value="Inactive">{t("inactive", "Inactive")}</option>
-                        </select>
-                      </div>
-                    </div>
-
                   </div>
+
+                  {/* Email & Status - 2 columns */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                    <div className="form-field-group">
+                      <label htmlFor="email" className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "12px" }}>
+                        {t("emailAddress", "Email Address")} <span className="required-star">*</span>
+                      </label>
+                      <input
+                        id="email"
+                        type="email"
+                        placeholder="ranjith@moe.gov.lk"
+                        value={formEmail}
+                        onChange={(e) => setFormEmail(e.target.value)}
+                        className={`field-input ${errors.email ? "field-input-invalid" : ""}`}
+                        style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", width: "100%", fontSize: "13px" }}
+                      />
+                      {errors.email && <span className="field-error-text" style={{ fontSize: "11px", color: "#ef4444" }}>{errors.email}</span>}
+                    </div>
+                    <div className="form-field-group">
+                      <label htmlFor="status" className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "12px" }}>{t("status", "Account Status")}</label>
+                      <select
+                        id="status"
+                        value={formStatus}
+                        onChange={(e) => setFormStatus(e.target.value as "Active" | "Inactive")}
+                        className="field-select"
+                        style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", width: "100%", backgroundColor: "#ffffff", fontSize: "13px" }}
+                      >
+                        <option value="Active">{t("active", "Active")}</option>
+                        <option value="Inactive">{t("inactive", "Inactive")}</option>
+                      </select>
+                    </div>
+                  </div>
+
                 </div>
 
-                <div style={{ height: "1px", backgroundColor: "#e2e8f0" }} />
-
-                {/* Section 2: School Background */}
-                <div>
-                  <h4 style={{ fontSize: "13px", fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "12px", display: "flex", alignItems: "center", gap: "6px", margin: "0 0 12px" }}>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                      &#127979; 2. School Background
-                    </span>
+                {/* RIGHT COLUMN: School Background */}
+                <div style={{ backgroundColor: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "14px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                  <h4 style={{ fontSize: "12px", fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 4px 0", display: "flex", alignItems: "center", gap: "6px" }}>
+                    <GraduationCap size={15} style={{ color: "#0284c7" }} />
+                    2. School Background
                   </h4>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
 
-                    {/* Studied Schools */}
-                    <div className="form-field-group">
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-                        <label className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "13px", margin: 0 }}>
-                          Studied Schools
-                        </label>
-                        <span style={{ fontSize: "11px", color: "#0284c7", fontWeight: 600, backgroundColor: "#e0f2fe", padding: "1px 8px", borderRadius: "10px" }}>
-                          {formStudiedSchools.length} added
-                        </span>
-                      </div>
-                      <div style={{ display: "flex", gap: "8px" }}>
-                        <input
-                          type="text"
-                          placeholder="Type school name & press Enter..."
-                          value={newStudiedInput}
-                          onChange={(e) => setNewStudiedInput(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              handleAddStudiedSchool();
-                            }
-                          }}
-                          className="field-input"
-                          style={{ flex: 1, fontSize: "13px" }}
-                        />
-                        <button type="button" onClick={handleAddStudiedSchool} style={{ padding: "9px 16px", borderRadius: "8px", backgroundColor: "#0284c7", color: "#fff", border: "none", fontWeight: 600, cursor: "pointer", fontSize: "13px" }}>
-                          + Add School
-                        </button>
-                      </div>
-                      {formStudiedSchools.length > 0 ? (
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", backgroundColor: "#f8fafc", padding: "10px", borderRadius: "8px", border: "1px solid #e2e8f0", marginTop: "8px" }}>
-                          {formStudiedSchools.map((s, idx) => (
-                            <span key={idx} style={{ display: "inline-flex", alignItems: "center", gap: "6px", backgroundColor: "#e0f2fe", color: "#0369a1", padding: "4px 10px", borderRadius: "16px", fontSize: "12px", fontWeight: 600 }}>
-                              {s}
-                              <button type="button" onClick={() => handleRemoveStudiedSchool(idx)} title="Remove" style={{ background: "none", border: "none", color: "#0369a1", cursor: "pointer", display: "flex", alignItems: "center", padding: 0 }}>
-                                <X size={13} />
-                              </button>
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <span style={{ fontSize: "12px", color: "#94a3b8", display: "block", marginTop: "4px", fontStyle: "italic" }}>No schools added yet.</span>
-                      )}
+                  {/* Studied Schools */}
+                  <div className="form-field-group">
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                      <label className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "12px", margin: 0 }}>
+                        Studied Schools
+                      </label>
+                      <span style={{ fontSize: "10px", color: "#0284c7", fontWeight: 700, backgroundColor: "#e0f2fe", padding: "1px 6px", borderRadius: "8px" }}>
+                        {formStudiedSchools.length} added
+                      </span>
                     </div>
-
-                    {/* Children's Schools */}
-                    <div className="form-field-group">
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-                        <label className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "13px", margin: 0 }}>
-                          Children&apos;s Schools
-                        </label>
-                        <span style={{ fontSize: "11px", color: "#d97706", fontWeight: 600, backgroundColor: "#fef3c7", padding: "1px 8px", borderRadius: "10px" }}>
-                          {formChildrenSchools.length} added
-                        </span>
-                      </div>
-                      <div style={{ display: "flex", gap: "8px" }}>
-                        <input
-                          type="text"
-                          placeholder="Type school name & press Enter..."
-                          value={newChildrenInput}
-                          onChange={(e) => setNewChildrenInput(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              handleAddChildrenSchool();
-                            }
-                          }}
-                          className="field-input"
-                          style={{ flex: 1, fontSize: "13px" }}
-                        />
-                        <button type="button" onClick={handleAddChildrenSchool} style={{ padding: "9px 16px", borderRadius: "8px", backgroundColor: "#d97706", color: "#fff", border: "none", fontWeight: 600, cursor: "pointer", fontSize: "13px" }}>
-                          + Add School
-                        </button>
-                      </div>
-                      {formChildrenSchools.length > 0 ? (
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", backgroundColor: "#f8fafc", padding: "10px", borderRadius: "8px", border: "1px solid #e2e8f0", marginTop: "8px" }}>
-                          {formChildrenSchools.map((s, idx) => (
-                            <span key={idx} style={{ display: "inline-flex", alignItems: "center", gap: "6px", backgroundColor: "#fef3c7", color: "#b45309", padding: "4px 10px", borderRadius: "16px", fontSize: "12px", fontWeight: 600 }}>
-                              {s}
-                              <button type="button" onClick={() => handleRemoveChildrenSchool(idx)} title="Remove" style={{ background: "none", border: "none", color: "#b45309", cursor: "pointer", display: "flex", alignItems: "center", padding: 0 }}>
-                                <X size={13} />
-                              </button>
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <span style={{ fontSize: "12px", color: "#94a3b8", display: "block", marginTop: "4px", fontStyle: "italic" }}>No schools added yet.</span>
-                      )}
+                    <div style={{ display: "flex", gap: "6px" }}>
+                      <input
+                        type="text"
+                        placeholder="School name & Enter..."
+                        value={newStudiedInput}
+                        onChange={(e) => setNewStudiedInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleAddStudiedSchool();
+                          }
+                        }}
+                        className="field-input"
+                        style={{ padding: "7px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", flex: 1, fontSize: "12px" }}
+                      />
+                      <button type="button" onClick={handleAddStudiedSchool} style={{ padding: "7px 12px", borderRadius: "6px", backgroundColor: "#0284c7", color: "#fff", border: "none", fontWeight: 600, cursor: "pointer", fontSize: "12px" }}>
+                        + Add
+                      </button>
                     </div>
-
+                    {formStudiedSchools.length > 0 ? (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", backgroundColor: "#f8fafc", padding: "6px 8px", borderRadius: "6px", border: "1px solid #e2e8f0", marginTop: "6px", maxHeight: "54px", overflowY: "auto" }}>
+                        {formStudiedSchools.map((s, idx) => (
+                          <span key={idx} style={{ display: "inline-flex", alignItems: "center", gap: "4px", backgroundColor: "#e0f2fe", color: "#0369a1", padding: "2px 8px", borderRadius: "12px", fontSize: "11px", fontWeight: 600 }}>
+                            {s}
+                            <button type="button" onClick={() => handleRemoveStudiedSchool(idx)} title="Remove" style={{ background: "none", border: "none", color: "#0369a1", cursor: "pointer", display: "flex", alignItems: "center", padding: 0 }}>
+                              <X size={12} />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span style={{ fontSize: "11px", color: "#94a3b8", display: "block", marginTop: "3px", fontStyle: "italic" }}>No schools added yet.</span>
+                    )}
                   </div>
+
+                  {/* Children's Schools */}
+                  <div className="form-field-group">
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                      <label className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "12px", margin: 0 }}>
+                        Children&apos;s Schools
+                      </label>
+                      <span style={{ fontSize: "10px", color: "#d97706", fontWeight: 700, backgroundColor: "#fef3c7", padding: "1px 6px", borderRadius: "8px" }}>
+                        {formChildrenSchools.length} added
+                      </span>
+                    </div>
+                    <div style={{ display: "flex", gap: "6px" }}>
+                      <input
+                        type="text"
+                        placeholder="School name & Enter..."
+                        value={newChildrenInput}
+                        onChange={(e) => setNewChildrenInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleAddChildrenSchool();
+                          }
+                        }}
+                        className="field-input"
+                        style={{ padding: "7px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", flex: 1, fontSize: "12px" }}
+                      />
+                      <button type="button" onClick={handleAddChildrenSchool} style={{ padding: "7px 12px", borderRadius: "6px", backgroundColor: "#d97706", color: "#fff", border: "none", fontWeight: 600, cursor: "pointer", fontSize: "12px" }}>
+                        + Add
+                      </button>
+                    </div>
+                    {formChildrenSchools.length > 0 ? (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", backgroundColor: "#f8fafc", padding: "6px 8px", borderRadius: "6px", border: "1px solid #e2e8f0", marginTop: "6px", maxHeight: "54px", overflowY: "auto" }}>
+                        {formChildrenSchools.map((s, idx) => (
+                          <span key={idx} style={{ display: "inline-flex", alignItems: "center", gap: "4px", backgroundColor: "#fef3c7", color: "#b45309", padding: "2px 8px", borderRadius: "12px", fontSize: "11px", fontWeight: 600 }}>
+                            {s}
+                            <button type="button" onClick={() => handleRemoveChildrenSchool(idx)} title="Remove" style={{ background: "none", border: "none", color: "#b45309", cursor: "pointer", display: "flex", alignItems: "center", padding: 0 }}>
+                              <X size={12} />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span style={{ fontSize: "11px", color: "#94a3b8", display: "block", marginTop: "3px", fontStyle: "italic" }}>No schools added yet.</span>
+                    )}
+                  </div>
+
                 </div>
 
               </div>
 
-              <footer className="modal-footer" style={{ marginTop: "24px", paddingTop: "16px", borderTop: "1px solid #e2e8f0", display: "flex", justifyContent: "flex-end", gap: "12px" }}>
-                <button type="button" className="btn-modal-cancel" onClick={() => setIsModalOpen(false)} style={{ padding: "10px 20px", fontSize: "14px", fontWeight: 600 }}>
-                  {t("cancelBtn", "Cancel")}
+              {/* Modal Footer Buttons */}
+              <footer style={{ marginTop: "14px", paddingTop: "12px", borderTop: "1px solid #e2e8f0", display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  style={{ padding: "8px 18px", borderRadius: "6px", backgroundColor: "#f1f5f9", border: "1px solid #cbd5e1", color: "#475569", fontWeight: 600, fontSize: "13px" }}
+                >
+                  {t("cancel", "Cancel")}
                 </button>
-                <button type="submit" className="btn-modal-save" style={{ padding: "10px 26px", fontSize: "14px", fontWeight: 600, boxShadow: "0 2px 4px rgba(79,70,229,0.2)" }}>
-                  {t("saveAccountBtn", "Save Account")}
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  style={{ padding: "8px 24px", borderRadius: "6px", backgroundColor: "#4f46e5", color: "#ffffff", border: "none", fontWeight: 600, fontSize: "13px", boxShadow: "0 2px 4px rgba(79,70,229,0.2)" }}
+                >
+                  {isSaving ? t("saving", "Saving...") : (isEditMode ? "Update Officer" : t("createAccount", "Save Officer"))}
                 </button>
               </footer>
             </form>

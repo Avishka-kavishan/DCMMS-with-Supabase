@@ -12,6 +12,7 @@ import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { getCurrentProfile, signOut, UserProfile } from "@/lib/auth";
+import { CheckCircle, FileText, Send, Clock, X, AlertCircle, ShieldCheck, Calendar as CalendarIcon } from "lucide-react";
 
 interface Case {
   id: string;
@@ -261,6 +262,188 @@ export default function SubjectOfficerDashboard() {
   // Search & filter state
   const [searchQuery, setSearchQuery] = useState("");
   const [priorityFilter, setPriorityFilter] = useState<"all" | "high" | "medium" | "low">("all");
+
+  // Subject Officer Assignment Data Flow State & Handlers (Diagram: Investigation Admin <-> Subject Officer)
+  const [assignments, setAssignments] = useState<any[]>([]);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [activeAssignment, setActiveAssignment] = useState<any>(null);
+  const [reportDateForm, setReportDateForm] = useState(new Date().toISOString().slice(0, 10));
+  const [reportContentForm, setReportContentForm] = useState("");
+  const [toastMessage, setToastMessage] = useState("");
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(""), 3500);
+  };
+
+  // Load Assignments from localStorage / Supabase
+  const fetchAssignments = async () => {
+    if (typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem("dcmms_subject_assignments");
+        if (stored) {
+          setAssignments(JSON.parse(stored));
+        } else {
+          setAssignments([]);
+        }
+      } catch (e) {
+        console.error("Failed to parse subject assignments", e);
+      }
+    }
+  };
+
+  useEffect(() => {
+    fetchAssignments();
+    const interval = setInterval(fetchAssignments, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Step 2 Handler: Subject Officer Submits Appointment Date & Report Due Date
+  const handleStep2SubmitDates = (asgn: any, appointmentDate: string, reportDueDate: string) => {
+    if (!appointmentDate || !reportDueDate) {
+      showToast("Please select both Appointment Date and Report Due Date!");
+      return;
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    const updated = {
+      ...asgn,
+      appointmentDate,
+      reportDueDate,
+      datesSubmittedBySubject: true,
+      datesSubmitTimestamp: today,
+      currentStep: 3,
+      status: "Dates Confirmed",
+      updatedAt: today,
+    };
+
+    if (typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem("dcmms_subject_assignments") || "[]";
+        let list = JSON.parse(stored);
+        list = list.filter((a: any) => a.id !== asgn.id);
+        list.push(updated);
+        localStorage.setItem("dcmms_subject_assignments", JSON.stringify(list));
+      } catch (e) {}
+    }
+
+    showToast("Step 2 Complete: Appointment Date & Report Due Date submitted to Investigation Administrator!");
+    fetchAssignments();
+  };
+
+  // Handle Certification Submission (Data Flow: Subject Officer -> Investigation Admin)
+  const handleCertifyAssignment = (asgn: any) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const updated = {
+      ...asgn,
+      certificationSubmitted: true,
+      certificationDate: today,
+      status: "Certified",
+      updatedAt: today,
+    };
+
+    if (typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem("dcmms_subject_assignments") || "[]";
+        let list = JSON.parse(stored);
+        list = list.filter((a: any) => a.id !== asgn.id);
+        list.push(updated);
+        localStorage.setItem("dcmms_subject_assignments", JSON.stringify(list));
+      } catch (e) {}
+    }
+
+    if (isSupabaseConfigured) {
+      supabase.from("dcmms_subject_assignments").upsert({
+        id: updated.id,
+        case_no: updated.caseNo,
+        subject_officer_name: updated.subjectOfficerName,
+        appointment_date: updated.appointmentDate,
+        report_due_date: updated.reportDueDate,
+        extension_term: updated.extensionTerm,
+        extension_start_date: updated.extensionStartDate,
+        extension_end_date: updated.extensionEndDate,
+        certification_submitted: true,
+        certification_date: today,
+        report_submit_date: updated.reportSubmitDate || null,
+        report_content: updated.reportContent || null,
+        status: "Certified",
+      }).then();
+    }
+
+    showToast("Certification submitted to Investigation Administrator!");
+    fetchAssignments();
+  };
+
+  // Handle Opening Report Submission Modal
+  const handleOpenReportModal = (asgn: any) => {
+    setActiveAssignment(asgn);
+    setReportDateForm(asgn.reportSubmitDate || new Date().toISOString().slice(0, 10));
+    setReportContentForm(asgn.reportContent || "");
+    setIsReportModalOpen(true);
+  };
+
+  // Handle Submitting Investigation Report (Data Flow: Subject Officer -> Investigation Admin)
+  const handleSubmitReport = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeAssignment) return;
+    if (!reportContentForm.trim()) {
+      showToast("Please enter the investigation report content.");
+      return;
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const updated = {
+      ...activeAssignment,
+      reportSubmitDate: reportDateForm || today,
+      reportContent: reportContentForm.trim(),
+      status: "Report Submitted",
+      updatedAt: today,
+    };
+
+    if (typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem("dcmms_subject_assignments") || "[]";
+        let list = JSON.parse(stored);
+        list = list.filter((a: any) => a.id !== activeAssignment.id);
+        list.push(updated);
+        localStorage.setItem("dcmms_subject_assignments", JSON.stringify(list));
+
+        const storedActions = localStorage.getItem("dcmms_new_letter_current_case") || "[]";
+        const actionsList = JSON.parse(storedActions);
+        actionsList.push({
+          id: `report-${activeAssignment.caseNo}-${Date.now()}`,
+          caseNo: activeAssignment.caseNo,
+          subjectOfficerName: activeAssignment.subjectOfficerName || profile?.full_name || "Subject Officer",
+          reportState: "Report Submitted",
+          receivedDate: reportDateForm || today,
+          stepTaken: `Investigation Report Submitted on ${reportDateForm || today}`,
+          specialNotes: reportContentForm.trim(),
+        });
+        localStorage.setItem("dcmms_new_letter_current_case", JSON.stringify(actionsList));
+      } catch (e) {}
+    }
+
+    if (isSupabaseConfigured) {
+      supabase.from("dcmms_subject_assignments").upsert({
+        id: updated.id,
+        case_no: updated.caseNo,
+        subject_officer_name: updated.subjectOfficerName,
+        appointment_date: updated.appointmentDate,
+        report_due_date: updated.reportDueDate,
+        extension_term: updated.extensionTerm,
+        extension_start_date: updated.extensionStartDate,
+        extension_end_date: updated.extensionEndDate,
+        certification_submitted: updated.certificationSubmitted || true,
+        certification_date: updated.certificationDate || today,
+        report_submit_date: reportDateForm || today,
+        report_content: reportContentForm.trim(),
+        status: "Report Submitted",
+      }).then();
+    }
+
+    showToast("Investigation Report successfully submitted to Investigation Administrator!");
+    setIsReportModalOpen(false);
+    fetchAssignments();
+  };
 
   // Session guard — redirect to login if not authenticated
   useEffect(() => {
@@ -623,6 +806,143 @@ export default function SubjectOfficerDashboard() {
             </div>
           </section>
 
+          {/* ==================== INVESTIGATION DIRECTIVES & DATA FLOW SECTION ==================== */}
+          <section className="letters-list-section" style={{ marginBottom: "24px" }}>
+            <div className="letters-list-header" style={{ flexWrap: "wrap", gap: "10px" }}>
+              <h3 className="section-title" style={{ margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
+                <Send size={20} style={{ color: "#0284c7" }} />
+                <span>{lang === "si" ? "විමර්ශන නියෝග සහ සහතික කිරීම් (Data Flow Directives)" : "Investigation Directives & Certification Flow"}</span>
+              </h3>
+              <span style={{ fontSize: "12px", color: "#64748b" }}>
+                Directives, report due dates, extension terms from Investigation Administrator
+              </span>
+            </div>
+
+            {assignments.length > 0 ? (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: "16px", padding: "16px" }}>
+                {assignments.map((asgn) => {
+                  const isDatesSubmitted = !!asgn.datesSubmittedBySubject;
+                  const isExtensionRequested = !!asgn.extensionRequestedByAdmin || (asgn.extensionTerm && asgn.extensionTerm !== "None");
+                  const isCertified = !!asgn.certificationSubmitted;
+                  const isApproved = !!asgn.reportApprovedByAdmin;
+
+                  return (
+                    <div key={asgn.id} style={{ backgroundColor: "#ffffff", borderRadius: "12px", border: "1px solid #cbd5e1", padding: "16px", boxShadow: "0 2px 4px rgba(0,0,0,0.04)", display: "flex", flexDirection: "column", gap: "12px" }}>
+                      
+                      {/* Header */}
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #f1f5f9", paddingBottom: "10px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <FileText size={18} style={{ color: "#4f46e5" }} />
+                          <span style={{ fontWeight: 700, fontSize: "15px", color: "#0f172a" }}>Case: {asgn.caseNo}</span>
+                        </div>
+                        <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "12px", backgroundColor: isApproved ? "#dcfce7" : isDatesSubmitted ? "#e0f2fe" : "#fef3c7", color: isApproved ? "#15803d" : isDatesSubmitted ? "#0369a1" : "#b45309" }}>
+                          {isApproved ? "✓ Case Approved" : isDatesSubmitted ? "Step 2: Dates Sent" : "Step 1: Officers Assigned"}
+                        </span>
+                      </div>
+
+                      {/* STEP 2: Subject Officer Submits Appointment Date & Report Due Date */}
+                      {!isDatesSubmitted ? (
+                        <div style={{ backgroundColor: "#f0f9ff", padding: "12px", borderRadius: "8px", border: "1px solid #bae6fd", display: "flex", flexDirection: "column", gap: "8px" }}>
+                          <div style={{ fontSize: "12px", fontWeight: 700, color: "#0369a1", display: "flex", alignItems: "center", gap: "6px" }}>
+                            <CalendarIcon size={14} />
+                            <span>Step 2: Enter & Send Appointment & Report Due Dates</span>
+                          </div>
+                          
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                            <div>
+                              <label style={{ fontSize: "11px", fontWeight: 600, color: "#475569" }}>Appointment Date</label>
+                              <input
+                                type="date"
+                                id={`app-date-${asgn.id}`}
+                                defaultValue={asgn.appointmentDate || new Date().toISOString().slice(0, 10)}
+                                style={{ width: "100%", padding: "6px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "12px" }}
+                              />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: "11px", fontWeight: 600, color: "#475569" }}>Report Due Date</label>
+                              <input
+                                type="date"
+                                id={`due-date-${asgn.id}`}
+                                defaultValue={asgn.reportDueDate || new Date().toISOString().slice(0, 10)}
+                                style={{ width: "100%", padding: "6px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "12px" }}
+                              />
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const appEl = document.getElementById(`app-date-${asgn.id}`) as HTMLInputElement;
+                              const dueEl = document.getElementById(`due-date-${asgn.id}`) as HTMLInputElement;
+                              handleStep2SubmitDates(asgn, appEl?.value || "", dueEl?.value || "");
+                            }}
+                            style={{ padding: "7px 12px", backgroundColor: "#0284c7", color: "#ffffff", border: "none", borderRadius: "6px", fontWeight: 600, fontSize: "12px", cursor: "pointer", marginTop: "4px" }}
+                          >
+                            Send Dates to Investigation Admin (Step 2)
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px", fontSize: "12px", color: "#334155", backgroundColor: "#f8fafc", padding: "10px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                          <div>📅 Appointment Date: <strong style={{ color: "#0369a1" }}>{asgn.appointmentDate || "Not set"}</strong></div>
+                          <div>⏳ Report Due Date: <strong style={{ color: "#dc2626" }}>{asgn.reportDueDate || "Not set"}</strong></div>
+                        </div>
+                      )}
+
+                      {/* STEP 3: Extension Request & Certification */}
+                      {isExtensionRequested && (
+                        <div style={{ backgroundColor: "#fffbeb", padding: "10px 12px", borderRadius: "8px", border: "1px solid #fef3c7", fontSize: "12px", display: "flex", flexDirection: "column", gap: "6px" }}>
+                          <div style={{ fontWeight: 700, color: "#b45309", display: "flex", alignItems: "center", gap: "6px" }}>
+                            <Clock size={14} />
+                            <span>Extension Request ({asgn.extensionTerm || "First"} Term)</span>
+                          </div>
+                          <div>
+                            Period: <strong>{asgn.extensionStartDate || "Start"}</strong> to <strong>{asgn.extensionEndDate || "End"}</strong>
+                          </div>
+
+                          {!isCertified ? (
+                            <button
+                              type="button"
+                              onClick={() => handleCertifyAssignment(asgn)}
+                              style={{ padding: "6px 10px", backgroundColor: "#d97706", color: "#ffffff", border: "none", borderRadius: "6px", fontWeight: 600, fontSize: "11px", cursor: "pointer", alignSelf: "flex-start", marginTop: "2px" }}
+                            >
+                              ✓ Submit Certification for Extension (Step 3)
+                            </button>
+                          ) : (
+                            <span style={{ fontSize: "11px", color: "#166534", fontWeight: 700, backgroundColor: "#dcfce7", padding: "3px 8px", borderRadius: "6px", width: "fit-content" }}>
+                              ✓ Extension Certified ({asgn.certificationDate || "Done"})
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* STEP 6 (Final Action): Subject Officer adds Investigation Report into related case */}
+                      <div style={{ marginTop: "6px", paddingTop: "10px", borderTop: "1px dashed #e2e8f0" }}>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenReportModal(asgn)}
+                          style={{ width: "100%", padding: "8px 14px", backgroundColor: "#4f46e5", color: "#ffffff", border: "none", borderRadius: "6px", fontWeight: 600, fontSize: "12px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", boxShadow: "0 2px 4px rgba(79,70,229,0.2)" }}
+                        >
+                          <Send size={14} />
+                          <span>{asgn.reportContent ? "Edit Investigation Report in Related Case" : "+ Add Investigation Report into Related Case"}</span>
+                        </button>
+                        {asgn.reportContent && (
+                          <div style={{ fontSize: "11px", color: "#166534", marginTop: "4px", fontWeight: 600 }}>
+                            ✓ Report added on {asgn.reportSubmitDate || "recent"}
+                          </div>
+                        )}
+                      </div>
+
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={{ padding: "20px", textAlign: "center", color: "#94a3b8", fontSize: "13px", fontStyle: "italic" }}>
+                No active directives assigned by Investigation Administrator yet.
+              </div>
+            )}
+          </section>
+
           {/* ── Case Management Section ── */}
           <section className="letters-list-section">
             {/* Header Filter Panel */}
@@ -762,6 +1082,109 @@ export default function SubjectOfficerDashboard() {
           <SiteFooter />
         </main>
       </div>
+
+      {/* ==================== SUBMIT INVESTIGATION REPORT MODAL ==================== */}
+      {isReportModalOpen && activeAssignment && (
+        <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="report-modal-title">
+          <div className="modal-content-wrapper premium-modal" style={{ maxWidth: "600px", width: "95%", borderRadius: "16px", overflow: "hidden", backgroundColor: "#ffffff", boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1)" }}>
+            
+            <header className="modal-header" style={{ padding: "18px 24px", backgroundColor: "#1e1b4b", color: "#ffffff", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                <div style={{ width: "40px", height: "40px", borderRadius: "10px", backgroundColor: "rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Send size={20} style={{ color: "#818cf8" }} />
+                </div>
+                <div>
+                  <h3 id="report-modal-title" style={{ color: "#ffffff", margin: 0, fontSize: "17px", fontWeight: 700 }}>
+                    {lang === "si" ? "විමර්ශන වාර්තාව විමර්ශන පරිපාලක වෙත යොමු කිරීම" : "Submit Investigation Report"}
+                  </h3>
+                  <span style={{ fontSize: "12px", color: "#cbd5e1" }}>
+                    Case: <strong>{activeAssignment.caseNo}</strong>
+                  </span>
+                </div>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setIsReportModalOpen(false)}
+                style={{ color: "#ffffff", backgroundColor: "rgba(255,255,255,0.1)", border: "none", padding: "8px", borderRadius: "50%", cursor: "pointer" }}
+              >
+                <X size={18} />
+              </button>
+            </header>
+
+            <form onSubmit={handleSubmitReport} style={{ padding: "20px 24px", backgroundColor: "#ffffff" }}>
+              
+              <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                
+                {/* Directive Summary */}
+                <div style={{ backgroundColor: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0", fontSize: "13px" }}>
+                  <div style={{ fontWeight: 700, color: "#334155", marginBottom: "4px" }}>Directive Details:</div>
+                  <div style={{ color: "#64748b" }}>
+                    Appointment Date: <strong>{activeAssignment.appointmentDate || "N/A"}</strong> | Due Date: <strong>{activeAssignment.reportDueDate || "N/A"}</strong>
+                  </div>
+                </div>
+
+                {/* Report Submit Date */}
+                <div className="form-field-group">
+                  <label htmlFor="formReportSubmitDate" className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "13px" }}>
+                    {lang === "si" ? "වාර්තාව භාරදෙන දිනය (Report Submit Date)" : "Report Submit Date"} <span style={{ color: "#dc2626" }}>*</span>
+                  </label>
+                  <input
+                    id="formReportSubmitDate"
+                    type="date"
+                    value={reportDateForm}
+                    onChange={(e) => setReportDateForm(e.target.value)}
+                    style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", width: "100%", fontSize: "14px" }}
+                  />
+                </div>
+
+                {/* Investigation Report Details / Findings */}
+                <div className="form-field-group">
+                  <label htmlFor="formReportContent" className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "13px" }}>
+                    {lang === "si" ? "විමර්ශන වාර්තාව සහ සොයාගැනීම් (Investigation Report Content)" : "Investigation Report & Findings"} <span style={{ color: "#dc2626" }}>*</span>
+                  </label>
+                  <textarea
+                    id="formReportContent"
+                    rows={5}
+                    value={reportContentForm}
+                    onChange={(e) => setReportContentForm(e.target.value)}
+                    placeholder={lang === "si" ? "විමර්ශන සොයාගැනීම්, නිගමන සහ නිර්දේශ මෙහි සටහන් කරන්න..." : "Enter your investigation report findings, conclusions, and recommended actions here..."}
+                    style={{ padding: "12px", borderRadius: "8px", border: "1px solid #cbd5e1", width: "100%", fontSize: "14px", resize: "vertical" }}
+                  />
+                </div>
+
+              </div>
+
+              <footer style={{ marginTop: "24px", paddingTop: "16px", borderTop: "1px solid #e2e8f0", display: "flex", justifyContent: "flex-end", gap: "12px" }}>
+                <button
+                  type="button"
+                  onClick={() => setIsReportModalOpen(false)}
+                  style={{ padding: "10px 20px", borderRadius: "8px", backgroundColor: "#f1f5f9", border: "1px solid #cbd5e1", color: "#475569", fontWeight: 600, fontSize: "14px" }}
+                >
+                  {t("cancelBtn", "Cancel")}
+                </button>
+                <button
+                  type="submit"
+                  style={{ padding: "10px 26px", borderRadius: "8px", backgroundColor: "#4f46e5", color: "#ffffff", border: "none", fontWeight: 600, fontSize: "14px", display: "inline-flex", alignItems: "center", gap: "8px", boxShadow: "0 2px 4px rgba(79,70,229,0.2)", cursor: "pointer" }}
+                >
+                  <Send size={16} />
+                  <span>{lang === "si" ? "පරිපාලක වෙත යොමු කරන්න" : "Submit Report to Admin"}</span>
+                </button>
+              </footer>
+
+            </form>
+
+          </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="toast-notification" style={{ display: "flex", alignItems: "center", gap: "10px", backgroundColor: "#065f46", color: "#ffffff", padding: "12px 20px", borderRadius: "10px", boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.2)", position: "fixed", bottom: "24px", right: "24px", zIndex: 9999 }}>
+          <CheckCircle size={20} style={{ color: "#34d399" }} />
+          <span style={{ fontWeight: 600, fontSize: "14px" }}>{toastMessage}</span>
+        </div>
+      )}
+
     </div>
   );
 }
