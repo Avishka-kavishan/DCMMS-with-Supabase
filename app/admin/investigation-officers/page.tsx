@@ -8,6 +8,10 @@ import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 interface Officer {
   id: string;
   fullName: string;
+  nicNo?: string;
+  officerRole?: "Chairman" | "Member";
+  studiedSchools?: string[];
+  childrenSchools?: string[];
   email: string;
   role: "investigation_officer";
   status: "Active" | "Inactive";
@@ -27,9 +31,39 @@ export default function InvestigationOfficersPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const [formName, setFormName] = useState("");
+  const [formNic, setFormNic] = useState("");
+  const [formOfficerRole, setFormOfficerRole] = useState<"Chairman" | "Member">("Member");
+  const [formStudiedSchools, setFormStudiedSchools] = useState<string[]>([]);
+  const [newStudiedInput, setNewStudiedInput] = useState("");
+  const [formChildrenSchools, setFormChildrenSchools] = useState<string[]>([]);
+  const [newChildrenInput, setNewChildrenInput] = useState("");
   const [formEmail, setFormEmail] = useState("");
   const [formStatus, setFormStatus] = useState<"Active" | "Inactive">("Active");
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const handleAddStudiedSchool = () => {
+    const trimmed = newStudiedInput.trim();
+    if (trimmed && !formStudiedSchools.includes(trimmed)) {
+      setFormStudiedSchools((prev) => [...prev, trimmed]);
+      setNewStudiedInput("");
+    }
+  };
+
+  const handleRemoveStudiedSchool = (index: number) => {
+    setFormStudiedSchools((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleAddChildrenSchool = () => {
+    const trimmed = newChildrenInput.trim();
+    if (trimmed && !formChildrenSchools.includes(trimmed)) {
+      setFormChildrenSchools((prev) => [...prev, trimmed]);
+      setNewChildrenInput("");
+    }
+  };
+
+  const handleRemoveChildrenSchool = (index: number) => {
+    setFormChildrenSchools((prev) => prev.filter((_, i) => i !== index));
+  };
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -45,7 +79,7 @@ export default function InvestigationOfficersPage() {
       try {
         const { data, error } = await supabase
           .from("dcmms_profiles")
-          .select("id, full_name, email, status, created_at")
+          .select("id, full_name, nic_no, officer_role, studied_schools, children_schools, email, status, created_at")
           .eq("role", "investigation_officer")
           .order("created_at", { ascending: false });
 
@@ -53,6 +87,18 @@ export default function InvestigationOfficersPage() {
           result = data.map((p: any) => ({
             id: p.id,
             fullName: p.full_name || "",
+            nicNo: p.nic_no || "",
+            officerRole: p.officer_role === "Chairman" ? "Chairman" : "Member",
+            studiedSchools: Array.isArray(p.studied_schools)
+              ? p.studied_schools
+              : typeof p.studied_schools === "string" && p.studied_schools.startsWith("[")
+              ? JSON.parse(p.studied_schools)
+              : [],
+            childrenSchools: Array.isArray(p.children_schools)
+              ? p.children_schools
+              : typeof p.children_schools === "string" && p.children_schools.startsWith("[")
+              ? JSON.parse(p.children_schools)
+              : [],
             email: p.email || "",
             role: "investigation_officer",
             status: (p.status === "Inactive" ? "Inactive" : "Active") as "Active" | "Inactive",
@@ -73,7 +119,13 @@ export default function InvestigationOfficersPage() {
           const localInvestigation = list.filter((o) => o.role === "investigation_officer");
           const dbIds = new Set(result.map((o) => o.id));
           localInvestigation.forEach((lo) => {
-            if (!dbIds.has(lo.id)) result.push(lo);
+            if (!dbIds.has(lo.id)) {
+              result.push({
+                ...lo,
+                studiedSchools: Array.isArray(lo.studiedSchools) ? lo.studiedSchools : [],
+                childrenSchools: Array.isArray(lo.childrenSchools) ? lo.childrenSchools : [],
+              });
+            }
           });
         } catch (e) {
           console.error("Failed to parse local profiles:", e);
@@ -92,9 +144,10 @@ export default function InvestigationOfficersPage() {
   // ── Validation ─────────────────────────────────────────────────────────────
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
-    if (!formName.trim()) newErrors.name = t("pleaseFillAllFields", "Please fill out all fields.");
+    if (!formName.trim()) newErrors.name = t("pleaseFillAllFields", "Officer Name is required.");
+    if (!formNic.trim()) newErrors.nic = "NIC No is required.";
     if (!formEmail.trim()) {
-      newErrors.email = t("pleaseFillAllFields", "Please fill out all fields.");
+      newErrors.email = t("pleaseFillAllFields", "Email is required.");
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formEmail.trim())) {
       newErrors.email = "Please enter a valid email address.";
     }
@@ -107,6 +160,12 @@ export default function InvestigationOfficersPage() {
     setIsEditMode(false);
     setEditingId(null);
     setFormName("");
+    setFormNic("");
+    setFormOfficerRole("Member");
+    setFormStudiedSchools([]);
+    setNewStudiedInput("");
+    setFormChildrenSchools([]);
+    setNewChildrenInput("");
     setFormEmail("");
     setFormStatus("Active");
     setErrors({});
@@ -116,6 +175,12 @@ export default function InvestigationOfficersPage() {
     setIsEditMode(true);
     setEditingId(o.id);
     setFormName(o.fullName);
+    setFormNic(o.nicNo || "");
+    setFormOfficerRole(o.officerRole || "Member");
+    setFormStudiedSchools(Array.isArray(o.studiedSchools) ? [...o.studiedSchools] : []);
+    setNewStudiedInput("");
+    setFormChildrenSchools(Array.isArray(o.childrenSchools) ? [...o.childrenSchools] : []);
+    setNewChildrenInput("");
     setFormEmail(o.email);
     setFormStatus(o.status);
     setErrors({});
@@ -134,6 +199,10 @@ export default function InvestigationOfficersPage() {
     const officer: Officer = {
       id: newId,
       fullName: formName.trim(),
+      nicNo: formNic.trim(),
+      officerRole: formOfficerRole,
+      studiedSchools: formStudiedSchools,
+      childrenSchools: formChildrenSchools,
       email: formEmail.trim().toLowerCase(),
       role: "investigation_officer",
       status: formStatus,
@@ -147,7 +216,13 @@ export default function InvestigationOfficersPage() {
       try {
         const payload: any = {
           full_name: officer.fullName,
+          nic_no: officer.nicNo,
+          officer_role: officer.officerRole,
+          studied_schools: officer.studiedSchools,
+          children_schools: officer.childrenSchools,
+          email: officer.email,
           role: "investigation_officer",
+          status: officer.status,
         };
         // Only include `id` for real UUID edits (not temp local ids starting with "inv-")
         if (!isNew && !officer.id.startsWith("inv-")) {
@@ -155,12 +230,7 @@ export default function InvestigationOfficersPage() {
         }
 
         const { error } = await supabase.from("dcmms_profiles").upsert(payload);
-        if (error) throw error;
-
-        showToast(isEditMode ? "Officer updated successfully!" : t("officerAddedSuccess", "Officer registered successfully!"));
-        setIsModalOpen(false);
-        fetchOfficers();
-        return;
+        if (error) console.warn("Supabase upsert warning:", error);
       } catch (err: any) {
         console.error("Supabase upsert failed:", err?.message ?? err);
       }
@@ -276,9 +346,10 @@ export default function InvestigationOfficersPage() {
           <table className="letters-data-table">
             <thead>
               <tr>
-                <th scope="col">{t("officerFullName", "Officer Full Name")}</th>
+                <th scope="col">Officer Name & NIC</th>
+                <th scope="col">Studied Schools</th>
+                <th scope="col">Children's Schools</th>
                 <th scope="col">{t("emailAddress", "E-mail Address")}</th>
-                <th scope="col">{t("assignedSystemRole", "Assigned System Role")}</th>
                 <th scope="col">{t("accountStatus", "Account Status")}</th>
                 <th scope="col" className="admin-table-header-center">{t("actions", "Actions")}</th>
               </tr>
@@ -286,16 +357,51 @@ export default function InvestigationOfficersPage() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={5} className="admin-table-no-data table-no-data-padding">
+                  <td colSpan={6} className="admin-table-no-data table-no-data-padding">
                     {t("loadingData", "Loading officers from database…")}
                   </td>
                 </tr>
               ) : filteredOfficers.length > 0 ? (
                 filteredOfficers.map((item) => (
                   <tr key={item.id} className="letter-table-row">
-                    <td className="admin-table-case-no font-semibold">{item.fullName}</td>
+                    <td className="admin-table-case-no font-semibold">
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span>{item.fullName}</span>
+                        <span style={{ fontSize: "11px", backgroundColor: item.officerRole === "Chairman" ? "#fef3c7" : "#e0e7ff", color: item.officerRole === "Chairman" ? "#92400e" : "#3730a3", padding: "1px 7px", borderRadius: "10px", fontWeight: 600 }}>
+                          {item.officerRole || "Member"}
+                        </span>
+                      </div>
+                      <span style={{ fontSize: "11px", color: "#475569", display: "inline-block", backgroundColor: "#f1f5f9", padding: "1px 6px", borderRadius: "4px", marginTop: "2px" }}>
+                        NIC: {item.nicNo || "N/A"}
+                      </span>
+                    </td>
+                    <td>
+                      {item.studiedSchools && item.studiedSchools.length > 0 ? (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", maxWidth: "200px" }}>
+                          {item.studiedSchools.map((s, idx) => (
+                            <span key={idx} style={{ fontSize: "11px", backgroundColor: "#e0f2fe", color: "#0369a1", padding: "2px 8px", borderRadius: "12px", fontWeight: 500 }}>
+                              {s}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: "12px", color: "#94a3b8" }}>—</span>
+                      )}
+                    </td>
+                    <td>
+                      {item.childrenSchools && item.childrenSchools.length > 0 ? (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", maxWidth: "200px" }}>
+                          {item.childrenSchools.map((s, idx) => (
+                            <span key={idx} style={{ fontSize: "11px", backgroundColor: "#fef3c7", color: "#b45309", padding: "2px 8px", borderRadius: "12px", fontWeight: 500 }}>
+                              {s}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: "12px", color: "#94a3b8" }}>—</span>
+                      )}
+                    </td>
                     <td>{item.email || "—"}</td>
-                    <td>{t("roleInvestigation", "Investigation Officer")}</td>
                     <td>
                       <span className={item.status === "Active" ? "status-badge-active" : "status-badge-inactive"}>
                         {item.status === "Active" ? t("active", "Active") : t("inactive", "Inactive")}
@@ -333,78 +439,259 @@ export default function InvestigationOfficersPage() {
       {/* Add/Edit Modal */}
       {isModalOpen && (
         <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-          <div className="modal-card">
-            <header className="modal-header">
-              <h2 id="modal-title" className="modal-title">
-                {isEditMode ? "Edit Investigation Officer Account" : t("addStaffAccountTitle", "Add Disciplinary Staff Account")}
-              </h2>
-              <button className="btn-modal-close" onClick={() => setIsModalOpen(false)} aria-label="Close modal">
+          <div className="modal-card" style={{ backgroundColor: "#ffffff", maxWidth: "600px", width: "95%", borderRadius: "16px", overflow: "hidden", boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)", padding: 0 }}>
+            
+            {/* Header */}
+            <header style={{ padding: "18px 24px", backgroundColor: "#1e1b4b", color: "#ffffff", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                <div style={{ width: "40px", height: "40px", borderRadius: "10px", backgroundColor: "rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <UserPlus size={22} style={{ color: "#818cf8" }} />
+                </div>
+                <div>
+                  <h2 id="modal-title" style={{ color: "#ffffff", margin: 0, fontSize: "17px", fontWeight: 700 }}>
+                    {isEditMode ? "Edit Investigation Officer" : t("addStaffAccountTitle", "Register Investigation Officer")}
+                  </h2>
+                  <p style={{ margin: 0, fontSize: "12px", color: "#cbd5e1" }}>
+                    Fill out officer credentials &amp; school details below
+                  </p>
+                </div>
+              </div>
+              <button className="btn-modal-close" onClick={() => setIsModalOpen(false)} aria-label="Close modal" style={{ color: "#ffffff", backgroundColor: "rgba(255,255,255,0.1)", border: "none", padding: "8px", borderRadius: "50%", cursor: "pointer" }}>
                 <X size={20} />
               </button>
             </header>
 
-            <form onSubmit={handleSave}>
-              <div className="modal-body">
-                <div className="form-field-group">
-                  <label htmlFor="fullName" className="field-label">
-                    {t("officerFullName", "Officer Full Name")} <span className="required-star">*</span>
-                  </label>
-                  <input
-                    id="fullName"
-                    type="text"
-                    placeholder={t("placeholderOfficerNameExample", "e.g. Ranjith Bandara")}
-                    value={formName}
-                    onChange={(e) => setFormName(e.target.value)}
-                    className={`field-input ${errors.name ? "field-input-invalid" : ""}`}
-                  />
-                  {errors.name && <span className="field-error-text">{errors.name}</span>}
-                </div>
+            <form onSubmit={handleSave} style={{ padding: "20px 24px", backgroundColor: "#ffffff" }}>
 
-                <div className="form-field-group">
-                  <label htmlFor="email" className="field-label">
-                    {t("emailAddress", "E-mail Address")} <span className="required-star">*</span>
-                  </label>
-                  <input
-                    id="email"
-                    type="email"
-                    placeholder={t("placeholderEmailExample", "e.g. ranjithbandara@gmail.com")}
-                    value={formEmail}
-                    onChange={(e) => setFormEmail(e.target.value)}
-                    className={`field-input ${errors.email ? "field-input-invalid" : ""}`}
-                  />
-                  {errors.email && <span className="field-error-text">{errors.email}</span>}
+              {/* Live Preview Card */}
+              <div style={{ display: "flex", alignItems: "center", gap: "14px", backgroundColor: "#f8fafc", padding: "14px 16px", borderRadius: "12px", border: "1px solid #e2e8f0", marginBottom: "20px" }}>
+                <div style={{ width: "48px", height: "48px", borderRadius: "50%", backgroundColor: formOfficerRole === "Chairman" ? "#d97706" : "#4f46e5", color: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "16px", flexShrink: 0, boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }}>
+                  {formName ? formName.trim().split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase() : "?"}
                 </div>
-
-                <div className="form-field-group">
-                  <label htmlFor="assignedRole" className="field-label">{t("assignedSystemRole", "Assigned System Role")}</label>
-                  <input
-                    id="assignedRole"
-                    type="text"
-                    disabled
-                    value={t("roleInvestigation", "Investigation Officer")}
-                    className="field-input disabled-input-custom"
-                  />
-                </div>
-
-                <div className="form-field-group">
-                  <label htmlFor="status" className="field-label">{t("status", "Status")}</label>
-                  <select
-                    id="status"
-                    value={formStatus}
-                    onChange={(e) => setFormStatus(e.target.value as "Active" | "Inactive")}
-                    className="field-select"
-                  >
-                    <option value="Active">{t("active", "Active")}</option>
-                    <option value="Inactive">{t("inactive", "Inactive")}</option>
-                  </select>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                    <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "15px" }}>
+                      {formName || "New Officer Name"}
+                    </span>
+                    <span style={{ fontSize: "11px", backgroundColor: formOfficerRole === "Chairman" ? "#fef3c7" : "#e0e7ff", color: formOfficerRole === "Chairman" ? "#92400e" : "#3730a3", padding: "2px 8px", borderRadius: "12px", fontWeight: 700 }}>
+                      {formOfficerRole}
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", gap: "12px", marginTop: "4px", fontSize: "12px", color: "#64748b" }}>
+                    <span>NIC: <strong style={{ color: "#334155" }}>{formNic || "N/A"}</strong></span>
+                    <span>•</span>
+                    <span>Status: <strong style={{ color: formStatus === "Active" ? "#16a34a" : "#dc2626" }}>{formStatus}</strong></span>
+                  </div>
                 </div>
               </div>
 
-              <footer className="modal-footer">
-                <button type="button" className="btn-modal-cancel" onClick={() => setIsModalOpen(false)}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
+
+                {/* Section 1: Basic Details */}
+                <div>
+                  <h4 style={{ fontSize: "13px", fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "12px", display: "flex", alignItems: "center", gap: "6px", margin: "0 0 12px" }}>
+                    <UserPlus size={15} style={{ color: "#4f46e5" }} />
+                    1. Basic Details
+                  </h4>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+
+                    {/* Officer Name */}
+                    <div className="form-field-group">
+                      <label htmlFor="fullName" className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "13px" }}>
+                        Officer Name <span className="required-star">*</span>
+                      </label>
+                      <input
+                        id="fullName"
+                        type="text"
+                        placeholder="e.g. Ranjith Bandara"
+                        value={formName}
+                        onChange={(e) => setFormName(e.target.value)}
+                        className={`field-input ${errors.name ? "field-input-invalid" : ""}`}
+                        style={{ fontSize: "14px" }}
+                      />
+                      {errors.name && <span className="field-error-text">{errors.name}</span>}
+                    </div>
+
+                    {/* NIC No & Role - 2 columns */}
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                      <div className="form-field-group">
+                        <label htmlFor="nicNo" className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "13px" }}>
+                          NIC No <span className="required-star">*</span>
+                        </label>
+                        <input
+                          id="nicNo"
+                          type="text"
+                          placeholder="e.g. 198512345678"
+                          value={formNic}
+                          onChange={(e) => setFormNic(e.target.value)}
+                          className={`field-input ${errors.nic ? "field-input-invalid" : ""}`}
+                          style={{ fontSize: "14px" }}
+                        />
+                        {errors.nic && <span className="field-error-text">{errors.nic}</span>}
+                      </div>
+                      <div className="form-field-group">
+                        <label htmlFor="officerRoleSelect" className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "13px" }}>
+                          Role / Position <span className="required-star">*</span>
+                        </label>
+                        <select
+                          id="officerRoleSelect"
+                          value={formOfficerRole}
+                          onChange={(e) => setFormOfficerRole(e.target.value as "Chairman" | "Member")}
+                          className="field-select"
+                          style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", width: "100%", backgroundColor: "#ffffff", fontSize: "14px", fontWeight: 600 }}
+                        >
+                          <option value="Chairman">Chairman</option>
+                          <option value="Member">Member</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Email & Status - 2 columns */}
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                      <div className="form-field-group">
+                        <label htmlFor="email" className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "13px" }}>
+                          {t("emailAddress", "Email Address")} <span className="required-star">*</span>
+                        </label>
+                        <input
+                          id="email"
+                          type="email"
+                          placeholder="e.g. ranjith@moe.gov.lk"
+                          value={formEmail}
+                          onChange={(e) => setFormEmail(e.target.value)}
+                          className={`field-input ${errors.email ? "field-input-invalid" : ""}`}
+                          style={{ fontSize: "14px" }}
+                        />
+                        {errors.email && <span className="field-error-text">{errors.email}</span>}
+                      </div>
+                      <div className="form-field-group">
+                        <label htmlFor="status" className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "13px" }}>{t("status", "Account Status")}</label>
+                        <select
+                          id="status"
+                          value={formStatus}
+                          onChange={(e) => setFormStatus(e.target.value as "Active" | "Inactive")}
+                          className="field-select"
+                          style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", width: "100%", backgroundColor: "#ffffff", fontSize: "14px" }}
+                        >
+                          <option value="Active">{t("active", "Active")}</option>
+                          <option value="Inactive">{t("inactive", "Inactive")}</option>
+                        </select>
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+
+                <div style={{ height: "1px", backgroundColor: "#e2e8f0" }} />
+
+                {/* Section 2: School Background */}
+                <div>
+                  <h4 style={{ fontSize: "13px", fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "12px", display: "flex", alignItems: "center", gap: "6px", margin: "0 0 12px" }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                      &#127979; 2. School Background
+                    </span>
+                  </h4>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+
+                    {/* Studied Schools */}
+                    <div className="form-field-group">
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                        <label className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "13px", margin: 0 }}>
+                          Studied Schools
+                        </label>
+                        <span style={{ fontSize: "11px", color: "#0284c7", fontWeight: 600, backgroundColor: "#e0f2fe", padding: "1px 8px", borderRadius: "10px" }}>
+                          {formStudiedSchools.length} added
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", gap: "8px" }}>
+                        <input
+                          type="text"
+                          placeholder="Type school name & press Enter..."
+                          value={newStudiedInput}
+                          onChange={(e) => setNewStudiedInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleAddStudiedSchool();
+                            }
+                          }}
+                          className="field-input"
+                          style={{ flex: 1, fontSize: "13px" }}
+                        />
+                        <button type="button" onClick={handleAddStudiedSchool} style={{ padding: "9px 16px", borderRadius: "8px", backgroundColor: "#0284c7", color: "#fff", border: "none", fontWeight: 600, cursor: "pointer", fontSize: "13px" }}>
+                          + Add School
+                        </button>
+                      </div>
+                      {formStudiedSchools.length > 0 ? (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", backgroundColor: "#f8fafc", padding: "10px", borderRadius: "8px", border: "1px solid #e2e8f0", marginTop: "8px" }}>
+                          {formStudiedSchools.map((s, idx) => (
+                            <span key={idx} style={{ display: "inline-flex", alignItems: "center", gap: "6px", backgroundColor: "#e0f2fe", color: "#0369a1", padding: "4px 10px", borderRadius: "16px", fontSize: "12px", fontWeight: 600 }}>
+                              {s}
+                              <button type="button" onClick={() => handleRemoveStudiedSchool(idx)} title="Remove" style={{ background: "none", border: "none", color: "#0369a1", cursor: "pointer", display: "flex", alignItems: "center", padding: 0 }}>
+                                <X size={13} />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: "12px", color: "#94a3b8", display: "block", marginTop: "4px", fontStyle: "italic" }}>No schools added yet.</span>
+                      )}
+                    </div>
+
+                    {/* Children's Schools */}
+                    <div className="form-field-group">
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                        <label className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "13px", margin: 0 }}>
+                          Children&apos;s Schools
+                        </label>
+                        <span style={{ fontSize: "11px", color: "#d97706", fontWeight: 600, backgroundColor: "#fef3c7", padding: "1px 8px", borderRadius: "10px" }}>
+                          {formChildrenSchools.length} added
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", gap: "8px" }}>
+                        <input
+                          type="text"
+                          placeholder="Type school name & press Enter..."
+                          value={newChildrenInput}
+                          onChange={(e) => setNewChildrenInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleAddChildrenSchool();
+                            }
+                          }}
+                          className="field-input"
+                          style={{ flex: 1, fontSize: "13px" }}
+                        />
+                        <button type="button" onClick={handleAddChildrenSchool} style={{ padding: "9px 16px", borderRadius: "8px", backgroundColor: "#d97706", color: "#fff", border: "none", fontWeight: 600, cursor: "pointer", fontSize: "13px" }}>
+                          + Add School
+                        </button>
+                      </div>
+                      {formChildrenSchools.length > 0 ? (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", backgroundColor: "#f8fafc", padding: "10px", borderRadius: "8px", border: "1px solid #e2e8f0", marginTop: "8px" }}>
+                          {formChildrenSchools.map((s, idx) => (
+                            <span key={idx} style={{ display: "inline-flex", alignItems: "center", gap: "6px", backgroundColor: "#fef3c7", color: "#b45309", padding: "4px 10px", borderRadius: "16px", fontSize: "12px", fontWeight: 600 }}>
+                              {s}
+                              <button type="button" onClick={() => handleRemoveChildrenSchool(idx)} title="Remove" style={{ background: "none", border: "none", color: "#b45309", cursor: "pointer", display: "flex", alignItems: "center", padding: 0 }}>
+                                <X size={13} />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: "12px", color: "#94a3b8", display: "block", marginTop: "4px", fontStyle: "italic" }}>No schools added yet.</span>
+                      )}
+                    </div>
+
+                  </div>
+                </div>
+
+              </div>
+
+              <footer className="modal-footer" style={{ marginTop: "24px", paddingTop: "16px", borderTop: "1px solid #e2e8f0", display: "flex", justifyContent: "flex-end", gap: "12px" }}>
+                <button type="button" className="btn-modal-cancel" onClick={() => setIsModalOpen(false)} style={{ padding: "10px 20px", fontSize: "14px", fontWeight: 600 }}>
                   {t("cancelBtn", "Cancel")}
                 </button>
-                <button type="submit" className="btn-modal-save">
+                <button type="submit" className="btn-modal-save" style={{ padding: "10px 26px", fontSize: "14px", fontWeight: 600, boxShadow: "0 2px 4px rgba(79,70,229,0.2)" }}>
                   {t("saveAccountBtn", "Save Account")}
                 </button>
               </footer>

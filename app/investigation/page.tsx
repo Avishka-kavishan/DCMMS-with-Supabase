@@ -15,7 +15,7 @@ import {
   UserCheck, Shield, ChevronRight, Calendar as CalendarIcon, 
   FileText, Clock, AlertCircle, Info, CheckCircle, Search, 
   User, Mail, ArrowRight, Sparkles, Filter, RefreshCw, FileCheck,
-  Building, CreditCard, MapPin, Award, Send, CheckSquare, Layers
+  Building, CreditCard, MapPin, Award, Send, CheckSquare, Layers, GraduationCap
 } from "lucide-react";
 
 interface Inquiry {
@@ -31,6 +31,10 @@ interface Inquiry {
 interface Officer {
   id: string;
   fullName: string;
+  nicNo?: string;
+  officerRole?: "Chairman" | "Member";
+  studiedSchools?: string[];
+  childrenSchools?: string[];
   email: string;
   role: "investigation_officer";
   status: "Active" | "Inactive";
@@ -89,10 +93,40 @@ export default function InvestigationPage() {
   const [isOfficerEditMode, setIsOfficerEditMode] = useState(false);
   const [editingOfficerId, setEditingOfficerId] = useState<string | null>(null);
   const [officerNameForm, setOfficerNameForm] = useState("");
+  const [officerNicForm, setOfficerNicForm] = useState("");
+  const [officerRoleTypeForm, setOfficerRoleTypeForm] = useState<"Chairman" | "Member">("Member");
+  const [studiedSchoolsForm, setStudiedSchoolsForm] = useState<string[]>([]);
+  const [newStudiedSchoolInput, setNewStudiedSchoolInput] = useState("");
+  const [childrenSchoolsForm, setChildrenSchoolsForm] = useState<string[]>([]);
+  const [newChildrenSchoolInput, setNewChildrenSchoolInput] = useState("");
   const [officerEmailForm, setOfficerEmailForm] = useState("");
   const [officerStatusForm, setOfficerStatusForm] = useState<"Active" | "Inactive">("Active");
   const [officerErrors, setOfficerErrors] = useState<Record<string, string>>({});
   const [toastMessage, setToastMessage] = useState("");
+
+  const handleAddStudiedSchool = () => {
+    const trimmed = newStudiedSchoolInput.trim();
+    if (trimmed && !studiedSchoolsForm.includes(trimmed)) {
+      setStudiedSchoolsForm((prev) => [...prev, trimmed]);
+      setNewStudiedSchoolInput("");
+    }
+  };
+
+  const handleRemoveStudiedSchool = (index: number) => {
+    setStudiedSchoolsForm((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleAddChildrenSchool = () => {
+    const trimmed = newChildrenSchoolInput.trim();
+    if (trimmed && !childrenSchoolsForm.includes(trimmed)) {
+      setChildrenSchoolsForm((prev) => [...prev, trimmed]);
+      setNewChildrenSchoolInput("");
+    }
+  };
+
+  const handleRemoveChildrenSchool = (index: number) => {
+    setChildrenSchoolsForm((prev) => prev.filter((_, i) => i !== index));
+  };
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -295,7 +329,7 @@ export default function InvestigationPage() {
       try {
         const { data, error } = await supabase
           .from("dcmms_profiles")
-          .select("id, full_name, email, status, created_at")
+          .select("id, full_name, nic_no, officer_role, studied_schools, children_schools, email, status, created_at")
           .eq("role", "investigation_officer")
           .order("created_at", { ascending: false });
 
@@ -303,6 +337,18 @@ export default function InvestigationPage() {
           result = data.map((p: any) => ({
             id: p.id,
             fullName: p.full_name || "",
+            nicNo: p.nic_no || "",
+            officerRole: p.officer_role === "Chairman" ? "Chairman" : "Member",
+            studiedSchools: Array.isArray(p.studied_schools)
+              ? p.studied_schools
+              : typeof p.studied_schools === "string" && p.studied_schools.startsWith("[")
+              ? JSON.parse(p.studied_schools)
+              : [],
+            childrenSchools: Array.isArray(p.children_schools)
+              ? p.children_schools
+              : typeof p.children_schools === "string" && p.children_schools.startsWith("[")
+              ? JSON.parse(p.children_schools)
+              : [],
             email: p.email || "",
             role: "investigation_officer",
             status: (p.status === "Inactive" ? "Inactive" : "Active") as "Active" | "Inactive",
@@ -326,10 +372,14 @@ export default function InvestigationPage() {
               result.push({
                 id: lo.id,
                 fullName: lo.fullName,
+                nicNo: lo.nicNo || "",
+                officerRole: lo.officerRole === "Chairman" ? "Chairman" : "Member",
+                studiedSchools: Array.isArray(lo.studiedSchools) ? lo.studiedSchools : [],
+                childrenSchools: Array.isArray(lo.childrenSchools) ? lo.childrenSchools : [],
                 email: lo.email,
                 role: "investigation_officer",
                 status: lo.status || "Active",
-                createdAt: lo.createdAt || new Date().toISOString().slice(0, 10)
+                createdAt: lo.createdAt || new Date().toISOString().slice(0, 10),
               });
             }
           });
@@ -666,7 +716,8 @@ export default function InvestigationPage() {
   // ── Officer form validation ───────────────────────────────────────────────
   const validateOfficerForm = () => {
     const newErrors: Record<string, string> = {};
-    if (!officerNameForm.trim()) newErrors.name = t("pleaseFillAllFields", "Name is required.");
+    if (!officerNameForm.trim()) newErrors.name = t("pleaseFillAllFields", "Officer Name is required.");
+    if (!officerNicForm.trim()) newErrors.nic = "NIC No is required.";
     if (!officerEmailForm.trim()) {
       newErrors.email = t("pleaseFillAllFields", "Email is required.");
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(officerEmailForm.trim())) {
@@ -689,6 +740,10 @@ export default function InvestigationPage() {
     const officer: Officer = {
       id: oId,
       fullName: officerNameForm.trim(),
+      nicNo: officerNicForm.trim(),
+      officerRole: officerRoleTypeForm,
+      studiedSchools: studiedSchoolsForm,
+      childrenSchools: childrenSchoolsForm,
       email: officerEmailForm.trim().toLowerCase(),
       role: "investigation_officer",
       status: officerStatusForm,
@@ -699,6 +754,10 @@ export default function InvestigationPage() {
       try {
         const payload: any = {
           full_name: officer.fullName,
+          nic_no: officer.nicNo,
+          officer_role: officer.officerRole,
+          studied_schools: officer.studiedSchools,
+          children_schools: officer.childrenSchools,
           email: officer.email,
           role: "investigation_officer",
           status: officer.status
@@ -707,7 +766,7 @@ export default function InvestigationPage() {
           payload.id = officer.id;
         }
         const { error } = await supabase.from("dcmms_profiles").upsert(payload);
-        if (error) throw error;
+        if (error) console.warn("Supabase upsert warning:", error);
       } catch (err) {
         console.error("Failed to save officer in Supabase:", err);
       }
@@ -718,14 +777,7 @@ export default function InvestigationPage() {
       let list = [];
       try { list = JSON.parse(stored); } catch (e) {}
       list = list.filter((o: any) => o.id !== officer.id);
-      list.push({
-        id: officer.id,
-        fullName: officer.fullName,
-        email: officer.email,
-        role: "investigation_officer",
-        status: officer.status,
-        createdAt: officer.createdAt
-      });
+      list.push(officer);
       localStorage.setItem("dcmms_custom_profiles", JSON.stringify(list));
     }
 
@@ -1320,6 +1372,12 @@ export default function InvestigationPage() {
                       setIsOfficerEditMode(false);
                       setEditingOfficerId(null);
                       setOfficerNameForm("");
+                      setOfficerNicForm("");
+                      setOfficerRoleTypeForm("Member");
+                      setStudiedSchoolsForm([]);
+                      setNewStudiedSchoolInput("");
+                      setChildrenSchoolsForm([]);
+                      setNewChildrenSchoolInput("");
                       setOfficerEmailForm("");
                       setOfficerStatusForm("Active");
                       setOfficerErrors({});
@@ -1337,7 +1395,9 @@ export default function InvestigationPage() {
                 <table className="letters-data-table">
                   <thead>
                     <tr>
-                      <th scope="col">{lang === "si" ? "සම්පූර්ණ නම" : "Officer Name"}</th>
+                      <th scope="col">{lang === "si" ? "නිලධාරියාගේ නම සහ NIC" : "Officer Name & NIC"}</th>
+                      <th scope="col">{lang === "si" ? "ඉගෙනුම ලැබූ පාසල්" : "Studied Schools"}</th>
+                      <th scope="col">{lang === "si" ? "දරුවන්ගේ පාසල්" : "Children's Schools"}</th>
                       <th scope="col">{lang === "si" ? "ඊමේල් ලිපිනය" : "Email Address"}</th>
                       <th scope="col">{lang === "si" ? "ලියාපදිංචි දිනය" : "Date Registered"}</th>
                       <th scope="col">{lang === "si" ? "තත්ත්වය" : "Status"}</th>
@@ -1350,14 +1410,47 @@ export default function InvestigationPage() {
                         <tr key={o.id} className="letter-table-row">
                           <td className="font-semibold text-primary">
                             <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                              <div style={{ width: "36px", height: "36px", borderRadius: "50%", backgroundColor: "#e0e7ff", color: "#4338ca", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "13px" }}>
+                              <div style={{ width: "38px", height: "38px", borderRadius: "50%", backgroundColor: "#e0e7ff", color: "#4338ca", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "13px" }}>
                                 {getInitials(o.fullName)}
                               </div>
                               <div>
-                                <div style={{ fontWeight: 600, color: "#0f172a" }}>{o.fullName}</div>
-                                <span style={{ fontSize: "11px", color: "#64748b" }}>Investigation Officer</span>
+                                <div style={{ fontWeight: 600, color: "#0f172a", display: "flex", alignItems: "center", gap: "6px" }}>
+                                  <span>{o.fullName}</span>
+                                  <span style={{ fontSize: "11px", backgroundColor: o.officerRole === "Chairman" ? "#fef3c7" : "#e0e7ff", color: o.officerRole === "Chairman" ? "#92400e" : "#3730a3", padding: "1px 7px", borderRadius: "10px", fontWeight: 600 }}>
+                                    {o.officerRole || "Member"}
+                                  </span>
+                                </div>
+                                <span style={{ fontSize: "11px", color: "#475569", display: "inline-block", backgroundColor: "#f1f5f9", padding: "1px 6px", borderRadius: "4px", marginTop: "2px" }}>
+                                  NIC: {o.nicNo || "N/A"}
+                                </span>
                               </div>
                             </div>
+                          </td>
+                          <td>
+                            {o.studiedSchools && o.studiedSchools.length > 0 ? (
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", maxWidth: "200px" }}>
+                                {o.studiedSchools.map((s, idx) => (
+                                  <span key={idx} style={{ fontSize: "11px", backgroundColor: "#e0f2fe", color: "#0369a1", padding: "2px 8px", borderRadius: "12px", fontWeight: 500 }}>
+                                    {s}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span style={{ fontSize: "12px", color: "#94a3b8" }}>—</span>
+                            )}
+                          </td>
+                          <td>
+                            {o.childrenSchools && o.childrenSchools.length > 0 ? (
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", maxWidth: "200px" }}>
+                                {o.childrenSchools.map((s, idx) => (
+                                  <span key={idx} style={{ fontSize: "11px", backgroundColor: "#fef3c7", color: "#b45309", padding: "2px 8px", borderRadius: "12px", fontWeight: 500 }}>
+                                    {s}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span style={{ fontSize: "12px", color: "#94a3b8" }}>—</span>
+                            )}
                           </td>
                           <td>
                             <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "#475569" }}>
@@ -1386,6 +1479,12 @@ export default function InvestigationPage() {
                                   setIsOfficerEditMode(true);
                                   setEditingOfficerId(o.id);
                                   setOfficerNameForm(o.fullName);
+                                  setOfficerNicForm(o.nicNo || "");
+                                  setOfficerRoleTypeForm(o.officerRole || "Member");
+                                  setStudiedSchoolsForm(Array.isArray(o.studiedSchools) ? [...o.studiedSchools] : []);
+                                  setNewStudiedSchoolInput("");
+                                  setChildrenSchoolsForm(Array.isArray(o.childrenSchools) ? [...o.childrenSchools] : []);
+                                  setNewChildrenSchoolInput("");
                                   setOfficerEmailForm(o.email);
                                   setOfficerStatusForm(o.status);
                                   setOfficerErrors({});
@@ -1742,109 +1841,305 @@ export default function InvestigationPage() {
       {/* ==================== OFFICER REGISTER/EDIT MODAL ==================== */}
       {isOfficerModalOpen && (
         <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="officer-modal-title">
-          <div className="modal-content-wrapper premium-modal" style={{ maxWidth: "520px", width: "95%", borderRadius: "16px", overflow: "hidden" }}>
+          <div className="modal-content-wrapper premium-modal" style={{ maxWidth: "600px", width: "95%", borderRadius: "16px", overflow: "hidden", backgroundColor: "#ffffff", boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)" }}>
             
-            <header className="modal-header" style={{ padding: "20px 24px", backgroundColor: "#1e1b4b", color: "#ffffff" }}>
+            {/* Modal Header */}
+            <header className="modal-header" style={{ padding: "18px 24px", backgroundColor: "#1e1b4b", color: "#ffffff", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
                 <div style={{ width: "40px", height: "40px", borderRadius: "10px", backgroundColor: "rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <UserPlus size={22} style={{ color: "#818cf8" }} />
                 </div>
-                <h3 id="officer-modal-title" className="modal-title" style={{ color: "#ffffff", margin: 0, fontSize: "17px", fontWeight: 700 }}>
-                  {isOfficerEditMode 
-                    ? (lang === "si" ? "නිලධාරී තොරතුරු සංස්කරණය" : "Edit Investigation Officer") 
-                    : (lang === "si" ? "නව විමර්ශන නිලධාරී ලියාපදිංචිය" : "Register Investigation Officer")}
-                </h3>
+                <div>
+                  <h3 id="officer-modal-title" className="modal-title" style={{ color: "#ffffff", margin: 0, fontSize: "17px", fontWeight: 700 }}>
+                    {isOfficerEditMode 
+                      ? (lang === "si" ? "නිලධාරී තොරතුරු සංස්කරණය" : "Edit Investigation Officer") 
+                      : (lang === "si" ? "නව විමර්ශන නිලධාරී ලියාපදිංචිය" : "Register Investigation Officer")}
+                  </h3>
+                  <p style={{ margin: 0, fontSize: "12px", color: "#cbd5e1" }}>
+                    {lang === "si" ? "පහත තොරතුරු සම්පූර්ණ කර පද්ධතියට එක් කරන්න" : "Fill out officer credentials & school details below"}
+                  </p>
+                </div>
               </div>
               <button 
                 type="button" 
                 className="modal-close-btn"
                 onClick={() => setIsOfficerModalOpen(false)}
                 aria-label="Close modal"
-                style={{ color: "#ffffff", backgroundColor: "rgba(255,255,255,0.1)", border: "none", padding: "8px", borderRadius: "50%", cursor: "pointer" }}
+                style={{ color: "#ffffff", backgroundColor: "rgba(255,255,255,0.1)", border: "none", padding: "8px", borderRadius: "50%", cursor: "pointer", transition: "background-color 0.2s" }}
               >
                 <X size={18} />
               </button>
             </header>
 
-            <form onSubmit={handleSaveOfficer} style={{ padding: "20px 24px" }}>
+            <form onSubmit={handleSaveOfficer} style={{ padding: "20px 24px", backgroundColor: "#ffffff" }}>
               
-              {/* Dynamic Avatar Preview */}
-              <div style={{ display: "flex", alignItems: "center", gap: "14px", backgroundColor: "#f8fafc", padding: "14px", borderRadius: "10px", border: "1px solid #e2e8f0", marginBottom: "18px" }}>
-                <div style={{ width: "44px", height: "44px", borderRadius: "50%", backgroundColor: "#4f46e5", color: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "16px" }}>
+              {/* Dynamic Live Preview Header Card */}
+              <div style={{ display: "flex", alignItems: "center", gap: "14px", backgroundColor: "#f8fafc", padding: "14px 16px", borderRadius: "12px", border: "1px solid #e2e8f0", marginBottom: "20px" }}>
+                <div style={{ width: "48px", height: "48px", borderRadius: "50%", backgroundColor: officerRoleTypeForm === "Chairman" ? "#d97706" : "#4f46e5", color: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "16px", flexShrink: 0, boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }}>
                   {getInitials(officerNameForm)}
                 </div>
-                <div>
-                  <div style={{ fontWeight: 700, color: "#0f172a" }}>
-                    {officerNameForm || "New Officer"}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                    <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "15px" }}>
+                      {officerNameForm || (lang === "si" ? "නව නිලධාරියාගේ නම" : "New Officer Name")}
+                    </span>
+                    <span style={{ fontSize: "11px", backgroundColor: officerRoleTypeForm === "Chairman" ? "#fef3c7" : "#e0e7ff", color: officerRoleTypeForm === "Chairman" ? "#92400e" : "#3730a3", padding: "2px 8px", borderRadius: "12px", fontWeight: 700 }}>
+                      {officerRoleTypeForm}
+                    </span>
                   </div>
-                  <span style={{ fontSize: "12px", color: "#64748b" }}>
-                    Role: Investigation Officer ({officerStatusForm})
-                  </span>
+                  <div style={{ display: "flex", gap: "12px", marginTop: "4px", fontSize: "12px", color: "#64748b" }}>
+                    <span>NIC: <strong style={{ color: "#334155" }}>{officerNicForm || "N/A"}</strong></span>
+                    <span>•</span>
+                    <span>Status: <strong style={{ color: officerStatusForm === "Active" ? "#16a34a" : "#dc2626" }}>{officerStatusForm}</strong></span>
+                  </div>
                 </div>
               </div>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
                 
-                {/* Officer Name */}
-                <div className="form-field-group">
-                  <label htmlFor="formOfficerName" className="field-label" style={{ fontWeight: 600, color: "#334155" }}>
-                    {lang === "si" ? "නිලධාරියාගේ සම්පූර්ණ නම" : "Full Name"} <span style={{ color: "#dc2626" }}>*</span>
-                  </label>
-                  <input
-                    id="formOfficerName"
-                    type="text"
-                    value={officerNameForm}
-                    onChange={(e) => setOfficerNameForm(e.target.value)}
-                    placeholder="e.g., Ranjith Bandara"
-                    className={`field-input${officerErrors.name ? " error" : ""}`}
-                    style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", width: "100%" }}
-                  />
-                  {officerErrors.name && <span style={{ color: "#ef4444", fontSize: "12px", marginTop: "4px", display: "block" }}>{officerErrors.name}</span>}
+                {/* Section 1: Basic Information */}
+                <div>
+                  <h4 style={{ fontSize: "13px", fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "12px", display: "flex", alignItems: "center", gap: "6px" }}>
+                    <User size={15} style={{ color: "#4f46e5" }} />
+                    {lang === "si" ? "1. මූලික තොරතුරු" : "1. Basic Details"}
+                  </h4>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                    
+                    {/* Officer Name */}
+                    <div className="form-field-group">
+                      <label htmlFor="formOfficerName" className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "13px" }}>
+                        {lang === "si" ? "නිලධාරියාගේ නම" : "Officer Name"} <span style={{ color: "#dc2626" }}>*</span>
+                      </label>
+                      <input
+                        id="formOfficerName"
+                        type="text"
+                        value={officerNameForm}
+                        onChange={(e) => setOfficerNameForm(e.target.value)}
+                        placeholder="e.g., Ranjith Bandara"
+                        className={`field-input${officerErrors.name ? " error" : ""}`}
+                        style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", width: "100%", fontSize: "14px" }}
+                      />
+                      {officerErrors.name && <span style={{ color: "#ef4444", fontSize: "12px", marginTop: "4px", display: "block" }}>{officerErrors.name}</span>}
+                    </div>
+
+                    {/* NIC No & Role Grid Row */}
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                      
+                      {/* NIC No */}
+                      <div className="form-field-group">
+                        <label htmlFor="formOfficerNic" className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "13px" }}>
+                          {lang === "si" ? "ජාතික හැඳුනුම්පත් අංකය (NIC No)" : "NIC No"} <span style={{ color: "#dc2626" }}>*</span>
+                        </label>
+                        <input
+                          id="formOfficerNic"
+                          type="text"
+                          value={officerNicForm}
+                          onChange={(e) => setOfficerNicForm(e.target.value)}
+                          placeholder="e.g., 198512345678"
+                          className={`field-input${officerErrors.nic ? " error" : ""}`}
+                          style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", width: "100%", fontSize: "14px" }}
+                        />
+                        {officerErrors.nic && <span style={{ color: "#ef4444", fontSize: "12px", marginTop: "4px", display: "block" }}>{officerErrors.nic}</span>}
+                      </div>
+
+                      {/* Role / Position */}
+                      <div className="form-field-group">
+                        <label htmlFor="formOfficerRoleType" className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "13px" }}>
+                          {lang === "si" ? "තනතුර / කාර්යභාරය" : "Role / Position"} <span style={{ color: "#dc2626" }}>*</span>
+                        </label>
+                        <select
+                          id="formOfficerRoleType"
+                          value={officerRoleTypeForm}
+                          onChange={(e) => setOfficerRoleTypeForm(e.target.value as "Chairman" | "Member")}
+                          className="field-select"
+                          style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", width: "100%", backgroundColor: "#ffffff", fontSize: "14px", fontWeight: 600 }}
+                        >
+                          <option value="Chairman">{lang === "si" ? "සභාපති (Chairman)" : "Chairman"}</option>
+                          <option value="Member">{lang === "si" ? "සාමාජික (Member)" : "Member"}</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Email & Status Grid Row */}
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                      
+                      {/* Email Address */}
+                      <div className="form-field-group">
+                        <label htmlFor="formOfficerEmail" className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "13px" }}>
+                          {lang === "si" ? "විද්‍යුත් තැපැල් ලිපිනය" : "Email Address"} <span style={{ color: "#dc2626" }}>*</span>
+                        </label>
+                        <input
+                          id="formOfficerEmail"
+                          type="text"
+                          value={officerEmailForm}
+                          onChange={(e) => setOfficerEmailForm(e.target.value)}
+                          placeholder="e.g., ranjith@moe.gov.lk"
+                          className={`field-input${officerErrors.email ? " error" : ""}`}
+                          disabled={isOfficerEditMode}
+                          style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", width: "100%", fontSize: "14px" }}
+                        />
+                        {officerErrors.email && <span style={{ color: "#ef4444", fontSize: "12px", marginTop: "4px", display: "block" }}>{officerErrors.email}</span>}
+                      </div>
+
+                      {/* Status */}
+                      <div className="form-field-group">
+                        <label htmlFor="formOfficerStatus" className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "13px" }}>
+                          {lang === "si" ? "තත්ත්වය" : "Account Status"}
+                        </label>
+                        <select
+                          id="formOfficerStatus"
+                          value={officerStatusForm}
+                          onChange={(e) => setOfficerStatusForm(e.target.value as any)}
+                          className="field-select"
+                          style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", width: "100%", backgroundColor: "#ffffff", fontSize: "14px" }}
+                        >
+                          <option value="Active">Active</option>
+                          <option value="Inactive">Inactive</option>
+                        </select>
+                      </div>
+                    </div>
+
+                  </div>
                 </div>
 
-                {/* Email Address */}
-                <div className="form-field-group">
-                  <label htmlFor="formOfficerEmail" className="field-label" style={{ fontWeight: 600, color: "#334155" }}>
-                    {lang === "si" ? "විද්‍යුත් තැපැල් ලිපිනය" : "Email Address"} <span style={{ color: "#dc2626" }}>*</span>
-                  </label>
-                  <input
-                    id="formOfficerEmail"
-                    type="text"
-                    value={officerEmailForm}
-                    onChange={(e) => setOfficerEmailForm(e.target.value)}
-                    placeholder="e.g., ranjith@moe.gov.lk"
-                    className={`field-input${officerErrors.email ? " error" : ""}`}
-                    disabled={isOfficerEditMode}
-                    style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", width: "100%" }}
-                  />
-                  {officerErrors.email && <span style={{ color: "#ef4444", fontSize: "12px", marginTop: "4px", display: "block" }}>{officerErrors.email}</span>}
-                </div>
+                <div style={{ height: "1px", backgroundColor: "#e2e8f0" }} />
 
-                {/* Status */}
-                <div className="form-field-group">
-                  <label htmlFor="formOfficerStatus" className="field-label" style={{ fontWeight: 600, color: "#334155" }}>
-                    {lang === "si" ? "තත්ත්වය" : "Status"}
-                  </label>
-                  <select
-                    id="formOfficerStatus"
-                    value={officerStatusForm}
-                    onChange={(e) => setOfficerStatusForm(e.target.value as any)}
-                    className="field-select"
-                    style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", width: "100%" }}
-                  >
-                    <option value="Active">Active</option>
-                    <option value="Inactive">Inactive</option>
-                  </select>
+                {/* Section 2: Educational & Background Details */}
+                <div>
+                  <h4 style={{ fontSize: "13px", fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "12px", display: "flex", alignItems: "center", gap: "6px" }}>
+                    <GraduationCap size={16} style={{ color: "#0284c7" }} />
+                    {lang === "si" ? "2. අධ්‍යාපනික සහ පාසල් තොරතුරු" : "2. School Background"}
+                  </h4>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                    
+                    {/* Studied Schools (Dynamic list) */}
+                    <div className="form-field-group">
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                        <label className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "13px", margin: 0 }}>
+                          {lang === "si" ? "ඉගෙනුම ලැබූ පාසල්" : "Studied Schools"}
+                        </label>
+                        <span style={{ fontSize: "11px", color: "#0284c7", fontWeight: 600, backgroundColor: "#e0f2fe", padding: "1px 8px", borderRadius: "10px" }}>
+                          {studiedSchoolsForm.length} {lang === "si" ? "එක්කළ පාසල්" : "added"}
+                        </span>
+                      </div>
+
+                      <div style={{ display: "flex", gap: "8px" }}>
+                        <input
+                          type="text"
+                          value={newStudiedSchoolInput}
+                          onChange={(e) => setNewStudiedSchoolInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleAddStudiedSchool();
+                            }
+                          }}
+                          placeholder={lang === "si" ? "පාසලක නමක් ඇතුළත් කර Enter ඔබන්න..." : "Type school name & press Enter..."}
+                          style={{ padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", flex: 1, fontSize: "13px" }}
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddStudiedSchool}
+                          style={{ padding: "9px 16px", borderRadius: "8px", backgroundColor: "#0284c7", color: "#ffffff", border: "none", fontWeight: 600, fontSize: "13px", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "4px" }}
+                        >
+                          {lang === "si" ? "+ එකතු කරන්න" : "+ Add School"}
+                        </button>
+                      </div>
+
+                      {studiedSchoolsForm.length > 0 ? (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", backgroundColor: "#f8fafc", padding: "10px", borderRadius: "8px", border: "1px solid #e2e8f0", marginTop: "8px" }}>
+                          {studiedSchoolsForm.map((school, index) => (
+                            <span key={index} style={{ display: "inline-flex", alignItems: "center", gap: "6px", backgroundColor: "#e0f2fe", color: "#0369a1", padding: "4px 10px", borderRadius: "16px", fontSize: "12px", fontWeight: 600 }}>
+                              {school}
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveStudiedSchool(index)}
+                                title="Remove school"
+                                style={{ background: "none", border: "none", color: "#0369a1", cursor: "pointer", display: "flex", alignItems: "center", padding: 0 }}
+                              >
+                                <X size={13} />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: "12px", color: "#94a3b8", display: "block", marginTop: "4px", fontStyle: "italic" }}>
+                          {lang === "si" ? "පාසල් ඇතුළත් කර නොමැත." : "No schools added yet."}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Children's Schools (Dynamic list) */}
+                    <div className="form-field-group">
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                        <label className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "13px", margin: 0 }}>
+                          {lang === "si" ? "දරුවන්ගේ පාසල්" : "Children's Schools"}
+                        </label>
+                        <span style={{ fontSize: "11px", color: "#d97706", fontWeight: 600, backgroundColor: "#fef3c7", padding: "1px 8px", borderRadius: "10px" }}>
+                          {childrenSchoolsForm.length} {lang === "si" ? "එක්කළ පාසල්" : "added"}
+                        </span>
+                      </div>
+
+                      <div style={{ display: "flex", gap: "8px" }}>
+                        <input
+                          type="text"
+                          value={newChildrenSchoolInput}
+                          onChange={(e) => setNewChildrenSchoolInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleAddChildrenSchool();
+                            }
+                          }}
+                          placeholder={lang === "si" ? "දරුවාගේ පාසලක නමක් ඇතුළත් කරන්න..." : "Type school name & press Enter..."}
+                          style={{ padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", flex: 1, fontSize: "13px" }}
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddChildrenSchool}
+                          style={{ padding: "9px 16px", borderRadius: "8px", backgroundColor: "#d97706", color: "#ffffff", border: "none", fontWeight: 600, fontSize: "13px", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "4px" }}
+                        >
+                          {lang === "si" ? "+ එකතු කරන්න" : "+ Add School"}
+                        </button>
+                      </div>
+
+                      {childrenSchoolsForm.length > 0 ? (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", backgroundColor: "#f8fafc", padding: "10px", borderRadius: "8px", border: "1px solid #e2e8f0", marginTop: "8px" }}>
+                          {childrenSchoolsForm.map((school, index) => (
+                            <span key={index} style={{ display: "inline-flex", alignItems: "center", gap: "6px", backgroundColor: "#fef3c7", color: "#b45309", padding: "4px 10px", borderRadius: "16px", fontSize: "12px", fontWeight: 600 }}>
+                              {school}
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveChildrenSchool(index)}
+                                title="Remove school"
+                                style={{ background: "none", border: "none", color: "#b45309", cursor: "pointer", display: "flex", alignItems: "center", padding: 0 }}
+                              >
+                                <X size={13} />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: "12px", color: "#94a3b8", display: "block", marginTop: "4px", fontStyle: "italic" }}>
+                          {lang === "si" ? "පාසල් ඇතුළත් කර නොමැත." : "No schools added yet."}
+                        </span>
+                      )}
+                    </div>
+
+                  </div>
                 </div>
 
               </div>
 
+              {/* Form Footer Buttons */}
               <footer className="modal-footer" style={{ marginTop: "24px", paddingTop: "16px", borderTop: "1px solid #e2e8f0", display: "flex", justifyContent: "flex-end", gap: "12px" }}>
                 <button 
                   type="button" 
                   className="btn-action-cancel"
                   onClick={() => setIsOfficerModalOpen(false)}
-                  style={{ padding: "10px 18px", borderRadius: "8px", backgroundColor: "#f1f5f9", border: "1px solid #cbd5e1", color: "#475569", fontWeight: 600 }}
+                  style={{ padding: "10px 20px", borderRadius: "8px", backgroundColor: "#f1f5f9", border: "1px solid #cbd5e1", color: "#475569", fontWeight: 600, fontSize: "14px" }}
                 >
                   {t("cancelBtn")}
                 </button>
@@ -1852,7 +2147,7 @@ export default function InvestigationPage() {
                   type="submit" 
                   disabled={isSaving}
                   className="btn-new-letter"
-                  style={{ padding: "10px 24px", borderRadius: "8px", backgroundColor: "#4f46e5", color: "#ffffff", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "8px" }}
+                  style={{ padding: "10px 26px", borderRadius: "8px", backgroundColor: "#4f46e5", color: "#ffffff", fontWeight: 600, fontSize: "14px", display: "inline-flex", alignItems: "center", gap: "8px", boxShadow: "0 2px 4px rgba(79,70,229,0.2)" }}
                 >
                   {isSaving ? "Saving..." : (lang === "si" ? "සුරකින්න" : "Save Officer")}
                 </button>
