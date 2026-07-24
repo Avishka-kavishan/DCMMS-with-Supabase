@@ -1091,21 +1091,6 @@ function CaseDetailsForm() {
                                 placeholder="e.g. SUB/FILE/102"
                               />
                             </div>
-
-                            {/* Investigation File Number (විමර්ශන ගොනු අංකය) */}
-                            <div className="form-field-group">
-                              <label htmlFor="fileRelated" className="field-label">
-                                {t("investigationFileNo", "විමර්ශන ගොනු අංකය")}
-                              </label>
-                              <input
-                                id="fileRelated"
-                                type="text"
-                                value={fileRelated}
-                                onChange={(e) => setFileRelated(e.target.value)}
-                                className="field-input"
-                                placeholder="e.g. INV/FILE/2026/01"
-                              />
-                            </div>
                           </div>
 
                           <div className="form-grid-2 mt-3">
@@ -1237,7 +1222,7 @@ function CaseDetailsForm() {
                       <svg className="card-title-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
                       </svg>
-                      {t("relatedPersonStatus", "Related Person & Status")}
+                      {t("relatedPersonStatus", "Accused Officer(s) Information")}
                     </h2>
 
                     <div className="flowchart-container">

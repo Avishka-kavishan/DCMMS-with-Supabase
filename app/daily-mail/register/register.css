@@ -261,15 +261,18 @@
   padding-right: 38px;
 }
 
-/* Custom styles for native datepicker placement */
+.field-input[type="date"] {
+  position: relative;
+}
+
 .field-input[type="date"]::-webkit-calendar-picker-indicator {
-  opacity: 0;
-  width: 100%;
-  height: 100%;
-  position: absolute;
-  top: 0;
-  left: 0;
   cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
+.field-input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
 }
 
 .radio-group-container {

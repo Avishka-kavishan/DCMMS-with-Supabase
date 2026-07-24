@@ -139,20 +139,24 @@ export default function InvestigationOfficerRegistrationPage() {
 
     // 1. Save to LocalStorage
     if (typeof window !== "undefined") {
-      try {
-        const stored = localStorage.getItem("dcmms_investigation_officers") || "[]";
-        const list = JSON.parse(stored);
-        list.push(newOfficer);
-        localStorage.setItem("dcmms_investigation_officers", JSON.stringify(list));
-      } catch (err) {
-        console.error("LocalStorage save error:", err);
-      }
+      ["dcmms_investigation_officers", "dcmms_custom_profiles"].forEach((key) => {
+        try {
+          const stored = localStorage.getItem(key) || "[]";
+          let list = JSON.parse(stored);
+          if (!Array.isArray(list)) list = [];
+          list = list.filter((o: any) => o.id !== newOfficer.id && (o.fullName || o.full_name) !== newOfficer.fullName);
+          list.push(newOfficer);
+          localStorage.setItem(key, JSON.stringify(list));
+        } catch (err) {
+          console.error("LocalStorage save error:", err);
+        }
+      });
     }
 
     // 2. Save to Supabase (if configured)
     if (isSupabaseConfigured) {
       try {
-        await supabase.from("dcmms_investigation_officers").insert({
+        const invPayload = {
           id: newOfficer.id,
           full_name: newOfficer.fullName,
           nic_no: newOfficer.nicNo,
@@ -160,10 +164,9 @@ export default function InvestigationOfficerRegistrationPage() {
           studied_schools: newOfficer.studiedSchools,
           children_schools: newOfficer.childrenSchools,
           email: newOfficer.email,
-          role: newOfficer.role,
           status: newOfficer.status,
-          created_at: newOfficer.createdAt,
-        });
+        };
+        await supabase.from("dcmms_investigation_officers").upsert(invPayload);
       } catch (err) {
         console.warn("Supabase save warning:", err);
       }

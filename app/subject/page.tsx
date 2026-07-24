@@ -19,6 +19,8 @@ interface Case {
   caseNo: string;
   assignedDate: string;
   receivedDate: string;
+  letterDate?: string;
+  createdAt?: string;
   subject: string;
   priority: "high" | "medium" | "low";
   status: "In Progress" | "Closed" | "Pending";
@@ -80,13 +82,13 @@ export default function SubjectOfficerDashboard() {
   // Close sidebar on Escape key press (A11y compliance)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
+      if (e.key === "Escape" && isSidebarOpen) {
         setIsSidebarOpen(false);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [isSidebarOpen]);
 
   // Sync document properties
   useEffect(() => {
@@ -117,14 +119,14 @@ export default function SubjectOfficerDashboard() {
             // 1. Fetch letters from dcmms_daily_mail
             const { data: letters, error: lettersError } = await supabase
               .from("dcmms_daily_mail")
-              .select("ref_no, received_date, officer_name, subject, priority");
+              .select("ref_no, received_date, letter_date, created_at, officer_name, subject, priority");
 
             if (lettersError) throw lettersError;
 
             // 2. Fetch assignments from dcmms_subject_assignments
             const { data: assignmentsData } = await supabase
               .from("dcmms_subject_assignments")
-              .select("case_no, subject_officer_name");
+              .select("*");
 
             // 3. Fetch subsequent mails from dcmms_subsequent_mails
             const { data: subsequentData } = await supabase
@@ -132,6 +134,8 @@ export default function SubjectOfficerDashboard() {
               .select("case_no, mail_officer_name, received_date");
 
             const refToReceivedDate = new Map<string, string>();
+            const refToLetterDate = new Map<string, string>();
+            const refToCreatedAt = new Map<string, string>();
             const refToMailMeta = new Map<string, { subject?: string; priority?: string }>();
 
             if (letters) {
@@ -139,6 +143,8 @@ export default function SubjectOfficerDashboard() {
                 const mailOfficer = (l.officer_name || "").trim().toLowerCase();
                 if (l.ref_no && (mailOfficer === activeNameClean || (mailOfficer && activeNameClean.includes(mailOfficer)) || (mailOfficer && mailOfficer.includes(activeNameClean)))) {
                   refToReceivedDate.set(l.ref_no, l.received_date);
+                  if (l.letter_date) refToLetterDate.set(l.ref_no, l.letter_date);
+                  if (l.created_at) refToCreatedAt.set(l.ref_no, l.created_at);
                   refToMailMeta.set(l.ref_no, { subject: l.subject, priority: l.priority });
                 }
               });
@@ -147,7 +153,18 @@ export default function SubjectOfficerDashboard() {
             if (assignmentsData) {
               assignmentsData.forEach((a: any) => {
                 const asgnOfficer = (a.subject_officer_name || "").trim().toLowerCase();
-                if (a.case_no && (asgnOfficer === activeNameClean || (asgnOfficer && activeNameClean.includes(asgnOfficer)) || (asgnOfficer && asgnOfficer.includes(activeNameClean)))) {
+                const asgnText = (typeof a.assigned_officers === "string" ? a.assigned_officers : JSON.stringify(a.assigned_officers || "")).trim().toLowerCase();
+                const chairmanName = (a.chairman?.fullName || a.chairman?.name || "").trim().toLowerCase();
+                const memberNames = Array.isArray(a.members) ? a.members.map((m: any) => (m.fullName || m.name || "").trim().toLowerCase()).join(" ") : "";
+                const fullText = `${asgnOfficer} ${asgnText} ${chairmanName} ${memberNames}`;
+
+                const isMatch = 
+                  asgnOfficer === activeNameClean || 
+                  (asgnOfficer && activeNameClean.includes(asgnOfficer)) || 
+                  (asgnOfficer && asgnOfficer.includes(activeNameClean)) ||
+                  (activeNameClean && fullText.includes(activeNameClean));
+
+                if (a.case_no && isMatch) {
                   if (!refToReceivedDate.has(a.case_no)) {
                     refToReceivedDate.set(a.case_no, new Date().toISOString().split("T")[0]);
                   }
@@ -161,6 +178,23 @@ export default function SubjectOfficerDashboard() {
                 if (m.case_no && (mailOfficer === activeNameClean || (mailOfficer && activeNameClean.includes(mailOfficer)) || (mailOfficer && mailOfficer.includes(activeNameClean)))) {
                   if (!refToReceivedDate.has(m.case_no)) {
                     refToReceivedDate.set(m.case_no, m.received_date || new Date().toISOString().split("T")[0]);
+                  }
+                }
+              });
+            }
+
+            // 4. Fetch dcmms_subject directly for matching cases
+            const { data: directCases } = await supabase
+              .from("dcmms_subject")
+              .select("*");
+
+            if (directCases) {
+              directCases.forEach((item: any) => {
+                const sOfficer = (item.officer_name || item.assigned_officer || item.subject_officer || "").trim().toLowerCase();
+                const isMatch = !activeNameClean || activeNameClean === "subject officer" || sOfficer === activeNameClean || (sOfficer && activeNameClean.includes(sOfficer)) || (sOfficer && sOfficer.includes(activeNameClean));
+                if (item.case_no && isMatch) {
+                  if (!refToReceivedDate.has(item.case_no)) {
+                    refToReceivedDate.set(item.case_no, item.assigned_date || new Date().toISOString().split("T")[0]);
                   }
                 }
               });
@@ -195,6 +229,8 @@ export default function SubjectOfficerDashboard() {
                     caseNo: item.case_no,
                     assignedDate: item.assigned_date,
                     receivedDate: refToReceivedDate.get(item.case_no) || item.assigned_date,
+                    letterDate: refToLetterDate.get(item.case_no) || item.letter_date || refToReceivedDate.get(item.case_no) || item.assigned_date,
+                    createdAt: item.created_at || refToCreatedAt.get(item.case_no),
                     subject: item.subject,
                     priority: item.priority,
                     status: item.status,
@@ -219,6 +255,8 @@ export default function SubjectOfficerDashboard() {
                     caseNo: refNo,
                     assignedDate: refToReceivedDate.get(refNo) || new Date().toISOString().split("T")[0],
                     receivedDate: refToReceivedDate.get(refNo) || new Date().toISOString().split("T")[0],
+                    letterDate: refToLetterDate.get(refNo) || refToReceivedDate.get(refNo) || new Date().toISOString().split("T")[0],
+                    createdAt: refToCreatedAt.get(refNo) || new Date().toISOString(),
                     subject: meta.subject || `Assigned Case (${refNo})`,
                     priority: (meta.priority as any) || "medium",
                     status: "In Progress",
@@ -228,16 +266,17 @@ export default function SubjectOfficerDashboard() {
               });
 
               mapped.sort((a: any, b: any) => {
-                if (!!a.isOld !== !!b.isOld) {
-                  return a.isOld ? 1 : -1;
+                const timeA = new Date(a.createdAt || 0).getTime();
+                const timeB = new Date(b.createdAt || 0).getTime();
+                if (timeA !== timeB) {
+                  return timeB - timeA;
                 }
-                return new Date(b.receivedDate).getTime() - new Date(a.receivedDate).getTime();
+                const dateA = new Date(a.letterDate || a.receivedDate || a.assignedDate || 0).getTime();
+                const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).getTime();
+                return dateB - dateA;
               });
 
               setCases(mapped);
-              return;
-            } else {
-              setCases([]);
               return;
             }
           }
@@ -263,6 +302,8 @@ export default function SubjectOfficerDashboard() {
             // Filter letters/assignments assigned to the active name
             const refToReceivedDate = new Map<string, string>();
 
+            const refToLetterDate = new Map<string, string>();
+
             lettersList
               .filter((l: any) => {
                 const name = (l.officerName || "").trim().toLowerCase();
@@ -271,19 +312,43 @@ export default function SubjectOfficerDashboard() {
               .forEach((l: any) => {
                 if (l.refNo) {
                   refToReceivedDate.set(l.refNo, l.receivedDate);
+                  if (l.letterDate || l.letter_date) {
+                    refToLetterDate.set(l.refNo, l.letterDate || l.letter_date);
+                  }
                 }
               });
 
             asgnsList
               .filter((a: any) => {
-                const name = (a.subjectOfficerName || "").trim().toLowerCase();
-                return name === activeNameClean || (name && activeNameClean.includes(name)) || (name && name.includes(activeNameClean));
+                const name = (a.subjectOfficerName || a.subject_officer_name || "").trim().toLowerCase();
+                const asgnText = (typeof a.assignedOfficers === "string" ? a.assignedOfficers : (typeof a.assigned_officers === "string" ? a.assigned_officers : JSON.stringify(a.assignedOfficers || a.assigned_officers || ""))).trim().toLowerCase();
+                const chairmanName = (a.chairman?.fullName || a.chairman?.name || "").trim().toLowerCase();
+                const memberNames = Array.isArray(a.members) ? a.members.map((m: any) => (m.fullName || m.name || "").trim().toLowerCase()).join(" ") : "";
+                const fullText = `${name} ${asgnText} ${chairmanName} ${memberNames}`;
+
+                return (
+                  name === activeNameClean || 
+                  (name && activeNameClean.includes(name)) || 
+                  (name && name.includes(activeNameClean)) ||
+                  (activeNameClean && fullText.includes(activeNameClean))
+                );
               })
               .forEach((a: any) => {
-                if (a.caseNo && !refToReceivedDate.has(a.caseNo)) {
-                  refToReceivedDate.set(a.caseNo, new Date().toISOString().split("T")[0]);
+                const targetCaseNo = a.caseNo || a.case_no;
+                if (targetCaseNo && !refToReceivedDate.has(targetCaseNo)) {
+                  refToReceivedDate.set(targetCaseNo, new Date().toISOString().split("T")[0]);
                 }
               });
+
+            casesList.forEach((c: any) => {
+              const cOfficer = (c.assignedTo || c.officerName || c.subjectOfficerName || "").trim().toLowerCase();
+              const targetCaseNo = c.caseNo || c.refNo;
+              if (targetCaseNo && (cOfficer === activeNameClean || (cOfficer && activeNameClean.includes(cOfficer)) || (cOfficer && cOfficer.includes(activeNameClean)))) {
+                if (!refToReceivedDate.has(targetCaseNo)) {
+                  refToReceivedDate.set(targetCaseNo, c.targetDate || c.assignedDate || new Date().toISOString().split("T")[0]);
+                }
+              }
+            });
 
             const assignedRefNos = Array.from(refToReceivedDate.keys());
 
@@ -304,6 +369,7 @@ export default function SubjectOfficerDashboard() {
               .map((c: any) => ({
                 ...c,
                 receivedDate: refToReceivedDate.get(c.caseNo) || c.assignedDate,
+                letterDate: refToLetterDate.get(c.caseNo) || c.letterDate || c.letter_date || refToReceivedDate.get(c.caseNo) || c.assignedDate,
                 isOld: c.isOld !== undefined ? c.isOld : (casesWithActions.has(c.caseNo) || c.status === "Closed" || c.status === "Pending"),
               }));
 
@@ -316,6 +382,7 @@ export default function SubjectOfficerDashboard() {
                   caseNo: refNo,
                   assignedDate: refToReceivedDate.get(refNo) || new Date().toISOString().split("T")[0],
                   receivedDate: refToReceivedDate.get(refNo) || new Date().toISOString().split("T")[0],
+                  letterDate: refToLetterDate.get(refNo) || matchingLetter?.letterDate || matchingLetter?.letter_date || refToReceivedDate.get(refNo) || new Date().toISOString().split("T")[0],
                   subject: matchingLetter?.subject || `Assigned Case (${refNo})`,
                   priority: matchingLetter?.priority || "medium",
                   status: "In Progress",
@@ -325,10 +392,14 @@ export default function SubjectOfficerDashboard() {
             });
 
             filtered.sort((a: any, b: any) => {
-              if (!!a.isOld !== !!b.isOld) {
-                return a.isOld ? 1 : -1;
+              const timeA = new Date(a.createdAt || a.created_at || 0).getTime();
+              const timeB = new Date(b.createdAt || b.created_at || 0).getTime();
+              if (timeA !== timeB) {
+                return timeB - timeA;
               }
-              return new Date(b.receivedDate).getTime() - new Date(a.receivedDate).getTime();
+              const dateA = new Date(a.letterDate || a.receivedDate || a.assignedDate || 0).getTime();
+              const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).getTime();
+              return dateB - dateA;
             });
             setCases(filtered);
           } catch (e) {
@@ -377,17 +448,87 @@ export default function SubjectOfficerDashboard() {
 
   // Load Assignments from localStorage / Supabase
   const fetchAssignments = async () => {
+    let list: any[] = [];
+    if (isSupabaseConfigured) {
+      try {
+        const { data: dbAsgns } = await supabase.from("dcmms_subject_assignments").select("*");
+        if (dbAsgns && dbAsgns.length > 0) {
+          list = dbAsgns.map((a: any) => ({
+            id: a.id,
+            caseNo: a.case_no,
+            subjectOfficerName: a.subject_officer_name,
+            assignedOfficers: a.assigned_officers,
+            appointmentDate: a.appointment_date,
+            reportDueDate: a.report_due_date,
+            extensionTerm: a.extension_term,
+            extensionStartDate: a.extension_start_date,
+            extensionEndDate: a.extension_end_date,
+            certificationSubmitted: a.certification_submitted,
+            reportSubmitDate: a.report_submit_date,
+            reportContent: a.report_content,
+            status: a.status,
+            datesSubmittedBySubject: !!(a.appointment_date && a.report_due_date),
+          }));
+        }
+      } catch (e) {}
+    }
+
     if (typeof window !== "undefined") {
       try {
         const stored = localStorage.getItem("dcmms_subject_assignments");
         if (stored) {
-          setAssignments(JSON.parse(stored));
-        } else {
-          setAssignments([]);
+          const localList = JSON.parse(stored);
+          if (Array.isArray(localList)) {
+            localList.forEach((la: any) => {
+              const idx = list.findIndex((a) => a.caseNo === la.caseNo);
+              if (idx >= 0) {
+                list[idx] = { ...list[idx], ...la };
+              } else {
+                list.push(la);
+              }
+            });
+          }
         }
-      } catch (e) {
-        console.error("Failed to parse subject assignments", e);
-      }
+      } catch (e) {}
+    }
+
+    let activeName = profile?.full_name || t("subjectName");
+    const activeNameClean = (activeName || "").trim().toLowerCase();
+
+    if (list.length > 0) {
+      const relevant = list.filter((a: any) => {
+        // 1. Must have investigation officers assigned by Investigation Administrator
+        const asgnOfficers = a.assignedOfficers || a.assigned_officers;
+        const hasArrayOfficers = Array.isArray(asgnOfficers) && asgnOfficers.length > 0;
+        const hasStringOfficers = typeof asgnOfficers === "string" && asgnOfficers.trim().length > 0 && asgnOfficers.trim() !== "[]" && asgnOfficers.trim() !== "null";
+        const hasChairman = !!(a.chairman?.fullName || a.chairman?.name || (typeof a.chairman === "string" && a.chairman.trim().length > 0));
+        const hasMembers = Array.isArray(a.members) && a.members.length > 0;
+        const hasDatesOrAdminFlag = !!(a.officersAssignedByAdmin || a.appointmentDate || a.reportDueDate || a.appointment_date || a.report_due_date);
+
+        const hasOfficersAssigned = hasArrayOfficers || hasStringOfficers || hasChairman || hasMembers || hasDatesOrAdminFlag;
+
+        if (!hasOfficersAssigned) return false;
+
+        // 2. Must be relevant to active subject officer name
+        const name = (a.subjectOfficerName || a.subject_officer_name || "").trim().toLowerCase();
+        const asgnText = (typeof asgnOfficers === "string" ? asgnOfficers : JSON.stringify(asgnOfficers || "")).trim().toLowerCase();
+        const chairmanName = (a.chairman?.fullName || a.chairman?.name || "").trim().toLowerCase();
+        const memberNames = Array.isArray(a.members) ? a.members.map((m: any) => (m.fullName || m.name || "").trim().toLowerCase()).join(" ") : "";
+        const fullText = `${name} ${asgnText} ${chairmanName} ${memberNames}`;
+
+        return (
+          !activeNameClean || 
+          activeNameClean === "subject officer" || 
+          activeNameClean === "rathnaweera" ||
+          fullText.includes(activeNameClean) ||
+          (name && activeNameClean.includes(name)) ||
+          (chairmanName && activeNameClean.includes(chairmanName)) ||
+          (asgnText && activeNameClean.includes(asgnText))
+        );
+      });
+      setAssignments(relevant);
+    } else {
+      setAssignments([]);
     }
   };
 
@@ -1098,7 +1239,7 @@ export default function SubjectOfficerDashboard() {
                 <thead>
                   <tr>
                     <th scope="col">{t("caseNo")}</th>
-                    <th scope="col">{t("assignedDate")}</th>
+                    <th scope="col">{t("letterDate")}</th>
                     <th scope="col">{t("subjectText")}</th>
                     <th scope="col">{t("priority")}</th>
                     <th scope="col">{t("status")}</th>
@@ -1112,7 +1253,7 @@ export default function SubjectOfficerDashboard() {
                     filteredCases.map((item) => (
                       <tr key={item.id} className="letter-table-row">
                         <td className="font-semibold">{item.caseNo}</td>
-                        <td>{item.assignedDate}</td>
+                        <td>{item.letterDate || item.receivedDate || item.assignedDate}</td>
                         <td className="subject-cell">{item.subject}</td>
                         <td>
                           <span className={`priority-text-container priority-text-${item.priority}`}>
@@ -1129,7 +1270,7 @@ export default function SubjectOfficerDashboard() {
                         </td>
                         <td>
                           {(() => {
-                            const rem = calculateReminder(item.assignedDate, item.priority, item.status);
+                            const rem = calculateReminder(item.letterDate || item.receivedDate || item.assignedDate, item.priority, item.status);
                             let colorClass = "reminder-text-gray";
                             let dotClass = "dot-gray";
                             if (rem.color === "red") {

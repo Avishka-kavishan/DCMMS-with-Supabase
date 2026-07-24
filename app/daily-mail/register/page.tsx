@@ -666,6 +666,7 @@ function RegisterComplaintForm() {
             assigned_date: newLetter.receivedDate,
             subject: newLetter.subject,
             priority: newLetter.priority,
+            officer_name: newLetter.officerName || null,
             status: "In Progress",
           });
 

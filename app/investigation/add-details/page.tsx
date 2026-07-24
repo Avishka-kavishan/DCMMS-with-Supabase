@@ -23,7 +23,7 @@ function InvestigationCaseDetailsContent() {
   const { t, i18n } = useTranslation();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const caseNoParam = searchParams?.get("caseNo") || "INQ/2026/001";
+  const caseNoParam = searchParams?.get("id") || searchParams?.get("caseNo") || searchParams?.get("inquiryNo") || searchParams?.get("refNo") || "INQ/2026/001";
   const lang = i18n.language;
 
   // Layout & Accessibility State
@@ -165,8 +165,43 @@ function InvestigationCaseDetailsContent() {
         if (storedCases) {
           try {
             const list = JSON.parse(storedCases);
-            matchedCase = list.find((c: any) => c.caseNo === caseNoParam || c.inquiryNo === caseNoParam);
+            matchedCase = list.find((c: any) => 
+              c.caseNo === caseNoParam || 
+              c.inquiryNo === caseNoParam || 
+              c.refNo === caseNoParam ||
+              c.id === caseNoParam ||
+              (c.caseNo && c.caseNo.toLowerCase() === caseNoParam.toLowerCase()) ||
+              (c.refNo && c.refNo.toLowerCase() === caseNoParam.toLowerCase())
+            );
           } catch (e) {}
+        }
+
+        if (!matchedCase) {
+          const storedLetters = localStorage.getItem("dcmms_letters");
+          if (storedLetters) {
+            try {
+              const list = JSON.parse(storedLetters);
+              const found = list.find((l: any) => 
+                l.refNo === caseNoParam || 
+                l.id === caseNoParam ||
+                (l.refNo && l.refNo.toLowerCase() === caseNoParam.toLowerCase())
+              );
+              if (found) {
+                matchedCase = {
+                  id: found.id || `case-${caseNoParam}`,
+                  inquiryNo: found.refNo || caseNoParam,
+                  caseNo: found.refNo || caseNoParam,
+                  refNo: found.refNo || caseNoParam,
+                  subject: found.subject || "Formal disciplinary inquiry regarding misconduct",
+                  targetDate: found.receivedDate || new Date().toISOString().slice(0, 10),
+                  assignee: found.officerName || "Kavishan",
+                  status: found.status === "assigned" ? "In Progress" : "In Progress",
+                  inquiryNotes: found.specialNotes || "",
+                  complainantName: found.senderName || "Director of Education",
+                };
+              }
+            } catch (e) {}
+          }
         }
       }
 
@@ -175,6 +210,7 @@ function InvestigationCaseDetailsContent() {
           id: `case-${Date.now()}`,
           inquiryNo: caseNoParam,
           caseNo: caseNoParam,
+          refNo: caseNoParam,
           subject: "Formal disciplinary inquiry regarding misconduct",
           targetDate: new Date().toISOString().slice(0, 10),
           assignee: "Kavishan",
@@ -191,27 +227,65 @@ function InvestigationCaseDetailsContent() {
       setInquiryNotes(matchedCase.inquiryNotes || matchedCase.notes || "");
       setInvestigationFileNo(matchedCase.investigationFileNo || matchedCase.fileNo || matchedCase.fileRefNo || "");
 
-      // Load accused/concerned officer details
+      // Fetch Accused Officers from Supabase
+      if (isSupabaseConfigured && caseNoParam) {
+        try {
+          const { data: dbConcerned } = await supabase
+            .from("dcmms_concerned_officers")
+            .select("*")
+            .ilike("case_no", caseNoParam.trim());
+          if (dbConcerned && dbConcerned.length > 0) {
+            setConcernedOfficersList(dbConcerned);
+          }
+        } catch (e) {}
+      }
+
+      // Load accused/concerned officer details from localStorage
       if (typeof window !== "undefined") {
         const storedConcerned = localStorage.getItem("dcmms_officer_concerned");
         if (storedConcerned) {
           try {
             const concernedMap = JSON.parse(storedConcerned);
-            const entry = concernedMap[caseNoParam];
+            const targetKeys = [caseNoParam, matchedCase?.inquiryNo, matchedCase?.caseNo, matchedCase?.refNo].filter(Boolean).map(k => String(k).trim().toLowerCase());
+            const matchedKey = Object.keys(concernedMap).find(k => targetKeys.includes(k.trim().toLowerCase()));
+            const entry = matchedKey ? concernedMap[matchedKey] : null;
             if (entry) {
               if (Array.isArray(entry.persons) && entry.persons.length > 0) {
-                setConcernedOfficersList(entry.persons);
-              } else if (entry.officerName) {
+                setConcernedOfficersList(entry.persons.map((p: any) => ({
+                  officer_name: p.name || p.officer_name || p.officerName,
+                  position: p.position || p.designation,
+                  dob: p.dob,
+                  nic: p.nic,
+                  appointment_date: p.appointmentDate || p.appointment_date,
+                  address: p.address,
+                  institute_name: entry.instituteName || entry.schoolName,
+                  institute_address: entry.schoolAddress || entry.instituteAddress,
+                })));
+              } else if (entry.officerName || entry.officer_name) {
                 setConcernedOfficersList([{
-                  officer_name: entry.officerName,
+                  officer_name: entry.officerName || entry.officer_name,
                   nic: entry.nic,
-                  position: entry.position,
-                  institute_name: entry.instituteName,
+                  position: entry.position || entry.designation,
+                  institute_name: entry.instituteName || entry.schoolName,
                   address: entry.address,
                 }]);
               }
             }
           } catch (e) {}
+        }
+
+        // Inline case fallback
+        if ((matchedCase as any).persons && Array.isArray((matchedCase as any).persons)) {
+          setConcernedOfficersList((matchedCase as any).persons.map((p: any) => ({
+            officer_name: p.name || p.officer_name || p.officerName,
+            position: p.position || p.designation,
+            dob: p.dob,
+            nic: p.nic,
+            appointment_date: p.appointmentDate || p.appointment_date,
+            address: p.address,
+            institute_name: p.instituteName || (matchedCase as any).schoolName,
+            institute_address: p.schoolAddress || (matchedCase as any).schoolAddress,
+          })));
         }
       }
 
@@ -286,13 +360,15 @@ function InvestigationCaseDetailsContent() {
       try { list = JSON.parse(stored); } catch (e) {}
       
       const idx = list.findIndex((a) => a.caseNo === caseNoParam);
+      const existing = idx >= 0 ? list[idx] : {};
+      
       const updated = {
         id: assignmentExistingId(),
         caseNo: caseNoParam,
-        subjectOfficerName: "Subject Officer",
+        subjectOfficerName: updatedFields.subjectOfficerName || existing.subjectOfficerName || assignee || "Subject Officer",
         status: status,
         updatedAt: new Date().toISOString(),
-        ...(idx >= 0 ? list[idx] : {}),
+        ...existing,
         ...updatedFields,
       };
 
@@ -339,12 +415,83 @@ function InvestigationCaseDetailsContent() {
 
     setStep1AssignedOfficers(formattedAssignedText);
 
+    const primaryOfficer = selectedChairman?.fullName || selectedMembers[0]?.fullName || step1AssignedOfficers || assignee || "Subject Officer";
+    const allOfficerNames = Array.from(new Set([
+      selectedChairman?.fullName,
+      ...selectedMembers.map((m) => m.fullName),
+      step1AssignedOfficers,
+      assignee
+    ].filter(Boolean)));
+
     await saveSubjectAssignment({
+      subjectOfficerName: primaryOfficer,
       assignedOfficers: formattedAssignedText,
+      officerList: allOfficerNames,
       chairman: selectedChairman,
       members: selectedMembers,
       status: "Officers Assigned",
     });
+
+    if (typeof window !== "undefined") {
+      // 1. Sync dcmms_letters in localStorage
+      try {
+        const storedLetters = localStorage.getItem("dcmms_letters") || "[]";
+        let letters = JSON.parse(storedLetters);
+        allOfficerNames.forEach((name) => {
+          const exists = letters.some((l: any) => l.refNo === caseNoParam && l.officerName?.toLowerCase() === name.toLowerCase());
+          if (!exists) {
+            letters.push({
+              id: `let-${caseNoParam}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+              refNo: caseNoParam,
+              officerName: name,
+              subject: selectedCase?.subject || `Assigned Inquiry Case (${caseNoParam})`,
+              receivedDate: new Date().toISOString().split("T")[0],
+              status: "assigned",
+              priority: "high"
+            });
+          }
+        });
+        localStorage.setItem("dcmms_letters", JSON.stringify(letters));
+      } catch (e) {}
+
+      // 2. Sync dcmms_cases in localStorage
+      try {
+        const storedCases = localStorage.getItem("dcmms_cases") || "[]";
+        let cases = JSON.parse(storedCases);
+        const idx = cases.findIndex((c: any) => c.caseNo === caseNoParam || c.refNo === caseNoParam);
+        if (idx >= 0) {
+          cases[idx].assignedTo = primaryOfficer;
+          cases[idx].assignedOfficers = formattedAssignedText;
+        }
+        localStorage.setItem("dcmms_cases", JSON.stringify(cases));
+      } catch (e) {}
+
+      // 3. Sync Supabase dcmms_daily_mail & dcmms_subject
+      if (isSupabaseConfigured) {
+        try {
+          for (const name of allOfficerNames) {
+            await supabase.from("dcmms_daily_mail").upsert({
+              id: `mail-${caseNoParam}-${name.trim().toLowerCase().replace(/\s+/g, "_")}`,
+              ref_no: caseNoParam,
+              officer_name: name,
+              subject: selectedCase?.subject || `Assigned Inquiry Case (${caseNoParam})`,
+              received_date: new Date().toISOString().split("T")[0],
+              status: "assigned"
+            });
+          }
+
+          await supabase.from("dcmms_subject").upsert({
+            id: `case-${caseNoParam}`,
+            case_no: caseNoParam,
+            subject: selectedCase?.subject || `Assigned Inquiry Case (${caseNoParam})`,
+            priority: "high",
+            status: "Officers Assigned",
+            assigned_date: new Date().toISOString().split("T")[0],
+          });
+        } catch (e) {}
+      }
+    }
+
     showToast("Step 1: Assigned Officers Committee (1 Chairman & Members) submitted to Subject Officer!");
   };
 
@@ -688,20 +835,20 @@ function InvestigationCaseDetailsContent() {
                         <div key={idx} style={{ backgroundColor: "#f8fafc", padding: "14px", borderRadius: "10px", border: "1px solid #e2e8f0" }}>
                           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px" }}>
                             <div>
-                              <span style={{ fontSize: "11px", color: "#64748b", display: "block" }}>Officer Name</span>
-                              <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "13px" }}>{officer.officer_name || officer.officerName || "—"}</span>
+                              <span style={{ fontSize: "11px", color: "#64748b", display: "block" }}>{lang === "si" ? "නිලධාරියාගේ නම" : "Officer Name"}</span>
+                              <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "13px" }}>{officer.officer_name || officer.officerName || officer.name || "—"}</span>
                             </div>
                             <div>
-                              <span style={{ fontSize: "11px", color: "#64748b", display: "block" }}>NIC Number</span>
+                              <span style={{ fontSize: "11px", color: "#64748b", display: "block" }}>{lang === "si" ? "ජාතික හැඳුනුම්පත් අංකය" : "NIC Number"}</span>
                               <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "13px" }}>{officer.nic || "—"}</span>
                             </div>
                             <div>
-                              <span style={{ fontSize: "11px", color: "#64748b", display: "block" }}>Designation</span>
-                              <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "13px" }}>{officer.position || "—"}</span>
+                              <span style={{ fontSize: "11px", color: "#64748b", display: "block" }}>{lang === "si" ? "තනතුර" : "Designation"}</span>
+                              <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "13px" }}>{officer.position || officer.designation || "—"}</span>
                             </div>
                             <div>
-                              <span style={{ fontSize: "11px", color: "#64748b", display: "block" }}>School / Institute</span>
-                              <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "13px" }}>{officer.institute_name || officer.instituteName || "—"}</span>
+                              <span style={{ fontSize: "11px", color: "#64748b", display: "block" }}>{lang === "si" ? "පාසල / ආයතනය" : "School / Institute"}</span>
+                              <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "13px" }}>{officer.institute_name || officer.instituteName || officer.schoolName || "—"}</span>
                             </div>
                           </div>
                         </div>
@@ -710,7 +857,11 @@ function InvestigationCaseDetailsContent() {
                   ) : (
                     <div style={{ display: "flex", gap: "10px", alignItems: "center", padding: "12px 16px", backgroundColor: "#fffbeb", color: "#b45309", borderRadius: "8px", border: "1px solid #fef3c7" }}>
                       <AlertCircle size={18} />
-                      <span style={{ fontSize: "13px" }}>No specific accused officer personal record registered for this inquiry yet.</span>
+                      <span style={{ fontSize: "13px" }}>
+                        {lang === "si"
+                          ? "මෙම විමර්ශනය සඳහා වෙන් වූ චෝදනා ලැබූ නිලධාරියාගේ තොරතුරු තවමත් ඇතුළත් කර නොමැත."
+                          : "No specific accused officer personal record registered for this inquiry yet."}
+                      </span>
                     </div>
                   )}
                 </div>

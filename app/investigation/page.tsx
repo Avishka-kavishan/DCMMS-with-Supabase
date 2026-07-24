@@ -26,6 +26,7 @@ interface Inquiry {
   status: "Scheduled" | "In Progress" | "Evidence Review" | "Completed" | "Preliminary Investigation" | "Conducting preliminary investigations" | "Under Investigation";
   assignedOfficer?: string;
   notes?: string;
+  createdAt?: string;
 }
 
 interface Officer {
@@ -256,31 +257,33 @@ export default function InvestigationPage() {
         const { data, error } = await supabase
           .from("dcmms_subject")
           .select("*")
-          .order("case_no", { ascending: true });
+          .order("created_at", { ascending: false });
 
         if (error) throw error;
 
         if (data) {
           const mappedInquiries = data
-            .filter((item: any) => 
-              item.case_no.includes("INQ/") || 
-              item.status === "Preliminary Investigation" ||
-              item.status === "Conducting preliminary investigations" ||
-              item.status === "Under Investigation" ||
-              item.status === "Institutional Preliminary Investigation" ||
-              item.status === "Delegation of authority to conduct a provincial preliminary investigation" ||
-              item.status === "Scheduled" ||
-              item.status === "In Progress" ||
-              item.status === "Evidence Review" ||
-              item.status === "Completed"
-            )
             .map((item: any) => ({
               id: item.id,
               inquiryNo: item.case_no,
               subject: item.subject,
               targetDate: item.assigned_date || "2026-07-30",
               status: item.status as Inquiry["status"],
+              assignedOfficer: item.officer_name || item.assigned_officer,
+              createdAt: item.created_at || new Date().toISOString(),
             }));
+
+          mappedInquiries.sort((a: any, b: any) => {
+            const timeA = new Date(a.createdAt || 0).getTime();
+            const timeB = new Date(b.createdAt || 0).getTime();
+            if (timeA !== timeB) {
+              return timeB - timeA;
+            }
+            const dateA = new Date(a.targetDate || 0).getTime();
+            const dateB = new Date(b.targetDate || 0).getTime();
+            return dateB - dateA;
+          });
+
           setInquiries(mappedInquiries);
           return;
         }
@@ -296,23 +299,27 @@ export default function InvestigationPage() {
         try {
           const list = JSON.parse(storedCases);
           const mapped = list
-            .filter((item: any) => 
-              item.caseNo.includes("INQ/") || 
-              item.status === "Preliminary Investigation" ||
-              item.status === "Conducting preliminary investigations" ||
-              item.status === "Under Investigation" ||
-              item.status === "Scheduled" ||
-              item.status === "In Progress" ||
-              item.status === "Evidence Review" ||
-              item.status === "Completed"
-            )
             .map((item: any) => ({
               id: item.id || `case-${item.caseNo}`,
               inquiryNo: item.caseNo,
               subject: item.subject,
               targetDate: item.targetDate || item.assignedDate || "2026-07-30",
               status: item.status,
+              assignedOfficer: item.assignedOfficer || item.assignedTo || item.officerName,
+              createdAt: item.createdAt || item.created_at || new Date().toISOString(),
             }));
+
+          mapped.sort((a: any, b: any) => {
+            const timeA = new Date(a.createdAt || 0).getTime();
+            const timeB = new Date(b.createdAt || 0).getTime();
+            if (timeA !== timeB) {
+              return timeB - timeA;
+            }
+            const dateA = new Date(a.targetDate || 0).getTime();
+            const dateB = new Date(b.targetDate || 0).getTime();
+            return dateB - dateA;
+          });
+
           setInquiries(mapped);
           return;
         } catch (e) {
@@ -349,68 +356,91 @@ export default function InvestigationPage() {
 
   const fetchInvestigationOfficers = async () => {
     let result: Officer[] = [];
+    const seenIds = new Set<string>();
+    const seenNames = new Set<string>();
+
+    const addOfficer = (raw: any) => {
+      const fullName = (raw.fullName || raw.full_name || raw.name || "").trim();
+      if (!fullName) return;
+
+      const nameKey = fullName.toLowerCase();
+      const id = raw.id || `inv-${nameKey}`;
+
+      if (seenIds.has(id) || seenNames.has(nameKey)) return;
+
+      seenIds.add(id);
+      seenNames.add(nameKey);
+
+      let studied: string[] = [];
+      if (Array.isArray(raw.studiedSchools)) studied = raw.studiedSchools;
+      else if (Array.isArray(raw.studied_schools)) studied = raw.studied_schools;
+      else if (typeof raw.studied_schools === "string" && raw.studied_schools.startsWith("[")) {
+        try { studied = JSON.parse(raw.studied_schools); } catch (e) {}
+      }
+
+      let children: string[] = [];
+      if (Array.isArray(raw.childrenSchools)) children = raw.childrenSchools;
+      else if (Array.isArray(raw.children_schools)) children = raw.children_schools;
+      else if (typeof raw.children_schools === "string" && raw.children_schools.startsWith("[")) {
+        try { children = JSON.parse(raw.children_schools); } catch (e) {}
+      }
+
+      const roleType = (raw.officerRole || raw.officer_role) === "Chairman" ? "Chairman" : "Member";
+
+      result.push({
+        id,
+        fullName,
+        nicNo: raw.nicNo || raw.nic_no || "",
+        officerRole: roleType,
+        studiedSchools: studied,
+        childrenSchools: children,
+        email: raw.email || "",
+        role: "investigation_officer",
+        status: (raw.status === "Inactive" ? "Inactive" : "Active") as "Active" | "Inactive",
+        createdAt: (raw.createdAt || raw.created_at || new Date().toISOString()).slice(0, 10),
+      });
+    };
+
     if (isSupabaseConfigured) {
       try {
-        const { data, error } = await supabase
+        const { data: dbInv } = await supabase
+          .from("dcmms_investigation_officers")
+          .select("*")
+          .order("created_at", { ascending: false });
+        if (dbInv && dbInv.length > 0) {
+          dbInv.forEach(addOfficer);
+        }
+      } catch (err) {}
+
+      try {
+        const { data: dbProf } = await supabase
           .from("dcmms_profiles")
-          .select("id, full_name, nic_no, officer_role, studied_schools, children_schools, email, status, created_at")
+          .select("*")
           .eq("role", "investigation_officer")
           .order("created_at", { ascending: false });
-
-        if (!error && data) {
-          result = data.map((p: any) => ({
-            id: p.id,
-            fullName: p.full_name || "",
-            nicNo: p.nic_no || "",
-            officerRole: p.officer_role === "Chairman" ? "Chairman" : "Member",
-            studiedSchools: Array.isArray(p.studied_schools)
-              ? p.studied_schools
-              : typeof p.studied_schools === "string" && p.studied_schools.startsWith("[")
-              ? JSON.parse(p.studied_schools)
-              : [],
-            childrenSchools: Array.isArray(p.children_schools)
-              ? p.children_schools
-              : typeof p.children_schools === "string" && p.children_schools.startsWith("[")
-              ? JSON.parse(p.children_schools)
-              : [],
-            email: p.email || "",
-            role: "investigation_officer",
-            status: (p.status === "Inactive" ? "Inactive" : "Active") as "Active" | "Inactive",
-            createdAt: (p.created_at || "").slice(0, 10),
-          }));
+        if (dbProf && dbProf.length > 0) {
+          dbProf.forEach(addOfficer);
         }
-      } catch (err) {
-        console.error("Failed to load investigation officers:", err);
-      }
+      } catch (err) {}
     }
 
     if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("dcmms_custom_profiles");
-      if (stored) {
+      const keys = ["dcmms_investigation_officers", "dcmms_custom_profiles", "dcmms_profiles"];
+      keys.forEach((key) => {
         try {
-          const list = JSON.parse(stored) as Officer[];
-          const localInvestigation = list.filter((o) => o.role === "investigation_officer");
-          const dbIds = new Set(result.map((o) => o.id));
-          localInvestigation.forEach((lo) => {
-            if (!dbIds.has(lo.id)) {
-              result.push({
-                id: lo.id,
-                fullName: lo.fullName,
-                nicNo: lo.nicNo || "",
-                officerRole: lo.officerRole === "Chairman" ? "Chairman" : "Member",
-                studiedSchools: Array.isArray(lo.studiedSchools) ? lo.studiedSchools : [],
-                childrenSchools: Array.isArray(lo.childrenSchools) ? lo.childrenSchools : [],
-                email: lo.email,
-                role: "investigation_officer",
-                status: lo.status || "Active",
-                createdAt: lo.createdAt || new Date().toISOString().slice(0, 10),
+          const stored = localStorage.getItem(key);
+          if (stored) {
+            const list = JSON.parse(stored);
+            if (Array.isArray(list)) {
+              list.forEach((item: any) => {
+                if (key === "dcmms_investigation_officers" || item.role === "investigation_officer") {
+                  addOfficer(item);
+                }
               });
             }
-          });
-        } catch (e) {
-          console.error("Failed to merge local profiles:", e);
-        }
-      }
+          }
+        } catch (e) {}
+      });
     }
 
     setOfficers(result);
@@ -606,13 +636,16 @@ export default function InvestigationPage() {
     // 1. Fetch from Supabase
     if (isSupabaseConfigured) {
       try {
-        const { data: cData } = await supabase
-          .from("dcmms_concerned_officers")
-          .select("*")
-          .eq("case_no", inq.inquiryNo);
-        if (cData && cData.length > 0) {
-          concernedList = cData;
-          concernedData = cData[0];
+        const searchCaseNo = (inq.inquiryNo || (inq as any).caseNo || (inq as any).refNo || "").trim();
+        if (searchCaseNo) {
+          const { data: cData } = await supabase
+            .from("dcmms_concerned_officers")
+            .select("*")
+            .ilike("case_no", searchCaseNo);
+          if (cData && cData.length > 0) {
+            concernedList = cData;
+            concernedData = cData[0];
+          }
         }
 
         const { data: dData } = await supabase
@@ -633,35 +666,51 @@ export default function InvestigationPage() {
           const storedConcerned = localStorage.getItem("dcmms_officer_concerned");
           if (storedConcerned) {
             const map = JSON.parse(storedConcerned);
-            const item = map[inq.inquiryNo];
+            const targetKeys = [inq.inquiryNo, (inq as any).caseNo, (inq as any).refNo].filter(Boolean).map(k => String(k).trim().toLowerCase());
+            const matchedKey = Object.keys(map).find(k => targetKeys.includes(k.trim().toLowerCase()));
+            const item = matchedKey ? map[matchedKey] : map[inq.inquiryNo];
             if (item) {
               concernedData = item;
               if (Array.isArray(item.persons) && item.persons.length > 0) {
                 concernedList = item.persons.map((p: any) => ({
-                  officer_name: p.name,
-                  position: p.position,
+                  officer_name: p.name || p.officer_name || p.officerName,
+                  position: p.position || p.designation,
                   dob: p.dob,
                   nic: p.nic,
-                  appointment_date: p.appointmentDate,
+                  appointment_date: p.appointmentDate || p.appointment_date,
                   address: p.address,
-                  institute_name: item.instituteName,
-                  institute_address: item.schoolAddress,
+                  institute_name: item.instituteName || item.schoolName,
+                  institute_address: item.schoolAddress || item.instituteAddress,
                 }));
-              } else if (item.officerName) {
+              } else if (item.officerName || item.officer_name) {
                 concernedList = [{
-                  officer_name: item.officerName,
-                  position: item.position,
+                  officer_name: item.officerName || item.officer_name,
+                  position: item.position || item.designation,
                   dob: item.dob,
                   nic: item.nic,
-                  appointment_date: item.appointmentDate,
+                  appointment_date: item.appointmentDate || item.appointment_date,
                   address: item.address,
-                  institute_name: item.instituteName,
-                  institute_address: item.schoolAddress,
+                  institute_name: item.instituteName || item.schoolName,
+                  institute_address: item.schoolAddress || item.instituteAddress,
                 }];
               }
             }
           }
         } catch (e) {}
+
+        // 3. Fallback to inline case properties
+        if (concernedList.length === 0 && (inq as any).persons && Array.isArray((inq as any).persons)) {
+          concernedList = (inq as any).persons.map((p: any) => ({
+            officer_name: p.name || p.officer_name || p.officerName,
+            position: p.position || p.designation,
+            dob: p.dob,
+            nic: p.nic,
+            appointment_date: p.appointmentDate || p.appointment_date,
+            address: p.address,
+            institute_name: p.instituteName || (inq as any).schoolName,
+            institute_address: p.schoolAddress || (inq as any).schoolAddress,
+          }));
+        }
       }
 
       if (detailList.length === 0) {
@@ -721,13 +770,14 @@ export default function InvestigationPage() {
     const caseNo = selectedCase?.inquiryNo;
     if (!caseNo) return;
     const now = new Date().toISOString().slice(0, 10);
+    const assignedName = subjOfficerName.trim();
 
     const updatedRecord = {
       ...(existingAssignment || {}),
       id: existingAssignment?.id || `asgn-${caseNo}-${Date.now()}`,
       caseNo,
-      subjectOfficerName: subjOfficerName.trim(),
-      assignedOfficers: [subjOfficerName.trim()],
+      subjectOfficerName: assignedName,
+      assignedOfficers: [assignedName],
       currentStep: 2,
       assignedDate: now,
       status: "Officers Assigned",
@@ -745,6 +795,66 @@ export default function InvestigationPage() {
         list.push(updatedRecord);
         localStorage.setItem("dcmms_subject_assignments", JSON.stringify(list));
       } catch (e) {}
+
+      // Sync dcmms_letters
+      try {
+        const storedLetters = localStorage.getItem("dcmms_letters") || "[]";
+        let letters = JSON.parse(storedLetters);
+        const exists = letters.some((l: any) => l.refNo === caseNo && l.officerName?.toLowerCase() === assignedName.toLowerCase());
+        if (!exists) {
+          letters.push({
+            id: `let-${caseNo}-${Date.now()}`,
+            refNo: caseNo,
+            officerName: assignedName,
+            subject: selectedCase?.subject || `Assigned Inquiry Case (${caseNo})`,
+            receivedDate: now,
+            status: "assigned",
+            priority: "high"
+          });
+          localStorage.setItem("dcmms_letters", JSON.stringify(letters));
+        }
+      } catch (e) {}
+
+      // Sync dcmms_cases
+      try {
+        const storedCases = localStorage.getItem("dcmms_cases") || "[]";
+        let cases = JSON.parse(storedCases);
+        const idx = cases.findIndex((c: any) => c.caseNo === caseNo || c.refNo === caseNo);
+        if (idx >= 0) {
+          cases[idx].assignedTo = assignedName;
+        }
+        localStorage.setItem("dcmms_cases", JSON.stringify(cases));
+      } catch (e) {}
+
+      if (isSupabaseConfigured) {
+        try {
+          await supabase.from("dcmms_subject_assignments").upsert({
+            id: updatedRecord.id,
+            case_no: caseNo,
+            subject_officer_name: assignedName,
+            status: "Officers Assigned",
+            assigned_officers: [assignedName]
+          });
+
+          await supabase.from("dcmms_daily_mail").upsert({
+            id: `mail-${caseNo}-${assignedName.trim().toLowerCase().replace(/\s+/g, "_")}`,
+            ref_no: caseNo,
+            officer_name: assignedName,
+            subject: selectedCase?.subject || `Assigned Inquiry Case (${caseNo})`,
+            received_date: now,
+            status: "assigned"
+          });
+
+          await supabase.from("dcmms_subject").upsert({
+            id: `case-${caseNo}`,
+            case_no: caseNo,
+            subject: selectedCase?.subject || `Assigned Inquiry Case (${caseNo})`,
+            priority: "high",
+            status: "Officers Assigned",
+            assigned_date: now,
+          });
+        } catch (e) {}
+      }
     }
     showToast("Step 1 Complete: Assigned Officer submitted! Step 2 unlocked for Subject Officer.");
   };
@@ -1074,33 +1184,35 @@ export default function InvestigationPage() {
 
     if (isSupabaseConfigured) {
       try {
-        const payload: any = {
+        const invPayload: any = {
+          id: officer.id,
           full_name: officer.fullName,
           nic_no: officer.nicNo,
           officer_role: officer.officerRole,
           studied_schools: officer.studiedSchools,
           children_schools: officer.childrenSchools,
           email: officer.email,
-          role: "investigation_officer",
-          status: officer.status
+          status: officer.status,
         };
-        if (!isNew && !officer.id.startsWith("inv-")) {
-          payload.id = officer.id;
-        }
-        const { error } = await supabase.from("dcmms_profiles").upsert(payload);
-        if (error) console.warn("Supabase upsert warning:", error);
+        await supabase.from("dcmms_investigation_officers").upsert(invPayload);
       } catch (err) {
         console.error("Failed to save officer in Supabase:", err);
       }
     }
 
     if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("dcmms_custom_profiles") || "[]";
-      let list = [];
-      try { list = JSON.parse(stored); } catch (e) {}
-      list = list.filter((o: any) => o.id !== officer.id);
-      list.push(officer);
-      localStorage.setItem("dcmms_custom_profiles", JSON.stringify(list));
+      ["dcmms_custom_profiles", "dcmms_investigation_officers"].forEach((key) => {
+        try {
+          const stored = localStorage.getItem(key) || "[]";
+          let list = [];
+          try { list = JSON.parse(stored); } catch (e) {}
+          if (Array.isArray(list)) {
+            list = list.filter((o: any) => o.id !== officer.id && (o.fullName || o.full_name) !== officer.fullName);
+            list.push(officer);
+            localStorage.setItem(key, JSON.stringify(list));
+          }
+        } catch (e) {}
+      });
     }
 
     setIsSaving(false);
@@ -1980,7 +2092,11 @@ export default function InvestigationPage() {
                     ) : (
                       <div style={{ display: "flex", gap: "10px", alignItems: "center", padding: "12px 16px", backgroundColor: "#fffbeb", color: "#b45309", borderRadius: "8px", border: "1px solid #fef3c7" }}>
                         <AlertCircle size={18} />
-                        <span style={{ fontSize: "13px" }}>No specific accused officer personal record registered for this inquiry yet.</span>
+                        <span style={{ fontSize: "13px" }}>
+                          {lang === "si"
+                            ? "මෙම විමර්ශනය සඳහා වෙන් වූ චෝදනා ලැබූ නිලධාරියාගේ තොරතුරු තවමත් ඇතුළත් කර නොමැත."
+                            : "No specific accused officer personal record registered for this inquiry yet."}
+                        </span>
                       </div>
                     )}
                   </div>
