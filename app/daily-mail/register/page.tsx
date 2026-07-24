@@ -674,6 +674,21 @@ function RegisterComplaintForm() {
           throw caseError;
         }
 
+        // Also write assignment entry to dcmms_subject_assignments if an officer is assigned
+        if (newLetter.officerName) {
+          const { error: asgnError } = await supabase
+            .from("dcmms_subject_assignments")
+            .upsert({
+              id: `asgn-${newLetter.refNo}`,
+              case_no: newLetter.refNo,
+              subject_officer_name: newLetter.officerName.trim(),
+              status: "Step 1: Officers Assigned",
+            });
+          if (asgnError) {
+            console.warn("Supabase subject assignment write warning:", asgnError.message);
+          }
+        }
+
         // success
         console.debug("Supabase upsert returned:", upserted);
         localStorage.setItem("show_register_success", "true");
@@ -723,6 +738,20 @@ function RegisterComplaintForm() {
       };
       const updatedCases = casesList.filter((item: any) => item.caseNo !== newCase.caseNo);
       localStorage.setItem("dcmms_cases", JSON.stringify([newCase, ...updatedCases]));
+
+      if (newLetter.officerName) {
+        const storedAsgns = localStorage.getItem("dcmms_subject_assignments") || "[]";
+        let asgnsList = [];
+        try { asgnsList = JSON.parse(storedAsgns); } catch (e) {}
+        const newAsgn = {
+          id: `asgn-${newLetter.refNo}`,
+          caseNo: newLetter.refNo,
+          subjectOfficerName: newLetter.officerName.trim(),
+          status: "Step 1: Officers Assigned",
+        };
+        const updatedAsgns = asgnsList.filter((a: any) => a.caseNo !== newLetter.refNo);
+        localStorage.setItem("dcmms_subject_assignments", JSON.stringify([newAsgn, ...updatedAsgns]));
+      }
 
       localStorage.setItem("show_register_success", "true");
     }

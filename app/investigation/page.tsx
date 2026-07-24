@@ -529,7 +529,7 @@ export default function InvestigationPage() {
     setTargetDate(inq.targetDate || "");
     setInvestigationStatus(inq.status || "In Progress");
     setInvestigationNotes("");
-    setFileRefNoForm("");
+    setFileRefNoForm((inq as any).investigationFileNo || (inq as any).fileNo || (inq as any).fileRefNo || "");
 
     // Load existing Subject Officer assignment (Data Flow)
     if (typeof window !== "undefined") {
@@ -925,6 +925,9 @@ export default function InvestigationPage() {
                 status: investigationStatus,
                 assignedTo: targetOfficer || c.assignedTo,
                 targetDate: targetDate || c.targetDate,
+                investigationFileNo: fileRefNoForm,
+                fileNo: fileRefNoForm,
+                fileRefNo: fileRefNoForm,
               };
             }
             return c;
@@ -2135,45 +2138,24 @@ export default function InvestigationPage() {
 
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "16px" }}>
                       
-                      {/* Assign officer */}
+                      {/* Investigation File Number (විමර්ශන ගොනු අංකය) */}
                       <div className="form-field-group">
-                        <label htmlFor="modalAssignee" className="field-label" style={{ fontWeight: 600, color: "#334155", display: "flex", alignItems: "center", gap: "6px" }}>
-                          <User size={14} style={{ color: "#4f46e5" }} />
-                          {lang === "si" ? "පැවරූ විමර්ශන නිලධාරියා" : "Assign Investigation Officer"}
-                        </label>
-                        <select
-                          id="modalAssignee"
-                          value={assignee}
-                          onChange={(e) => setAssignee(e.target.value)}
-                          className="field-select"
-                          style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", width: "100%" }}
-                        >
-                          <option value="">{t("clearAssignment", "-- Unassigned --")}</option>
-                          {officers
-                            .filter(o => o.status === "Active")
-                            .map((o) => (
-                              <option key={o.id} value={o.fullName}>{o.fullName} ({o.email})</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Target date */}
-                      <div className="form-field-group">
-                        <label htmlFor="modalTargetDate" className="field-label" style={{ fontWeight: 600, color: "#334155", display: "flex", alignItems: "center", gap: "6px" }}>
-                          <CalendarIcon size={14} style={{ color: "#4f46e5" }} />
-                          {t("targetCompletionDate", "Target Completion Date")}
+                        <label htmlFor="modalFileRefNo" className="field-label" style={{ fontWeight: 600, color: "#334155", display: "flex", alignItems: "center", gap: "6px" }}>
+                          <FileText size={14} style={{ color: "#4f46e5" }} />
+                          {lang === "si" ? "විමර්ශන ගොනු අංකය" : t("investigationFileNo", "Investigation File No.")}
                         </label>
                         <input
-                          id="modalTargetDate"
-                          type="date"
-                          value={targetDate}
-                          onChange={(e) => setTargetDate(e.target.value)}
+                          id="modalFileRefNo"
+                          type="text"
+                          placeholder={lang === "si" ? "උදා: INV/FILE/2026/01" : "e.g. INV/FILE/2026/01"}
+                          value={fileRefNoForm}
+                          onChange={(e) => setFileRefNoForm(e.target.value)}
                           className="field-input"
                           style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", width: "100%" }}
                         />
                       </div>
 
-                      {/* Investigation Status */}
+                      {/* Investigation Status (විමර්ශන තත්ත්වය) */}
                       <div className="form-field-group">
                         <label htmlFor="modalStatus" className="field-label" style={{ fontWeight: 600, color: "#334155", display: "flex", alignItems: "center", gap: "6px" }}>
                           <Layers size={14} style={{ color: "#4f46e5" }} />
@@ -2186,12 +2168,12 @@ export default function InvestigationPage() {
                           className="field-select"
                           style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", width: "100%" }}
                         >
-                          <option value="Scheduled">🗓️ Scheduled</option>
-                          <option value="In Progress">⚡ In Progress</option>
-                          <option value="Evidence Review">🔍 Evidence Review</option>
-                          <option value="Preliminary Investigation">📋 Preliminary Investigation</option>
-                          <option value="Under Investigation">🕵️ Under Investigation</option>
-                          <option value="Completed">✅ Completed</option>
+                          <option value="Scheduled">{lang === "si" ? "🗓️ නියමිතයි (Scheduled)" : "🗓️ Scheduled"}</option>
+                          <option value="In Progress">{lang === "si" ? "⚡ සිදුවෙමින් පවතියි (In Progress)" : "⚡ In Progress"}</option>
+                          <option value="Evidence Review">{lang === "si" ? "🔍 සාක්ෂි සමාලෝචනය (Evidence Review)" : "🔍 Evidence Review"}</option>
+                          <option value="Preliminary Investigation">{lang === "si" ? "📋 මූලික විමර්ශනය (Preliminary Investigation)" : "📋 Preliminary Investigation"}</option>
+                          <option value="Under Investigation">{lang === "si" ? "🕵️ විමර්ශනය යටතේ පවතියි (Under Investigation)" : "🕵️ Under Investigation"}</option>
+                          <option value="Completed">{lang === "si" ? "✅ අවසන් කර ඇත (Completed)" : "✅ Completed"}</option>
                         </select>
                       </div>
                     </div>
@@ -2200,15 +2182,15 @@ export default function InvestigationPage() {
                     <div style={{ marginTop: "18px" }}>
                       <label style={{ fontSize: "12px", fontWeight: 700, color: "#475569", display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
                         <Sparkles size={14} style={{ color: "#f59e0b" }} />
-                        <span>{t("quickNoteTemplates", "Quick Action Presets (Click to insert):")}</span>
+                        <span>{lang === "si" ? "ඉක්මන් ක්‍රියාමාර්ග සටහන් (එක් කිරීමට ක්ලික් කරන්න):" : t("quickNoteTemplates", "Quick Action Presets (Click to insert):")}</span>
                       </label>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
                         {[
-                          { label: lang === "si" ? "+ සාක්ෂිකරුවන්ගේ ප්‍රකාශ" : "+ Witness Statement Recorded", val: t("presetWitnessStatement", "Witness statement recorded.") },
-                          { label: lang === "si" ? "+ විභාග දිනය නියම කිරීම" : "+ Hearing Scheduled", val: t("presetHearingScheduled", "Inquiry hearing scheduled.") },
-                          { label: lang === "si" ? "+ සාක්ෂි සමාලෝචනය" : "+ Evidence Reviewed", val: t("presetEvidenceReviewed", "Evidence & documentation reviewed.") },
-                          { label: lang === "si" ? "+ අතරමැදි වාර්තාව" : "+ Interlocutory Report", val: t("presetInterlocutoryReport", "Interlocutory status report submitted.") },
-                          { label: lang === "si" ? "+ අවසන් වාර්තාව" : "+ Final Report Complete", val: t("presetFinalReport", "Final investigation report completed.") },
+                          { label: lang === "si" ? "+ සාක්ෂිකරුවන්ගේ ප්‍රකාශ" : "+ Witness Statement Recorded", val: lang === "si" ? "සාක්ෂිකරුවන්ගෙන් ප්‍රකාශ ලබා ගන්නා ලදී." : t("presetWitnessStatement", "Witness statement recorded.") },
+                          { label: lang === "si" ? "+ විභාග දිනය නියම කිරීම" : "+ Hearing Scheduled", val: lang === "si" ? "විමර්ශන විභාග දිනය නියම කරන ලදී." : t("presetHearingScheduled", "Inquiry hearing scheduled.") },
+                          { label: lang === "si" ? "+ සාක්ෂි සමාලෝචනය" : "+ Evidence Reviewed", val: lang === "si" ? "සාක්ෂි සහ ලේඛන සමාලෝචනය කරන ලදී." : t("presetEvidenceReviewed", "Evidence & documentation reviewed.") },
+                          { label: lang === "si" ? "+ අතරමැදි වාර්තාව" : "+ Interlocutory Report", val: lang === "si" ? "අතරමැදි ප්‍රගති වාර්තාව ඉදිරිපත් කරන ලදී." : t("presetInterlocutoryReport", "Interlocutory status report submitted.") },
+                          { label: lang === "si" ? "+ අවසන් වාර්තාව" : "+ Final Report Complete", val: lang === "si" ? "අවසාන විමර්ශන වාර්තාව සම්පූර්ණ කරන ලදී." : t("presetFinalReport", "Final investigation report completed.") },
                         ].map((chip, idx) => (
                           <button
                             key={idx}
@@ -2247,7 +2229,7 @@ export default function InvestigationPage() {
                         style={{ padding: "12px", borderRadius: "8px", border: "1px solid #cbd5e1", width: "100%", resize: "vertical" }}
                       />
                       <div style={{ display: "flex", justifyContent: "space-between", marginTop: "4px", fontSize: "11px", color: "#64748b" }}>
-                        <span>Include hearing dates, witness references, or report summaries.</span>
+                        <span>{lang === "si" ? "විභාග දින, සාක්ෂිකරුවන්ගේ තොරතුරු හෝ වාර්තා සාරාංශ ඇතුළත් කරන්න." : "Include hearing dates, witness references, or report summaries."}</span>
                         <span>{investigationNotes.length} chars</span>
                       </div>
                     </div>

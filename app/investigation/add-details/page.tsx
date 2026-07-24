@@ -45,6 +45,7 @@ function InvestigationCaseDetailsContent() {
   const [targetDate, setTargetDate] = useState("");
   const [status, setStatus] = useState("In Progress");
   const [inquiryNotes, setInquiryNotes] = useState("");
+  const [investigationFileNo, setInvestigationFileNo] = useState("");
 
   // Step 1: Assign Officers to Subject Officer (1 Chairman + Many Members)
   const [step1AssignedOfficers, setStep1AssignedOfficers] = useState("");
@@ -188,6 +189,7 @@ function InvestigationCaseDetailsContent() {
       setTargetDate(matchedCase.targetDate || new Date().toISOString().slice(0, 10));
       setStatus(matchedCase.status || "In Progress");
       setInquiryNotes(matchedCase.inquiryNotes || matchedCase.notes || "");
+      setInvestigationFileNo(matchedCase.investigationFileNo || matchedCase.fileNo || matchedCase.fileRefNo || "");
 
       // Load accused/concerned officer details
       if (typeof window !== "undefined") {
@@ -1040,20 +1042,59 @@ function InvestigationCaseDetailsContent() {
                     <span>{lang === "si" ? "විමර්ශන ප්‍රගතිය සහ පියවර ඇතුළත් කිරීම" : "Record Progress & Update Inquiry Details"}</span>
                   </h4>
 
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "16px", marginBottom: "16px" }}>
+                    {/* Investigation File Number (විමර්ශන ගොනු අංකය) */}
+                    <div className="form-field-group">
+                      <label htmlFor="invFileNo" className="field-label" style={{ fontWeight: 600, color: "#334155", display: "flex", alignItems: "center", gap: "6px" }}>
+                        <FileText size={14} style={{ color: "#4f46e5" }} />
+                        {lang === "si" ? "විමර්ශන ගොනු අංකය" : t("investigationFileNo", "Investigation File No.")}
+                      </label>
+                      <input
+                        id="invFileNo"
+                        type="text"
+                        placeholder={lang === "si" ? "උදා: INV/FILE/2026/01" : "e.g. INV/FILE/2026/01"}
+                        value={investigationFileNo}
+                        onChange={(e) => setInvestigationFileNo(e.target.value)}
+                        className="field-input"
+                        style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", width: "100%" }}
+                      />
+                    </div>
 
+                    {/* Investigation Status (විමර්ශන තත්ත්වය) */}
+                    <div className="form-field-group">
+                      <label htmlFor="invStatus" className="field-label" style={{ fontWeight: 600, color: "#334155", display: "flex", alignItems: "center", gap: "6px" }}>
+                        <CheckSquare size={14} style={{ color: "#4f46e5" }} />
+                        {lang === "si" ? "විමර්ශන තත්ත්වය" : "Investigation Status"}
+                      </label>
+                      <select
+                        id="invStatus"
+                        value={status}
+                        onChange={(e) => setStatus(e.target.value)}
+                        className="field-select"
+                        style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", width: "100%" }}
+                      >
+                        <option value="Scheduled">{lang === "si" ? "🗓️ නියමිතයි (Scheduled)" : "🗓️ Scheduled"}</option>
+                        <option value="In Progress">{lang === "si" ? "⚡ සිදුවෙමින් පවතියි (In Progress)" : "⚡ In Progress"}</option>
+                        <option value="Evidence Review">{lang === "si" ? "🔍 සාක්ෂි සමාලෝචනය (Evidence Review)" : "🔍 Evidence Review"}</option>
+                        <option value="Preliminary Investigation">{lang === "si" ? "📋 මූලික විමර්ශනය (Preliminary Investigation)" : "📋 Preliminary Investigation"}</option>
+                        <option value="Under Investigation">{lang === "si" ? "🕵️ විමර්ශනය යටතේ පවතියි (Under Investigation)" : "🕵️ Under Investigation"}</option>
+                        <option value="Completed">{lang === "si" ? "✅ අවසන් කර ඇත (Completed)" : "✅ Completed"}</option>
+                      </select>
+                    </div>
+                  </div>
 
                   {/* Quick Action Notes Tags */}
                   <div style={{ marginTop: "16px" }}>
                     <span style={{ fontSize: "12px", fontWeight: 600, color: "#475569", display: "block", marginBottom: "6px" }}>
-                      ⚡ Quick Progress Notes:
+                      ⚡ {lang === "si" ? "ඉක්මන් ක්‍රියාමාර්ග සටහන්:" : "Quick Progress Notes:"}
                     </span>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
                       {[
-                        "සාක්ෂිකරුවන්ගෙන් ප්‍රකාශ ලබා ගැනීම",
-                        "විභාග දිනය නියම කිරීම",
-                        "සාක්ෂි සටහන් කිරීම",
-                        "අතරමැදි වාර්තාව",
-                        "අවසාන වාර්තාව",
+                        lang === "si" ? "සාක්ෂිකරුවන්ගෙන් ප්‍රකාශ ලබා ගැනීම" : "Witness Statement Recorded",
+                        lang === "si" ? "විභාග දිනය නියම කිරීම" : "Hearing Scheduled",
+                        lang === "si" ? "සාක්ෂි සටහන් කිරීම" : "Evidence Recorded",
+                        lang === "si" ? "අතරමැදි වාර්තාව" : "Interlocutory Report",
+                        lang === "si" ? "අවසාන වාර්තාව" : "Final Report Complete",
                       ].map((tag, idx) => (
                         <button
                           key={idx}

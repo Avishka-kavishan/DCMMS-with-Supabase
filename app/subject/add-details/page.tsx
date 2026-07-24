@@ -1080,7 +1080,7 @@ function CaseDetailsForm() {
                             {/* Subject File Number (විෂය ගොනු අංකය) */}
                             <div className="form-field-group">
                               <label htmlFor="specialNotes" className="field-label">
-                                {t("subjectFileNo")}
+                                {t("subjectFileNo", "විෂය ගොනු අංකය")}
                               </label>
                               <input
                                 id="specialNotes"
@@ -1089,6 +1089,21 @@ function CaseDetailsForm() {
                                 onChange={(e) => setSpecialNotes(e.target.value)}
                                 className="field-input"
                                 placeholder="e.g. SUB/FILE/102"
+                              />
+                            </div>
+
+                            {/* Investigation File Number (විමර්ශන ගොනු අංකය) */}
+                            <div className="form-field-group">
+                              <label htmlFor="fileRelated" className="field-label">
+                                {t("investigationFileNo", "විමර්ශන ගොනු අංකය")}
+                              </label>
+                              <input
+                                id="fileRelated"
+                                type="text"
+                                value={fileRelated}
+                                onChange={(e) => setFileRelated(e.target.value)}
+                                className="field-input"
+                                placeholder="e.g. INV/FILE/2026/01"
                               />
                             </div>
                           </div>

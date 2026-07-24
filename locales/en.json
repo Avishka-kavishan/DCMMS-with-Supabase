@@ -54,6 +54,7 @@
   "caseAge": "Case Status (New/Old)",
   "newCase": "New Case",
   "oldCase": "Old Case",
+  "investigationFileNo": "Investigation File No.",
   "investigationDashboardTitle": "Investigation Administrator Dashboard",
   "investigationDashboardDesc": "Register investigation officers, add investigation details, and track inquiries",
   "goodMorning": "Good Morning, Nathasha!",
