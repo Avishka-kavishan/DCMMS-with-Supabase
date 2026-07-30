@@ -427,8 +427,6 @@
   "exportExcel": "Excel ஏற்றுமதி செய்",
   "exportFullReport": "முழு தினசரி அறிக்கையையும் Excel வடிவில் பதிவிறக்கவும்",
   "exportExcelSuccess": "தினசரி அஞ்சல் அறிக்கை வெற்றிகரமாக Excel கோப்பாக ஏற்றுமதி செய்யப்பட்டது!",
-  "seeAll": "அனைத்தையும் காண்க",
-  "showLess": "குறைவாகக் காட்டு",
   "moreLetters": "மேலும் கடிதங்கள்",
   "exportExcelBottom": "Excel கோப்பைப் பிரித்தெடுக்கவும்"
 }

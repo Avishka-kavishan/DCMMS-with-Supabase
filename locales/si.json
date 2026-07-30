@@ -429,8 +429,6 @@
   "exportExcel": "Excel ගොනුව ලබා ගන්න",
   "exportFullReport": "සම්පූර්ණ දෛනික වාර්තාව Excel මගින් බාගත කරන්න",
   "exportExcelSuccess": "දෛනික තැපැල් වාර්තාව සාර්ථකව Excel ගොනුවක් ලෙස බාගත විය!",
-  "seeAll": "සියල්ල බලන්න",
-  "showLess": "අඩුවෙන් පෙන්වන්න",
   "moreLetters": "තවත් ලිපි",
   "exportExcelBottom": "Excel ගොනුව නිස්සාරණය කරන්න"
 }

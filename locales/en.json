@@ -432,8 +432,6 @@
   "exportExcel": "Export Excel",
   "exportFullReport": "Export Full Daily Report",
   "exportExcelSuccess": "Daily Mail report exported to Excel successfully!",
-  "seeAll": "See All",
-  "showLess": "Show Less",
   "moreLetters": "more letters",
   "exportExcelBottom": "Extract Excel File"
 }
