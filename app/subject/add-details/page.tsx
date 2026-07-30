@@ -127,6 +127,12 @@ function CaseDetailsForm() {
   const [specialNotes, setSpecialNotes] = useState("");
   const [priority, setPriority] = useState("medium");
 
+  // Data Flow Assignment States (From Investigation Admin)
+  const [assignedOfficersText, setAssignedOfficersText] = useState("");
+  const [assignmentData, setAssignmentData] = useState<any>(null);
+  const [subjectApptDate, setSubjectApptDate] = useState("");
+  const [subjectDueDate, setSubjectDueDate] = useState("");
+
   // Flowchart Form States (as in the flowchart diagram)
   const [classification, setClassification] = useState<"nominal" | "anonymous">("nominal");
   const [complainantName, setComplainantName] = useState("");
@@ -247,6 +253,40 @@ function CaseDetailsForm() {
             } catch (e) {
               console.error("Failed to parse letters from local storage", e);
             }
+          }
+        }
+
+        // Fetch Subject Assignment details (Chairman, Members, Extension, After-Investigation details)
+        if (caseNoParam) {
+          let asgn: any = null;
+          if (isSupabaseConfigured) {
+            try {
+              const { data } = await supabase
+                .from("dcmms_subject_assignments")
+                .select("*")
+                .ilike("case_no", caseNoParam.trim())
+                .maybeSingle();
+              if (data) asgn = data;
+            } catch (e) {}
+          }
+          if (typeof window !== "undefined") {
+            try {
+              const stored = localStorage.getItem("dcmms_subject_assignments");
+              if (stored) {
+                const list = JSON.parse(stored);
+                const found = list.find((a: any) =>
+                  (a.caseNo && String(a.caseNo).trim().toLowerCase() === String(caseNoParam).trim().toLowerCase()) ||
+                  (a.case_no && String(a.case_no).trim().toLowerCase() === String(caseNoParam).trim().toLowerCase())
+                );
+                if (found) asgn = { ...asgn, ...found };
+              }
+            } catch (e) {}
+          }
+          if (asgn) {
+            setAssignmentData(asgn);
+            if (asgn.assigned_officers || asgn.assignedOfficers) setAssignedOfficersText(asgn.assigned_officers || asgn.assignedOfficers);
+            if (asgn.appointment_date || asgn.appointmentDate) setSubjectApptDate(asgn.appointment_date || asgn.appointmentDate);
+            if (asgn.report_due_date || asgn.reportDueDate) setSubjectDueDate(asgn.report_due_date || asgn.reportDueDate);
           }
         }
 
@@ -515,6 +555,52 @@ function CaseDetailsForm() {
     }
   };
 
+  const handleSubjectSubmitDates = async () => {
+    if (!subjectApptDate || !subjectDueDate) {
+      alert("Please select both Appointment Date and Report Due Date.");
+      return;
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    const updated = {
+      ...(assignmentData || {}),
+      caseNo: caseNoParam,
+      appointmentDate: subjectApptDate,
+      reportDueDate: subjectDueDate,
+      datesSubmittedBySubject: true,
+      datesSubmitTimestamp: today,
+      status: "Dates Confirmed by Subject Officer",
+    };
+
+    if (typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem("dcmms_subject_assignments") || "[]";
+        let list = JSON.parse(stored);
+        list = list.filter((a: any) => (a.caseNo !== caseNoParam && a.case_no !== caseNoParam));
+        list.push(updated);
+        localStorage.setItem("dcmms_subject_assignments", JSON.stringify(list));
+      } catch (e) {}
+    }
+
+    if (isSupabaseConfigured) {
+      try {
+        await supabase.from("dcmms_subject_assignments").upsert({
+          id: updated.id || `asgn-${caseNoParam}`,
+          case_no: caseNoParam,
+          subject_officer_name: updated.subjectOfficerName || subjectOfficer || "Subject Officer",
+          appointment_date: subjectApptDate,
+          report_due_date: subjectDueDate,
+          dates_submitted_by_subject: true,
+          status: updated.status,
+        });
+        await supabase.from("dcmms_subject").update({
+          subject_officer_name: updated.subjectOfficerName || subjectOfficer || "Subject Officer",
+        }).eq("case_no", caseNoParam);
+      } catch (e) {}
+    }
+    setAssignmentData(updated);
+    alert(i18n.language === "si" ? "පත්වීම් ලිපිය දිනය සහ වාර්තා දිනය Admin වෙත යවන ලදී!" : "Appointment Date and Report Due Date submitted to Admin!");
+  };
+
   const saveCaseData = async (status: string, isDraftMode = false) => {
     const actionId = `action-${refNo}-${Date.now()}`;
     const serializedStepTaken = `[EduSecApproval:${eduSecretaryApproval}${eduSecretaryApproval === "yes" && approvalDate ? `|Date:${approvalDate}` : ""}]`;
@@ -527,6 +613,7 @@ function CaseDetailsForm() {
           .upsert({
             id: `case-${refNo}`,
             case_no: refNo,
+            subject_officer_name: subjectOfficer || null,
             status: status || "In Progress",
           }, { onConflict: "case_no", ignoreDuplicates: true });
 
@@ -589,7 +676,7 @@ function CaseDetailsForm() {
           } catch (e) {}
         }
 
-        // Update main case status
+        // Update main case status and subject_officer_name
         const { data: caseData, error: fetchError } = await supabase
           .from("dcmms_subject")
           .select("*")
@@ -601,6 +688,7 @@ function CaseDetailsForm() {
             .from("dcmms_subject")
             .upsert({
               ...caseData,
+              subject_officer_name: subjectOfficer || caseData.subject_officer_name || caseData.officer_name,
               status: status || caseData.status,
             });
         }
@@ -1054,6 +1142,42 @@ function CaseDetailsForm() {
                     </h2>
 
                     <div className="flowchart-container">
+                      {/* Investigation Committee & Step 2 Dates Banner from Admin */}
+                      {assignedOfficersText && (
+                        <div style={{ backgroundColor: "#eff6ff", border: "1px solid #93c5fd", borderRadius: "10px", padding: "14px 16px", marginBottom: "16px" }}>
+                          <div style={{ fontSize: "12px", fontWeight: 700, color: "#1d4ed8", textTransform: "uppercase", marginBottom: "4px" }}>
+                            ✓ {i18n.language === "si" ? "පවරන ලද විමර්ශන නිලධාරීන් (Investigation Admin වෙතින් ලැබිණි):" : "Assigned Investigation Committee (From Admin):"}
+                          </div>
+                          <div style={{ fontSize: "14px", fontWeight: 700, color: "#0369a1" }}>
+                            {assignedOfficersText}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Step 2 Date Submission to Admin */}
+                      <div style={{ backgroundColor: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: "10px", padding: "14px 16px", marginBottom: "16px" }}>
+                        <div style={{ fontSize: "13px", fontWeight: 700, color: "#0369a1", marginBottom: "8px" }}>
+                          📅 {i18n.language === "si" ? "Step 2: පත්වීම් ලිපිය දිනය සහ වාර්තාව ලැබිය යුතු දිනය Admin වෙත යවන්න" : "Step 2: Send Appointment Date & Report Due Date to Admin"}
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "10px" }}>
+                          <div>
+                            <label style={{ fontSize: "11px", fontWeight: 600, color: "#475569", display: "block", marginBottom: "4px" }}>
+                              {i18n.language === "si" ? "පත්වීම් ලිපිය දිනය (Appointment Date):" : "Appointment Letter Date:"}
+                            </label>
+                            <input type="date" value={subjectApptDate} onChange={(e) => setSubjectApptDate(e.target.value)} className="field-input" style={{ width: "100%", padding: "8px 10px", borderRadius: "6px", border: "1px solid #cbd5e1" }} />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: "11px", fontWeight: 600, color: "#475569", display: "block", marginBottom: "4px" }}>
+                              {i18n.language === "si" ? "වාර්තාව ලැබිය යුතු දිනය (Report Due Date):" : "Report Must Be Received By:"}
+                            </label>
+                            <input type="date" value={subjectDueDate} onChange={(e) => setSubjectDueDate(e.target.value)} className="field-input" style={{ width: "100%", padding: "8px 10px", borderRadius: "6px", border: "1px solid #cbd5e1" }} />
+                          </div>
+                        </div>
+                        <button type="button" onClick={handleSubjectSubmitDates} className="btn-primary" style={{ padding: "8px 18px", fontSize: "12px", backgroundColor: "#0284c7", color: "#ffffff", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: 700 }}>
+                          {i18n.language === "si" ? "දිනයන් Admin වෙත යවන්න" : "Submit Dates to Admin"}
+                        </button>
+                      </div>
+
                       {/* Step 1: Case Administration */}
                       <div className="flowchart-step">
                         <div className="step-indicator">1</div>

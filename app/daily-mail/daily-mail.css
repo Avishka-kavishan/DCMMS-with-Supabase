@@ -679,6 +679,50 @@
   transform: scale(0.97);
 }
 
+.hero-action-buttons-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  position: relative;
+  z-index: 1;
+}
+
+.btn-export-excel {
+  background-color: #107c41;
+  color: #ffffff;
+  font-family: inherit;
+  font-size: calc(13px * var(--font-scale));
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 20px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 10px rgba(16, 124, 65, 0.25);
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.btn-export-excel:hover {
+  background-color: #0e6b37;
+  box-shadow: 0 6px 14px rgba(16, 124, 65, 0.38);
+  transform: translateY(-1px);
+}
+
+.btn-export-excel:active {
+  transform: translateY(0);
+  background-color: #0b552c;
+}
+
+.btn-export-excel svg {
+  flex-shrink: 0;
+}
+
 /* ============================================================
    LETTERS TABLE AND FILTERS
    ============================================================ */
@@ -1434,4 +1478,108 @@
 
 .premium-card-sparkline {
   opacity: 0.85;
+}
+
+/* ============================================================
+   LETTERS LIST FOOTER & BOTTOM EXCEL EXPORT BUTTON
+   ============================================================ */
+.letters-list-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 18px;
+  border-top: 1px solid var(--border-color, #e2e8f0);
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.letters-count-info {
+  font-size: calc(13px * var(--font-scale, 1));
+  color: #64748b;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.letters-count-badge {
+  background-color: #f1f5f9;
+  color: #334155;
+  font-size: calc(12px * var(--font-scale, 1));
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 20px;
+  border: 1px solid #e2e8f0;
+}
+
+.letters-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.btn-see-all-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background-color: #0e162f;
+  color: #ffffff;
+  font-family: inherit;
+  font-size: calc(13px * var(--font-scale, 1));
+  font-weight: 600;
+  border: 1px solid #0e162f;
+  border-radius: 8px;
+  padding: 10px 20px;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(14, 22, 47, 0.15);
+  transition: all 0.2s ease;
+}
+
+.btn-see-all-toggle:hover {
+  background-color: #1e293b;
+  border-color: #1e293b;
+  box-shadow: 0 4px 12px rgba(14, 22, 47, 0.25);
+  transform: translateY(-1px);
+}
+
+.btn-see-all-toggle:active {
+  transform: translateY(0);
+  background-color: #090e1f;
+}
+
+.see-all-icon {
+  transition: transform 0.25s ease;
+}
+
+.see-all-icon.rotate-180 {
+  transform: rotate(180deg);
+}
+
+.btn-export-excel-bottom {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background-color: #107c41;
+  color: #ffffff;
+  font-family: inherit;
+  font-size: calc(13px * var(--font-scale, 1));
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 22px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(16, 124, 65, 0.25);
+  transition: all 0.2s ease;
+}
+
+.btn-export-excel-bottom:hover {
+  background-color: #0e6b37;
+  box-shadow: 0 6px 16px rgba(16, 124, 65, 0.38);
+  transform: translateY(-1px);
+}
+
+.btn-export-excel-bottom:active {
+  transform: translateY(0);
+  background-color: #0b552c;
 }

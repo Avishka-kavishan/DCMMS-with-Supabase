@@ -53,6 +53,10 @@ function InvestigationCaseDetailsContent() {
   const [selectedMembers, setSelectedMembers] = useState<any[]>([]);
   const [memberSelectId, setMemberSelectId] = useState("");
   
+  // Step 2: Check / Set Appointment Date & Report Due Date
+  const [step2ApptDate, setStep2ApptDate] = useState("");
+  const [step2DueDate, setStep2DueDate] = useState("");
+
   // Step 3: Extension of Dates (Start & End Date, Term: First, Second, Third)
   const [step3Term, setStep3Term] = useState<"First" | "Second" | "Third">("First");
   const [step3StartDate, setStep3StartDate] = useState("");
@@ -158,9 +162,107 @@ function InvestigationCaseDetailsContent() {
 
       setOfficers(fetchedOfficers);
 
+      // Load Data Flow Assignment FIRST
+      let assignment: any = null;
+      if (isSupabaseConfigured && caseNoParam) {
+        try {
+          const { data: dbAsgn } = await supabase
+            .from("dcmms_subject_assignments")
+            .select("*")
+            .ilike("case_no", caseNoParam.trim())
+            .maybeSingle();
+          if (dbAsgn) {
+            assignment = {
+              id: dbAsgn.id,
+              caseNo: dbAsgn.case_no,
+              subjectOfficerName: dbAsgn.subject_officer_name,
+              status: dbAsgn.status,
+              assignedOfficers: dbAsgn.assigned_officers,
+              appointmentDate: dbAsgn.appointment_date,
+              reportDueDate: dbAsgn.report_due_date,
+              extensionTerm: dbAsgn.extension_term,
+              extensionStartDate: dbAsgn.extension_start_date,
+              extensionEndDate: dbAsgn.extension_end_date,
+              extensionApprovalStatus: dbAsgn.extension_approval_status,
+              extensionDecisionDate: dbAsgn.extension_decision_date,
+              certificationSubmitted: dbAsgn.certification_submitted,
+              reportSubmitDate: dbAsgn.report_submit_date,
+              reportContent: dbAsgn.report_content,
+              afterInvestigationSent: dbAsgn.after_investigation_sent,
+              afterInvestigationDate: dbAsgn.after_investigation_date,
+              investigationFileNo: dbAsgn.investigation_file_no,
+              investigationStatus: dbAsgn.investigation_status,
+              investigationNotes: dbAsgn.investigation_notes,
+              progressDetails: dbAsgn.progress_details,
+            };
+          }
+        } catch (e) {}
+      }
+
+      if (typeof window !== "undefined") {
+        const storedAsgn = localStorage.getItem("dcmms_subject_assignments");
+        if (storedAsgn) {
+          try {
+            const list = JSON.parse(storedAsgn);
+            const found = list.find((a: any) => 
+              (a.caseNo && String(a.caseNo).trim().toLowerCase() === String(caseNoParam).trim().toLowerCase()) ||
+              (a.case_no && String(a.case_no).trim().toLowerCase() === String(caseNoParam).trim().toLowerCase())
+            );
+            if (found) {
+              assignment = { ...assignment, ...found };
+            }
+          } catch (e) {}
+        }
+      }
+      setExistingAssignment(assignment);
+      if (assignment) {
+        if (assignment.assignedOfficers) setStep1AssignedOfficers(assignment.assignedOfficers);
+        if (assignment.appointmentDate) setStep2ApptDate(assignment.appointmentDate);
+        if (assignment.reportDueDate) setStep2DueDate(assignment.reportDueDate);
+        if (assignment.extensionTerm) setStep3Term(assignment.extensionTerm);
+        if (assignment.extensionStartDate) setStep3StartDate(assignment.extensionStartDate);
+        if (assignment.extensionEndDate) setStep3EndDate(assignment.extensionEndDate);
+        if (assignment.reportSubmitDate) setStep4ApprovalDate(assignment.reportSubmitDate);
+        if (assignment.investigationFileNo) setInvestigationFileNo(assignment.investigationFileNo);
+        if (assignment.investigationNotes || assignment.progressDetails) setInquiryNotes(assignment.investigationNotes || assignment.progressDetails);
+        if (assignment.investigationStatus) setStatus(assignment.investigationStatus);
+        if (assignment.chairman) setSelectedChairman(assignment.chairman);
+        if (assignment.members && Array.isArray(assignment.members)) setSelectedMembers(assignment.members);
+      }
+
       // Load case data
       let matchedCase: any = null;
-      if (typeof window !== "undefined") {
+      if (isSupabaseConfigured && caseNoParam) {
+        try {
+          const { data: dbMail } = await supabase
+            .from("dcmms_daily_mail")
+            .select("*")
+            .ilike("ref_no", caseNoParam.trim())
+            .maybeSingle();
+
+          if (dbMail) {
+            const officer = assignment?.subjectOfficerName || dbMail.subject_officer_name || dbMail.officer_name || "";
+            matchedCase = {
+              id: dbMail.id || `case-${caseNoParam}`,
+              inquiryNo: dbMail.ref_no || caseNoParam,
+              caseNo: dbMail.ref_no || caseNoParam,
+              refNo: dbMail.ref_no || caseNoParam,
+              subject: dbMail.subject || "Formal disciplinary inquiry regarding misconduct",
+              targetDate: dbMail.received_date || new Date().toISOString().slice(0, 10),
+              assignee: officer,
+              subjectOfficerName: officer,
+              officerName: dbMail.officer_name || dbMail.officerName || officer,
+              status: "In Progress",
+              inquiryNotes: dbMail.special_notes || "",
+              complainantName: dbMail.sender_name || "Director of Education",
+            };
+          }
+        } catch (e) {
+          console.warn("Failed to fetch daily mail from Supabase:", e);
+        }
+      }
+
+      if (!matchedCase && typeof window !== "undefined") {
         const storedCases = localStorage.getItem("dcmms_cases");
         if (storedCases) {
           try {
@@ -187,6 +289,7 @@ function InvestigationCaseDetailsContent() {
                 (l.refNo && l.refNo.toLowerCase() === caseNoParam.toLowerCase())
               );
               if (found) {
+                const officer = assignment?.subjectOfficerName || found.subjectOfficerName || found.subject_officer_name || found.officerName || "";
                 matchedCase = {
                   id: found.id || `case-${caseNoParam}`,
                   inquiryNo: found.refNo || caseNoParam,
@@ -194,7 +297,9 @@ function InvestigationCaseDetailsContent() {
                   refNo: found.refNo || caseNoParam,
                   subject: found.subject || "Formal disciplinary inquiry regarding misconduct",
                   targetDate: found.receivedDate || new Date().toISOString().slice(0, 10),
-                  assignee: found.officerName || "Kavishan",
+                  assignee: officer,
+                  subjectOfficerName: officer,
+                  officerName: found.officerName || officer,
                   status: found.status === "assigned" ? "In Progress" : "In Progress",
                   inquiryNotes: found.specialNotes || "",
                   complainantName: found.senderName || "Director of Education",
@@ -213,103 +318,22 @@ function InvestigationCaseDetailsContent() {
           refNo: caseNoParam,
           subject: "Formal disciplinary inquiry regarding misconduct",
           targetDate: new Date().toISOString().slice(0, 10),
-          assignee: "Kavishan",
+          assignee: assignment?.subjectOfficerName || "",
+          subjectOfficerName: assignment?.subjectOfficerName || "",
+          officerName: assignment?.subjectOfficerName || "",
           status: "In Progress",
           inquiryNotes: "",
           complainantName: "Director of Education",
         };
       }
 
+      const resolvedOfficer = assignment?.subjectOfficerName || matchedCase?.subjectOfficerName || matchedCase?.officerName || matchedCase?.subjectOfficer || matchedCase?.assignee || "";
       setSelectedCase(matchedCase);
-      setAssignee(matchedCase.assignee || "");
+      setAssignee(resolvedOfficer);
       setTargetDate(matchedCase.targetDate || new Date().toISOString().slice(0, 10));
       setStatus(matchedCase.status || "In Progress");
       setInquiryNotes(matchedCase.inquiryNotes || matchedCase.notes || "");
       setInvestigationFileNo(matchedCase.investigationFileNo || matchedCase.fileNo || matchedCase.fileRefNo || "");
-
-      // Fetch Accused Officers from Supabase
-      if (isSupabaseConfigured && caseNoParam) {
-        try {
-          const { data: dbConcerned } = await supabase
-            .from("dcmms_concerned_officers")
-            .select("*")
-            .ilike("case_no", caseNoParam.trim());
-          if (dbConcerned && dbConcerned.length > 0) {
-            setConcernedOfficersList(dbConcerned);
-          }
-        } catch (e) {}
-      }
-
-      // Load accused/concerned officer details from localStorage
-      if (typeof window !== "undefined") {
-        const storedConcerned = localStorage.getItem("dcmms_officer_concerned");
-        if (storedConcerned) {
-          try {
-            const concernedMap = JSON.parse(storedConcerned);
-            const targetKeys = [caseNoParam, matchedCase?.inquiryNo, matchedCase?.caseNo, matchedCase?.refNo].filter(Boolean).map(k => String(k).trim().toLowerCase());
-            const matchedKey = Object.keys(concernedMap).find(k => targetKeys.includes(k.trim().toLowerCase()));
-            const entry = matchedKey ? concernedMap[matchedKey] : null;
-            if (entry) {
-              if (Array.isArray(entry.persons) && entry.persons.length > 0) {
-                setConcernedOfficersList(entry.persons.map((p: any) => ({
-                  officer_name: p.name || p.officer_name || p.officerName,
-                  position: p.position || p.designation,
-                  dob: p.dob,
-                  nic: p.nic,
-                  appointment_date: p.appointmentDate || p.appointment_date,
-                  address: p.address,
-                  institute_name: entry.instituteName || entry.schoolName,
-                  institute_address: entry.schoolAddress || entry.instituteAddress,
-                })));
-              } else if (entry.officerName || entry.officer_name) {
-                setConcernedOfficersList([{
-                  officer_name: entry.officerName || entry.officer_name,
-                  nic: entry.nic,
-                  position: entry.position || entry.designation,
-                  institute_name: entry.instituteName || entry.schoolName,
-                  address: entry.address,
-                }]);
-              }
-            }
-          } catch (e) {}
-        }
-
-        // Inline case fallback
-        if ((matchedCase as any).persons && Array.isArray((matchedCase as any).persons)) {
-          setConcernedOfficersList((matchedCase as any).persons.map((p: any) => ({
-            officer_name: p.name || p.officer_name || p.officerName,
-            position: p.position || p.designation,
-            dob: p.dob,
-            nic: p.nic,
-            appointment_date: p.appointmentDate || p.appointment_date,
-            address: p.address,
-            institute_name: p.instituteName || (matchedCase as any).schoolName,
-            institute_address: p.schoolAddress || (matchedCase as any).schoolAddress,
-          })));
-        }
-      }
-
-      // Load Data Flow Assignment
-      let assignment: any = null;
-      if (typeof window !== "undefined") {
-        const storedAsgn = localStorage.getItem("dcmms_subject_assignments");
-        if (storedAsgn) {
-          try {
-            const list = JSON.parse(storedAsgn);
-            assignment = list.find((a: any) => a.caseNo === caseNoParam);
-          } catch (e) {}
-        }
-      }
-      setExistingAssignment(assignment);
-      if (assignment) {
-        if (assignment.assignedOfficers) setStep1AssignedOfficers(assignment.assignedOfficers);
-        if (assignment.extensionTerm) setStep3Term(assignment.extensionTerm);
-        if (assignment.extensionStartDate) setStep3StartDate(assignment.extensionStartDate);
-        if (assignment.extensionEndDate) setStep3EndDate(assignment.extensionEndDate);
-        if (assignment.reportSubmitDate) setStep4ApprovalDate(assignment.reportSubmitDate);
-      }
-
-      // Load previous actions history
       let loadedActions: any[] = [];
       if (typeof window !== "undefined") {
         const storedActions = localStorage.getItem("dcmms_new_letter_current_case") || "[]";
@@ -352,6 +376,31 @@ function InvestigationCaseDetailsContent() {
     loadDetails();
   }, [caseNoParam]);
 
+  const formatSubjectOfficerName = (raw?: string | null): string => {
+    if (!raw || typeof raw !== "string" || !raw.trim()) {
+      return lang === "si" ? "පවරන ලද විෂය භාර නිලධාරී" : "Assigned Subject Officer";
+    }
+    const trimmed = raw.trim();
+    const lower = trimmed.toLowerCase();
+    if (
+      lower === "subject officer" ||
+      lower === "විෂය නිලධාරී" ||
+      lower === "පවරන ලද විෂය භාර නිලධාරී" ||
+      lower === "පවරන ලද විෂය භාර නිලධාරියා" ||
+      lower === "assigned subject officer" ||
+      lower === "unassigned" ||
+      lower === "නොපවරන ලද"
+    ) {
+      return lang === "si" ? "පවරන ලද විෂය භාර නිලධාරී" : "Assigned Subject Officer";
+    }
+    return trimmed;
+  };
+
+  const getDisplaySubjectOfficerName = () => {
+    const raw = existingAssignment?.subjectOfficerName || selectedCase?.subjectOfficerName || selectedCase?.officerName || selectedCase?.subjectOfficer || (assignee && assignee.toLowerCase() !== "subject officer" ? assignee : "");
+    return formatSubjectOfficerName(raw);
+  };
+
   // Helper to save assignment
   const saveSubjectAssignment = async (updatedFields: Partial<any>) => {
     if (typeof window !== "undefined") {
@@ -391,9 +440,17 @@ function InvestigationCaseDetailsContent() {
             extension_term: updated.extensionTerm || null,
             extension_start_date: updated.extensionStartDate || null,
             extension_end_date: updated.extensionEndDate || null,
+            extension_approval_status: updated.extensionApprovalStatus || null,
+            extension_decision_date: updated.extensionDecisionDate || null,
             certification_submitted: updated.certificationSubmitted || false,
             report_submit_date: updated.reportSubmitDate || null,
             report_content: updated.reportContent || null,
+            after_investigation_sent: updated.afterInvestigationSent || false,
+            after_investigation_date: updated.afterInvestigationDate || null,
+            investigation_file_no: updated.investigationFileNo || null,
+            investigation_status: updated.investigationStatus || null,
+            investigation_notes: updated.investigationNotes || null,
+            progress_details: updated.progressDetails || null,
           });
         } catch (e) {}
       }
@@ -415,42 +472,35 @@ function InvestigationCaseDetailsContent() {
 
     setStep1AssignedOfficers(formattedAssignedText);
 
-    const primaryOfficer = selectedChairman?.fullName || selectedMembers[0]?.fullName || step1AssignedOfficers || assignee || "Subject Officer";
-    const allOfficerNames = Array.from(new Set([
-      selectedChairman?.fullName,
-      ...selectedMembers.map((m) => m.fullName),
-      step1AssignedOfficers,
-      assignee
-    ].filter(Boolean)));
+    // Subject Officer is the system user with a profile who receives the case file
+    const targetSubjectOfficer = getDisplaySubjectOfficerName();
 
     await saveSubjectAssignment({
-      subjectOfficerName: primaryOfficer,
+      subjectOfficerName: targetSubjectOfficer,
       assignedOfficers: formattedAssignedText,
-      officerList: allOfficerNames,
+      officerList: [targetSubjectOfficer],
       chairman: selectedChairman,
       members: selectedMembers,
       status: "Officers Assigned",
     });
 
     if (typeof window !== "undefined") {
-      // 1. Sync dcmms_letters in localStorage
+      // 1. Sync dcmms_letters in localStorage for the Subject Officer
       try {
         const storedLetters = localStorage.getItem("dcmms_letters") || "[]";
         let letters = JSON.parse(storedLetters);
-        allOfficerNames.forEach((name) => {
-          const exists = letters.some((l: any) => l.refNo === caseNoParam && l.officerName?.toLowerCase() === name.toLowerCase());
-          if (!exists) {
-            letters.push({
-              id: `let-${caseNoParam}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-              refNo: caseNoParam,
-              officerName: name,
-              subject: selectedCase?.subject || `Assigned Inquiry Case (${caseNoParam})`,
-              receivedDate: new Date().toISOString().split("T")[0],
-              status: "assigned",
-              priority: "high"
-            });
-          }
-        });
+        const exists = letters.some((l: any) => l.refNo === caseNoParam && l.officerName?.toLowerCase() === targetSubjectOfficer.toLowerCase());
+        if (!exists) {
+          letters.push({
+            id: `let-${caseNoParam}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+            refNo: caseNoParam,
+            officerName: targetSubjectOfficer,
+            subject: selectedCase?.subject || `Assigned Inquiry Case (${caseNoParam})`,
+            receivedDate: new Date().toISOString().split("T")[0],
+            status: "assigned",
+            priority: "high"
+          });
+        }
         localStorage.setItem("dcmms_letters", JSON.stringify(letters));
       } catch (e) {}
 
@@ -460,25 +510,25 @@ function InvestigationCaseDetailsContent() {
         let cases = JSON.parse(storedCases);
         const idx = cases.findIndex((c: any) => c.caseNo === caseNoParam || c.refNo === caseNoParam);
         if (idx >= 0) {
-          cases[idx].assignedTo = primaryOfficer;
+          cases[idx].assignedTo = targetSubjectOfficer;
+          cases[idx].subjectOfficer = targetSubjectOfficer;
+          cases[idx].subjectOfficerName = targetSubjectOfficer;
           cases[idx].assignedOfficers = formattedAssignedText;
         }
         localStorage.setItem("dcmms_cases", JSON.stringify(cases));
       } catch (e) {}
 
-      // 3. Sync Supabase dcmms_daily_mail & dcmms_subject
+      // 3. Sync Supabase dcmms_daily_mail & dcmms_subject for the Subject Officer
       if (isSupabaseConfigured) {
         try {
-          for (const name of allOfficerNames) {
-            await supabase.from("dcmms_daily_mail").upsert({
-              id: `mail-${caseNoParam}-${name.trim().toLowerCase().replace(/\s+/g, "_")}`,
-              ref_no: caseNoParam,
-              officer_name: name,
-              subject: selectedCase?.subject || `Assigned Inquiry Case (${caseNoParam})`,
-              received_date: new Date().toISOString().split("T")[0],
-              status: "assigned"
-            });
-          }
+          await supabase.from("dcmms_daily_mail").upsert({
+            id: `mail-${caseNoParam}-${targetSubjectOfficer.trim().toLowerCase().replace(/\s+/g, "_")}`,
+            ref_no: caseNoParam,
+            officer_name: targetSubjectOfficer,
+            subject: selectedCase?.subject || `Assigned Inquiry Case (${caseNoParam})`,
+            received_date: new Date().toISOString().split("T")[0],
+            status: "assigned"
+          });
 
           await supabase.from("dcmms_subject").upsert({
             id: `case-${caseNoParam}`,
@@ -487,12 +537,34 @@ function InvestigationCaseDetailsContent() {
             priority: "high",
             status: "Officers Assigned",
             assigned_date: new Date().toISOString().split("T")[0],
+            subject_officer_name: targetSubjectOfficer,
+            officer_name: targetSubjectOfficer,
           });
         } catch (e) {}
       }
     }
 
-    showToast("Step 1: Assigned Officers Committee (1 Chairman & Members) submitted to Subject Officer!");
+    const isGenericOrKumara = !targetSubjectOfficer || targetSubjectOfficer.toLowerCase().includes("kumara") || targetSubjectOfficer === "subject officer" || targetSubjectOfficer === "විෂය නිලධාරී" || targetSubjectOfficer === "පවරන ලද විෂය භාර නිලධාරී" || targetSubjectOfficer === "assigned subject officer";
+    const officerLabel = isGenericOrKumara
+      ? (lang === "si" ? "පවරන ලද විෂය භාර නිලධාරී" : "Assigned Subject Officer")
+      : targetSubjectOfficer;
+
+    showToast(lang === "si" ? `Step 1: පත් කළ විමර්ශන කමිටුව ${officerLabel} වෙත යවන ලදී!` : `Step 1: Assigned Officers Committee submitted to ${officerLabel}!`);
+  };
+
+  // Step 2: Admin Confirms / Sets Appointment Date & Report Due Date
+  const handleStep2SubmitDatesAdmin = async () => {
+    if (!step2ApptDate || !step2DueDate) {
+      alert("Please select both Appointment Letter Date and Report Due Date.");
+      return;
+    }
+    await saveSubjectAssignment({
+      appointmentDate: step2ApptDate,
+      reportDueDate: step2DueDate,
+      datesSubmittedBySubject: true,
+      status: "Appointment & Due Dates Set",
+    });
+    showToast(lang === "si" ? `Step 2: පත්වීම් ලිපිය දිනය (${step2ApptDate}) සහ වාර්තා දිනය (${step2DueDate}) සාර්ථකව තහවුරු කරන ලදී!` : `Step 2: Appointment Date (${step2ApptDate}) and Due Date (${step2DueDate}) saved!`);
   };
 
   // Step 3: Admin Sends Extension Request
@@ -506,28 +578,33 @@ function InvestigationCaseDetailsContent() {
       extensionStartDate: step3StartDate,
       extensionEndDate: step3EndDate,
       certificationSubmitted: false,
+      status: "Extension Requested",
     });
-    showToast(`Step 3: Extension Request (${step3Term} Term) sent to Subject Officer!`);
+    showToast(lang === "si" ? `Step 3: දීර්ඝ කිරීමේ ඉල්ලීම (${step3Term} වාරය) විෂය නිලධාරී වෙත යවන ලදී!` : `Step 3: Extension Request (${step3Term} Term) sent to Subject Officer!`);
   };
 
-  // Step 5: Admin Sends Report Submit Date
-  const handleStep4SubmitFinalReport = async () => {
-    if (!step4ApprovalDate) {
-      alert("Please select Report Submit Date.");
-      return;
-    }
-    await saveSubjectAssignment({
-      reportSubmitDate: step4ApprovalDate,
-      status: "Approved",
-    });
-    showToast("Step 5: Report Submit Date sent to Subject Officer!");
-  };
-
-  // Submit Main Investigation Form
-  const handleSaveForm = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Step 4: Admin Records Progress & Updates Inquiry Details
+  const handleStep4RecordProgress = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     setIsSaving(true);
+    const today = new Date().toISOString().slice(0, 10);
 
+    await saveSubjectAssignment({
+      afterInvestigationSent: true,
+      afterInvestigationDate: today,
+      investigationFileNo: investigationFileNo || null,
+      investigationStatus: status,
+      investigationNotes: inquiryNotes || null,
+      progressDetails: inquiryNotes || null,
+      status: status || "In Progress",
+    });
+
+    await handleSaveFormInternal();
+    setIsSaving(false);
+    showToast(lang === "si" ? "Step 4: විමර්ශන ප්‍රගතිය සහ විස්තර සාර්ථකව යාවත්කාලීන කරන ලදී!" : "Step 4: Progress recorded and inquiry details updated successfully!");
+  };
+
+  const handleSaveFormInternal = async () => {
     const now = new Date().toISOString().slice(0, 10);
     const actionId = `act-${Date.now()}`;
     const desc = `Inquiry progress updated (${status}). Assigned: ${assignee || "Officer"}. ${inquiryNotes}`;
@@ -644,11 +721,24 @@ function InvestigationCaseDetailsContent() {
       setPreviousActions((prev) => [newActionItem, ...prev]);
     }
 
+    // Also update the subject assignment with latest investigation data for the Subject Officer to see
+    await saveSubjectAssignment({
+      investigationFileNo: investigationFileNo || undefined,
+      investigationStatus: status,
+      investigationNotes: inquiryNotes || undefined,
+      progressDetails: inquiryNotes || undefined,
+    });
+
     setIsSaving(false);
     showToast(lang === "si" ? "විමර්ශන තොරතුරු සාර්ථකව යාවත්කාලීන කර අදාළ විෂය නිලධාරියා වෙත යවන ලදී!" : "Investigation record saved and sent to the case subject officer!");
     setTimeout(() => {
       router.push("/investigation");
     }, 1000);
+  };
+
+  const handleSaveForm = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await handleStep4RecordProgress();
   };
 
 
@@ -782,10 +872,10 @@ function InvestigationCaseDetailsContent() {
                     {/* Subject Officer */}
                     <div style={{ backgroundColor: "#f8fafc", padding: "10px 12px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
                       <span style={{ fontSize: "11px", color: "#64748b", fontWeight: 600, display: "block" }}>
-                        {lang === "si" ? "විෂය නිලධාරියාගේ නම" : "Name of Subject Officer"}
+                        {lang === "si" ? "පවරන ලද විෂය භාර නිලධාරියා" : "Assigned Subject Officer"}
                       </span>
                       <span style={{ fontSize: "13px", fontWeight: 700, color: "#0f172a" }}>
-                        {existingAssignment?.subjectOfficerName || selectedCase?.subjectOfficerName || selectedCase?.officerName || "Subject Officer"}
+                        {getDisplaySubjectOfficerName()}
                       </span>
                     </div>
 
@@ -866,324 +956,346 @@ function InvestigationCaseDetailsContent() {
                   )}
                 </div>
 
-
-
-                {/* ==================== INVESTIGATION ADMIN <-> SUBJECT OFFICER DATA FLOW ==================== */}
-                <div style={{ backgroundColor: "#ffffff", padding: "20px", borderRadius: "12px", border: "1px solid #cbd5e1", display: "flex", flexDirection: "column", gap: "16px", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.03)" }}>
+                {/* ====================================================
+                   INVESTIGATION DATA FLOW — STEP TIMELINE
+                   Investigation Admin ↔ Subject Officer
+                ==================================================== */}
+                <div style={{ backgroundColor: "#ffffff", borderRadius: "16px", border: "1px solid #e2e8f0", overflow: "hidden", boxShadow: "0 4px 12px rgba(0,0,0,0.05)" }}>
                   
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #e2e8f0", paddingBottom: "12px" }}>
-                    <h4 style={{ margin: 0, fontSize: "16px", color: "#0369a1", fontWeight: 700, display: "flex", alignItems: "center", gap: "8px" }}>
-                      <Send size={20} style={{ color: "#0284c7" }} />
-                      <span>Investigation Administrator &amp; Subject Officer Data Flow</span>
-                    </h4>
-                    <span style={{ fontSize: "11px", fontWeight: 700, padding: "4px 12px", borderRadius: "12px", backgroundColor: existingAssignment?.reportContent ? "#dcfce7" : "#e0f2fe", color: existingAssignment?.reportContent ? "#166534" : "#0369a1" }}>
-                      {existingAssignment?.reportContent ? "✓ Final Report Completed" : "Data Flow In Progress"}
+                  {/* Section Header */}
+                  <div style={{ background: "linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)", padding: "18px 24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <Send size={20} style={{ color: "#a5b4fc" }} />
+                      <div>
+                        <div style={{ color: "#ffffff", fontWeight: 700, fontSize: "15px" }}>
+                          {lang === "si" ? "විමර්ශන ආයතන ↔ විෂය නිලධාරී — දත්ත ප්‍රවාහය" : "Investigation Administrator ↔ Subject Officer — Data Flow"}
+                        </div>
+                        <div style={{ color: "#a5b4fc", fontSize: "12px", marginTop: "2px" }}>
+                          {lang === "si" ? "විමර්ශන නිලධාරීන් පත් කිරීමේ සිට වාර්තාව ලැබෙන තෙක්" : "From assigning investigation officers to final report receipt"}
+                        </div>
+                      </div>
+                    </div>
+                    <span style={{ fontSize: "11px", fontWeight: 700, padding: "4px 12px", borderRadius: "20px", backgroundColor: existingAssignment?.afterInvestigationSent ? "#22c55e" : existingAssignment?.datesSubmittedBySubject ? "#3b82f6" : existingAssignment?.assignedOfficers ? "#f59e0b" : "#6b7280", color: "#ffffff" }}>
+                      {existingAssignment?.afterInvestigationSent ? "✓ Step 5 Complete" : existingAssignment?.datesSubmittedBySubject ? "● Step 3/4 Active" : existingAssignment?.assignedOfficers ? "● Step 2 Awaiting" : "● Step 1 Active"}
                     </span>
                   </div>
 
-                  {/* FLOW STEP 1: Select & Assign Registered Officers (1 Chairman & Many Members) */}
-                  <div style={{ backgroundColor: "#f8fafc", padding: "16px", borderRadius: "12px", border: "1px solid #e2e8f0", display: "flex", flexDirection: "column", gap: "14px" }}>
-                    <div style={{ fontSize: "14px", fontWeight: 700, color: "#1e1b4b", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                        <UserPlus size={16} style={{ color: "#4f46e5" }} />
-                        <span>1. Select &amp; Submit Assigned Officers (Admin ➔ Subject Officer)</span>
+                  <div style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "0px" }}>
+
+                    {/* ── STEP 1 ── Assign Officers → Send to Subject Officer */}
+                    <div style={{ display: "flex", gap: "16px", position: "relative" }}>
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: "40px" }}>
+                        <div style={{ width: "36px", height: "36px", borderRadius: "50%", backgroundColor: existingAssignment?.assignedOfficers ? "#4f46e5" : "#4f46e5", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "14px", flexShrink: 0, boxShadow: "0 2px 8px rgba(79,70,229,0.4)" }}>1</div>
+                        <div style={{ width: "2px", flex: 1, minHeight: "20px", backgroundColor: existingAssignment?.datesSubmittedBySubject ? "#4f46e5" : "#e2e8f0", marginTop: "4px", marginBottom: "4px" }} />
                       </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                        <Link
-                          href="/investigation/officer-registration"
-                          style={{ fontSize: "12px", color: "#4f46e5", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "4px", backgroundColor: "#e0e7ff", padding: "4px 10px", borderRadius: "8px", textDecoration: "none" }}
-                        >
-                          <UserPlus size={13} />
-                          <span>{lang === "si" ? "+ පරීක්ෂණ නිලධාරී ලියාපදිංචි කිරීමේ පෝරමය" : "+ Register Officer Form"}</span>
-                        </Link>
-                        <span style={{ fontSize: "11px", color: "#64748b", fontWeight: 600 }}>
-                          Structure: 1 Chairman + Committee Members
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* SELECT 1 CHAIRMAN */}
-                    <div style={{ backgroundColor: "#ffffff", padding: "14px", borderRadius: "10px", border: "1px solid #cbd5e1" }}>
-                      <label style={{ fontSize: "12px", fontWeight: 700, color: "#92400e", display: "flex", alignItems: "center", gap: "6px", marginBottom: "6px" }}>
-                        <Award size={14} style={{ color: "#d97706" }} />
-                        <span>{lang === "si" ? "සභාපති තෝරන්න (Select 1 Chairman):" : "Select Committee Chairman (1 Chairman):"}</span>
-                      </label>
-
-                      <select
-                        value={selectedChairman?.id || ""}
-                        onChange={(e) => {
-                          const found = officers.find((o) => o.id === e.target.value);
-                          setSelectedChairman(found || null);
-                        }}
-                        style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13px", backgroundColor: "#ffffff", fontWeight: 600 }}
-                      >
-                        <option value="">-- Choose Chairman --</option>
-                        {officers.map((o) => (
-                          <option key={o.id} value={o.id}>
-                            [{o.officerRole || "Officer"}] {o.fullName} (NIC: {o.nicNo || "N/A"})
-                          </option>
-                        ))}
-                      </select>
-
-                      {/* Selected Chairman Officer Card with Schools */}
-                      {selectedChairman && (
-                        <div style={{ marginTop: "10px", padding: "12px", borderRadius: "8px", backgroundColor: "#fffbeb", border: "1px solid #fde68a" }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                              <span style={{ fontWeight: 700, color: "#78350f", fontSize: "14px" }}>{selectedChairman.fullName}</span>
-                              <span style={{ fontSize: "11px", backgroundColor: "#fef3c7", color: "#92400e", padding: "2px 8px", borderRadius: "10px", fontWeight: 700 }}>
-                                Chairman (සභාපති)
-                              </span>
+                      <div style={{ flex: 1, marginBottom: "20px" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
+                          <div>
+                            <span style={{ fontWeight: 700, fontSize: "14px", color: "#1e1b4b" }}>
+                              {lang === "si" ? "1. විමර්ශන නිලධාරීන් පත් කිරීම" : "Step 1: Assign Investigation Officers"}
+                            </span>
+                            <div style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}>
+                              {lang === "si" ? "Admin → සභාපති + සාමාජිකයින් තෝරා, විෂය නිලධාරී වෙත යවයි" : "Admin selects 1 Chairman + Members → Submits to Subject Officer"}
                             </div>
-                            <span style={{ fontSize: "12px", color: "#64748b" }}>NIC: <strong>{selectedChairman.nicNo || "N/A"}</strong></span>
+                          </div>
+                          {existingAssignment?.assignedOfficers ? (
+                            <span style={{ fontSize: "11px", fontWeight: 700, padding: "3px 10px", borderRadius: "20px", backgroundColor: "#dbeafe", color: "#1d4ed8", whiteSpace: "nowrap" }}>✓ Sent</span>
+                          ) : (
+                            <span style={{ fontSize: "11px", fontWeight: 700, padding: "3px 10px", borderRadius: "20px", backgroundColor: "#fef3c7", color: "#b45309", whiteSpace: "nowrap" }}>Action Required</span>
+                          )}
+                        </div>
+
+                        <div style={{ backgroundColor: "#f8fafc", borderRadius: "12px", border: "1px solid #e2e8f0", padding: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                          
+                          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                            <Link
+                              href="/investigation/officer-registration"
+                              style={{ fontSize: "12px", color: "#4f46e5", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "4px", backgroundColor: "#ede9fe", padding: "4px 10px", borderRadius: "8px", textDecoration: "none" }}
+                            >
+                              <UserPlus size={12} />
+                              <span>{lang === "si" ? "+ නිලධාරියා ලියාපදිංචි කිරීම" : "+ Register New Officer"}</span>
+                            </Link>
                           </div>
 
-                          {/* Studied Schools */}
-                          <div style={{ fontSize: "12px", marginTop: "6px", display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
-                            <span style={{ fontWeight: 600, color: "#0369a1" }}>🎓 Studied Schools:</span>
-                            {selectedChairman.studiedSchools && selectedChairman.studiedSchools.length > 0 ? (
-                              selectedChairman.studiedSchools.map((s: string, idx: number) => (
-                                <span key={idx} style={{ backgroundColor: "#e0f2fe", color: "#0369a1", padding: "2px 8px", borderRadius: "12px", fontSize: "11px", fontWeight: 600 }}>
-                                  {s}
-                                </span>
-                              ))
-                            ) : (
-                              <span style={{ color: "#94a3b8", fontStyle: "italic" }}>None listed</span>
+                          {/* SELECT CHAIRMAN */}
+                          <div style={{ backgroundColor: "#ffffff", padding: "14px", borderRadius: "10px", border: "1px solid #e2e8f0" }}>
+                            <label style={{ fontSize: "12px", fontWeight: 700, color: "#92400e", display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+                              <Award size={14} style={{ color: "#d97706" }} />
+                              <span>{lang === "si" ? "සභාපති (Chairman) — 1 දෙනෙක් පමණ:" : "Select Committee Chairman (exactly 1):"}</span>
+                            </label>
+                            <select
+                              value={selectedChairman?.id || ""}
+                              onChange={(e) => {
+                                const found = officers.find((o) => o.id === e.target.value);
+                                setSelectedChairman(found || null);
+                              }}
+                              style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #d97706", fontSize: "13px", backgroundColor: "#fffbeb", fontWeight: 600 }}
+                            >
+                              <option value="">-- {lang === "si" ? "සභාපති තෝරන්න" : "Choose Chairman"} --</option>
+                              {officers.map((o) => (
+                                <option key={o.id} value={o.id}>
+                                  [{o.officerRole || "Officer"}] {o.fullName} (NIC: {o.nicNo || "N/A"})
+                                </option>
+                              ))}
+                            </select>
+                            {selectedChairman && (
+                              <div style={{ marginTop: "8px", padding: "10px 12px", borderRadius: "8px", backgroundColor: "#fef3c7", border: "1px solid #fde68a", fontSize: "12px" }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                  <span style={{ fontWeight: 700, color: "#78350f" }}>👤 {selectedChairman.fullName}</span>
+                                  <span style={{ fontSize: "11px", backgroundColor: "#fbbf24", color: "#1c1917", padding: "2px 8px", borderRadius: "10px", fontWeight: 700 }}>Chairman</span>
+                                </div>
+                                {selectedChairman.studiedSchools?.length > 0 && (
+                                  <div style={{ marginTop: "4px", color: "#92400e" }}>
+                                    🎓 {lang === "si" ? "ඉගෙනුම ලත් පාසල්:" : "Studied:"} {selectedChairman.studiedSchools.join(", ")}
+                                  </div>
+                                )}
+                                {selectedChairman.childrenSchools?.length > 0 && (
+                                  <div style={{ color: "#92400e" }}>
+                                    🏫 {lang === "si" ? "දරුවන්ගේ පාසල්:" : "Children's schools:"} {selectedChairman.childrenSchools.join(", ")}
+                                  </div>
+                                )}
+                              </div>
                             )}
                           </div>
 
-                          {/* Children's Schools */}
-                          <div style={{ fontSize: "12px", marginTop: "4px", display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
-                            <span style={{ fontWeight: 600, color: "#b45309" }}>🏫 Children's Schools:</span>
-                            {selectedChairman.childrenSchools && selectedChairman.childrenSchools.length > 0 ? (
-                              selectedChairman.childrenSchools.map((s: string, idx: number) => (
-                                <span key={idx} style={{ backgroundColor: "#fef3c7", color: "#b45309", padding: "2px 8px", borderRadius: "12px", fontSize: "11px", fontWeight: 600 }}>
-                                  {s}
-                                </span>
-                              ))
-                            ) : (
-                              <span style={{ color: "#94a3b8", fontStyle: "italic" }}>None listed</span>
+                          {/* SELECT MEMBERS */}
+                          <div style={{ backgroundColor: "#ffffff", padding: "14px", borderRadius: "10px", border: "1px solid #e2e8f0" }}>
+                            <label style={{ fontSize: "12px", fontWeight: 700, color: "#3730a3", display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+                              <User size={14} style={{ color: "#4f46e5" }} />
+                              <span>{lang === "si" ? "සාමාජිකයින් (Members) — කිහිප දෙනෙකු:" : "Select Committee Members (add multiple):"}</span>
+                            </label>
+                            <div style={{ display: "flex", gap: "8px" }}>
+                              <select
+                                value={memberSelectId}
+                                onChange={(e) => setMemberSelectId(e.target.value)}
+                                style={{ flex: 1, padding: "9px 12px", borderRadius: "8px", border: "1px solid #c7d2fe", fontSize: "13px", backgroundColor: "#eef2ff" }}
+                              >
+                                <option value="">-- {lang === "si" ? "සාමාජිකයෙකු තෝරන්න" : "Choose Member to Add"} --</option>
+                                {officers
+                                  .filter((o) => o.id !== selectedChairman?.id && !selectedMembers.some((m) => m.id === o.id))
+                                  .map((o) => (
+                                    <option key={o.id} value={o.id}>
+                                      [{o.officerRole || "Member"}] {o.fullName} (NIC: {o.nicNo || "N/A"})
+                                    </option>
+                                  ))}
+                              </select>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (memberSelectId) {
+                                    const found = officers.find((o) => o.id === memberSelectId);
+                                    if (found) { setSelectedMembers((prev) => [...prev, found]); setMemberSelectId(""); }
+                                  }
+                                }}
+                                style={{ padding: "9px 16px", backgroundColor: "#4f46e5", color: "#ffffff", border: "none", borderRadius: "8px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}
+                              >
+                                + {lang === "si" ? "එකතු කරන්න" : "Add"}
+                              </button>
+                            </div>
+                            {selectedMembers.length > 0 && (
+                              <div style={{ marginTop: "8px", display: "flex", flexDirection: "column", gap: "6px" }}>
+                                {selectedMembers.map((mem, idx) => (
+                                  <div key={mem.id || idx} style={{ padding: "8px 12px", borderRadius: "8px", backgroundColor: "#f0fdf4", border: "1px solid #bbf7d0", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "12px" }}>
+                                    <div>
+                                      <span style={{ fontWeight: 700, color: "#166534" }}>👤 {mem.fullName}</span>
+                                      <span style={{ marginLeft: "6px", fontSize: "10px", backgroundColor: "#dcfce7", color: "#15803d", padding: "1px 6px", borderRadius: "10px", fontWeight: 700 }}>Member #{idx + 1}</span>
+                                      {mem.studiedSchools?.length > 0 && <div style={{ color: "#0369a1", marginTop: "2px" }}>🎓 {mem.studiedSchools.join(", ")}</div>}
+                                    </div>
+                                    <button type="button" onClick={() => setSelectedMembers((prev) => prev.filter((m) => m.id !== mem.id))} style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer" }} title="Remove">
+                                      <X size={16} />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Step 1 Submit Button + Status */}
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px", paddingTop: "8px" }}>
+                            <button
+                              type="button"
+                              onClick={handleStep1SubmitOfficers}
+                              style={{ padding: "11px 22px", background: "linear-gradient(135deg, #4f46e5, #6366f1)", color: "#ffffff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "13px", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", boxShadow: "0 4px 12px rgba(79,70,229,0.3)" }}
+                            >
+                              <Send size={15} />
+                              {lang === "si" ? "විෂය නිලධාරී වෙත යවන්න" : "Submit to Subject Officer"}
+                            </button>
+                            {existingAssignment?.assignedOfficers && (
+                              <div style={{ fontSize: "12px", color: "#1d4ed8", fontWeight: 600, backgroundColor: "#dbeafe", padding: "8px 14px", borderRadius: "8px", maxWidth: "450px" }}>
+                                ✓ {lang === "si" 
+                                    ? `පවරන ලද විෂය භාර නිලධාරී${getDisplaySubjectOfficerName() && !getDisplaySubjectOfficerName().toLowerCase().includes("kumara") && getDisplaySubjectOfficerName() !== "පවරන ලද විෂය භාර නිලධාරී" && getDisplaySubjectOfficerName() !== "Assigned Subject Officer" ? ` (${getDisplaySubjectOfficerName()})` : ""} වෙත යවා ඇත: ` 
+                                    : `Sent to Subject Officer${getDisplaySubjectOfficerName() && !getDisplaySubjectOfficerName().toLowerCase().includes("kumara") && getDisplaySubjectOfficerName() !== "පවරන ලද විෂය භාර නිලධාරී" && getDisplaySubjectOfficerName() !== "Assigned Subject Officer" ? ` (${getDisplaySubjectOfficerName()})` : ""}: `
+                                  } {existingAssignment.assignedOfficers}
+                              </div>
                             )}
                           </div>
                         </div>
-                      )}
-                    </div>
-
-                    {/* SELECT MANY MEMBERS */}
-                    <div style={{ backgroundColor: "#ffffff", padding: "14px", borderRadius: "10px", border: "1px solid #cbd5e1" }}>
-                      <label style={{ fontSize: "12px", fontWeight: 700, color: "#3730a3", display: "flex", alignItems: "center", gap: "6px", marginBottom: "6px" }}>
-                        <User size={14} style={{ color: "#4f46e5" }} />
-                        <span>{lang === "si" ? "සාමාජිකයින් තෝරන්න (Select Committee Members - Add Many):" : "Select Committee Members (Add Many Members):"}</span>
-                      </label>
-
-                      <div style={{ display: "flex", gap: "8px" }}>
-                        <select
-                          value={memberSelectId}
-                          onChange={(e) => setMemberSelectId(e.target.value)}
-                          style={{ flex: 1, padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13px", backgroundColor: "#ffffff" }}
-                        >
-                          <option value="">-- Choose Member Officer to Add --</option>
-                          {officers
-                            .filter((o) => o.id !== selectedChairman?.id && !selectedMembers.some((m) => m.id === o.id))
-                            .map((o) => (
-                              <option key={o.id} value={o.id}>
-                                [{o.officerRole || "Member"}] {o.fullName} (NIC: {o.nicNo || "N/A"})
-                              </option>
-                            ))}
-                        </select>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (memberSelectId) {
-                              const found = officers.find((o) => o.id === memberSelectId);
-                              if (found) {
-                                setSelectedMembers((prev) => [...prev, found]);
-                                setMemberSelectId("");
-                              }
-                            }
-                          }}
-                          style={{ padding: "9px 16px", backgroundColor: "#4f46e5", color: "#ffffff", border: "none", borderRadius: "8px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}
-                        >
-                          + Add Member
-                        </button>
                       </div>
-
-                      {/* Selected Members Cards List */}
-                      {selectedMembers.length > 0 && (
-                        <div style={{ marginTop: "10px", display: "flex", flexDirection: "column", gap: "8px" }}>
-                          {selectedMembers.map((mem, idx) => (
-                            <div key={mem.id || idx} style={{ padding: "10px 12px", borderRadius: "8px", backgroundColor: "#f0fdf4", border: "1px solid #bbf7d0" }}>
-                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                  <span style={{ fontWeight: 700, color: "#166534", fontSize: "13px" }}>{mem.fullName}</span>
-                                  <span style={{ fontSize: "10px", backgroundColor: "#dcfce7", color: "#15803d", padding: "2px 8px", borderRadius: "10px", fontWeight: 700 }}>
-                                    Member #{idx + 1}
-                                  </span>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => setSelectedMembers((prev) => prev.filter((m) => m.id !== mem.id))}
-                                  style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", display: "flex", alignItems: "center" }}
-                                  title="Remove member"
-                                >
-                                  <X size={16} />
-                                </button>
-                              </div>
-
-                              {/* Studied & Children's Schools */}
-                              <div style={{ display: "flex", gap: "12px", marginTop: "4px", fontSize: "11px", flexWrap: "wrap" }}>
-                                <div>
-                                  <span style={{ fontWeight: 600, color: "#0369a1" }}>🎓 Studied: </span>
-                                  {mem.studiedSchools && mem.studiedSchools.length > 0 ? (
-                                    mem.studiedSchools.join(", ")
-                                  ) : (
-                                    <span style={{ color: "#94a3b8" }}>—</span>
-                                  )}
-                                </div>
-                                <div>
-                                  <span style={{ fontWeight: 600, color: "#b45309" }}>🏫 Children: </span>
-                                  {mem.childrenSchools && mem.childrenSchools.length > 0 ? (
-                                    mem.childrenSchools.join(", ")
-                                  ) : (
-                                    <span style={{ color: "#94a3b8" }}>—</span>
-                                  )}
-                                </div>
-                              </div>
+                    </div>
+                    <div style={{ display: "flex", gap: "16px", position: "relative" }}>
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: "40px" }}>
+                        <div style={{ width: "36px", height: "36px", borderRadius: "50%", backgroundColor: (step2ApptDate && step2DueDate) ? "#0284c7" : "#cbd5e1", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "14px", flexShrink: 0 }}>2</div>
+                        <div style={{ width: "2px", flex: 1, minHeight: "20px", backgroundColor: (step2ApptDate && step2DueDate) ? "#0284c7" : "#e2e8f0", marginTop: "4px", marginBottom: "4px" }} />
+                      </div>
+                      <div style={{ flex: 1, marginBottom: "20px" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
+                          <div>
+                            <span style={{ fontWeight: 700, fontSize: "14px", color: (step2ApptDate && step2DueDate) ? "#0369a1" : "#1e293b" }}>
+                              {lang === "si" ? "2. පත්වීම් ලිපිය සහ වාර්තා දිනය පරීක්ෂා කිරීම / තහවුරු කිරීම" : "Step 2: Check & Confirm Appointment Date & Report Due Date"}
+                            </span>
+                            <div style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}>
+                              {lang === "si" ? "Subject Officer ගෙන් ලැබූ දිනයන් පරීක්ෂා කර තහවුරු කරන්න හෝ ඇතුළත් කරන්න" : "Verify dates received from Subject Officer or enter dates to confirm"}
                             </div>
-                          ))}
+                          </div>
+                          {(existingAssignment?.datesSubmittedBySubject || (step2ApptDate && step2DueDate)) ? (
+                            <span style={{ fontSize: "11px", fontWeight: 700, padding: "3px 10px", borderRadius: "20px", backgroundColor: "#dbeafe", color: "#1d4ed8", whiteSpace: "nowrap" }}>✓ Dates Set</span>
+                          ) : (
+                            <span style={{ fontSize: "11px", fontWeight: 700, padding: "3px 10px", borderRadius: "20px", backgroundColor: "#fef3c7", color: "#b45309", whiteSpace: "nowrap" }}>⏳ Action Required</span>
+                          )}
                         </div>
-                      )}
+                        <div style={{ backgroundColor: "#f0f9ff", borderRadius: "12px", border: "1px solid #bae6fd", padding: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                            <div>
+                              <label style={{ fontSize: "11px", fontWeight: 700, color: "#0369a1", display: "block", marginBottom: "4px" }}>
+                                📅 {lang === "si" ? "පත්වීම් ලිපිය දිනය (Appointment Date):" : "Appointment Letter Date:"}
+                              </label>
+                              <input
+                                type="date"
+                                value={step2ApptDate}
+                                onChange={(e) => setStep2ApptDate(e.target.value)}
+                                style={{ width: "100%", padding: "8px 10px", borderRadius: "8px", border: "1px solid #93c5fd", fontSize: "13px", backgroundColor: "#ffffff" }}
+                              />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: "11px", fontWeight: 700, color: "#dc2626", display: "block", marginBottom: "4px" }}>
+                                ⏳ {lang === "si" ? "වාර්තාව ලැබිය යුතු දිනය (Report Due Date):" : "Report Must Be Received By:"}
+                              </label>
+                              <input
+                                type="date"
+                                value={step2DueDate}
+                                onChange={(e) => setStep2DueDate(e.target.value)}
+                                style={{ width: "100%", padding: "8px 10px", borderRadius: "8px", border: "1px solid #fca5a5", fontSize: "13px", backgroundColor: "#ffffff" }}
+                              />
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleStep2SubmitDatesAdmin}
+                            style={{ padding: "9px 18px", background: "linear-gradient(135deg, #0284c7, #2563eb)", color: "#ffffff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "12px", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px", width: "fit-content", boxShadow: "0 2px 8px rgba(2,132,199,0.3)" }}
+                          >
+                            <Send size={13} />
+                            {lang === "si" ? "Step 2: දිනයන් පරීක්ෂා කර තහවුරු කරන්න" : "Step 2: Confirm & Save Dates"}
+                          </button>
+                        </div>
+                      </div>
                     </div>
 
-                    {/* Submit Assigned Officers Button */}
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px", marginTop: "4px" }}>
-                      <button
-                        type="button"
-                        onClick={handleStep1SubmitOfficers}
-                        style={{ padding: "10px 20px", backgroundColor: "#4f46e5", color: "#ffffff", border: "none", borderRadius: "8px", fontWeight: 600, fontSize: "13px", cursor: "pointer", boxShadow: "0 2px 4px rgba(79,70,229,0.2)" }}
-                      >
-                        Submit Assigned Officers Committee
-                      </button>
+                    {/* ── STEP 3 ── Extension Request */}
+                    <div style={{ display: "flex", gap: "16px", position: "relative" }}>
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: "40px" }}>
+                        <div style={{ width: "36px", height: "36px", borderRadius: "50%", backgroundColor: existingAssignment?.extensionStartDate ? "#d97706" : "#cbd5e1", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "14px", flexShrink: 0 }}>3</div>
+                        <div style={{ width: "2px", flex: 1, minHeight: "20px", backgroundColor: existingAssignment?.extensionStartDate ? "#d97706" : "#e2e8f0", marginTop: "4px", marginBottom: "4px" }} />
+                      </div>
+                      <div style={{ flex: 1, marginBottom: "20px" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
+                          <div>
+                            <span style={{ fontWeight: 700, fontSize: "14px", color: existingAssignment?.extensionStartDate ? "#b45309" : "#1e293b" }}>
+                              {lang === "si" ? "3. දිනය දීර්ඝ කිරීමේ ඉල්ලීම (Extension Request)" : "Step 3: Extension Request"}
+                            </span>
+                            <div style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}>
+                              {lang === "si" ? "Admin දීර්ඝ කිරීමේ වාරය, ආරම්භ/අවසාන දිනයන් ඇතුළත් කර යවයි" : "Admin selects extension term, start & end dates and updates request"}
+                            </div>
+                          </div>
+                          {existingAssignment?.extensionApprovalStatus === "Approved" ? (
+                            <span style={{ fontSize: "11px", fontWeight: 700, padding: "3px 10px", borderRadius: "20px", backgroundColor: "#dcfce7", color: "#15803d", whiteSpace: "nowrap" }}>✓ Approved</span>
+                          ) : existingAssignment?.extensionApprovalStatus === "Disapproved" ? (
+                            <span style={{ fontSize: "11px", fontWeight: 700, padding: "3px 10px", borderRadius: "20px", backgroundColor: "#fee2e2", color: "#b91c1c", whiteSpace: "nowrap" }}>✕ Disapproved</span>
+                          ) : existingAssignment?.extensionStartDate ? (
+                            <span style={{ fontSize: "11px", fontWeight: 700, padding: "3px 10px", borderRadius: "20px", backgroundColor: "#fef3c7", color: "#b45309", whiteSpace: "nowrap" }}>⏳ Extension Active</span>
+                          ) : null}
+                        </div>
+                        <div style={{ backgroundColor: "#fffbeb", borderRadius: "12px", border: "1px solid #fde68a", padding: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
+                            <div>
+                              <label style={{ fontSize: "11px", fontWeight: 700, color: "#78350f", display: "block", marginBottom: "4px" }}>
+                                {lang === "si" ? "දීර්ඝ කිරීමේ ගණන:" : "Extension Term:"}
+                              </label>
+                              <select
+                                value={step3Term}
+                                onChange={(e) => setStep3Term(e.target.value as any)}
+                                style={{ width: "100%", padding: "8px 10px", borderRadius: "8px", border: "1px solid #fbbf24", fontSize: "12px", backgroundColor: "#ffffff", fontWeight: 600 }}
+                              >
+                                <option value="First">{lang === "si" ? "1 වන වතාවේ (1st Term)" : "1st Extension"}</option>
+                                <option value="Second">{lang === "si" ? "2 වන වතාවේ (2nd Term)" : "2nd Extension"}</option>
+                                <option value="Third">{lang === "si" ? "3 වන වතාවේ (3rd Term)" : "3rd Extension"}</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label style={{ fontSize: "11px", fontWeight: 700, color: "#78350f", display: "block", marginBottom: "4px" }}>
+                                {lang === "si" ? "ආරම්භ දිනය:" : "Extension Start Date:"}
+                              </label>
+                              <input
+                                type="date"
+                                value={step3StartDate}
+                                onChange={(e) => setStep3StartDate(e.target.value)}
+                                style={{ width: "100%", padding: "8px 10px", borderRadius: "8px", border: "1px solid #fbbf24", fontSize: "12px", backgroundColor: "#ffffff" }}
+                              />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: "11px", fontWeight: 700, color: "#78350f", display: "block", marginBottom: "4px" }}>
+                                {lang === "si" ? "අවසාන දිනය:" : "Extension End Date:"}
+                              </label>
+                              <input
+                                type="date"
+                                value={step3EndDate}
+                                onChange={(e) => setStep3EndDate(e.target.value)}
+                                style={{ width: "100%", padding: "8px 10px", borderRadius: "8px", border: "1px solid #fbbf24", fontSize: "12px", backgroundColor: "#ffffff" }}
+                              />
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleStep3RequestExtension}
+                            style={{ padding: "9px 18px", background: "linear-gradient(135deg, #d97706, #f59e0b)", color: "#ffffff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "12px", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px", width: "fit-content", boxShadow: "0 2px 8px rgba(217,119,6,0.3)" }}
+                          >
+                            <Send size={13} />
+                            {lang === "si" ? "Step 3: දීර්ඝ කිරීමේ ඉල්ලීම යවන්න" : "Step 3: Submit Extension Request"}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
 
-                      {existingAssignment?.assignedOfficers && (
-                        <span style={{ fontSize: "12px", color: "#166534", fontWeight: 700, backgroundColor: "#dcfce7", padding: "4px 12px", borderRadius: "8px" }}>
-                          ✓ Submitted: {existingAssignment.assignedOfficers}
-                        </span>
-                      )}
+                    {/* ── STEP 4 ── Record Progress and Update Inquiry Details */}
+                    <div style={{ display: "flex", gap: "16px", position: "relative" }}>
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: "40px" }}>
+                        <div style={{ width: "36px", height: "36px", borderRadius: "50%", backgroundColor: existingAssignment?.afterInvestigationSent ? "#16a34a" : "#cbd5e1", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "14px", flexShrink: 0 }}>4</div>
+                      </div>
+                      <div style={{ flex: 1, marginBottom: "20px" }}>
+                        <div style={{ fontWeight: 700, fontSize: "14px", color: existingAssignment?.afterInvestigationSent ? "#15803d" : "#1e293b", marginBottom: "10px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                          <span>{lang === "si" ? "4. ප්‍රගතිය සටහන් කිරීම සහ විස්තර යාවත්කාලීන කිරීම (Record Progress & Update Inquiry Details)" : "Step 4: Record Progress & Update Inquiry Details"}</span>
+                          {existingAssignment?.afterInvestigationSent ? (
+                            <span style={{ fontSize: "11px", fontWeight: 700, padding: "3px 10px", borderRadius: "20px", backgroundColor: "#dcfce7", color: "#15803d" }}>✓ Progress Recorded</span>
+                          ) : (
+                            <span style={{ fontSize: "11px", fontWeight: 700, padding: "3px 10px", borderRadius: "20px", backgroundColor: "#fef3c7", color: "#b45309" }}>⚡ Action Required</span>
+                          )}
+                        </div>
+                        <div style={{ backgroundColor: "#f0fdf4", borderRadius: "12px", border: "1px solid #bbf7d0", padding: "16px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                          <div style={{ fontSize: "12px", color: "#166534", fontWeight: 600 }}>
+                            📤 {lang === "si" ? "පහත ආකෘතියේ විමර්ශන ගොනු අංකය, තත්ත්වය සහ සටහන් ඇතුළත් කර යාවත්කාලීන කරන්න." : "Fill the Investigation File No., Status and Progress Notes below then click update."}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleStep4RecordProgress}
+                            style={{ padding: "10px 22px", background: "linear-gradient(135deg, #16a34a, #22c55e)", color: "#ffffff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "13px", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", width: "fit-content", boxShadow: "0 4px 12px rgba(22,163,74,0.3)" }}
+                          >
+                            <Send size={15} />
+                            {lang === "si" ? "Step 4: විමර්ශන ප්‍රගතිය සටහන් කර විස්තර යාවත්කාලීන කරන්න" : "Step 4: Record Progress & Update Inquiry Details"}
+                          </button>
+                        </div>
+                      </div>
                     </div>
 
                   </div>
-
-                  {/* FLOW STEP 2: Appointment Date & Report Due Date (Received from Subject Officer) */}
-                  <div style={{ backgroundColor: "#f0f9ff", padding: "14px", borderRadius: "10px", border: "1px solid #bae6fd", display: "flex", flexDirection: "column", gap: "8px" }}>
-                    <div style={{ fontSize: "13px", fontWeight: 700, color: "#0369a1", display: "flex", alignItems: "center", gap: "6px" }}>
-                      <CalendarIcon size={15} />
-                      <span>2. Appointment Date &amp; Report Due Date (Received from Subject Officer)</span>
-                    </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", fontSize: "13px", color: "#1e293b", marginTop: "4px" }}>
-                      <div style={{ backgroundColor: "#ffffff", padding: "8px 12px", borderRadius: "6px", border: "1px solid #cbd5e1" }}>
-                        📅 <strong>Appointment Date:</strong> <span style={{ color: "#0369a1", fontWeight: 700 }}>{existingAssignment?.appointmentDate || "Pending Subject Officer"}</span>
-                      </div>
-                      <div style={{ backgroundColor: "#ffffff", padding: "8px 12px", borderRadius: "6px", border: "1px solid #cbd5e1" }}>
-                        ⏳ <strong>Report Due Date:</strong> <span style={{ color: "#dc2626", fontWeight: 700 }}>{existingAssignment?.reportDueDate || "Pending Subject Officer"}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* FLOW STEP 3 & 4: Extension of Dates & Certification */}
-                  <div style={{ backgroundColor: "#fffbeb", padding: "14px", borderRadius: "10px", border: "1px solid #fef3c7", display: "flex", flexDirection: "column", gap: "10px" }}>
-                    <div style={{ fontSize: "13px", fontWeight: 700, color: "#b45309", display: "flex", alignItems: "center", gap: "6px" }}>
-                      <Clock size={15} />
-                      <span>3 &amp; 4. Extension of Dates (Start/End Date, Term: First/Second/Third) &amp; Certification</span>
-                    </div>
-                    
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
-                      <div>
-                        <label style={{ fontSize: "11px", fontWeight: 600, color: "#78350f" }}>Extension Term</label>
-                        <select
-                          value={step3Term}
-                          onChange={(e) => setStep3Term(e.target.value as any)}
-                          style={{ width: "100%", padding: "7px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "12px", backgroundColor: "#ffffff" }}
-                        >
-                          <option value="First">First Term</option>
-                          <option value="Second">Second Term</option>
-                          <option value="Third">Third Term</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label style={{ fontSize: "11px", fontWeight: 600, color: "#78350f" }}>Start Date</label>
-                        <input
-                          type="date"
-                          value={step3StartDate}
-                          onChange={(e) => setStep3StartDate(e.target.value)}
-                          style={{ width: "100%", padding: "7px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "12px", backgroundColor: "#ffffff" }}
-                        />
-                      </div>
-
-                      <div>
-                        <label style={{ fontSize: "11px", fontWeight: 600, color: "#78350f" }}>End Date</label>
-                        <input
-                          type="date"
-                          value={step3EndDate}
-                          onChange={(e) => setStep3EndDate(e.target.value)}
-                          style={{ width: "100%", padding: "7px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "12px", backgroundColor: "#ffffff" }}
-                        />
-                      </div>
-                    </div>
-
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "4px" }}>
-                      <button
-                        type="button"
-                        onClick={handleStep3RequestExtension}
-                        style={{ padding: "7px 14px", backgroundColor: "#d97706", color: "#ffffff", border: "none", borderRadius: "6px", fontWeight: 600, fontSize: "12px", cursor: "pointer" }}
-                      >
-                        Send Extension Request to Subject Officer
-                      </button>
-
-                      {existingAssignment?.extensionStartDate && (
-                        <span style={{ fontSize: "12px", fontWeight: 700, color: existingAssignment.certificationSubmitted ? "#166534" : "#b45309" }}>
-                          {existingAssignment.certificationSubmitted ? "✓ Certified by Subject Officer" : "⏳ Pending Subject Officer Certification"}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* FLOW STEP 5: Send Report Submit Date (Admin -> Subject) */}
-                  <div style={{ backgroundColor: "#f0fdf4", padding: "14px", borderRadius: "10px", border: "1px solid #bbf7d0", display: "flex", flexDirection: "column", gap: "10px" }}>
-                    <div style={{ fontSize: "13px", fontWeight: 700, color: "#166534", display: "flex", alignItems: "center", gap: "6px" }}>
-                      <FileCheck size={15} />
-                      <span>5. Send Report Submit Date (Admin ➔ Subject Officer)</span>
-                    </div>
-                    <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
-                      <input
-                        type="date"
-                        value={step4ApprovalDate}
-                        onChange={(e) => setStep4ApprovalDate(e.target.value)}
-                        style={{ padding: "8px 12px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "13px", backgroundColor: "#ffffff" }}
-                      />
-                      <button
-                        type="button"
-                        onClick={handleStep4SubmitFinalReport}
-                        style={{ padding: "8px 16px", backgroundColor: "#16a34a", color: "#ffffff", border: "none", borderRadius: "6px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}
-                      >
-                        Send Report Submit Date
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* DISPLAY SUBMITTED REPORT FROM SUBJECT OFFICER */}
-                  {existingAssignment?.reportContent && (
-                    <div style={{ backgroundColor: "#ffffff", padding: "14px", borderRadius: "10px", border: "1px solid #4f46e5" }}>
-                      <div style={{ fontWeight: 700, color: "#4338ca", fontSize: "13px", marginBottom: "6px" }}>
-                        📄 Investigation Report Added by Subject Officer (Submitted on {existingAssignment.reportSubmitDate || "recent"}):
-                      </div>
-                      <p style={{ margin: 0, fontSize: "13px", color: "#1e293b", whiteSpace: "pre-wrap" }}>
-                        {existingAssignment.reportContent}
-                      </p>
-                    </div>
-                  )}
-
                 </div>
 
                 {/* Add/Update Investigation Progress Form Section */}

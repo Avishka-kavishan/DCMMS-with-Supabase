@@ -3,7 +3,7 @@
 import "../../../i18n";
 import "../daily-mail.css";
 import "./register.css";
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { Sidebar } from "@/components/Sidebar";
@@ -96,10 +96,25 @@ function RegisterComplaintForm() {
   const [previousLetters, setPreviousLetters] = useState<any[]>([]);
 
   const [officerOptions, setOfficerOptions] = useState<string[]>([
+    "Rathnaweera",
     "Kamal Perera",
     "Suresh Silva",
     "Aruni Rajapaksha",
   ]);
+  const [officerSearchQuery, setOfficerSearchQuery] = useState("");
+  const [isOfficerDropdownOpen, setIsOfficerDropdownOpen] = useState(false);
+  const officerDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close officer searchable dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (officerDropdownRef.current && !officerDropdownRef.current.contains(event.target as Node)) {
+        setIsOfficerDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const [instituteOptions, setInstituteOptions] = useState<string[]>([
     "Zonal Office - Kandy",
@@ -138,12 +153,13 @@ function RegisterComplaintForm() {
   useEffect(() => {
     const loadOfficers = async () => {
       const namesSet = new Set<string>([
+        "Rathnaweera",
         "Kamal Perera",
         "Suresh Silva",
         "Aruni Rajapaksha",
       ]);
 
-      // 1. Load from Supabase profiles
+      // 1. Load from Supabase profiles (role = subject_officer)
       if (isSupabaseConfigured) {
         try {
           const { data, error } = await supabase
@@ -158,9 +174,21 @@ function RegisterComplaintForm() {
         } catch (e) {
           console.error("Failed to load subject officers from Supabase", e);
         }
+
+        // Also fetch from dcmms_subject_assignments
+        try {
+          const { data, error } = await supabase
+            .from("dcmms_subject_assignments")
+            .select("subject_officer_name");
+          if (!error && data) {
+            data.forEach((d: any) => {
+              if (d.subject_officer_name) namesSet.add(d.subject_officer_name);
+            });
+          }
+        } catch (e) {}
       }
 
-      // 2. Load from localStorage custom profiles
+      // 2. Load from localStorage custom profiles (role = subject_officer)
       if (typeof window !== "undefined") {
         const stored = localStorage.getItem("dcmms_custom_profiles");
         if (stored) {
@@ -174,6 +202,19 @@ function RegisterComplaintForm() {
           } catch (e) {
             console.error("Failed to load custom profiles from localStorage", e);
           }
+        }
+
+        // Also load from localStorage subject assignments
+        const storedAsgns = localStorage.getItem("dcmms_subject_assignments");
+        if (storedAsgns) {
+          try {
+            const list = JSON.parse(storedAsgns);
+            if (Array.isArray(list)) {
+              list.forEach((a: any) => {
+                if (a.subjectOfficerName) namesSet.add(a.subjectOfficerName);
+              });
+            }
+          } catch (e) {}
         }
       }
 
@@ -1186,241 +1227,319 @@ function RegisterComplaintForm() {
 
                 <form onSubmit={handleSubmit} className="register-grid-form">
 
-                  {/* ── Step 1: Letter Reference Information ── */}
+                  {/* ── Card 1: Letter Reference Information (ලිපි යොමු තොරතුරු) ── */}
                   <div className="register-step-card">
-                    <div className="register-step-indicator">
-                      <span className="register-step-number">1</span>
-                    </div>
-                    <div className="register-step-content">
-                      <h3 className="register-step-title">{t("stepLetterReference", "Letter Reference Information")}</h3>
-                      <div className="register-step-grid">
+                    <h3 className="register-step-title">{t("stepLetterReference", "Letter Reference Information")}</h3>
+                    <div className="register-step-grid">
 
-                        {/* Letter Number */}
-                        <div className="form-field-group">
-                          <label htmlFor="letterNo" className="field-label">{t("letterNo")}</label>
-                          <input
-                            id="letterNo"
-                            type="text"
-                            value={formState.letterNo}
-                            onChange={(e) => setFormState({ ...formState, letterNo: e.target.value })}
-                            placeholder={t("placeholderLetterNo")}
-                            className="field-input"
-                          />
-                        </div>
-
-                        {/* Reference Number * */}
-                        <div className="form-field-group">
-                          <label htmlFor="refNo" className="field-label">{t("refNo")} <span className="required-star">*</span></label>
-                          <input
-                            id="refNo"
-                            type="text"
-                            required
-                            value={formState.refNo}
-                            onChange={(e) => setFormState({ ...formState, refNo: e.target.value })}
-                            placeholder={t("refPlaceholder")}
-                            className="field-input"
-                            readOnly={isSubsequentMode}
-                          />
-                        </div>
-
-                        {/* Mode of Receipt */}
-                        <div className="form-field-group">
-                          <label htmlFor="letterType" className="field-label">{t("letterType")}</label>
-                          <select
-                            id="letterType"
-                            value={formState.letterType}
-                            onChange={(e) => setFormState({ ...formState, letterType: e.target.value })}
-                            className="field-select"
-                          >
-                            <option value="">{t("placeholderLetterType")}</option>
-                            {receiptModes.map((mode) => (
-                              <option key={mode.value} value={mode.value}>
-                                {t(mode.labelKey)}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
+                      {/* Serial / Letter Number */}
+                      <div className="form-field-group">
+                        <label htmlFor="letterNo" className="field-label">{t("letterNo")}</label>
+                        <input
+                          id="letterNo"
+                          type="text"
+                          value={formState.letterNo}
+                          onChange={(e) => setFormState({ ...formState, letterNo: e.target.value })}
+                          placeholder={t("placeholderLetterNo")}
+                          className="field-input"
+                        />
                       </div>
+
+                      {/* Reference Number * */}
+                      <div className="form-field-group">
+                        <label htmlFor="refNo" className="field-label">{t("refNo")} <span className="required-star">*</span></label>
+                        <input
+                          id="refNo"
+                          type="text"
+                          required
+                          value={formState.refNo}
+                          onChange={(e) => setFormState({ ...formState, refNo: e.target.value })}
+                          placeholder={t("refPlaceholder")}
+                          className="field-input"
+                          readOnly={isSubsequentMode}
+                        />
+                      </div>
+
+                      {/* Mode of Receipt */}
+                      <div className="form-field-group">
+                        <label htmlFor="letterType" className="field-label">{t("letterType")}</label>
+                        <select
+                          id="letterType"
+                          value={formState.letterType}
+                          onChange={(e) => setFormState({ ...formState, letterType: e.target.value })}
+                          className="field-select"
+                        >
+                          <option value="">{t("placeholderLetterType")}</option>
+                          {receiptModes.map((mode) => (
+                            <option key={mode.value} value={mode.value}>
+                              {t(mode.labelKey)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
                     </div>
                   </div>
 
-                  {/* ── Step 2: Sender Details ── */}
+                  {/* ── Card 2: Sender Details (යවන පාර්ශ්වයේ තොරතුරු) ── */}
                   <div className="register-step-card">
-                    <div className="register-step-indicator">
-                      <span className="register-step-number">2</span>
-                    </div>
-                    <div className="register-step-content">
-                      <h3 className="register-step-title">{t("stepSenderDetails", "Sender Details")}</h3>
-                      <div className="register-step-grid">
+                    <h3 className="register-step-title">{t("stepSenderDetails", "Sender Details")}</h3>
+                    <div className="register-step-grid">
 
-                        {/* Sender's Party * */}
-                        <div className="form-field-group">
-                          <label htmlFor="senderName" className="field-label">{t("senderName")} <span className="required-star">*</span></label>
-                          <input
-                            id="senderName"
-                            type="text"
-                            required
-                            value={formState.senderName}
-                            onChange={(e) => setFormState({ ...formState, senderName: e.target.value })}
-                            placeholder={t("senderPlaceholder")}
-                            className="field-input"
-                          />
-                        </div>
-
-                        {/* Nature of the Letter */}
-                        <div className="form-field-group">
-                          <label htmlFor="regionProvince" className="field-label">{t("regionProvince")}</label>
-                          <select
-                            id="regionProvince"
-                            value={formState.regionProvince}
-                            onChange={(e) => setFormState({ ...formState, regionProvince: e.target.value })}
-                            className="field-select"
-                          >
-                            <option value="">{t("selectClassification")}</option>
-                            {letterNatures.map((nature) => (
-                              <option key={nature.value} value={nature.value}>
-                                {t(nature.labelKey)}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        {/* Letter Classification */}
-                        <div className="form-field-group">
-                          <label htmlFor="subjectCategory" className="field-label">{t("subjectCategoryLabel")}</label>
-                          <select
-                            id="subjectCategory"
-                            value={formState.subjectCategory}
-                            onChange={(e) => setFormState({ ...formState, subjectCategory: e.target.value })}
-                            className="field-select"
-                          >
-                            <option value="">{t("selectCategory", "Select category...")}</option>
-                            {letterClassifications.map((item) => (
-                              <option key={item.value} value={item.value}>
-                                {t(item.labelKey)}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
+                      {/* Sender's Party * */}
+                      <div className="form-field-group">
+                        <label htmlFor="senderName" className="field-label">{t("senderName")} <span className="required-star">*</span></label>
+                        <input
+                          id="senderName"
+                          type="text"
+                          required
+                          value={formState.senderName}
+                          onChange={(e) => setFormState({ ...formState, senderName: e.target.value })}
+                          placeholder={t("senderPlaceholder")}
+                          className="field-input"
+                        />
                       </div>
+
+                      {/* Nature of the Letter */}
+                      <div className="form-field-group">
+                        <label htmlFor="regionProvince" className="field-label">{t("regionProvince")}</label>
+                        <select
+                          id="regionProvince"
+                          value={formState.regionProvince}
+                          onChange={(e) => setFormState({ ...formState, regionProvince: e.target.value })}
+                          className="field-select"
+                        >
+                          <option value="">{t("selectClassification")}</option>
+                          {letterNatures.map((nature) => (
+                            <option key={nature.value} value={nature.value}>
+                              {t(nature.labelKey)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Letter Classification */}
+                      <div className="form-field-group">
+                        <label htmlFor="subjectCategory" className="field-label">{t("subjectCategory")}</label>
+                        <select
+                          id="subjectCategory"
+                          value={formState.subjectCategory}
+                          onChange={(e) => setFormState({ ...formState, subjectCategory: e.target.value })}
+                          className="field-select"
+                        >
+                          <option value="">{t("selectCategory", "Select category...")}</option>
+                          {letterClassifications.map((item) => (
+                            <option key={item.value} value={item.value}>
+                              {t(item.labelKey)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
                     </div>
                   </div>
 
-                  {/* ── Step 3: Letter Subject & Dates ── */}
+                  {/* ── Card 3: Letter Subject & Dates (ලිපි විෂය සහ දින) ── */}
                   <div className="register-step-card">
-                    <div className="register-step-indicator">
-                      <span className="register-step-number">3</span>
-                    </div>
-                    <div className="register-step-content">
-                      <h3 className="register-step-title">{t("stepLetterSubjectDates", "Letter Subject & Dates")}</h3>
-                      <div className="register-step-grid">
+                    <h3 className="register-step-title">{t("stepLetterSubjectDates", "Letter Subject & Dates")}</h3>
+                    <div className="register-step-grid">
 
-                        {/* Subject / Matter of the Letter */}
-                        <div className="form-field-group">
-                          <label htmlFor="subject" className="field-label">{t("letterTitle")}</label>
+                      {/* Subject / Matter of the Letter */}
+                      <div className="form-field-group">
+                        <label htmlFor="subject" className="field-label">{t("letterTitle")}</label>
+                        <input
+                          id="subject"
+                          type="text"
+                          value={formState.subject}
+                          onChange={(e) => setFormState({ ...formState, subject: e.target.value })}
+                          placeholder={t("subjectPlaceholder")}
+                          className="field-input"
+                        />
+                      </div>
+
+                      {/* Date Received by Additional Secretary */}
+                      <div className="form-field-group">
+                        <label htmlFor="receivedDate" className="field-label">{t("receivedDate")}</label>
+                        <div className="input-icon-wrapper">
                           <input
-                            id="subject"
-                            type="text"
-                            value={formState.subject}
-                            onChange={(e) => setFormState({ ...formState, subject: e.target.value })}
-                            placeholder={t("subjectPlaceholder")}
-                            className="field-input"
+                            id="receivedDate"
+                            type="date"
+                            value={formState.receivedDate}
+                            onChange={(e) => setFormState({ ...formState, receivedDate: e.target.value })}
+                            className="field-input input-with-right-icon"
                           />
-                        </div>
-
-                        {/* Date Received by Additional Secretary */}
-                        <div className="form-field-group">
-                          <label htmlFor="receivedDate" className="field-label">{t("receivedDate")}</label>
-                          <div className="input-icon-wrapper">
-                            <input
-                              id="receivedDate"
-                              type="date"
-                              value={formState.receivedDate}
-                              onChange={(e) => setFormState({ ...formState, receivedDate: e.target.value })}
-                              className="field-input input-with-right-icon"
-                            />
+                          <div className="input-right-icons">
                             <svg className="input-right-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                               <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                             </svg>
                           </div>
                         </div>
+                      </div>
 
-                        {/* Date Letter Handed Over to Disciplinary Branch */}
-                        <div className="form-field-group">
-                          <label htmlFor="letterDate" className="field-label">{t("letterDate")}</label>
-                          <div className="input-icon-wrapper">
-                            <input
-                              id="letterDate"
-                              type="date"
-                              value={formState.letterDate}
-                              onChange={(e) => setFormState({ ...formState, letterDate: e.target.value })}
-                              className="field-input input-with-right-icon"
-                            />
+                      {/* Date Letter Handed Over to Disciplinary Branch */}
+                      <div className="form-field-group">
+                        <label htmlFor="letterDate" className="field-label">{t("letterDate")}</label>
+                        <div className="input-icon-wrapper">
+                          <input
+                            id="letterDate"
+                            type="date"
+                            value={formState.letterDate}
+                            onChange={(e) => setFormState({ ...formState, letterDate: e.target.value })}
+                            className="field-input input-with-right-icon"
+                          />
+                          <div className="input-right-icons">
                             <svg className="input-right-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                               <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                             </svg>
                           </div>
                         </div>
-
                       </div>
+
                     </div>
                   </div>
 
-                  {/* ── Step 4: Assignment Details ── */}
+                  {/* ── Card 4: Assignment Details (පැවරීම් තොරතුරු) ── */}
                   <div className="register-step-card">
-                    <div className="register-step-indicator">
-                      <span className="register-step-number">4</span>
-                    </div>
-                    <div className="register-step-content">
-                      <h3 className="register-step-title">{t("stepAssignmentDetails", "Assignment Details")}</h3>
-                      <div className="register-step-grid">
+                    <h3 className="register-step-title">{t("stepAssignmentDetails", "Assignment Details")}</h3>
+                    <div className="register-step-grid">
 
-                        {/* Subject Officer Name */}
-                        <div className="form-field-group">
-                          <label htmlFor="officerName" className="field-label">{t("nameOfOfficer")}</label>
-                          <select
-                            id="officerName"
-                            value={formState.officerName}
-                            onChange={(e) => setFormState({ ...formState, officerName: e.target.value })}
-                            className="field-select"
-                          >
-                            <option value="">{t("selectSubjectOfficer")}</option>
-                            {officerOptions.map((opt) => (
-                              <option key={opt} value={opt}>
-                                {opt}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        {/* Priority */}
-                        <div className="form-field-group">
-                          <label htmlFor="priority" className="field-label">{t("priority")}</label>
-                          <div className="priority-select-wrapper">
-                            <span className={`priority-dot-indicator dot-${formState.priority}`} />
-                            <div className="select-wrapper" style={{ flex: 1 }}>
-                              <select
-                                id="priority"
-                                value={formState.priority}
-                                onChange={(e) => setFormState({ ...formState, priority: e.target.value as any })}
-                                className="field-select"
+                      {/* Subject Officer Name (Searchable & Filterable Select) */}
+                      <div className="form-field-group" ref={officerDropdownRef}>
+                        <label htmlFor="officerNameInput" className="field-label">{t("nameOfOfficer")}</label>
+                        <div className="searchable-select-wrapper">
+                          <div className="searchable-select-input-container">
+                            <input
+                              id="officerNameInput"
+                              type="text"
+                              readOnly
+                              value={formState.officerName || ""}
+                              onClick={() => setIsOfficerDropdownOpen(!isOfficerDropdownOpen)}
+                              placeholder={t("selectSubjectOfficer")}
+                              className="field-input searchable-select-input"
+                            />
+                            <div className="searchable-select-icons">
+                              {formState.officerName && (
+                                <button
+                                  type="button"
+                                  className="searchable-select-clear-btn"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setFormState((prev) => ({ ...prev, officerName: "" }));
+                                    setOfficerSearchQuery("");
+                                  }}
+                                  title="Clear selection"
+                                >
+                                  <svg style={{ width: "16px", height: "16px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                className="searchable-select-arrow-btn"
+                                onClick={() => setIsOfficerDropdownOpen(!isOfficerDropdownOpen)}
                               >
-                                <option value="high" className="priority-option-high">{t("priorityHigh")}</option>
-                                <option value="medium" className="priority-option-medium">{t("priorityMedium")}</option>
-                                <option value="low" className="priority-option-low">{t("priorityLow")}</option>
-                              </select>
-                              <div className="select-arrow-container">
-                                <svg className="select-arrow-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                <svg
+                                  className="select-arrow-icon"
+                                  style={{
+                                    width: "16px",
+                                    height: "16px",
+                                    transform: isOfficerDropdownOpen ? "rotate(180deg)" : "rotate(0deg)",
+                                    transition: "transform 0.2s ease"
+                                  }}
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                  strokeWidth="2.5"
+                                >
                                   <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                                 </svg>
+                              </button>
+                            </div>
+                          </div>
+
+                          {isOfficerDropdownOpen && (
+                            <div className="searchable-select-dropdown">
+                              <div className="searchable-select-search-box">
+                                <input
+                                  type="text"
+                                  value={officerSearchQuery}
+                                  onChange={(e) => setOfficerSearchQuery(e.target.value)}
+                                  placeholder={lang === "si" ? "විෂය ලිපිකරු සොයන්න..." : lang === "ta" ? "தேடுக..." : "Search subject officer..."}
+                                  className="searchable-select-filter-input"
+                                  autoFocus
+                                />
                               </div>
+                              <div className="searchable-select-options-list">
+                                <div
+                                  className={`searchable-select-option ${!formState.officerName ? "selected" : ""}`}
+                                  onClick={() => {
+                                    setFormState((prev) => ({ ...prev, officerName: "" }));
+                                    setOfficerSearchQuery("");
+                                    setIsOfficerDropdownOpen(false);
+                                  }}
+                                >
+                                  <span style={{ color: "#64748b", fontStyle: "italic" }}>{t("selectSubjectOfficer")}</span>
+                                </div>
+                                {officerOptions.filter((opt) =>
+                                  opt.toLowerCase().includes(officerSearchQuery.toLowerCase())
+                                ).length > 0 ? (
+                                  officerOptions
+                                    .filter((opt) => opt.toLowerCase().includes(officerSearchQuery.toLowerCase()))
+                                    .map((opt) => (
+                                      <div
+                                        key={opt}
+                                        className={`searchable-select-option ${formState.officerName === opt ? "selected" : ""}`}
+                                        onClick={() => {
+                                          setFormState((prev) => ({ ...prev, officerName: opt }));
+                                          setOfficerSearchQuery("");
+                                          setIsOfficerDropdownOpen(false);
+                                        }}
+                                      >
+                                        <span>{opt}</span>
+                                        {formState.officerName === opt && (
+                                          <svg style={{ width: "16px", height: "16px", color: "#2563eb" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                          </svg>
+                                        )}
+                                      </div>
+                                    ))
+                                ) : (
+                                  <div className="searchable-select-no-options">
+                                    {lang === "si" ? "ගැලපෙන විෂය ලිපිකරුවන් හමු නොවුණි" : lang === "ta" ? "பொருந்தக்கூடிய அதிகாரிகள் இல்லை" : "No matching subject officers found"}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Priority */}
+                      <div className="form-field-group">
+                        <label htmlFor="priority" className="field-label">{t("priority")}</label>
+                        <div className="priority-select-wrapper">
+                          <span className={`priority-dot-indicator dot-${formState.priority}`} />
+                          <div className="select-wrapper" style={{ flex: 1 }}>
+                            <select
+                              id="priority"
+                              value={formState.priority}
+                              onChange={(e) => setFormState({ ...formState, priority: e.target.value as any })}
+                              className="field-select"
+                            >
+                              <option value="high" className="priority-option-high">{t("priorityHigh")}</option>
+                              <option value="medium" className="priority-option-medium">{t("priorityMedium")}</option>
+                              <option value="low" className="priority-option-low">{t("priorityLow")}</option>
+                            </select>
+                            <div className="select-arrow-container">
+                              <svg className="select-arrow-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                              </svg>
                             </div>
                           </div>
                         </div>
-
                       </div>
+
                     </div>
                   </div>
 

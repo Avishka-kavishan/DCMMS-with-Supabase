@@ -25,6 +25,7 @@ interface Inquiry {
   targetDate: string;
   status: "Scheduled" | "In Progress" | "Evidence Review" | "Completed" | "Preliminary Investigation" | "Conducting preliminary investigations" | "Under Investigation";
   assignedOfficer?: string;
+  subjectOfficer?: string;
   notes?: string;
   createdAt?: string;
 }
@@ -49,6 +50,26 @@ export default function InvestigationPage() {
   // Accessibility & language state
   const [fontScale, setFontScale] = useState<"small" | "medium" | "large">("medium");
   const lang = i18n.language;
+
+  const formatSubjectOfficerName = (raw?: string | null, currentLang: string = lang): string => {
+    if (!raw || typeof raw !== "string" || !raw.trim()) {
+      return currentLang === "si" ? "පවරන ලද විෂය භාර නිලධාරී" : "Assigned Subject Officer";
+    }
+    const trimmed = raw.trim();
+    const lower = trimmed.toLowerCase();
+    if (
+      lower === "subject officer" ||
+      lower === "විෂය නිලධාරී" ||
+      lower === "පවරන ලද විෂය භාර නිලධාරී" ||
+      lower === "පවරන ලද විෂය භාර නිලධාරියා" ||
+      lower === "assigned subject officer" ||
+      lower === "unassigned" ||
+      lower === "නොපවරන ලද"
+    ) {
+      return currentLang === "si" ? "පවරන ලද විෂය භාර නිලධාරී" : "Assigned Subject Officer";
+    }
+    return trimmed;
+  };
 
   // Tabs state
   const [activeTab, setActiveTab] = useState<"cases" | "officers">("cases");
@@ -254,6 +275,51 @@ export default function InvestigationPage() {
   const fetchInquiries = async () => {
     if (isSupabaseConfigured) {
       try {
+        const { data: assignmentsData } = await supabase
+          .from("dcmms_subject_assignments")
+          .select("case_no, subject_officer_name");
+
+        const asgnMap = new Map<string, string>();
+        if (assignmentsData) {
+          assignmentsData.forEach((a: any) => {
+            const key = (a.case_no || a.caseNo || "").trim().toLowerCase();
+            const officerName = a.subject_officer_name || a.subjectOfficerName;
+            if (key && officerName && typeof officerName === "string" && officerName.trim()) {
+              asgnMap.set(key, officerName.trim());
+            }
+          });
+        }
+
+        // Fetch subject officer from dcmms_subject_details for fallback
+        try {
+          const { data: detailsData } = await supabase
+            .from("dcmms_subject_details")
+            .select("case_no, subject_officer_name");
+          if (detailsData) {
+            detailsData.forEach((d: any) => {
+              const key = (d.case_no || "").trim().toLowerCase();
+              const officerName = d.subject_officer_name;
+              if (key && officerName && typeof officerName === "string" && officerName.trim() && !asgnMap.has(key)) {
+                asgnMap.set(key, officerName.trim());
+              }
+            });
+          }
+        } catch (e) {}
+
+        const { data: mailData } = await supabase
+          .from("dcmms_daily_mail")
+          .select("ref_no, subject_officer_name, officer_name");
+
+        if (mailData) {
+          mailData.forEach((m: any) => {
+            const key = (m.ref_no || m.case_no || "").trim().toLowerCase();
+            const officerName = m.subject_officer_name || m.officer_name;
+            if (key && officerName && typeof officerName === "string" && officerName.trim() && !asgnMap.has(key)) {
+              asgnMap.set(key, officerName.trim());
+            }
+          });
+        }
+
         const { data, error } = await supabase
           .from("dcmms_subject")
           .select("*")
@@ -263,15 +329,20 @@ export default function InvestigationPage() {
 
         if (data) {
           const mappedInquiries = data
-            .map((item: any) => ({
-              id: item.id,
-              inquiryNo: item.case_no,
-              subject: item.subject,
-              targetDate: item.assigned_date || "2026-07-30",
-              status: item.status as Inquiry["status"],
-              assignedOfficer: item.officer_name || item.assigned_officer,
-              createdAt: item.created_at || new Date().toISOString(),
-            }));
+            .map((item: any) => {
+              const itemNo = (item.case_no || item.inquiryNo || item.caseNo || "").trim().toLowerCase();
+              const assignedSubjOfficer = asgnMap.get(itemNo) || item.subject_officer_name || item.officer_name || item.subjectOfficerName || item.subject_officer || item.subjectOfficer || "";
+              return {
+                id: item.id,
+                inquiryNo: item.case_no,
+                subject: item.subject,
+                targetDate: item.assigned_date || "2026-07-30",
+                status: item.status as Inquiry["status"],
+                assignedOfficer: item.officer_name || item.assigned_officer,
+                subjectOfficer: assignedSubjOfficer,
+                createdAt: item.created_at || new Date().toISOString(),
+              };
+            });
 
           mappedInquiries.sort((a: any, b: any) => {
             const timeA = new Date(a.createdAt || 0).getTime();
@@ -295,19 +366,76 @@ export default function InvestigationPage() {
     // Fallback if not configured or query fails
     if (typeof window !== "undefined") {
       const storedCases = localStorage.getItem("dcmms_cases");
+      const storedAsgns = localStorage.getItem("dcmms_subject_assignments");
+      const storedDetails = localStorage.getItem("dcmms_new_letter_current_case");
+      const storedLetters = localStorage.getItem("dcmms_letters");
+      const localAsgnMap = new Map<string, string>();
+
+      if (storedAsgns) {
+        try {
+          const list = JSON.parse(storedAsgns);
+          list.forEach((a: any) => {
+            const key = (a.caseNo || a.case_no || "").trim().toLowerCase();
+            const officerName = a.subjectOfficerName || a.subject_officer_name;
+            if (key && officerName && typeof officerName === "string" && officerName.trim()) {
+              localAsgnMap.set(key, officerName.trim());
+            }
+          });
+        } catch (e) {}
+      }
+
+      if (storedDetails) {
+        try {
+          const list = JSON.parse(storedDetails);
+          if (Array.isArray(list)) {
+            list.forEach((d: any) => {
+              const key = (d.caseNo || d.case_no || "").trim().toLowerCase();
+              const officerName = d.subjectOfficerName || d.subject_officer_name;
+              if (key && officerName && typeof officerName === "string" && officerName.trim() && !localAsgnMap.has(key)) {
+                if (!officerName.toLowerCase().includes("kumara") && officerName.toLowerCase() !== "subject officer") {
+                  localAsgnMap.set(key, officerName.trim());
+                }
+              }
+            });
+          }
+        } catch (e) {}
+      }
+
+      if (storedLetters) {
+        try {
+          const list = JSON.parse(storedLetters);
+          if (Array.isArray(list)) {
+            list.forEach((l: any) => {
+              const key = (l.refNo || l.caseNo || "").trim().toLowerCase();
+              const officerName = l.subjectOfficerName || l.subject_officer_name;
+              if (key && officerName && typeof officerName === "string" && officerName.trim() && !localAsgnMap.has(key)) {
+                if (!officerName.toLowerCase().includes("kumara")) {
+                  localAsgnMap.set(key, officerName.trim());
+                }
+              }
+            });
+          }
+        } catch (e) {}
+      }
+
       if (storedCases) {
         try {
           const list = JSON.parse(storedCases);
           const mapped = list
-            .map((item: any) => ({
-              id: item.id || `case-${item.caseNo}`,
-              inquiryNo: item.caseNo,
-              subject: item.subject,
-              targetDate: item.targetDate || item.assignedDate || "2026-07-30",
-              status: item.status,
-              assignedOfficer: item.assignedOfficer || item.assignedTo || item.officerName,
-              createdAt: item.createdAt || item.created_at || new Date().toISOString(),
-            }));
+            .map((item: any) => {
+              const itemNo = (item.caseNo || item.inquiryNo || item.case_no || "").trim().toLowerCase();
+              const assignedSubjOfficer = localAsgnMap.get(itemNo) || item.subjectOfficerName || item.subject_officer_name || item.subjectOfficer || item.subject_officer || "";
+              return {
+                id: item.id || `case-${item.caseNo}`,
+                inquiryNo: item.caseNo,
+                subject: item.subject,
+                targetDate: item.targetDate || item.assignedDate || "2026-07-30",
+                status: item.status,
+                assignedOfficer: item.assignedOfficer || item.assignedTo || item.officerName,
+                subjectOfficer: assignedSubjOfficer,
+                createdAt: item.createdAt || item.created_at || new Date().toISOString(),
+              };
+            });
 
           mapped.sort((a: any, b: any) => {
             const timeA = new Date(a.createdAt || 0).getTime();
@@ -335,6 +463,8 @@ export default function InvestigationPage() {
         subject: "Formal disciplinary inquiry - Student misconduct at Royal College",
         targetDate: "2026-07-28",
         status: "In Progress",
+        assignedOfficer: "Nimali Jayasinghe",
+        subjectOfficer: "Imasha Gunasekara",
       },
       {
         id: "2",
@@ -342,6 +472,8 @@ export default function InvestigationPage() {
         subject: "Preliminary investigation on teacher absenteeism - Jaffna Office",
         targetDate: "2026-08-05",
         status: "Evidence Review",
+        assignedOfficer: "Suresh Silva",
+        subjectOfficer: "Kamal Perera",
       },
       {
         id: "3",
@@ -349,6 +481,8 @@ export default function InvestigationPage() {
         subject: "Inquiry into safety guidelines violation - Annual Sports Meet",
         targetDate: "2026-08-12",
         status: "Scheduled",
+        assignedOfficer: "Nimali Jayasinghe",
+        subjectOfficer: "Rathnaweera",
       },
     ];
     setInquiries(defaults);
@@ -570,7 +704,7 @@ export default function InvestigationPage() {
           const found = list.find((a: any) => a.caseNo === inq.inquiryNo);
           if (found) {
             setExistingAssignment(found);
-            setSubjOfficerName(found.subjectOfficerName || inq.assignedOfficer || "");
+            setSubjOfficerName(found.subjectOfficerName || inq.subjectOfficer || "");
             setSubjAppointmentDate(found.appointmentDate || "");
             setSubjReportDueDate(found.reportDueDate || inq.targetDate || "");
             setSubjExtensionTerm(found.extensionTerm || "None");
@@ -593,7 +727,7 @@ export default function InvestigationPage() {
             setStep4Completed(!!found.reportApprovedByAdmin);
           } else {
             setExistingAssignment(null);
-            setSubjOfficerName(inq.assignedOfficer || "");
+            setSubjOfficerName(inq.subjectOfficer || "");
             setSubjAppointmentDate("");
             setSubjReportDueDate(inq.targetDate || "");
             setSubjExtensionTerm("None");
@@ -822,6 +956,8 @@ export default function InvestigationPage() {
         const idx = cases.findIndex((c: any) => c.caseNo === caseNo || c.refNo === caseNo);
         if (idx >= 0) {
           cases[idx].assignedTo = assignedName;
+          cases[idx].subjectOfficer = assignedName;
+          cases[idx].subjectOfficerName = assignedName;
         }
         localStorage.setItem("dcmms_cases", JSON.stringify(cases));
       } catch (e) {}
@@ -852,6 +988,8 @@ export default function InvestigationPage() {
             priority: "high",
             status: "Officers Assigned",
             assigned_date: now,
+            subject_officer_name: assignedName,
+            officer_name: assignedName,
           });
         } catch (e) {}
       }
@@ -1298,7 +1436,8 @@ export default function InvestigationPage() {
       item.inquiryNo.toLowerCase().includes(query) ||
       item.subject.toLowerCase().includes(query) ||
       item.status.toLowerCase().includes(query) ||
-      (item.assignedOfficer && item.assignedOfficer.toLowerCase().includes(query))
+      (item.assignedOfficer && item.assignedOfficer.toLowerCase().includes(query)) ||
+      (item.subjectOfficer && item.subjectOfficer.toLowerCase().includes(query))
     );
 
     if (!matchesSearch) return false;
@@ -1716,6 +1855,7 @@ export default function InvestigationPage() {
                         <th scope="col">{lang === "si" ? "විමර්ශන අංකය" : "Inquiry No"}</th>
                         <th scope="col">{lang === "si" ? "ඉලක්කගත අවසන් දිනය" : "Target Completion Date"}</th>
                         <th scope="col">{lang === "si" ? "විෂය කරුණ" : "Subject / Matter"}</th>
+                        <th scope="col">{t("assignedSubjectOfficer", "Assigned Subject Officer")}</th>
                         <th scope="col">{lang === "si" ? "තත්ත්වය" : "Status"}</th>
                         <th scope="col" className="text-center">{lang === "si" ? "ක්‍රියාමාර්ග" : "Actions"}</th>
                       </tr>
@@ -1723,7 +1863,7 @@ export default function InvestigationPage() {
                     <tbody>
                       {isLoading ? (
                         <tr>
-                          <td colSpan={5} className="text-center py-4 text-muted">
+                          <td colSpan={6} className="text-center py-4 text-muted">
                             {lang === "si" ? "තොරතුරු පූරණය වෙමින් පවතී..." : "Loading inquiries..."}
                           </td>
                         </tr>
@@ -1744,6 +1884,12 @@ export default function InvestigationPage() {
                             </td>
                             <td className="subject-cell" style={{ maxWidth: "340px" }}>
                               <div style={{ fontWeight: 600, color: "#1e293b" }}>{item.subject}</div>
+                            </td>
+                            <td>
+                              <div style={{ display: "flex", alignItems: "center", gap: "6px", fontWeight: 600, color: "#334155" }}>
+                                <User size={14} style={{ color: "#4f46e5" }} />
+                                <span>{formatSubjectOfficerName(item.subjectOfficer, lang)}</span>
+                              </div>
                             </td>
                             <td>
                               <span className={`badge-badge ${
@@ -1771,7 +1917,7 @@ export default function InvestigationPage() {
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={5} className="text-center py-4 text-muted">
+                          <td colSpan={6} className="text-center py-4 text-muted">
                             <div style={{ padding: "30px 0", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
                               <AlertCircle size={28} style={{ color: "#94a3b8" }} />
                               <span>{t("noCasesFound", "No matching inquiry cases found")}</span>

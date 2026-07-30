@@ -32,6 +32,11 @@ interface Letter {
   regionProvince?: string;
 }
 
+const getValidSubjectOfficerName = (name?: string, fallback = "Subject Officer") => {
+  if (!name || !name.trim()) return fallback;
+  return name.trim();
+};
+
 export default function DailyMailPage() {
   const { t, i18n } = useTranslation();
   const router = useRouter();
@@ -91,6 +96,7 @@ export default function DailyMailPage() {
   const [priorityFilter, setPriorityFilter] = useState<"all" | "high" | "medium" | "low">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "today" | "pending" | "submitted-today">("all");
   const [caseStatusFilter, setCaseStatusFilter] = useState<"all" | "new" | "old">("all");
+  const [showAll, setShowAll] = useState(false);
 
   // Success Notification Toast state
   const [toastMessage, setToastMessage] = useState("");
@@ -329,6 +335,9 @@ export default function DailyMailPage() {
     return matchesSearch && matchesPriority && matchesStatus && matchesCaseStatus;
   });
 
+  // Display 10 most recent filtered letters by default, or all if showAll is true
+  const displayedLetters = showAll ? filteredLetters : filteredLetters.slice(0, 10);
+
   // Handle reset search filters
   const handleResetFilters = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -336,6 +345,164 @@ export default function DailyMailPage() {
     setPriorityFilter("all");
     setStatusFilter("all");
     setCaseStatusFilter("all");
+    setShowAll(false);
+  };
+
+  // Handle exporting daily mail reports to Excel file (.xls / .csv)
+  const handleExportExcel = (e?: React.MouseEvent) => {
+    if (e) e.preventDefault();
+    const exportDataList = filteredLetters.length > 0 ? filteredLetters : letters;
+
+    if (!exportDataList || exportDataList.length === 0) {
+      triggerToast(t("noLettersFound", "No letters found to export"));
+      return;
+    }
+
+    try {
+      const isSi = lang === "si";
+      const isTa = lang === "ta";
+
+      // Map all letter fields into structured tabular data matching the updated form cards
+      const exportRows: Record<string, string>[] = exportDataList.map((l, index) => {
+        const priorityText =
+          l.priority === "high"
+            ? t("priorityHigh")
+            : l.priority === "medium"
+            ? t("priorityMedium")
+            : t("priorityLow");
+
+        const statusText =
+          l.status !== "pending"
+            ? t("submitted", "Submitted")
+            : t("pendingDetails", "Pending");
+
+        if (isSi) {
+          const row: Record<string, string> = {
+            "අනු අංකය (S/N)": String(index + 1),
+            "ලිපි අංකය": l.refNo || "",
+            "අනු අංකය": l.letterNo || "",
+            "ලිපිය ලද ආකාරය": l.letterType || "",
+            "ලිපිය එවන ලද පාර්ශ්වය": l.senderName || "",
+            "ලිපියේ ස්වභාවය": l.regionProvince || "",
+            "ලිපි වර්ග කිරීම": l.subjectCategory ? t(`opt${l.subjectCategory.replace(/\s+/g, "")}`, l.subjectCategory) : "",
+            "ලිපිය අදාළ කාරණය/ මාතෘකාව": l.subject || "",
+            "අති.ලේ වෙත ලද දිනය": l.receivedDate || "",
+            "විෂය ශාඛාවට ලිපිය භාරදුන් දිනය": l.letterDate || "",
+            "විෂය ලිපිකරුගේ නම": getValidSubjectOfficerName(l.officerName),
+            "ප්‍රමුඛතාවය": priorityText,
+            "තත්ත්වය": statusText,
+          };
+          return row;
+        }
+
+        if (isTa) {
+          const row: Record<string, string> = {
+            "வரிசை எண் (S/N)": String(index + 1),
+            "குறிப்பு எண்": l.refNo || "",
+            "கடித எண்": l.letterNo || "",
+            "கடிதம் பெறப்பட்ட முறை": l.letterType || "",
+            "கடிதம் அனுப்பிய தரப்பு": l.senderName || "",
+            "கடிதத்தின் தன்மை": l.regionProvince || "",
+            "விடயப் பிரிவு": l.subjectCategory ? t(`opt${l.subjectCategory.replace(/\s+/g, "")}`, l.subjectCategory) : "",
+            "கடிதத்தின் பொருள் / தலைப்பு": l.subject || "",
+            "கூடுதல் செயலாளரால் பெறப்பட்ட தேதி": l.receivedDate || "",
+            "ஒழுக்காற்று பிரிவுக்கு கடிதம் ஒப்படைக்கப்பட்ட தேதி": l.letterDate || "",
+            "விடய உத்தியோகத்தர் பெயர்": getValidSubjectOfficerName(l.officerName),
+            "முன்னுரிமை": priorityText,
+            "நிலை": statusText,
+          };
+          return row;
+        }
+
+        const row: Record<string, string> = {
+          "S/N": String(index + 1),
+          "Reference No": l.refNo || "",
+          "Letter No": l.letterNo || "",
+          "Mode of Receipt": l.letterType || "",
+          "Sender's Party": l.senderName || "",
+          "Nature of Letter": l.regionProvince || "",
+          "Letter Classification": l.subjectCategory ? t(`opt${l.subjectCategory.replace(/\s+/g, "")}`, l.subjectCategory) : "",
+          "Subject / Matter of Letter": l.subject || "",
+          "Date Received by Addl. Sec.": l.receivedDate || "",
+          "Date Handed to Subject Branch": l.letterDate || "",
+          "Subject Officer Name": getValidSubjectOfficerName(l.officerName),
+          "Priority": priorityText,
+          "Status": statusText,
+        };
+        return row;
+      });
+
+      const headers = Object.keys(exportRows[0]);
+      const escapeXml = (str: string) =>
+        str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+
+      // Generate Microsoft Excel XML 2003 Spreadsheet format with styled header & cells
+      let xmlContent = `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+ <Styles>
+  <Style ss:ID="HeaderStyle">
+   <Font ss:Bold="1" ss:Color="#FFFFFF" ss:Size="11"/>
+   <Interior ss:Color="#107C41" ss:Pattern="Solid"/>
+   <Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#0D6334"/>
+   </Borders>
+  </Style>
+  <Style ss:ID="DataStyle">
+   <Font ss:Size="10" ss:Color="#1E293B"/>
+   <Alignment ss:Vertical="Center" ss:WrapText="1"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+   </Borders>
+  </Style>
+ </Styles>
+ <Worksheet ss:Name="Daily Mail Report">
+  <Table ss:DefaultRowHeight="22">
+   <Column ss:Width="50"/>
+   <Column ss:Width="140"/>
+   <Column ss:Width="110"/>
+   <Column ss:Width="120"/>
+   <Column ss:Width="170"/>
+   <Column ss:Width="140"/>
+   <Column ss:Width="170"/>
+   <Column ss:Width="260"/>
+   <Column ss:Width="130"/>
+   <Column ss:Width="160"/>
+   <Column ss:Width="160"/>
+   <Column ss:Width="180"/>
+   <Column ss:Width="100"/>
+   <Row ss:Height="28">
+${headers.map((h) => `    <Cell ss:StyleID="HeaderStyle"><Data ss:Type="String">${escapeXml(h)}</Data></Cell>`).join("\n")}
+   </Row>
+${exportRows
+  .map(
+    (row) => `   <Row ss:Height="22">
+${headers.map((h) => `    <Cell ss:StyleID="DataStyle"><Data ss:Type="String">${escapeXml((row as Record<string, string>)[h] || "")}</Data></Cell>`).join("\n")}
+   </Row>`
+  )
+  .join("\n")}
+  </Table>
+ </Worksheet>
+</Workbook>`;
+
+      const blob = new Blob([xmlContent], { type: "application/vnd.ms-excel;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const todayStr = getTodayString();
+      link.setAttribute("href", url);
+      link.setAttribute("download", `Daily_Mail_Full_Report_${todayStr}.xls`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      triggerToast(t("exportExcelSuccess", "Daily Mail report exported to Excel successfully!"));
+    } catch (err) {
+      console.error("Export to Excel failed:", err);
+    }
   };
 
   return (
@@ -613,9 +780,11 @@ export default function DailyMailPage() {
                   <h4 className="hero-action-title">{t("registerLetterComplainBanner")}</h4>
                   <p className="hero-action-description">{t("heroActionDesc", "Easily log new incoming correspondence and files for dispatching to subject officers.")}</p>
                 </div>
-                <button className="btn-hero-action" onClick={() => router.push("/daily-mail/register")}>
-                  {t("newLetterBtn")}
-                </button>
+                <div className="hero-action-buttons-group">
+                  <button className="btn-hero-action" onClick={() => router.push("/daily-mail/register")}>
+                    {t("newLetterBtn")}
+                  </button>
+                </div>
               </div>
             </div>
           </section>
@@ -695,10 +864,18 @@ export default function DailyMailPage() {
                   </select>
                 </div>
 
-                {/* Reset filters action */}
-                <a href="#" className="view-all-reset-link" onClick={handleResetFilters}>
-                  {t("viewAll")} <span className="arrow-span">→</span>
-                </a>
+                {/* Reset / See All filters action */}
+                <button
+                  type="button"
+                  className="view-all-reset-link"
+                  onClick={() => setShowAll((prev) => !prev)}
+                  style={{ background: "none", border: "none", cursor: "pointer", font: "inherit", padding: 0 }}
+                >
+                  {showAll
+                    ? (lang === "si" ? "මෑත 10 බලන්න" : lang === "ta" ? "சமீபத்திய 10 ஐக் காண்க" : "Show Recent 10")
+                    : (lang === "si" ? "සියල්ල බලන්න" : lang === "ta" ? "அனைத்தையும் காண்க" : "See All")}{" "}
+                  <span className="arrow-span">→</span>
+                </button>
               </div>
             </div>
 
@@ -720,8 +897,8 @@ export default function DailyMailPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredLetters.length > 0 ? (
-                    filteredLetters.map((letter) => (
+                  {displayedLetters.length > 0 ? (
+                    displayedLetters.map((letter) => (
                       <tr key={letter.id} className="letter-table-row">
                         <td className="font-semibold text-primary">
                           <div className="ref-cell">
@@ -750,7 +927,7 @@ export default function DailyMailPage() {
                         </td>
                         <td>
                           {letter.officerName ? (
-                            t(`opt${letter.officerName.replace(/\s+/g, "")}`, letter.officerName)
+                            t(`opt${getValidSubjectOfficerName(letter.officerName).replace(/\s+/g, "")}`, getValidSubjectOfficerName(letter.officerName))
                           ) : (
                             "—"
                           )}
@@ -806,6 +983,57 @@ export default function DailyMailPage() {
                   )}
                 </tbody>
               </table>
+            </div>
+
+            {/* Letters list bottom footer bar with counter and Excel file extraction button */}
+            <div className="letters-list-footer">
+              <div className="letters-count-info">
+                <span className="letters-count-badge">
+                  {!showAll && filteredLetters.length > 10 ? 10 : filteredLetters.length}
+                </span>
+                <span>
+                  {!showAll && filteredLetters.length > 10
+                    ? (lang === "si"
+                        ? `මෑතකදී ලියාපදිංචි කළ ලිපි 10 පෙන්වයි (මුළු ${filteredLetters.length} න්)`
+                        : lang === "ta"
+                        ? `சமீபத்திய 10 கடிதங்கள் காட்டப்படுகின்றன (மொத்தம் ${filteredLetters.length} இல்)`
+                        : `Showing 10 most recent cases (out of ${filteredLetters.length} total)`)
+                    : (lang === "si"
+                        ? `මුළු ලිපි ${filteredLetters.length} ක් ඇත`
+                        : lang === "ta"
+                        ? `மொத்தம் ${filteredLetters.length} கடிதங்கள் உள்ளன`
+                        : `Total ${filteredLetters.length} letters available`)}
+                </span>
+              </div>
+
+              <div className="letters-footer-actions">
+
+                {/* Bottom Excel File Extraction Button */}
+                <button
+                  type="button"
+                  className="btn-export-excel-bottom"
+                  onClick={handleExportExcel}
+                  title={t("exportFullReport", "Export Daily Mail Report to Excel")}
+                >
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <path d="M8 13h8"></path>
+                    <path d="M8 17h8"></path>
+                    <path d="M10 9h1"></path>
+                  </svg>
+                  <span>{t("exportExcelBottom", "Extract Excel File")}</span>
+                </button>
+              </div>
             </div>
           </section>
 

@@ -46,6 +46,7 @@
   "pendingCases": "Pending Cases",
   "closeCases": "Close Cases",
   "caseNo": "Case No.",
+  "assignedSubjectOfficer": "Assigned Subject Officer",
   "assignedDate": "Assigned Date",
   "addDetails": "Add Details",
   "assignedCases": "Assigned Cases",
@@ -427,6 +428,13 @@
   "officerName": "Officer Full Name",
   "registeredDate": "Date Registered",
   "searchInquiries": "Search inquiries by ref, subject, officer...",
-  "showingResults": "Showing {{count}} of {{total}} cases"
+  "showingResults": "Showing {{count}} of {{total}} cases",
+  "exportExcel": "Export Excel",
+  "exportFullReport": "Export Full Daily Report",
+  "exportExcelSuccess": "Daily Mail report exported to Excel successfully!",
+  "seeAll": "See All",
+  "showLess": "Show Less",
+  "moreLetters": "more letters",
+  "exportExcelBottom": "Extract Excel File"
 }
 
