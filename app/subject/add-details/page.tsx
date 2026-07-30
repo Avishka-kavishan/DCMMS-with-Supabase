@@ -1195,10 +1195,10 @@ function CaseDetailsForm() {
 
                           <div className="form-grid-2 mt-3">
 
-                            {/* Status (තත්ත්වය) */}
+                            {/* Future Actions (ගනු ලබන ඉදිරි ක්‍රියාමාර්ග) */}
                             <div className="form-field-group">
                               <label htmlFor="reportState" className="field-label">
-                                {t("status")} <span className="required-star">*</span>
+                                {t("futureActions", "ගනු ලබන ඉදිරි ක්‍රියාමාර්ග")} <span className="required-star">*</span>
                               </label>
                               <div className="select-wrapper">
                                 <select
@@ -1574,7 +1574,7 @@ function CaseDetailsForm() {
                         <div className="step-indicator">{classification === "nominal" ? "7" : "6"}</div>
                         <div className="step-content">
                           <span className="field-label" style={{ display: "block", marginBottom: "8px" }}>
-                            {t("eduSecretaryApproval", "Education Secretary's Approval")} <span className="required-star">*</span>
+                            {t("eduSecretaryApproval", "මූලික විමර්ශනයට යවන්නේනම් අධ්‍යාපන ලේකම්ගේ අනුමැතිය")} <span className="required-star">*</span>
                           </span>
                           <div className="classification-toggle-group" role="radiogroup" aria-label="Education Secretary Approval Toggle">
                             <button
