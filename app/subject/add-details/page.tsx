@@ -1209,10 +1209,14 @@ function CaseDetailsForm() {
                                   required
                                 >
                                   <option value="">{t("Choose report state", "Select current status...")}</option>
-                                  <option value="File Closed">{t("statusFileClosed")}</option>
-                                  <option value="Implementation of Recommendations">{t("statusImplementRecommendations")}</option>
-                                  <option value="Institutional Preliminary Investigation">{t("statusInstitutionalPreliminary")}</option>
-                                  <option value="Provincial Preliminary Investigation">{t("statusProvincialPreliminary")}</option>
+                                  <option value="statusCallingReports">{t("statusCallingReports")}</option>
+                                  <option value="statusCallingCourtReports">{t("statusCallingCourtReports")}</option>
+                                  <option value="statusPreliminaryInvestigation">{t("statusPreliminaryInvestigation")}</option>
+                                  <option value="statusInquiry">{t("statusInquiry")}</option>
+                                  <option value="statusConsultRelevantInstitutes">{t("statusConsultRelevantInstitutes")}</option>
+                                  <option value="statusObtainStatements">{t("statusObtainStatements")}</option>
+                                  <option value="statusUnclearAnonymous">{t("statusUnclearAnonymous")}</option>
+                                  <option value="statusReferOtherInstitute">{t("statusReferOtherInstitute")}</option>
                                 </select>
                                 <div className="select-arrow-container">
                                   <svg className="select-arrow-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
