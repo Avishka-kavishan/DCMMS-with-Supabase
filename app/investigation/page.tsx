@@ -15,7 +15,7 @@ import {
   UserCheck, Shield, ChevronRight, Calendar as CalendarIcon, 
   FileText, Clock, AlertCircle, Info, CheckCircle, Search, 
   User, Mail, ArrowRight, Sparkles, Filter, RefreshCw, FileCheck,
-  Building, CreditCard, MapPin, Award, Send, CheckSquare, Layers, GraduationCap
+  Building, CreditCard, MapPin, Award, Send, CheckSquare, Layers, GraduationCap, Plus
 } from "lucide-react";
 
 interface Inquiry {
@@ -133,6 +133,72 @@ export default function InvestigationPage() {
   const [step4FinalReport, setStep4FinalReport] = useState("");
   const [step4ApprovalDate, setStep4ApprovalDate] = useState("");
   const [step4Completed, setStep4Completed] = useState(false);
+
+  // Investigation Committee Assignment state (1 Chairman + Many Members)
+  const [selectedChairman, setSelectedChairman] = useState<any | null>(null);
+  const [selectedMembers, setSelectedMembers] = useState<any[]>([]);
+  const [memberSelectId, setMemberSelectId] = useState("");
+  const [customMemberInput, setCustomMemberInput] = useState("");
+
+  const handleSelectChairman = (officerId: string) => {
+    if (!officerId) {
+      setSelectedChairman(null);
+      return;
+    }
+    const found = officers.find((o) => o.id === officerId);
+    if (found) {
+      setSelectedChairman(found);
+      setSelectedMembers((prev) => prev.filter((m) => m.id !== officerId && m.fullName !== found.fullName));
+    }
+  };
+
+  const handleAddMemberSelect = (officerId: string) => {
+    if (!officerId) return;
+    const found = officers.find((o) => o.id === officerId);
+    if (found) {
+      if (selectedChairman && (selectedChairman.id === officerId || selectedChairman.fullName === found.fullName)) {
+        showToast(lang === "si" ? "මෙම නිලධාරියා දැනටමත් සභාපති ලෙස තෝරා ඇත." : "This officer is already selected as Chairman.");
+        setMemberSelectId("");
+        return;
+      }
+      if (selectedMembers.some((m) => m.id === officerId || m.fullName === found.fullName)) {
+        showToast(lang === "si" ? "මෙම නිලධාරියා දැනටමත් සාමාජිකයෙකු ලෙස එක් කර ඇත." : "This officer is already in the members list.");
+        setMemberSelectId("");
+        return;
+      }
+      setSelectedMembers((prev) => [...prev, found]);
+      setMemberSelectId("");
+    }
+  };
+
+  const handleAddCustomMember = () => {
+    const name = customMemberInput.trim();
+    if (!name) return;
+    if (selectedChairman && (selectedChairman.fullName || selectedChairman.name || "").toLowerCase() === name.toLowerCase()) {
+      showToast(lang === "si" ? "මෙම නම දැනටමත් සභාපති ලෙස තෝරා ඇත." : "This name is already selected as Chairman.");
+      return;
+    }
+    if (selectedMembers.some((m) => (m.fullName || m.name || "").toLowerCase() === name.toLowerCase())) {
+      showToast(lang === "si" ? "මෙම සාමාජිකයා දැනටමත් එක් කර ඇත." : "This member is already added.");
+      return;
+    }
+    const customMember = {
+      id: `custom-m-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+      fullName: name,
+      officerRole: "Member",
+      role: "investigation_officer",
+    };
+    setSelectedMembers((prev) => [...prev, customMember]);
+    setCustomMemberInput("");
+  };
+
+  const handleRemoveMember = (index: number) => {
+    setSelectedMembers((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleRemoveChairman = () => {
+    setSelectedChairman(null);
+  };
 
   // Officer form modal state
   const [isOfficerModalOpen, setIsOfficerModalOpen] = useState(false);
@@ -1223,11 +1289,18 @@ export default function InvestigationPage() {
     }
 
     // Save/Update Subject Officer Assignment Data Flow record
-    if (targetOfficer) {
+    if (targetOfficer || selectedChairman || selectedMembers.length > 0) {
+      const chairmanPart = selectedChairman ? `Chairman: ${selectedChairman.fullName || selectedChairman.name || selectedChairman}` : "";
+      const membersPart = selectedMembers.length > 0 ? `Members: ${selectedMembers.map((m) => m.fullName || m.name || m).join(", ")}` : "";
+      const formattedAssignedText = [chairmanPart, membersPart].filter(Boolean).join(" | ") || targetOfficer;
+
       const assignmentRecord = {
         id: existingAssignment?.id || `asgn-${caseNo}-${Date.now()}`,
         caseNo: caseNo,
-        subjectOfficerName: targetOfficer,
+        subjectOfficerName: targetOfficer || (selectedChairman ? selectedChairman.fullName : "Subject Officer"),
+        assignedOfficers: formattedAssignedText,
+        chairman: selectedChairman,
+        members: selectedMembers,
         appointmentDate: subjAppointmentDate || now,
         reportDueDate: subjReportDueDate || targetDate || "",
         extensionTerm: subjExtensionTerm,
@@ -1259,6 +1332,7 @@ export default function InvestigationPage() {
             id: assignmentRecord.id,
             case_no: assignmentRecord.caseNo,
             subject_officer_name: assignmentRecord.subjectOfficerName,
+            assigned_officers: formattedAssignedText,
             appointment_date: assignmentRecord.appointmentDate,
             report_due_date: assignmentRecord.reportDueDate,
             extension_term: assignmentRecord.extensionTerm,
@@ -1853,7 +1927,7 @@ export default function InvestigationPage() {
                     <thead>
                       <tr>
                         <th scope="col">{lang === "si" ? "විමර්ශන අංකය" : "Inquiry No"}</th>
-                        <th scope="col">{lang === "si" ? "ඉලක්කගත අවසන් දිනය" : "Target Completion Date"}</th>
+                        <th scope="col">{t("targetCompletionDate", lang === "si" ? "අති.ලේ වෙත ලද දිනය" : "Date Received at Addl. Sec.")}</th>
                         <th scope="col">{lang === "si" ? "විෂය කරුණ" : "Subject / Matter"}</th>
                         <th scope="col">{t("assignedSubjectOfficer", "Assigned Subject Officer")}</th>
                         <th scope="col">{lang === "si" ? "තත්ත්වය" : "Status"}</th>
@@ -1877,10 +1951,7 @@ export default function InvestigationPage() {
                               </div>
                             </td>
                             <td>
-                              <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                                <span>{item.targetDate}</span>
-                                {getRemainingDaysBadge(item.targetDate)}
-                              </div>
+                              <span style={{ fontWeight: 500, color: "#334155" }}>{item.targetDate || "-"}</span>
                             </td>
                             <td className="subject-cell" style={{ maxWidth: "340px" }}>
                               <div style={{ fontWeight: 600, color: "#1e293b" }}>{item.subject}</div>
@@ -2225,6 +2296,24 @@ export default function InvestigationPage() {
                                 <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "13px" }}>{officer.institute_name || officer.instituteName || "—"}</span>
                               </div>
 
+                              {(officer.dob || officer.date_of_birth) && (
+                                <div className="detail-field">
+                                  <span style={{ fontSize: "11px", color: "#64748b", display: "flex", alignItems: "center", gap: "4px", marginBottom: "2px" }}>
+                                    <CalendarIcon size={12} /> {lang === "si" ? "උපන් දිනය" : "Date of Birth"}
+                                  </span>
+                                  <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "13px" }}>{officer.dob || officer.date_of_birth}</span>
+                                </div>
+                              )}
+
+                              {(officer.appointment_date || officer.appointmentDate) && (
+                                <div className="detail-field">
+                                  <span style={{ fontSize: "11px", color: "#64748b", display: "flex", alignItems: "center", gap: "4px", marginBottom: "2px" }}>
+                                    <CalendarIcon size={12} /> {lang === "si" ? "පත්වීම් දිනය" : "Date of Appointment"}
+                                  </span>
+                                  <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "13px" }}>{officer.appointment_date || officer.appointmentDate}</span>
+                                </div>
+                              )}
+
                               <div className="detail-field">
                                 <span style={{ fontSize: "11px", color: "#64748b", display: "flex", alignItems: "center", gap: "4px", marginBottom: "2px" }}>
                                   <MapPin size={12} /> {lang === "si" ? "ලිපිනය" : "Address"}
@@ -2247,148 +2336,169 @@ export default function InvestigationPage() {
                     )}
                   </div>
 
-                  {/* ==================== INVESTIGATION ADMIN <-> SUBJECT OFFICER DATA FLOW ==================== */}
-                  <div style={{ backgroundColor: "#ffffff", padding: "18px", borderRadius: "12px", border: "1px solid #cbd5e1", display: "flex", flexDirection: "column", gap: "14px" }}>
-                    
-                    {/* Header */}
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #e2e8f0", paddingBottom: "10px" }}>
-                      <h4 style={{ margin: 0, fontSize: "15px", color: "#0369a1", fontWeight: 700, display: "flex", alignItems: "center", gap: "8px" }}>
-                        <Send size={18} style={{ color: "#0284c7" }} />
-                        <span>Investigation Administrator &amp; Subject Officer Data Flow</span>
+
+
+                  {/* Investigation Committee Assignment (Choose 1 Chairman & Many Members) */}
+                  <div className="details-section-card" style={{ backgroundColor: "#ffffff", padding: "18px", borderRadius: "12px", border: "1px solid #cbd5e1", boxShadow: "0 2px 4px rgba(0,0,0,0.03)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px", borderBottom: "1px solid #f1f5f9", paddingBottom: "10px" }}>
+                      <h4 style={{ margin: 0, fontSize: "15px", color: "#1e293b", fontWeight: 700, display: "flex", alignItems: "center", gap: "8px" }}>
+                        <UserCheck size={18} style={{ color: "#4f46e5" }} />
+                        <span>{lang === "si" ? "විමර්ශන කමිටුව / මණ්ඩලය පත් කිරීම (1 සභාපති සහ සාමාජිකයින්)" : "Investigation Committee Assignment (1 Chairman & Members)"}</span>
                       </h4>
-                      <span style={{ fontSize: "11px", fontWeight: 700, padding: "3px 10px", borderRadius: "12px", backgroundColor: existingAssignment?.reportContent ? "#dcfce7" : "#e0f2fe", color: existingAssignment?.reportContent ? "#166534" : "#0369a1" }}>
-                        {existingAssignment?.reportContent ? "✓ Report Added to Case" : "Data Flow In Progress"}
+                      <span style={{ fontSize: "11px", fontWeight: 700, backgroundColor: "#e0e7ff", color: "#3730a3", padding: "3px 10px", borderRadius: "12px" }}>
+                        {selectedChairman ? "1 Chairman" : "No Chairman"} • {selectedMembers.length} {selectedMembers.length === 1 ? "Member" : "Members"}
                       </span>
                     </div>
 
-                    {/* FLOW 1: Submit Assigned Officers (Investigation Admin -> Subject Officer) */}
-                    <div style={{ backgroundColor: "#f8fafc", padding: "12px", borderRadius: "8px", border: "1px solid #e2e8f0", display: "flex", flexDirection: "column", gap: "8px" }}>
-                      <div style={{ fontSize: "12px", fontWeight: 700, color: "#1e1b4b", display: "flex", alignItems: "center", gap: "6px" }}>
-                        <UserPlus size={14} style={{ color: "#4f46e5" }} />
-                        <span>1. Submit Assigned Officers (Admin ➔ Subject Officer)</span>
-                      </div>
-                      <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-                        <input
-                          type="text"
-                          placeholder="Enter / Select assigned officer name..."
-                          value={subjOfficerName}
-                          onChange={(e) => setSubjOfficerName(e.target.value)}
-                          style={{ flex: 1, minWidth: "200px", padding: "7px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "12px", backgroundColor: "#ffffff" }}
-                        />
-                        <button
-                          type="button"
-                          onClick={handleStep1SubmitOfficers}
-                          style={{ padding: "7px 14px", backgroundColor: "#4f46e5", color: "#ffffff", border: "none", borderRadius: "6px", fontWeight: 600, fontSize: "12px", cursor: "pointer" }}
-                        >
-                          Submit Assigned Officers
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* FLOW 2: Appointment Date & Report Due Date (Subject Officer ➔ Investigation Admin) */}
-                    <div style={{ backgroundColor: "#f0f9ff", padding: "12px", borderRadius: "8px", border: "1px solid #bae6fd", display: "flex", flexDirection: "column", gap: "6px" }}>
-                      <div style={{ fontSize: "12px", fontWeight: 700, color: "#0369a1", display: "flex", alignItems: "center", gap: "6px" }}>
-                        <CalendarIcon size={14} style={{ color: "#0284c7" }} />
-                        <span>2. Appointment Date &amp; Report Due Date (Received from Subject Officer)</span>
-                      </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", fontSize: "12px", color: "#334155" }}>
-                        <div>📅 Appointment Date: <strong style={{ color: "#0369a1" }}>{step2AppointmentDate || existingAssignment?.appointmentDate || "Pending Subject Officer"}</strong></div>
-                        <div>⏳ Report Due Date: <strong style={{ color: "#0369a1" }}>{step2ReportDueDate || existingAssignment?.reportDueDate || "Pending Subject Officer"}</strong></div>
-                      </div>
-                    </div>
-
-                    {/* FLOW 3 & 4: Extension of Dates (Admin ➔ Subject) & Certification (Subject ➔ Admin) */}
-                    <div style={{ backgroundColor: "#fffbeb", padding: "12px", borderRadius: "8px", border: "1px solid #fef3c7", display: "flex", flexDirection: "column", gap: "8px" }}>
-                      <div style={{ fontSize: "12px", fontWeight: 700, color: "#b45309", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                          <Clock size={14} />
-                          <span>3 &amp; 4. Extension of Dates (Start/End Date, Term: First/Second/Third) &amp; Certification</span>
-                        </div>
-                        {step3ExtensionCertified && (
-                          <span style={{ fontSize: "11px", color: "#166534", backgroundColor: "#dcfce7", padding: "2px 8px", borderRadius: "6px" }}>
-                            ✓ Extension Certified
-                          </span>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                      
+                      {/* 1. CHOOSE CHAIRMAN (1 Chairman) */}
+                      <div style={{ backgroundColor: "#fffbe6", padding: "14px", borderRadius: "10px", border: "1px solid #fef08a" }}>
+                        <label htmlFor="chairmanSelectModal" style={{ fontSize: "13px", fontWeight: 700, color: "#854d0e", display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+                          <Award size={16} style={{ color: "#d97706" }} />
+                          <span>{lang === "si" ? "1. සභාපති නිලධාරී තේරීම (තනි සභාපතිවරයෙක් පමණි)" : "1. Choose Inquiry Chairman (Single Chairman)"}</span>
+                        </label>
+                        
+                        {selectedChairman ? (
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", backgroundColor: "#ffffff", padding: "10px 14px", borderRadius: "8px", border: "1px solid #fde047" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                              <div style={{ width: "36px", height: "36px", borderRadius: "50%", backgroundColor: "#d97706", color: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "14px" }}>
+                                {getInitials(selectedChairman.fullName || selectedChairman.name || "C")}
+                              </div>
+                              <div>
+                                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                  <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "14px" }}>
+                                    {selectedChairman.fullName || selectedChairman.name}
+                                  </span>
+                                  <span style={{ fontSize: "10px", backgroundColor: "#fef3c7", color: "#92400e", padding: "2px 6px", borderRadius: "4px", fontWeight: 700 }}>
+                                    CHAIRMAN / සභාපති
+                                  </span>
+                                </div>
+                                <span style={{ fontSize: "11px", color: "#64748b" }}>
+                                  NIC: {selectedChairman.nicNo || selectedChairman.nic || "N/A"} {selectedChairman.email ? `• ${selectedChairman.email}` : ""}
+                                </span>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={handleRemoveChairman}
+                              style={{ color: "#dc2626", backgroundColor: "#fef2f2", border: "1px solid #fca5a5", padding: "6px 12px", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}
+                            >
+                              <X size={14} />
+                              <span>{lang === "si" ? "ඉවත් කරන්න" : "Change"}</span>
+                            </button>
+                          </div>
+                        ) : (
+                          <select
+                            id="chairmanSelectModal"
+                            value=""
+                            onChange={(e) => handleSelectChairman(e.target.value)}
+                            className="field-select"
+                            style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid #fde047", backgroundColor: "#ffffff", fontSize: "13px" }}
+                          >
+                            <option value="">{lang === "si" ? "-- ලියාපදිංචි සභාපතිවරුන්ගෙන් තෝරන්න --" : "-- Select Chairman from Registered Chairmen --"}</option>
+                            {officers
+                              .filter((off) => off.officerRole === "Chairman" || off.officerRole?.toLowerCase() === "chairman")
+                              .map((off) => (
+                                <option key={off.id} value={off.id}>
+                                  {off.fullName} {off.nicNo ? `- NIC: ${off.nicNo}` : ""}
+                                </option>
+                              ))}
+                          </select>
                         )}
                       </div>
 
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "8px" }}>
-                        <div>
-                          <label style={{ fontSize: "11px", fontWeight: 600, color: "#475569" }}>Extension Term</label>
+                      {/* 2. CHOOSE MANY MEMBERS (Multiple Members) */}
+                      <div style={{ backgroundColor: "#f8fafc", padding: "14px", borderRadius: "10px", border: "1px solid #e2e8f0" }}>
+                        <label style={{ fontSize: "13px", fontWeight: 700, color: "#334155", display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+                          <UserCheck size={16} style={{ color: "#4f46e5" }} />
+                          <span>{lang === "si" ? "2. කමිටු සාමාජිකයින් එක් කිරීම (සාමාජිකයින් කිහිපදෙනෙකු)" : "2. Choose Committee Members (Many Members)"}</span>
+                        </label>
+
+                        {/* Selector & Add Member Row */}
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "10px", marginBottom: "12px" }}>
                           <select
-                            value={step3ExtensionTerm}
-                            onChange={(e) => setStep3ExtensionTerm(e.target.value as any)}
-                            style={{ width: "100%", padding: "6px 8px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "12px", backgroundColor: "#ffffff" }}
+                            value={memberSelectId}
+                            onChange={(e) => {
+                              setMemberSelectId(e.target.value);
+                              if (e.target.value) handleAddMemberSelect(e.target.value);
+                            }}
+                            className="field-select"
+                            style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", backgroundColor: "#ffffff", fontSize: "13px" }}
                           >
-                            <option value="None">None</option>
-                            <option value="First">First Term (පළමු වාරය)</option>
-                            <option value="Second">Second Term (දෙවන වාරය)</option>
-                            <option value="Third">Third Term (තෙවන වාරය)</option>
+                            <option value="">{lang === "si" ? "-- ලියාපදිංචි සාමාජිකයින්ගෙන් තෝරා එක් කරන්න --" : "-- Select Registered Member to Add --"}</option>
+                            {officers
+                              .filter((o) => o.officerRole !== "Chairman" && o.officerRole?.toLowerCase() !== "chairman")
+                              .filter((o) => !selectedChairman || (selectedChairman.id !== o.id && selectedChairman.fullName !== o.fullName))
+                              .filter((o) => !selectedMembers.some((m) => m.id === o.id || m.fullName === o.fullName))
+                              .map((off) => (
+                                <option key={off.id} value={off.id}>
+                                  + {off.fullName} {off.nicNo ? `- NIC: ${off.nicNo}` : ""}
+                                </option>
+                              ))}
                           </select>
                         </div>
-                        <div>
-                          <label style={{ fontSize: "11px", fontWeight: 600, color: "#475569" }}>Start Date</label>
+
+                        {/* Manual Name Input for non-registered members */}
+                        <div style={{ display: "flex", gap: "8px", marginBottom: "14px" }}>
                           <input
-                            type="date"
-                            value={step3ExtensionStartDate}
-                            onChange={(e) => setStep3ExtensionStartDate(e.target.value)}
-                            style={{ width: "100%", padding: "6px 8px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "12px", backgroundColor: "#ffffff" }}
+                            type="text"
+                            placeholder={lang === "si" ? "නැතහොත් වෙනත් සාමාජිකයෙකුගේ නම ඇතුළත් කරන්න..." : "Or type custom member full name..."}
+                            value={customMemberInput}
+                            onChange={(e) => setCustomMemberInput(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddCustomMember(); } }}
+                            style={{ flex: 1, padding: "8px 12px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "13px" }}
                           />
+                          <button
+                            type="button"
+                            onClick={handleAddCustomMember}
+                            style={{ padding: "8px 14px", backgroundColor: "#4f46e5", color: "#ffffff", border: "none", borderRadius: "6px", fontWeight: 600, fontSize: "12px", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}
+                          >
+                            <Plus size={14} />
+                            <span>{lang === "si" ? "එක් කරන්න" : "Add Member"}</span>
+                          </button>
                         </div>
-                        <div>
-                          <label style={{ fontSize: "11px", fontWeight: 600, color: "#475569" }}>End Date</label>
-                          <input
-                            type="date"
-                            value={step3ExtensionEndDate}
-                            onChange={(e) => setStep3ExtensionEndDate(e.target.value)}
-                            style={{ width: "100%", padding: "6px 8px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "12px", backgroundColor: "#ffffff" }}
-                          />
-                        </div>
+
+                        {/* Members Cards List */}
+                        {selectedMembers.length > 0 ? (
+                          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                            {selectedMembers.map((member, idx) => (
+                              <div
+                                key={member.id || idx}
+                                style={{ display: "flex", alignItems: "center", justifyContent: "space-between", backgroundColor: "#ffffff", padding: "10px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}
+                              >
+                                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                  <span style={{ fontSize: "11px", fontWeight: 700, backgroundColor: "#e0e7ff", color: "#3730a3", width: "24px", height: "24px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                    #{idx + 1}
+                                  </span>
+                                  <div>
+                                    <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "13px", display: "block" }}>
+                                      {member.fullName || member.name}
+                                    </span>
+                                    <span style={{ fontSize: "11px", color: "#64748b" }}>
+                                      Member {member.nicNo || member.nic ? `• NIC: ${member.nicNo || member.nic}` : ""}
+                                    </span>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveMember(idx)}
+                                  style={{ color: "#ef4444", backgroundColor: "#fef2f2", border: "1px solid #fca5a5", padding: "4px 8px", borderRadius: "6px", cursor: "pointer" }}
+                                  title="Remove Member"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div style={{ padding: "12px", textAlign: "center", color: "#94a3b8", fontSize: "12px", backgroundColor: "#ffffff", borderRadius: "8px", border: "1px dashed #cbd5e1" }}>
+                            {lang === "si" ? "තවමත් සාමාජිකයින් තෝරා නොමැත. ඉහත ලැයිස්තුවෙන් හෝ නම ඇතුළත් කර එක් කරන්න." : "No committee members added yet. Select from the dropdown or type a name above."}
+                          </div>
+                        )}
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={handleStep3RequestExtension}
-                        style={{ padding: "6px 12px", backgroundColor: "#d97706", color: "#ffffff", border: "none", borderRadius: "6px", fontWeight: 600, fontSize: "12px", cursor: "pointer", alignSelf: "flex-start" }}
-                      >
-                        Send Extension Request to Subject Officer
-                      </button>
                     </div>
-
-                    {/* FLOW 5: Report Submit Date (Admin ➔ Subject Officer) */}
-                    <div style={{ backgroundColor: "#f0fdf4", padding: "12px", borderRadius: "8px", border: "1px solid #bbf7d0", display: "flex", flexDirection: "column", gap: "8px" }}>
-                      <div style={{ fontSize: "12px", fontWeight: 700, color: "#166534", display: "flex", alignItems: "center", gap: "6px" }}>
-                        <FileCheck size={14} />
-                        <span>5. Send Report Submit Date (Admin ➔ Subject Officer)</span>
-                      </div>
-                      <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-                        <input
-                          type="date"
-                          value={step4ApprovalDate}
-                          onChange={(e) => setStep4ApprovalDate(e.target.value)}
-                          style={{ padding: "7px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "12px", backgroundColor: "#ffffff" }}
-                        />
-                        <button
-                          type="button"
-                          onClick={handleStep4SubmitFinalReport}
-                          style={{ padding: "7px 14px", backgroundColor: "#16a34a", color: "#ffffff", border: "none", borderRadius: "6px", fontWeight: 600, fontSize: "12px", cursor: "pointer" }}
-                        >
-                          Send Report Submit Date
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* DISPLAY SUBMITTED REPORT FROM SUBJECT OFFICER (FLOW 6) */}
-                    {existingAssignment?.reportContent && (
-                      <div style={{ backgroundColor: "#ffffff", padding: "12px 14px", borderRadius: "8px", border: "1px solid #4f46e5" }}>
-                        <div style={{ fontWeight: 700, color: "#4338ca", fontSize: "12px", marginBottom: "4px" }}>
-                          📄 Investigation Report Added by Subject Officer (Submitted on {existingAssignment.reportSubmitDate || "recent"}):
-                        </div>
-                        <p style={{ margin: 0, fontSize: "13px", color: "#1e293b", whiteSpace: "pre-wrap" }}>
-                          {existingAssignment.reportContent}
-                        </p>
-                      </div>
-                    )}
-
                   </div>
 
                   {/* Add/Update Investigation Progress Form Section */}
