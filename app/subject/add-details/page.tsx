@@ -1154,30 +1154,6 @@ function CaseDetailsForm() {
                         </div>
                       )}
 
-                      {/* Step 2 Date Submission to Admin */}
-                      <div style={{ backgroundColor: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: "10px", padding: "14px 16px", marginBottom: "16px" }}>
-                        <div style={{ fontSize: "13px", fontWeight: 700, color: "#0369a1", marginBottom: "8px" }}>
-                          📅 {i18n.language === "si" ? "Step 2: පත්වීම් ලිපිය දිනය සහ වාර්තාව ලැබිය යුතු දිනය Admin වෙත යවන්න" : "Step 2: Send Appointment Date & Report Due Date to Admin"}
-                        </div>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "10px" }}>
-                          <div>
-                            <label style={{ fontSize: "11px", fontWeight: 600, color: "#475569", display: "block", marginBottom: "4px" }}>
-                              {i18n.language === "si" ? "පත්වීම් ලිපිය දිනය (Appointment Date):" : "Appointment Letter Date:"}
-                            </label>
-                            <input type="date" value={subjectApptDate} onChange={(e) => setSubjectApptDate(e.target.value)} className="field-input" style={{ width: "100%", padding: "8px 10px", borderRadius: "6px", border: "1px solid #cbd5e1" }} />
-                          </div>
-                          <div>
-                            <label style={{ fontSize: "11px", fontWeight: 600, color: "#475569", display: "block", marginBottom: "4px" }}>
-                              {i18n.language === "si" ? "වාර්තාව ලැබිය යුතු දිනය (Report Due Date):" : "Report Must Be Received By:"}
-                            </label>
-                            <input type="date" value={subjectDueDate} onChange={(e) => setSubjectDueDate(e.target.value)} className="field-input" style={{ width: "100%", padding: "8px 10px", borderRadius: "6px", border: "1px solid #cbd5e1" }} />
-                          </div>
-                        </div>
-                        <button type="button" onClick={handleSubjectSubmitDates} className="btn-primary" style={{ padding: "8px 18px", fontSize: "12px", backgroundColor: "#0284c7", color: "#ffffff", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: 700 }}>
-                          {i18n.language === "si" ? "දිනයන් Admin වෙත යවන්න" : "Submit Dates to Admin"}
-                        </button>
-                      </div>
-
                       {/* Step 1: Case Administration */}
                       <div className="flowchart-step">
                         <div className="step-indicator">1</div>
