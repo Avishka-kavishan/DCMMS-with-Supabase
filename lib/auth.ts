@@ -55,6 +55,7 @@ export async function getCurrentProfile(): Promise<UserProfile | null> {
     await supabase.from("dcmms_profiles").upsert({
       id: session.user.id,
       full_name: authFullName,
+      email: session.user.email || null,
       role: authRole,
     });
   } catch (err) {

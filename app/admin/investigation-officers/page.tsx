@@ -253,6 +253,7 @@ export default function InvestigationOfficersPage() {
           payload.id = officer.id;
         }
 
+        await supabase.from("dcmms_investigation_officers").upsert(payload);
         const { error } = await supabase.from("dcmms_profiles").upsert(payload);
         if (error) console.warn("Supabase upsert warning:", error);
       } catch (err: any) {

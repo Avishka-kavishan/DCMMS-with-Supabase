@@ -48,6 +48,11 @@ function InvestigationCaseDetailsContent() {
   const [inquiryNotes, setInquiryNotes] = useState("");
   const [investigationFileNo, setInvestigationFileNo] = useState("");
 
+  // Subject Officer Selection State
+  const [subjectOfficersList, setSubjectOfficersList] = useState<string[]>([]);
+  const [selectedSubjectOfficer, setSelectedSubjectOfficer] = useState<string>("");
+  const [customSubjectOfficerInput, setCustomSubjectOfficerInput] = useState<string>("");
+
   // Step 1: Assign Officers to Subject Officer (1 Chairman + Many Members)
   const [step1AssignedOfficers, setStep1AssignedOfficers] = useState("");
   const [selectedChairman, setSelectedChairman] = useState<any | null>(null);
@@ -231,6 +236,94 @@ function InvestigationCaseDetailsContent() {
 
       setOfficers(fetchedOfficers);
 
+      // Fetch Subject Officers directly from dcmms_profiles table, assignments tables & local storage
+      const defaultSubjectOfficers = [
+        "Rathnaweera",
+        "Kamal Perera",
+        "Suresh Silva",
+        "Aruni Rajapaksha",
+        "Kumara",
+      ];
+      const subjSet = new Set<string>(defaultSubjectOfficers);
+
+      if (isSupabaseConfigured) {
+        try {
+          // 1. Primary: Load registered Subject Officers from dcmms_profiles DB table
+          const { data: dbSubj } = await supabase
+            .from("dcmms_profiles")
+            .select("full_name, role, officer_role, status");
+          if (dbSubj && Array.isArray(dbSubj)) {
+            dbSubj.forEach((p: any) => {
+              const r = (p.role || p.officer_role || "").toLowerCase();
+              if ((r.includes("subject") || r === "subject_officer") && p.status !== "Inactive" && p.full_name) {
+                subjSet.add(p.full_name.trim());
+              }
+            });
+          }
+
+          // 2. Load from dcmms_subject_assignments table
+          const { data: dbAsgnList } = await supabase
+            .from("dcmms_subject_assignments")
+            .select("subject_officer_name");
+          if (dbAsgnList && Array.isArray(dbAsgnList)) {
+            dbAsgnList.forEach((a: any) => {
+              if (a.subject_officer_name && a.subject_officer_name.trim()) {
+                const name = a.subject_officer_name.trim();
+                if (name !== "Subject Officer" && name !== "Unassigned") subjSet.add(name);
+              }
+            });
+          }
+
+          // 3. Load from dcmms_subject table
+          const { data: dbSubjCases } = await supabase
+            .from("dcmms_subject")
+            .select("subject_officer_name");
+          if (dbSubjCases && Array.isArray(dbSubjCases)) {
+            dbSubjCases.forEach((s: any) => {
+              if (s.subject_officer_name && s.subject_officer_name.trim()) {
+                const name = s.subject_officer_name.trim();
+                if (name !== "Subject Officer" && name !== "Unassigned") subjSet.add(name);
+              }
+            });
+          }
+        } catch (e) {
+          console.warn("Supabase Subject Officers table query warning:", e);
+        }
+      }
+
+      if (typeof window !== "undefined") {
+        const storedCustom = localStorage.getItem("dcmms_custom_profiles");
+        if (storedCustom) {
+          try {
+            const list = JSON.parse(storedCustom);
+            if (Array.isArray(list)) {
+              list.forEach((item: any) => {
+                const r = (item.role || item.officerRole || "").toLowerCase();
+                if ((r.includes("subject") || r === "subject_officer") && item.fullName) {
+                  subjSet.add(item.fullName.trim());
+                }
+              });
+            }
+          } catch (e) {}
+        }
+
+        const storedOfficers = localStorage.getItem("dcmms_subject_officers");
+        if (storedOfficers) {
+          try {
+            const list = JSON.parse(storedOfficers);
+            if (Array.isArray(list)) {
+              list.forEach((item: any) => {
+                if (typeof item === "string" && item.trim()) subjSet.add(item.trim());
+                else if (item?.fullName) subjSet.add(item.fullName.trim());
+              });
+            }
+          } catch (e) {}
+        }
+      }
+
+      const allSubjOfficers = Array.from(subjSet);
+      setSubjectOfficersList(allSubjOfficers);
+
       // Load Data Flow Assignment FIRST
       let assignment: any = null;
       if (isSupabaseConfigured && caseNoParam) {
@@ -249,6 +342,9 @@ function InvestigationCaseDetailsContent() {
               assignedOfficers: dbAsgn.assigned_officers,
               appointmentDate: dbAsgn.appointment_date,
               reportDueDate: dbAsgn.report_due_date,
+              datesSubmittedBySubject: dbAsgn.dates_submitted_by_subject || dbAsgn.datesSubmittedBySubject || false,
+              chairman: dbAsgn.chairman,
+              members: dbAsgn.members,
               extensionTerm: dbAsgn.extension_term,
               extensionStartDate: dbAsgn.extension_start_date,
               extensionEndDate: dbAsgn.extension_end_date,
@@ -399,6 +495,12 @@ function InvestigationCaseDetailsContent() {
       const resolvedOfficer = assignment?.subjectOfficerName || matchedCase?.subjectOfficerName || matchedCase?.officerName || matchedCase?.subjectOfficer || matchedCase?.assignee || "";
       setSelectedCase(matchedCase);
       setAssignee(resolvedOfficer);
+      
+      const initialSubj = resolvedOfficer || allSubjOfficers[0] || "";
+      setSelectedSubjectOfficer(initialSubj);
+      if (initialSubj && !allSubjOfficers.includes(initialSubj)) {
+        setSubjectOfficersList((prev) => [...prev, initialSubj]);
+      }
       setTargetDate(matchedCase.targetDate || new Date().toISOString().slice(0, 10));
       setStatus(matchedCase.status || "In Progress");
       setInquiryNotes(matchedCase.inquiryNotes || matchedCase.notes || "");
@@ -484,9 +586,9 @@ function InvestigationCaseDetailsContent() {
                   institute_name: item.instituteName || item.schoolName || p.instituteName || "",
                   institute_address: item.schoolAddress || item.instituteAddress || p.schoolAddress || "",
                 }));
-              } else if (item.officerName || item.officer_name || item.name) {
+              } else if (item.accusedOfficer || item.accused_officer) {
                 fetchedConcerned = [{
-                  officer_name: item.officerName || item.officer_name || item.name || "",
+                  officer_name: item.accusedOfficer || item.accused_officer || "",
                   position: item.position || item.designation || "",
                   dob: item.dob || "",
                   nic: item.nic || item.nic_no || "",
@@ -512,9 +614,9 @@ function InvestigationCaseDetailsContent() {
               institute_name: p.instituteName || matchedCase.schoolName || "",
               institute_address: p.schoolAddress || matchedCase.schoolAddress || "",
             }));
-          } else if (matchedCase.officerName || matchedCase.officer_name || matchedCase.accusedOfficer) {
+          } else if (matchedCase.accusedOfficer || matchedCase.accused_officer) {
             fetchedConcerned = [{
-              officer_name: matchedCase.officerName || matchedCase.officer_name || matchedCase.accusedOfficer || "",
+              officer_name: matchedCase.accusedOfficer || matchedCase.accused_officer || "",
               position: matchedCase.position || matchedCase.designation || "",
               dob: matchedCase.dob || "",
               nic: matchedCase.nic || matchedCase.nicNo || "",
@@ -527,7 +629,21 @@ function InvestigationCaseDetailsContent() {
         }
       }
 
-      setConcernedOfficersList(fetchedConcerned);
+      // Filter out any Subject Officer bleed-through where name matches subject officer and lack accused details
+      const cleanAccused = fetchedConcerned.filter((officer) => {
+        if (!officer) return false;
+        const name = (officer.officer_name || "").trim();
+        if (!name) return false;
+        const subjName = (resolvedOfficer || matchedCase?.subjectOfficerName || matchedCase?.subjectOfficer || "").trim();
+        if (subjName && name.toLowerCase() === subjName.toLowerCase()) {
+          if (!officer.nic && !officer.position && !officer.address && !officer.dob) {
+            return false;
+          }
+        }
+        return true;
+      });
+
+      setConcernedOfficersList(cleanAccused);
 
       setIsLoading(false);
     };
@@ -593,7 +709,9 @@ function InvestigationCaseDetailsContent() {
             case_no: updated.caseNo,
             subject_officer_name: updated.subjectOfficerName,
             status: updated.status,
-            assigned_officers: updated.assignedOfficers || null,
+            assigned_officers: Array.isArray(updated.assignedOfficers) ? updated.assignedOfficers : (updated.assignedOfficers ? [updated.assignedOfficers] : null),
+            chairman: updated.chairman || null,
+            members: updated.members || null,
             appointment_date: updated.appointmentDate || null,
             report_due_date: updated.reportDueDate || null,
             extension_term: updated.extensionTerm || null,
@@ -617,6 +735,169 @@ function InvestigationCaseDetailsContent() {
   };
 
   const assignmentExistingId = () => existingAssignment?.id || `asgn-${Date.now()}`;
+
+  // ── Handler: Investigation Administrator sends Investigation Committee Assignment details to Subject Officer ──
+  const handleSendCommitteeToSubjectOfficer = async () => {
+    if (!selectedChairman && selectedMembers.length === 0) {
+      showToast(lang === "si" ? "කරුණාකර අවම වශයෙන් සභාපතිවරයෙකු හෝ එක් කමිටු සාමාජිකයෙකු තෝරන්න." : "Please select a Chairman or at least one Committee Member first.");
+      return;
+    }
+
+    const targetOfficer = selectedSubjectOfficer?.trim() || getDisplaySubjectOfficerName();
+    if (!targetOfficer || targetOfficer === "Subject Officer" || targetOfficer === "Unassigned") {
+      showToast(lang === "si" ? "කරුණාකර තොරතුරු යැවිය යුතු විෂය භාර නිලධාරියා තෝරන්න." : "Please select a Subject Officer to send the committee details to.");
+      return;
+    }
+
+    const chairmanPart = selectedChairman ? `Chairman: ${selectedChairman.fullName || selectedChairman.name}` : "";
+    const membersPart = selectedMembers.length > 0 ? `Members: ${selectedMembers.map((m) => m.fullName || m.name).join(", ")}` : "";
+    const formattedAssignedText = [chairmanPart, membersPart].filter(Boolean).join(" | ");
+
+    setStep1AssignedOfficers(formattedAssignedText);
+    setAssignee(targetOfficer);
+    setIsSaving(true);
+
+    await saveSubjectAssignment({
+      subjectOfficerName: targetOfficer,
+      assignedOfficers: formattedAssignedText,
+      officerList: [targetOfficer],
+      chairman: selectedChairman,
+      members: selectedMembers,
+      committeeSent: true,
+      committeeSentAt: new Date().toISOString().slice(0, 10),
+      status: "Committee Details Sent to Subject Officer",
+    });
+
+    const now = new Date().toISOString().slice(0, 10);
+    const actionId = `act-committee-${caseNoParam}-${Date.now()}`;
+    const desc = `Investigation Committee Assignment details (${formattedAssignedText}) sent to Subject Officer (${targetOfficer}).`;
+
+    if (typeof window !== "undefined") {
+      try {
+        const storedLetters = localStorage.getItem("dcmms_letters") || "[]";
+        let letters = JSON.parse(storedLetters);
+        const idx = letters.findIndex((l: any) => l.refNo === caseNoParam);
+        if (idx >= 0) {
+          letters[idx].officerName = targetOfficer || letters[idx].officerName;
+          letters[idx].committeeDetails = formattedAssignedText;
+          letters[idx].status = "assigned";
+        } else {
+          letters.push({
+            id: `let-${caseNoParam}-${Date.now()}`,
+            refNo: caseNoParam,
+            officerName: targetOfficer,
+            subject: selectedCase?.subject || `Assigned Inquiry Case (${caseNoParam})`,
+            receivedDate: now,
+            status: "assigned",
+            committeeDetails: formattedAssignedText,
+            priority: "high"
+          });
+        }
+        localStorage.setItem("dcmms_letters", JSON.stringify(letters));
+      } catch (e) {}
+
+      try {
+        const storedCases = localStorage.getItem("dcmms_cases") || "[]";
+        let cases = JSON.parse(storedCases);
+        const idx = cases.findIndex((c: any) => c.caseNo === caseNoParam || c.refNo === caseNoParam);
+        if (idx >= 0) {
+          cases[idx].assignedTo = targetOfficer;
+          cases[idx].subjectOfficer = targetOfficer;
+          cases[idx].assignedOfficers = formattedAssignedText;
+          cases[idx].status = "Committee Details Sent";
+        }
+        localStorage.setItem("dcmms_cases", JSON.stringify(cases));
+      } catch (e) {}
+
+      try {
+        const storedActions = localStorage.getItem("dcmms_new_letter_current_case") || "[]";
+        let actionsList = [];
+        try { actionsList = JSON.parse(storedActions); } catch (e) {}
+        if (!Array.isArray(actionsList)) actionsList = [];
+        const newActionItem = {
+          id: actionId,
+          caseNo: caseNoParam,
+          receivedDate: now,
+          reportState: "Committee Details Sent",
+          specialNotes: `Committee Assignment: ${formattedAssignedText}`,
+          subjectOfficerName: targetOfficer,
+          stepTaken: desc,
+        };
+        actionsList.unshift(newActionItem);
+        localStorage.setItem("dcmms_new_letter_current_case", JSON.stringify(actionsList));
+        setPreviousActions((prev) => [newActionItem, ...prev]);
+      } catch (e) {}
+    }
+
+    if (isSupabaseConfigured) {
+      try {
+        // 1. Update all existing daily mail letters for this case
+        await supabase
+          .from("dcmms_daily_mail")
+          .update({
+            officer_name: targetOfficer,
+            name_of_subject_officer: targetOfficer,
+            status: "assigned",
+          })
+          .eq("ref_no", caseNoParam);
+
+        // 2. Upsert daily mail for this case ref_no
+        await supabase.from("dcmms_daily_mail").upsert({
+          id: `mail-${caseNoParam}-${targetOfficer.trim().toLowerCase().replace(/\s+/g, "_")}`,
+          ref_no: caseNoParam,
+          officer_name: targetOfficer,
+          name_of_subject_officer: targetOfficer,
+          subject: selectedCase?.subject || `Assigned Inquiry Case (${caseNoParam})`,
+          received_date: now,
+          status: "assigned"
+        });
+
+        // 3. Insert subject details history action log
+        await supabase.from("dcmms_subject_details").insert({
+          id: actionId,
+          case_no: caseNoParam,
+          ref_no: caseNoParam,
+          received_date: now,
+          report_state: "Committee Details Sent",
+          special_notes: `Committee Assignment: ${formattedAssignedText}`,
+          subject_officer_name: targetOfficer,
+          officer_name: targetOfficer,
+          step_taken: desc,
+        });
+
+        // 4. Update and Upsert case in dcmms_subject table
+        await supabase
+          .from("dcmms_subject")
+          .update({
+            subject_officer_name: targetOfficer,
+            officer_name: targetOfficer,
+            assigned_officer: targetOfficer,
+            status: "Committee Details Sent",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("case_no", caseNoParam);
+
+        await supabase.from("dcmms_subject").upsert({
+          id: `case-${caseNoParam}`,
+          case_no: caseNoParam,
+          subject: selectedCase?.subject || `Assigned Inquiry Case (${caseNoParam})`,
+          status: "Committee Details Sent",
+          subject_officer_name: targetOfficer,
+          officer_name: targetOfficer,
+          assigned_officer: targetOfficer,
+        }, { onConflict: "case_no" });
+      } catch (e) {
+        console.warn("Supabase committee details assignment error:", e);
+      }
+    }
+
+    setIsSaving(false);
+    showToast(
+      lang === "si"
+        ? `විමර්ශන කමිටු පත්වීම් තොරතුරු ${targetOfficer} වෙත සාර්ථකව යවන ලදී!`
+        : `Investigation Committee Assignment details successfully sent to ${targetOfficer}!`
+    );
+  };
 
   // Step 1: Admin Submits Assigned Officers (1 Chairman & Many Members)
   const handleStep1SubmitOfficers = async () => {
@@ -1047,13 +1328,23 @@ function InvestigationCaseDetailsContent() {
                       </span>
                     </div>
 
+                    {/* Appointment Letter Date */}
+                    <div style={{ backgroundColor: "#f8fafc", padding: "10px 12px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                      <span style={{ fontSize: "11px", color: "#64748b", fontWeight: 600, display: "block" }}>
+                        {lang === "si" ? "පත්වීම් ලිපියේ දිනය" : "Appointment Letter Date"}
+                      </span>
+                      <span style={{ fontSize: "13px", fontWeight: 700, color: "#0369a1" }}>
+                        {existingAssignment?.appointmentDate || step2ApptDate || "—"}
+                      </span>
+                    </div>
+
                     {/* Target / Due Date */}
                     <div style={{ backgroundColor: "#f8fafc", padding: "10px 12px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
                       <span style={{ fontSize: "11px", color: "#64748b", fontWeight: 600, display: "block" }}>
                         {lang === "si" ? "වාර්තා භාරදිය යුතු දිනය" : "Report Due Date"}
                       </span>
                       <span style={{ fontSize: "13px", fontWeight: 700, color: "#dc2626" }}>
-                        {existingAssignment?.reportDueDate || selectedCase?.targetDate || "2026-06-05"}
+                        {existingAssignment?.reportDueDate || step2DueDate || selectedCase?.targetDate || "—"}
                       </span>
                     </div>
 
@@ -1238,7 +1529,7 @@ function InvestigationCaseDetailsContent() {
                     <div style={{ backgroundColor: "#f8fafc", padding: "14px", borderRadius: "10px", border: "1px solid #e2e8f0" }}>
                       <label style={{ fontSize: "13px", fontWeight: 700, color: "#334155", display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
                         <UserCheck size={16} style={{ color: "#4f46e5" }} />
-                        <span>{lang === "si" ? "2. කමිටු සාමාජිකයින් එක් කිරීම (සාමාජිකයින් කිහිපදෙනෙකු)" : "2. Choose Committee Members (Many Members)"}</span>
+                        <span>{lang === "si" ? "2. කමිටු සාමාජයින් එක් කිරීම (සාමාජිකයින් කිහිපදෙනෙකු)" : "2. Choose Committee Members (Many Members)"}</span>
                       </label>
 
                       {/* Selector & Add Member Row */}
@@ -1324,11 +1615,108 @@ function InvestigationCaseDetailsContent() {
                       )}
                     </div>
 
+
+
+                    {/* Action Button: Send Investigation Committee Assignment details to Subject Officer */}
+                      <div style={{ marginTop: "16px", paddingTop: "14px", borderTop: "1px solid #f1f5f9", display: "flex", justifyContent: "flex-end" }}>
+                        <button
+                          type="button"
+                          onClick={handleSendCommitteeToSubjectOfficer}
+                          disabled={isSaving}
+                          style={{
+                            padding: "10px 20px",
+                            backgroundColor: "#2563eb",
+                            color: "#ffffff",
+                            border: "none",
+                            borderRadius: "8px",
+                            fontWeight: 600,
+                            fontSize: "13px",
+                            cursor: "pointer",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            boxShadow: "0 2px 4px rgba(37,99,235,0.25)",
+                            transition: "all 0.15s ease"
+                          }}
+                        >
+                          <Send size={16} />
+                          <span>
+                            {lang === "si"
+                              ? "විමර්ශන කමිටු පත්වීම් තොරතුරු අදාළ විෂය නිලධාරියා වෙත යවන්න"
+                              : "Send Committee Assignment Details to Subject Officer"}
+                          </span>
+                        </button>
+                      </div>
+
+                    </div>
                   </div>
+
+                {/* Step 2: Appointment Letter Date & Report Due Date (From Subject Officer) Card */}
+                <div style={{ backgroundColor: "#ffffff", padding: "20px", borderRadius: "12px", border: "1px solid #cbd5e1", boxShadow: "0 2px 4px rgba(0,0,0,0.02)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px", borderBottom: "1px solid #f1f5f9", paddingBottom: "10px" }}>
+                    <h4 style={{ margin: 0, fontSize: "15px", color: "#1e293b", fontWeight: 700, display: "flex", alignItems: "center", gap: "8px" }}>
+                      <CalendarIcon size={18} style={{ color: "#0284c7" }} />
+                      <span>{lang === "si" ? "පත්වීම් ලිපියේ දිනය සහ වාර්තා දිනය (විෂය නිලධාරී වෙතින්)" : "Step 2: Appointment Letter Date & Report Due Date (Received from Subject Officer)"}</span>
+                    </h4>
+                    <span style={{ fontSize: "11px", fontWeight: 700, backgroundColor: (existingAssignment?.datesSubmittedBySubject || (step2ApptDate && step2DueDate)) ? "#dcfce7" : "#fef3c7", color: (existingAssignment?.datesSubmittedBySubject || (step2ApptDate && step2DueDate)) ? "#15803d" : "#b45309", padding: "4px 10px", borderRadius: "12px", display: "flex", alignItems: "center", gap: "4px" }}>
+                      {(existingAssignment?.datesSubmittedBySubject || (step2ApptDate && step2DueDate)) ? (
+                        <>
+                          <CheckCircle size={13} />
+                          {lang === "si" ? "විෂය නිලධාරී විසින් සපයන ලදී" : "Submitted by Subject Officer"}
+                        </>
+                      ) : (
+                        <>
+                          <Clock size={13} />
+                          {lang === "si" ? "විෂය නිලධාරී වෙතින් බලපොරොත්තු වේ" : "Awaiting Subject Officer"}
+                        </>
+                      )}
+                    </span>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "16px", backgroundColor: "#f0f9ff", padding: "16px", borderRadius: "10px", border: "1px solid #bae6fd" }}>
+                    <div>
+                      <label htmlFor="step2ApptDateInput" style={{ fontSize: "12px", fontWeight: 700, color: "#0369a1", display: "flex", alignItems: "center", gap: "6px", marginBottom: "6px" }}>
+                        <CalendarIcon size={14} /> {lang === "si" ? "පත්වීම් ලිපියේ දිනය (Appointment Letter Date):" : "Appointment Letter Date:"}
+                      </label>
+                      <input
+                        id="step2ApptDateInput"
+                        type="date"
+                        value={step2ApptDate}
+                        onChange={(e) => setStep2ApptDate(e.target.value)}
+                        style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid #7dd3fc", fontSize: "14px", fontWeight: 700, color: "#0369a1", backgroundColor: "#ffffff" }}
+                      />
+                    </div>
+
+                    <div>
+                      <label htmlFor="step2DueDateInput" style={{ fontSize: "12px", fontWeight: 700, color: "#b91c1c", display: "flex", alignItems: "center", gap: "6px", marginBottom: "6px" }}>
+                        <CalendarIcon size={14} /> {lang === "si" ? "වාර්තාව ලබාදිය යුතු දිනය (Report Due Date):" : "Report Due Date:"}
+                      </label>
+                      <input
+                        id="step2DueDateInput"
+                        type="date"
+                        value={step2DueDate}
+                        onChange={(e) => setStep2DueDate(e.target.value)}
+                        style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid #fca5a5", fontSize: "14px", fontWeight: 700, color: "#b91c1c", backgroundColor: "#ffffff" }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: "14px", display: "flex", justifyContent: "flex-end" }}>
+                    <button
+                      type="button"
+                      onClick={handleStep2SubmitDatesAdmin}
+                      disabled={isSaving}
+                      style={{ padding: "10px 18px", backgroundColor: "#0284c7", color: "#ffffff", border: "none", borderRadius: "8px", fontWeight: 600, fontSize: "13px", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px", boxShadow: "0 2px 4px rgba(2,132,199,0.25)" }}
+                    >
+                      <CheckCircle size={15} />
+                      <span>{lang === "si" ? "පත්වීම් සහ වාර්තා දිනයන් තහවුරු කරන්න / සුරකින්න" : "Confirm & Save Appointment & Due Dates"}</span>
+                    </button>
+                  </div>
+                </div>
+
                 </div>
               </div>
 
-            </div>
           </section>
 
           <SiteFooter />

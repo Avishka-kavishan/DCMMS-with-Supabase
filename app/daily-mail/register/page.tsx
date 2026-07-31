@@ -694,7 +694,7 @@ function RegisterComplaintForm() {
           .select();
 
         if (error) {
-          console.error("Supabase letters write error", error);
+          console.error("Supabase letters write error:", error?.message || error?.details || JSON.stringify(error) || error);
           throw error;
         }
 
@@ -712,7 +712,7 @@ function RegisterComplaintForm() {
           });
 
         if (caseError) {
-          console.error("Supabase cases write error", caseError);
+          console.error("Supabase cases write error:", caseError?.message || caseError?.details || JSON.stringify(caseError) || caseError);
           throw caseError;
         }
 

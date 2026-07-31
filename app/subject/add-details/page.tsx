@@ -28,6 +28,90 @@ const formatStepTaken = (step: string, t: any) => {
   return step;
 };
 
+export function parseCommitteeDetails(asgn: any) {
+  let chairmanName = "";
+  let chairmanNic = "";
+  let memberList: string[] = [];
+
+  if (asgn?.chairman) {
+    if (typeof asgn.chairman === "object" && asgn.chairman !== null) {
+      chairmanName = asgn.chairman.fullName || asgn.chairman.name || asgn.chairman.officer_name || "";
+      chairmanNic = asgn.chairman.nicNo || asgn.chairman.nic || asgn.chairman.nic_no || "";
+    } else if (typeof asgn.chairman === "string") {
+      if (asgn.chairman.startsWith("{")) {
+        try {
+          const parsed = JSON.parse(asgn.chairman);
+          chairmanName = parsed.fullName || parsed.name || parsed.officer_name || "";
+          chairmanNic = parsed.nicNo || parsed.nic || parsed.nic_no || "";
+        } catch (e) {
+          chairmanName = asgn.chairman;
+        }
+      } else {
+        chairmanName = asgn.chairman;
+      }
+    }
+  }
+
+  if (asgn?.members) {
+    if (Array.isArray(asgn.members)) {
+      memberList = asgn.members.map((m: any) => {
+        if (typeof m === "object" && m !== null) {
+          return m.fullName || m.name || m.officer_name || "";
+        }
+        return String(m || "");
+      }).filter(Boolean);
+    } else if (typeof asgn.members === "string") {
+      try {
+        const parsed = JSON.parse(asgn.members);
+        if (Array.isArray(parsed)) {
+          memberList = parsed.map((m: any) => (typeof m === "object" ? m.fullName || m.name || m.officer_name : String(m))).filter(Boolean);
+        } else {
+          memberList = asgn.members.split(",").map((s: string) => s.trim()).filter(Boolean);
+        }
+      } catch (e) {
+        memberList = asgn.members.split(",").map((s: string) => s.trim()).filter(Boolean);
+      }
+    }
+  }
+
+  const rawText = String(asgn?.assignedOfficers || asgn?.assigned_officers || asgn?.officerName || asgn?.committeeDetails || "").trim();
+
+  if (!chairmanName && rawText) {
+    if (rawText.includes("Chairman:")) {
+      const match = rawText.match(/Chairman:\s*([^|]+)/i);
+      if (match && match[1]) chairmanName = match[1].trim();
+    } else if (rawText.includes("(Chairman)")) {
+      const match = rawText.match(/([^(,]+)\s*\(Chairman\)/i);
+      if (match && match[1]) chairmanName = match[1].trim();
+    }
+  }
+
+  if (memberList.length === 0 && rawText) {
+    if (rawText.includes("Members:")) {
+      const match = rawText.match(/Members:\s*([^|]+)/i);
+      if (match && match[1]) {
+        memberList = match[1].split(",").map((s) => s.trim()).filter(Boolean);
+      }
+    } else if (rawText.includes("(Member)") || rawText.includes("(Members)")) {
+      const matches = rawText.matchAll(/([^(,]+)\s*\(Members?\)/gi);
+      for (const m of matches) {
+        if (m[1] && m[1].trim()) memberList.push(m[1].trim());
+      }
+    }
+  }
+
+  const isPlaceholder = !rawText || rawText.includes("—") || rawText.includes("not yet assigned") || rawText.includes("යවා නොමැත");
+  const hasDetails = !!(chairmanName || memberList.length > 0 || (!isPlaceholder && rawText));
+
+  return {
+    chairmanName,
+    chairmanNic,
+    memberList,
+    rawText: isPlaceholder ? "" : rawText,
+    hasDetails
+  };
+}
+
 function CaseDetailsForm() {
   const { t, i18n } = useTranslation();
   const router = useRouter();
@@ -284,7 +368,13 @@ function CaseDetailsForm() {
           }
           if (asgn) {
             setAssignmentData(asgn);
-            if (asgn.assigned_officers || asgn.assignedOfficers) setAssignedOfficersText(asgn.assigned_officers || asgn.assignedOfficers);
+            let officerText = asgn.assigned_officers || asgn.assignedOfficers || "";
+            if (!officerText && (asgn.chairman || asgn.members)) {
+              const chairmanPart = asgn.chairman ? `Chairman: ${asgn.chairman.fullName || asgn.chairman.name}` : "";
+              const membersPart = Array.isArray(asgn.members) && asgn.members.length > 0 ? `Members: ${asgn.members.map((m: any) => m.fullName || m.name).join(", ")}` : "";
+              officerText = [chairmanPart, membersPart].filter(Boolean).join(" | ");
+            }
+            if (officerText) setAssignedOfficersText(officerText);
             if (asgn.appointment_date || asgn.appointmentDate) setSubjectApptDate(asgn.appointment_date || asgn.appointmentDate);
             if (asgn.report_due_date || asgn.reportDueDate) setSubjectDueDate(asgn.report_due_date || asgn.reportDueDate);
           }
@@ -587,6 +677,9 @@ function CaseDetailsForm() {
           id: updated.id || `asgn-${caseNoParam}`,
           case_no: caseNoParam,
           subject_officer_name: updated.subjectOfficerName || subjectOfficer || "Subject Officer",
+          assigned_officers: Array.isArray(updated.assignedOfficers) ? updated.assignedOfficers : (updated.assignedOfficers ? [updated.assignedOfficers] : null),
+          chairman: updated.chairman || null,
+          members: updated.members || null,
           appointment_date: subjectApptDate,
           report_due_date: subjectDueDate,
           dates_submitted_by_subject: true,
@@ -692,8 +785,8 @@ function CaseDetailsForm() {
               status: status || caseData.status,
             });
         }
-      } catch (err) {
-        console.error("Supabase save failed, falling back to localStorage:", err);
+      } catch (err: any) {
+        console.error("Supabase save failed, falling back to localStorage:", err?.message || err?.details || JSON.stringify(err) || err);
       }
     }
 
@@ -1145,12 +1238,40 @@ function CaseDetailsForm() {
                       {/* Investigation Committee & Step 2 Dates Banner from Admin */}
                       {assignedOfficersText && (
                         <div style={{ backgroundColor: "#eff6ff", border: "1px solid #93c5fd", borderRadius: "10px", padding: "14px 16px", marginBottom: "16px" }}>
-                          <div style={{ fontSize: "12px", fontWeight: 700, color: "#1d4ed8", textTransform: "uppercase", marginBottom: "4px" }}>
+                          <div style={{ fontSize: "12px", fontWeight: 700, color: "#1d4ed8", textTransform: "uppercase", marginBottom: "6px" }}>
                             ✓ {i18n.language === "si" ? "පවරන ලද විමර්ශන නිලධාරීන් (Investigation Admin වෙතින් ලැබිණි):" : "Assigned Investigation Committee (From Admin):"}
                           </div>
-                          <div style={{ fontSize: "14px", fontWeight: 700, color: "#0369a1" }}>
-                            {assignedOfficersText}
-                          </div>
+                          {(() => {
+                            const committee = parseCommitteeDetails({ assignedOfficers: assignedOfficersText, chairman: assignmentData?.chairman, members: assignmentData?.members });
+                            if (committee.hasDetails) {
+                              return (
+                                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                                  {committee.chairmanName && (
+                                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                                      <span style={{ fontSize: "11px", backgroundColor: "#fef3c7", color: "#92400e", border: "1px solid #fde68a", padding: "2px 8px", borderRadius: "12px", fontWeight: 700 }}>
+                                        👑 {i18n.language === "si" ? "සභාපති" : "Chairman"}:
+                                      </span>
+                                      <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "14px" }}>{committee.chairmanName}</span>
+                                      {committee.chairmanNic && <span style={{ fontSize: "11px", color: "#64748b" }}>(NIC: {committee.chairmanNic})</span>}
+                                    </div>
+                                  )}
+                                  {committee.memberList.length > 0 && (
+                                    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px", marginTop: "2px" }}>
+                                      <span style={{ fontSize: "11px", backgroundColor: "#e0e7ff", color: "#3730a3", border: "1px solid #c7d2fe", padding: "2px 8px", borderRadius: "12px", fontWeight: 700 }}>
+                                        👥 {i18n.language === "si" ? `සාමාජිකයින් (${committee.memberList.length})` : `Members (${committee.memberList.length})`}:
+                                      </span>
+                                      {committee.memberList.map((m: string, idx: number) => (
+                                        <span key={idx} style={{ fontSize: "12px", backgroundColor: "#ffffff", border: "1px solid #cbd5e1", padding: "2px 8px", borderRadius: "6px", color: "#334155", fontWeight: 600 }}>
+                                          {m}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            }
+                            return <div style={{ fontSize: "14px", fontWeight: 700, color: "#0369a1" }}>{assignedOfficersText}</div>;
+                          })()}
                         </div>
                       )}
 
