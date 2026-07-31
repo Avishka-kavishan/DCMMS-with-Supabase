@@ -1099,6 +1099,18 @@ export default function InvestigationPage() {
             if (found.appointmentDate) setStep2AppointmentDate(found.appointmentDate);
             if (found.reportDueDate) setStep2ReportDueDate(found.reportDueDate);
             setStep2Submitted(!!found.datesSubmittedBySubject);
+            if (found.extensionTerm) {
+              setSubjExtensionTerm(found.extensionTerm as any);
+              setStep3ExtensionTerm(found.extensionTerm as any);
+            }
+            if (found.extensionStartDate) {
+              setSubjExtensionStartDate(found.extensionStartDate);
+              setStep3ExtensionStartDate(found.extensionStartDate);
+            }
+            if (found.extensionEndDate) {
+              setSubjExtensionEndDate(found.extensionEndDate);
+              setStep3ExtensionEndDate(found.extensionEndDate);
+            }
             if (found.chairman) setSelectedChairman(found.chairman);
             if (found.members && Array.isArray(found.members)) setSelectedMembers(found.members);
           }
@@ -1596,15 +1608,19 @@ export default function InvestigationPage() {
 
   // ── Step 3 Handler: Admin Requests Extension ──────────────────────────────
   const handleStep3RequestExtension = async () => {
-    if (step3ExtensionTerm === "None") {
-      showToast("Please select an Extension Term (First, Second, or Third)!");
+    const extensionTermToUse = step3ExtensionTerm !== "None" ? step3ExtensionTerm : subjExtensionTerm;
+    const extensionStartToUse = step3ExtensionStartDate || subjExtensionStartDate;
+    const extensionEndToUse = step3ExtensionEndDate || subjExtensionEndDate;
+
+    if (extensionTermToUse === "None") {
+      showToast(lang === "si" ? "කරුණාකර දිනයන් දීර්ඝ කිරීමේ වාරය (පළමු, දෙවන, හෝ තෙවන) තෝරන්න!" : "Please select an Extension Term (First, Second, or Third)!");
       return;
     }
-    if (!step3ExtensionStartDate || !step3ExtensionEndDate) {
-      showToast("Please select both Extension Start Date and End Date!");
+    if (!extensionStartToUse || !extensionEndToUse) {
+      showToast(lang === "si" ? "කරුණාකර දීර්ඝ කිරීමේ ආරම්භ සහ අවසාන දිනයන් දෙකම තෝරන්න!" : "Please select both Extension Start Date and End Date!");
       return;
     }
-    const caseNo = selectedCase?.inquiryNo;
+    const caseNo = selectedCase?.inquiryNo || (selectedCase as any)?.caseNo || (selectedCase as any)?.refNo;
     if (!caseNo) return;
     const now = new Date().toISOString().slice(0, 10);
 
@@ -1612,9 +1628,9 @@ export default function InvestigationPage() {
       ...(existingAssignment || {}),
       id: existingAssignment?.id || `asgn-${caseNo}-${Date.now()}`,
       caseNo,
-      extensionTerm: step3ExtensionTerm,
-      extensionStartDate: step3ExtensionStartDate,
-      extensionEndDate: step3ExtensionEndDate,
+      extensionTerm: extensionTermToUse,
+      extensionStartDate: extensionStartToUse,
+      extensionEndDate: extensionEndToUse,
       extensionRequestedByAdmin: true,
       currentStep: 3,
       status: "Extension Requested",
@@ -1622,6 +1638,12 @@ export default function InvestigationPage() {
     };
 
     setExistingAssignment(updatedRecord);
+    setSubjExtensionTerm(extensionTermToUse);
+    setSubjExtensionStartDate(extensionStartToUse);
+    setSubjExtensionEndDate(extensionEndToUse);
+    setStep3ExtensionTerm(extensionTermToUse);
+    setStep3ExtensionStartDate(extensionStartToUse);
+    setStep3ExtensionEndDate(extensionEndToUse);
     setStep3ExtensionRequested(true);
     setWorkflowStep(3);
 
@@ -1634,7 +1656,21 @@ export default function InvestigationPage() {
         localStorage.setItem("dcmms_subject_assignments", JSON.stringify(list));
       } catch (e) {}
     }
-    showToast("Step 3 Complete: Extension request sent to Subject Officer for certification!");
+
+    if (isSupabaseConfigured) {
+      try {
+        await supabase.from("dcmms_subject_assignments").upsert({
+          id: updatedRecord.id,
+          case_no: caseNo,
+          extension_term: extensionTermToUse,
+          extension_start_date: extensionStartToUse,
+          extension_end_date: extensionEndToUse,
+          status: "Extension Requested",
+        });
+      } catch (e) {}
+    }
+
+    showToast(lang === "si" ? "දිනයන් දීර්ඝ කිරීමේ ඉල්ලීම විෂය නිලධාරී වෙත සාර්ථකව යවන ලදී!" : "Extension request sent to Subject Officer for certification!");
   };
 
   // ── Step 4 Handler: Admin Submits Final Report & Approval Date ─────────────
@@ -1834,9 +1870,9 @@ export default function InvestigationPage() {
         members: selectedMembers,
         appointmentDate: subjAppointmentDate || now,
         reportDueDate: subjReportDueDate || targetDate || "",
-        extensionTerm: subjExtensionTerm,
-        extensionStartDate: subjExtensionStartDate || "",
-        extensionEndDate: subjExtensionEndDate || "",
+        extensionTerm: step3ExtensionTerm !== "None" ? step3ExtensionTerm : subjExtensionTerm,
+        extensionStartDate: step3ExtensionStartDate || subjExtensionStartDate || "",
+        extensionEndDate: step3ExtensionEndDate || subjExtensionEndDate || "",
         certificationSubmitted: existingAssignment?.certificationSubmitted || false,
         certificationDate: existingAssignment?.certificationDate || "",
         reportSubmitDate: existingAssignment?.reportSubmitDate || "",
@@ -3341,6 +3377,112 @@ export default function InvestigationPage() {
                         <CheckCircle size={15} />
                         <span>{lang === "si" ? "පත්වීම් සහ වාර්තා දිනයන් තහවුරු කරන්න / සුරකින්න" : "Confirm & Save Appointment & Due Dates"}</span>
                       </button>
+                    </div>
+
+                    {/* ── Extension of Days Subsection (Directly inside Step 2 card under appointment/due dates) ── */}
+                    <div style={{ marginTop: "20px", paddingTop: "16px", borderTop: "1px dashed #cbd5e1" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                        <label style={{ fontSize: "13px", fontWeight: 700, color: "#92400e", display: "flex", alignItems: "center", gap: "6px" }}>
+                          <Clock size={16} style={{ color: "#d97706" }} />
+                          <span>{lang === "si" ? "දිනයන් දීර්ඝ කිරීමේ කොටස (Extension of Days Request):" : "Extension of Days Request:"}</span>
+                        </label>
+
+                        {/* Status Badge */}
+                        {existingAssignment?.extensionApprovalStatus === "Approved" ? (
+                          <span style={{ fontSize: "11px", fontWeight: 700, backgroundColor: "#dcfce7", color: "#15803d", padding: "3px 10px", borderRadius: "12px", display: "flex", alignItems: "center", gap: "4px" }}>
+                            <CheckCircle size={13} />
+                            {lang === "si" ? `විෂය නිලධාරී අනුමත කළා (${existingAssignment?.extensionDecisionDate || ""})` : `Approved by Subject Officer (${existingAssignment?.extensionDecisionDate || ""})`}
+                          </span>
+                        ) : existingAssignment?.extensionApprovalStatus === "Disapproved" ? (
+                          <span style={{ fontSize: "11px", fontWeight: 700, backgroundColor: "#fee2e2", color: "#b91c1c", padding: "3px 10px", borderRadius: "12px", display: "flex", alignItems: "center", gap: "4px" }}>
+                            <X size={13} />
+                            {lang === "si" ? `විෂය නිලධාරී ප්‍රතික්ෂේප කළා (${existingAssignment?.extensionDecisionDate || ""})` : `Disapproved by Subject Officer (${existingAssignment?.extensionDecisionDate || ""})`}
+                          </span>
+                        ) : (step3ExtensionRequested || subjExtensionTerm !== "None") ? (
+                          <span style={{ fontSize: "11px", fontWeight: 700, backgroundColor: "#fef3c7", color: "#b45309", padding: "3px 10px", borderRadius: "12px", display: "flex", alignItems: "center", gap: "4px" }}>
+                            <Clock size={13} />
+                            {lang === "si" ? "විෂය නිලධාරී තීරණය අපේක්ෂාවෙන්" : "Awaiting Subject Officer Decision"}
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: "11px", fontWeight: 700, backgroundColor: "#f1f5f9", color: "#64748b", padding: "3px 10px", borderRadius: "12px" }}>
+                            {lang === "si" ? "දිනයන් දීර්ඝ කිරීමක් නැත" : "No Extension Requested"}
+                          </span>
+                        )}
+                      </div>
+
+                      <div style={{ backgroundColor: "#fffbeb", padding: "16px", borderRadius: "10px", border: "1px solid #fde68a", display: "flex", flexDirection: "column", gap: "14px" }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "14px" }}>
+                          
+                          {/* Extension Term Select */}
+                          <div>
+                            <label htmlFor="modalExtensionTermSelect" style={{ fontSize: "12px", fontWeight: 700, color: "#92400e", display: "flex", alignItems: "center", gap: "6px", marginBottom: "6px" }}>
+                              <Clock size={14} /> {lang === "si" ? "දීර්ඝ කිරීමේ වාරය (Extension Term):" : "Extension Term:"}
+                            </label>
+                            <select
+                              id="modalExtensionTermSelect"
+                              value={step3ExtensionTerm !== "None" ? step3ExtensionTerm : subjExtensionTerm}
+                              onChange={(e) => {
+                                const val = e.target.value as any;
+                                setStep3ExtensionTerm(val);
+                                setSubjExtensionTerm(val);
+                              }}
+                              style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid #fde047", fontSize: "13px", fontWeight: 700, color: "#78350f", backgroundColor: "#ffffff" }}
+                            >
+                              <option value="None">{lang === "si" ? "-- තෝරන්න (None) --" : "-- Select Term --"}</option>
+                              <option value="First">{lang === "si" ? "පළමු දීර්ඝ කිරීම (First Extension)" : "First Extension (1st)"}</option>
+                              <option value="Second">{lang === "si" ? "දෙවන දීර්ඝ කිරීම (Second Extension)" : "Second Extension (2nd)"}</option>
+                              <option value="Third">{lang === "si" ? "තෙවන දීර්ඝ කිරීම (Third Extension)" : "Third Extension (3rd)"}</option>
+                            </select>
+                          </div>
+
+                          {/* Extension Start Date */}
+                          <div>
+                            <label htmlFor="modalExtensionStartDateInput" style={{ fontSize: "12px", fontWeight: 700, color: "#92400e", display: "flex", alignItems: "center", gap: "6px", marginBottom: "6px" }}>
+                              <CalendarIcon size={14} /> {lang === "si" ? "ආරම්භක දිනය (Extension Start Date):" : "Extension Start Date:"}
+                            </label>
+                            <input
+                              id="modalExtensionStartDateInput"
+                              type="date"
+                              value={step3ExtensionStartDate || subjExtensionStartDate}
+                              onChange={(e) => {
+                                setStep3ExtensionStartDate(e.target.value);
+                                setSubjExtensionStartDate(e.target.value);
+                              }}
+                              style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid #fde047", fontSize: "14px", fontWeight: 700, color: "#78350f", backgroundColor: "#ffffff" }}
+                            />
+                          </div>
+
+                          {/* Extension End Date */}
+                          <div>
+                            <label htmlFor="modalExtensionEndDateInput" style={{ fontSize: "12px", fontWeight: 700, color: "#92400e", display: "flex", alignItems: "center", gap: "6px", marginBottom: "6px" }}>
+                              <CalendarIcon size={14} /> {lang === "si" ? "අවසාන දිනය (Extension End Date):" : "Extension End Date:"}
+                            </label>
+                            <input
+                              id="modalExtensionEndDateInput"
+                              type="date"
+                              value={step3ExtensionEndDate || subjExtensionEndDate}
+                              onChange={(e) => {
+                                setStep3ExtensionEndDate(e.target.value);
+                                setSubjExtensionEndDate(e.target.value);
+                              }}
+                              style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid #fde047", fontSize: "14px", fontWeight: 700, color: "#78350f", backgroundColor: "#ffffff" }}
+                            />
+                          </div>
+
+                        </div>
+
+                        {/* Send Extension Request Button */}
+                        <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "10px", marginTop: "4px" }}>
+                          <button
+                            type="button"
+                            onClick={handleStep3RequestExtension}
+                            style={{ padding: "10px 18px", backgroundColor: "#d97706", color: "#ffffff", border: "none", borderRadius: "8px", fontWeight: 600, fontSize: "13px", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px", boxShadow: "0 2px 4px rgba(217,119,6,0.25)" }}
+                          >
+                            <Send size={15} />
+                            <span>{lang === "si" ? "දිනයන් දීර්ඝ කිරීමේ ඉල්ලීම විෂය නිලධාරී වෙත යවන්න" : "Send Extension Request to Subject Officer"}</span>
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
