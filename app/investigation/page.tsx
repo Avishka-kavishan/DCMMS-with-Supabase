@@ -93,6 +93,43 @@ export default function InvestigationPage() {
   const [isNotifLoading, setIsNotifLoading] = useState(true);
   const [isNotificationsMinimized, setIsNotificationsMinimized] = useState(false);
   const [showAllNotifications, setShowAllNotifications] = useState(false);
+  const [seenNotifIds, setSeenNotifIds] = useState<string[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem("dcmms_seen_notifications");
+        return stored ? JSON.parse(stored) : [];
+      } catch (e) {
+        return [];
+      }
+    }
+    return [];
+  });
+
+  const markAsSeen = (id: string) => {
+    setSeenNotifIds((prev) => {
+      if (prev.includes(id)) return prev;
+      const updated = [...prev, id];
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem("dcmms_seen_notifications", JSON.stringify(updated));
+        } catch (e) {}
+      }
+      return updated;
+    });
+  };
+
+  const markAllAsSeen = () => {
+    const allIds = subjectOfficerNotifications.map((n) => n.id);
+    const updated = Array.from(new Set([...seenNotifIds, ...allIds]));
+    setSeenNotifIds(updated);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("dcmms_seen_notifications", JSON.stringify(updated));
+      } catch (e) {}
+    }
+  };
+
+  const unseenCount = subjectOfficerNotifications.filter((n) => !seenNotifIds.includes(n.id)).length;
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState("");
@@ -2250,11 +2287,11 @@ export default function InvestigationPage() {
               <section className="upcoming-events-widget" style={{ backgroundColor: "#ffffff", borderRadius: "12px", border: "1px solid #cbd5e1", padding: "20px", marginBottom: "24px", boxShadow: "0 2px 4px rgba(0,0,0,0.02)" }}>
                 <div className="upcoming-events-container">
                   <div className="upcoming-events-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: isNotificationsMinimized ? "none" : "1px solid #f1f5f9", paddingBottom: isNotificationsMinimized ? "0" : "12px", marginBottom: isNotificationsMinimized ? "0" : "16px", flexWrap: "wrap", gap: "10px" }}>
-                    <h4 className="upcoming-events-title" style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "16px", color: "#1e293b", margin: 0, fontWeight: 700 }}>
-                      <div style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center", width: "34px", height: "34px", borderRadius: "50%", backgroundColor: "#eff6ff", border: "1px solid #bfdbfe" }}>
-                        <BellRing size={18} style={{ color: "#2563eb" }} />
-                        {subjectOfficerNotifications.length > 0 && (
-                          <span style={{ position: "absolute", top: "2px", right: "2px", width: "9px", height: "9px", borderRadius: "50%", backgroundColor: "#ef4444", border: "1.5px solid #ffffff" }}></span>
+                    <h4 className="upcoming-events-title" style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "16px", color: "#1e293b", margin: 0, fontWeight: 700, flexWrap: "wrap" }}>
+                      <div style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center", width: "36px", height: "36px", borderRadius: "50%", backgroundColor: unseenCount > 0 ? "#fef2f2" : "#eff6ff", border: unseenCount > 0 ? "1px solid #fca5a5" : "1px solid #bfdbfe" }}>
+                        <BellRing size={18} style={{ color: unseenCount > 0 ? "#dc2626" : "#2563eb" }} />
+                        {unseenCount > 0 && (
+                          <span style={{ position: "absolute", top: "2px", right: "2px", width: "10px", height: "10px", borderRadius: "50%", backgroundColor: "#ef4444", border: "2px solid #ffffff" }}></span>
                         )}
                       </div>
                       <span>
@@ -2262,13 +2299,50 @@ export default function InvestigationPage() {
                           ? "විෂය නිලධාරී දැනුම්දීම්: පත්වීම් ලිපිය සහ වාර්තා දිනයන් ලැබීම"
                           : "Subject Officer Notifications (Appointment & Report Due Dates)"}
                       </span>
-                      <span style={{ fontSize: "12px", fontWeight: 700, backgroundColor: "#dbeafe", color: "#1e40af", padding: "3px 10px", borderRadius: "12px", marginLeft: "4px" }}>
-                        {subjectOfficerNotifications.length} {lang === "si" ? "නව දැනුම්දීම්" : "Notifications"}
-                      </span>
+
+                      {/* Unseen Count Highlight Badge */}
+                      {unseenCount > 0 ? (
+                        <span style={{ fontSize: "12px", fontWeight: 800, backgroundColor: "#fee2e2", color: "#991b1b", border: "1px solid #fca5a5", padding: "4px 12px", borderRadius: "14px", display: "inline-flex", alignItems: "center", gap: "5px", boxShadow: "0 1px 2px rgba(239,68,68,0.1)" }}>
+                          <span style={{ display: "inline-block", width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#ef4444" }}></span>
+                          <span>{unseenCount}</span>
+                          <span>{lang === "si" ? "නුදුටු දැනුම්දීම්" : "Unseen"}</span>
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: "12px", fontWeight: 700, backgroundColor: "#f1f5f9", color: "#64748b", border: "1px solid #e2e8f0", padding: "3px 10px", borderRadius: "12px", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                          <CheckCircle size={13} style={{ color: "#16a34a" }} />
+                          <span>{subjectOfficerNotifications.length}</span>
+                          <span>{lang === "si" ? "සියල්ල බලන ලදී" : "All Read"}</span>
+                        </span>
+                      )}
                     </h4>
 
-                    {/* Action buttons: See All & Minimize/Expand */}
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    {/* Action buttons: Mark All Read, See All & Minimize/Expand */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                      {unseenCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => markAllAsSeen()}
+                          style={{
+                            fontSize: "12px",
+                            fontWeight: 700,
+                            color: "#166534",
+                            backgroundColor: "#f0fdf4",
+                            border: "1px solid #bbf7d0",
+                            borderRadius: "6px",
+                            padding: "6px 12px",
+                            cursor: "pointer",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "5px",
+                            transition: "all 0.15s ease"
+                          }}
+                          title="Mark all notifications as read"
+                        >
+                          <CheckCircle size={14} />
+                          <span>{lang === "si" ? "සියල්ල කියවූ බවට ලකුණු කරන්න" : "Mark All Read"}</span>
+                        </button>
+                      )}
+
                       <button
                         type="button"
                         onClick={() => {
@@ -2341,27 +2415,44 @@ export default function InvestigationPage() {
                       ) : subjectOfficerNotifications.length > 0 ? (
                         <div className="upcoming-events-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "16px" }}>
                           {(showAllNotifications ? subjectOfficerNotifications : subjectOfficerNotifications.slice(0, 4)).map((notif: any, index: number) => {
+                            const isUnseen = !seenNotifIds.includes(notif.id);
                             return (
                               <div 
                                 key={notif.id || index} 
                                 className="upcoming-event-card"
+                                onClick={() => markAsSeen(notif.id)}
                                 style={{
-                                  backgroundColor: "#f8fafc",
+                                  backgroundColor: isUnseen ? "#f0f9ff" : "#f8fafc",
                                   borderRadius: "10px",
-                                  border: "1px solid #cbd5e1",
+                                  border: isUnseen ? "1.5px solid #60a5fa" : "1px solid #cbd5e1",
+                                  borderLeft: isUnseen ? "6px solid #2563eb" : "1px solid #cbd5e1",
                                   padding: "16px",
-                                  boxShadow: "0 2px 4px rgba(0,0,0,0.02)",
+                                  boxShadow: isUnseen ? "0 4px 12px rgba(37,99,235,0.12)" : "0 2px 4px rgba(0,0,0,0.02)",
                                   display: "flex",
                                   flexDirection: "column",
-                                  gap: "12px"
+                                  gap: "12px",
+                                  cursor: "pointer",
+                                  transition: "all 0.2s ease"
                                 }}
                               >
                                 {/* Top meta row */}
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                  <span style={{ fontSize: "11px", fontWeight: 700, backgroundColor: "#dcfce7", color: "#15803d", padding: "3px 10px", borderRadius: "12px", display: "inline-flex", alignItems: "center", gap: "5px" }}>
-                                    <CheckCircle size={13} />
-                                    {lang === "si" ? "දිනයන් ඇතුළත් කරන ලදී" : "Dates Submitted by Subject Officer"}
-                                  </span>
+                                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                    {isUnseen ? (
+                                      <span style={{ fontSize: "10px", fontWeight: 800, backgroundColor: "#ef4444", color: "#ffffff", padding: "2px 8px", borderRadius: "10px", letterSpacing: "0.4px" }}>
+                                        {lang === "si" ? "නව • නුදුටු" : "NEW • UNSEEN"}
+                                      </span>
+                                    ) : (
+                                      <span style={{ fontSize: "10px", fontWeight: 700, backgroundColor: "#f1f5f9", color: "#64748b", padding: "2px 8px", borderRadius: "10px" }}>
+                                        {lang === "si" ? "කියවූ" : "READ"}
+                                      </span>
+                                    )}
+                                    <span style={{ fontSize: "11px", fontWeight: 700, backgroundColor: "#dcfce7", color: "#15803d", padding: "3px 10px", borderRadius: "12px", display: "inline-flex", alignItems: "center", gap: "5px" }}>
+                                      <CheckCircle size={13} />
+                                      {lang === "si" ? "දිනයන් ඇතුළත් කරන ලදී" : "Dates Submitted by Subject Officer"}
+                                    </span>
+                                  </div>
+
                                   <span style={{ fontSize: "11px", color: "#64748b", fontWeight: 500, display: "inline-flex", alignItems: "center", gap: "4px" }}>
                                     <Clock size={12} />
                                     {notif.submittedAt}
@@ -2407,7 +2498,11 @@ export default function InvestigationPage() {
                                 <div style={{ marginTop: "2px", display: "flex", justifyContent: "flex-end" }}>
                                   <button
                                     type="button"
-                                    onClick={() => router.push(`/investigation/add-details?caseNo=${notif.caseNo}`)}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      markAsSeen(notif.id);
+                                      router.push(`/investigation/add-details?caseNo=${notif.caseNo}`);
+                                    }}
                                     style={{
                                       display: "inline-flex",
                                       alignItems: "center",
@@ -2416,7 +2511,7 @@ export default function InvestigationPage() {
                                       fontSize: "12px",
                                       fontWeight: 700,
                                       color: "#ffffff",
-                                      backgroundColor: "#4f46e5",
+                                      backgroundColor: isUnseen ? "#2563eb" : "#4f46e5",
                                       border: "none",
                                       borderRadius: "6px",
                                       cursor: "pointer",
