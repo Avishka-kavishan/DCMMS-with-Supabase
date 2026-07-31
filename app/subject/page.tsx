@@ -653,6 +653,7 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
               extensionEndDate: a.extension_end_date || a.extensionEndDate,
               extensionApprovalStatus: a.extension_approval_status || a.extensionApprovalStatus,
               extensionDecisionDate: a.extension_decision_date || a.extensionDecisionDate,
+              extensionRequestedByAdmin: !!(a.extension_requested_by_admin || a.extensionRequestedByAdmin),
               certificationSubmitted: a.certification_submitted || a.certificationSubmitted,
               reportSubmitDate: a.report_submit_date || a.reportSubmitDate,
               reportContent: a.report_content || a.reportContent,
@@ -1462,7 +1463,12 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
                   <div style={{ display: "flex", flexDirection: "column", gap: "0" }}>
                     {assignments.map((asgn, asgnIdx) => {
                       const isDatesSubmitted = !!asgn.datesSubmittedBySubject;
-                      const isExtensionRequested = !!(asgn.extensionStartDate && asgn.extensionEndDate);
+                      const isExtensionRequested = !!(
+                        (asgn.extensionStartDate && asgn.extensionEndDate) ||
+                        asgn.extensionRequestedByAdmin ||
+                        asgn.status === "Extension Requested" ||
+                        asgn.extensionTerm
+                      );
                       const extensionStatus = asgn.extensionApprovalStatus;
                       const hasAfterInvestigation = !!(asgn.afterInvestigationSent || asgn.investigationFileNo || asgn.investigationStatus);
 

@@ -1662,9 +1662,19 @@ export default function InvestigationPage() {
         await supabase.from("dcmms_subject_assignments").upsert({
           id: updatedRecord.id,
           case_no: caseNo,
+          subject_officer_name: updatedRecord.subjectOfficerName || existingAssignment?.subjectOfficerName || null,
+          assigned_officers: (() => {
+            const ao = updatedRecord.assignedOfficers || existingAssignment?.assignedOfficers;
+            return Array.isArray(ao) ? ao : (ao ? [ao] : null);
+          })(),
+          chairman: updatedRecord.chairman || existingAssignment?.chairman || null,
+          members: updatedRecord.members || existingAssignment?.members || null,
+          appointment_date: updatedRecord.appointmentDate || existingAssignment?.appointmentDate || null,
+          report_due_date: updatedRecord.reportDueDate || existingAssignment?.reportDueDate || null,
           extension_term: extensionTermToUse,
           extension_start_date: extensionStartToUse,
           extension_end_date: extensionEndToUse,
+          extension_requested_by_admin: true,
           status: "Extension Requested",
         });
       } catch (e) {}

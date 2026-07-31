@@ -1007,20 +1007,78 @@ function InvestigationCaseDetailsContent() {
     showToast(lang === "si" ? `Step 2: පත්වීම් ලිපිය දිනය (${step2ApptDate}) සහ වාර්තා දිනය (${step2DueDate}) සාර්ථකව තහවුරු කරන ලදී!` : `Step 2: Appointment Date (${step2ApptDate}) and Due Date (${step2DueDate}) saved!`);
   };
 
-  // Step 3: Admin Sends Extension Request
+  // Step 3: Admin Sends Extension Request to Subject Officer
   const handleStep3RequestExtension = async () => {
     if (!step3StartDate || !step3EndDate) {
-      alert("Please select both Extension Start Date and End Date.");
+      showToast(lang === "si" ? "කරුණාකර දීර්ඝ කිරීමේ ආරම්භ දිනය සහ අවසාන දිනය තෝරන්න." : "Please select both Extension Start Date and End Date.");
       return;
     }
+
+    setIsSaving(true);
+    const subjectOfficer = existingAssignment?.subjectOfficerName || assignee || getDisplaySubjectOfficerName() || "Subject Officer";
+
+    // 1. Save extension data to dcmms_subject_assignments (localStorage + Supabase)
     await saveSubjectAssignment({
+      subjectOfficerName: subjectOfficer,
       extensionTerm: step3Term,
       extensionStartDate: step3StartDate,
       extensionEndDate: step3EndDate,
+      extensionApprovalStatus: null,
+      extensionDecisionDate: null,
       certificationSubmitted: false,
       status: "Extension Requested",
     });
-    showToast(lang === "si" ? `Step 3: දීර්ඝ කිරීමේ ඉල්ලීම (${step3Term} වාරය) විෂය නිලධාරී වෙත යවන ලදී!` : `Step 3: Extension Request (${step3Term} Term) sent to Subject Officer!`);
+
+    // 2. Also update dcmms_letters in localStorage so Subject Officer's page picks it up
+    if (typeof window !== "undefined") {
+      try {
+        const storedLetters = localStorage.getItem("dcmms_letters") || "[]";
+        let letters = JSON.parse(storedLetters);
+        const idx = letters.findIndex((l: any) => l.refNo === caseNoParam);
+        if (idx >= 0) {
+          letters[idx].extensionTerm = step3Term;
+          letters[idx].extensionStartDate = step3StartDate;
+          letters[idx].extensionEndDate = step3EndDate;
+          letters[idx].extensionRequested = true;
+          letters[idx].status = "Extension Requested";
+        }
+        localStorage.setItem("dcmms_letters", JSON.stringify(letters));
+      } catch (e) {}
+
+      // 3. Also update dcmms_cases status
+      try {
+        const storedCases = localStorage.getItem("dcmms_cases") || "[]";
+        let cases = JSON.parse(storedCases);
+        const idx = cases.findIndex((c: any) => c.caseNo === caseNoParam || c.refNo === caseNoParam);
+        if (idx >= 0) {
+          cases[idx].extensionTerm = step3Term;
+          cases[idx].extensionStartDate = step3StartDate;
+          cases[idx].extensionEndDate = step3EndDate;
+          cases[idx].extensionRequested = true;
+        }
+        localStorage.setItem("dcmms_cases", JSON.stringify(cases));
+      } catch (e) {}
+    }
+
+    // 4. Update dcmms_subject table in Supabase so Subject Officer's realtime subscription fires
+    if (isSupabaseConfigured) {
+      try {
+        await supabase
+          .from("dcmms_subject")
+          .update({
+            status: "Extension Requested",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("case_no", caseNoParam);
+      } catch (e) {}
+    }
+
+    setIsSaving(false);
+    showToast(
+      lang === "si"
+        ? `Step 3: දිනයන් දීර්ඝ කිරීමේ ඉල්ලීම (${step3Term} - ${step3StartDate} සිට ${step3EndDate} දක්වා) ${subjectOfficer} වෙත සාර්ථකව යවන ලදී!`
+        : `Step 3: Extension Request (${step3Term} — ${step3StartDate} to ${step3EndDate}) sent to ${subjectOfficer} for approval!`
+    );
   };
 
   // Step 4: Admin Records Progress & Updates Inquiry Details
