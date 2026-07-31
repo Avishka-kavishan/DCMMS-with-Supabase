@@ -16,7 +16,7 @@ import {
   FileText, Clock, AlertCircle, Info, CheckCircle, Search, 
   User, Mail, ArrowRight, Sparkles, Filter, RefreshCw, FileCheck,
   Building, CreditCard, MapPin, Award, Send, CheckSquare, Layers, GraduationCap, Plus,
-  Bell, BellRing
+  Bell, BellRing, ChevronDown, ChevronUp, Minimize2, Maximize2
 } from "lucide-react";
 
 interface Inquiry {
@@ -91,6 +91,8 @@ export default function InvestigationPage() {
   // Subject Officer Date Notifications state
   const [subjectOfficerNotifications, setSubjectOfficerNotifications] = useState<any[]>([]);
   const [isNotifLoading, setIsNotifLoading] = useState(true);
+  const [isNotificationsMinimized, setIsNotificationsMinimized] = useState(false);
+  const [showAllNotifications, setShowAllNotifications] = useState(false);
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState("");
@@ -2247,7 +2249,7 @@ export default function InvestigationPage() {
               {/* Notifications Widget: Subject Officer Date Submissions */}
               <section className="upcoming-events-widget" style={{ backgroundColor: "#ffffff", borderRadius: "12px", border: "1px solid #cbd5e1", padding: "20px", marginBottom: "24px", boxShadow: "0 2px 4px rgba(0,0,0,0.02)" }}>
                 <div className="upcoming-events-container">
-                  <div className="upcoming-events-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #f1f5f9", paddingBottom: "12px", marginBottom: "16px", flexWrap: "wrap", gap: "10px" }}>
+                  <div className="upcoming-events-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: isNotificationsMinimized ? "none" : "1px solid #f1f5f9", paddingBottom: isNotificationsMinimized ? "0" : "12px", marginBottom: isNotificationsMinimized ? "0" : "16px", flexWrap: "wrap", gap: "10px" }}>
                     <h4 className="upcoming-events-title" style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "16px", color: "#1e293b", margin: 0, fontWeight: 700 }}>
                       <div style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center", width: "34px", height: "34px", borderRadius: "50%", backgroundColor: "#eff6ff", border: "1px solid #bfdbfe" }}>
                         <BellRing size={18} style={{ color: "#2563eb" }} />
@@ -2264,112 +2266,177 @@ export default function InvestigationPage() {
                         {subjectOfficerNotifications.length} {lang === "si" ? "නව දැනුම්දීම්" : "Notifications"}
                       </span>
                     </h4>
-                    <a href="/calendar" className="upcoming-events-link" style={{ fontSize: "12px", fontWeight: 600, color: "#2563eb", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                      {lang === "si" ? "දින දර්ශනය බලන්න" : "View Full Calendar"} &rarr;
-                    </a>
+
+                    {/* Action buttons: See All & Minimize/Expand */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (isNotificationsMinimized) setIsNotificationsMinimized(false);
+                          setShowAllNotifications((prev) => !prev);
+                        }}
+                        style={{
+                          fontSize: "12px",
+                          fontWeight: 700,
+                          color: showAllNotifications ? "#ffffff" : "#2563eb",
+                          backgroundColor: showAllNotifications ? "#2563eb" : "#eff6ff",
+                          border: "1px solid #bfdbfe",
+                          borderRadius: "6px",
+                          padding: "6px 14px",
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          transition: "all 0.15s ease"
+                        }}
+                      >
+                        <Eye size={14} />
+                        <span>
+                          {showAllNotifications
+                            ? (lang === "si" ? "අඩුවෙන් බලන්න" : "Show Less")
+                            : (lang === "si" ? "සියල්ල බලන්න" : "See All")}
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsNotificationsMinimized((prev) => !prev)}
+                        style={{
+                          fontSize: "12px",
+                          fontWeight: 700,
+                          color: "#475569",
+                          backgroundColor: "#f1f5f9",
+                          border: "1px solid #cbd5e1",
+                          borderRadius: "6px",
+                          padding: "6px 14px",
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          transition: "all 0.15s ease"
+                        }}
+                        title={isNotificationsMinimized ? "Expand Notifications" : "Minimize Notifications"}
+                      >
+                        {isNotificationsMinimized ? (
+                          <>
+                            <ChevronDown size={15} />
+                            <span>{lang === "si" ? "දිගහරින්න" : "Expand"}</span>
+                          </>
+                        ) : (
+                          <>
+                            <ChevronUp size={15} />
+                            <span>{lang === "si" ? "හකුළන්න" : "Minimize"}</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
                   
-                  {isNotifLoading ? (
-                    <div className="upcoming-events-loading" style={{ padding: "20px", textAlign: "center", color: "#64748b", fontSize: "13px" }}>
-                      {lang === "si" ? "දැනුම්දීම් පූරණය වෙමින් පවතී..." : "Loading notifications..."}
-                    </div>
-                  ) : subjectOfficerNotifications.length > 0 ? (
-                    <div className="upcoming-events-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "16px" }}>
-                      {subjectOfficerNotifications.slice(0, 4).map((notif: any, index: number) => {
-                        return (
-                          <div 
-                            key={notif.id || index} 
-                            className="upcoming-event-card"
-                            style={{
-                              backgroundColor: "#f8fafc",
-                              borderRadius: "10px",
-                              border: "1px solid #cbd5e1",
-                              padding: "16px",
-                              boxShadow: "0 2px 4px rgba(0,0,0,0.02)",
-                              display: "flex",
-                              flexDirection: "column",
-                              gap: "12px"
-                            }}
-                          >
-                            {/* Top meta row */}
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                              <span style={{ fontSize: "11px", fontWeight: 700, backgroundColor: "#dcfce7", color: "#15803d", padding: "3px 10px", borderRadius: "12px", display: "inline-flex", alignItems: "center", gap: "5px" }}>
-                                <CheckCircle size={13} />
-                                {lang === "si" ? "දිනයන් ඇතුළත් කරන ලදී" : "Dates Submitted by Subject Officer"}
-                              </span>
-                              <span style={{ fontSize: "11px", color: "#64748b", fontWeight: 500, display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                                <Clock size={12} />
-                                {notif.submittedAt}
-                              </span>
-                            </div>
-
-                            {/* Case No & Subject Officer Name */}
-                            <div>
-                              <h5 style={{ margin: "0 0 4px 0", fontSize: "15px", fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: "6px" }}>
-                                <FileText size={16} style={{ color: "#4f46e5" }} />
-                                <span>{lang === "si" ? "නඩු අංකය: " : "Case No: "}{notif.caseNo}</span>
-                              </h5>
-                              <div style={{ fontSize: "13px", color: "#475569", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" }}>
-                                <User size={14} style={{ color: "#0284c7" }} />
-                                <span>{lang === "si" ? "විෂය නිලධාරී: " : "Subject Officer: "}{formatSubjectOfficerName(notif.subjectOfficerName, lang)}</span>
-                              </div>
-                            </div>
-
-                            {/* Prominent Dates Box */}
-                            <div style={{ backgroundColor: "#ffffff", borderRadius: "8px", padding: "12px", border: "1px solid #e2e8f0", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                              <div style={{ backgroundColor: "#f0f9ff", padding: "8px 10px", borderRadius: "6px", border: "1px solid #bae6fd" }}>
-                                <div style={{ fontSize: "10px", fontWeight: 700, color: "#0369a1", textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: "4px", display: "flex", alignItems: "center", gap: "4px" }}>
-                                  <CalendarIcon size={12} />
-                                  {lang === "si" ? "පත්වීම් ලිපියේ දිනය" : "Appt. Letter Date"}
-                                </div>
-                                <div style={{ fontSize: "13px", fontWeight: 800, color: "#0284c7" }}>
-                                  {notif.appointmentDate || "—"}
-                                </div>
-                              </div>
-
-                              <div style={{ backgroundColor: "#fef2f2", padding: "8px 10px", borderRadius: "6px", border: "1px solid #fecaca" }}>
-                                <div style={{ fontSize: "10px", fontWeight: 700, color: "#b91c1c", textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: "4px", display: "flex", alignItems: "center", gap: "4px" }}>
-                                  <CalendarIcon size={12} />
-                                  {lang === "si" ? "වාර්තා ලබාදිය යුතු දිනය" : "Report Due Date"}
-                                </div>
-                                <div style={{ fontSize: "13px", fontWeight: 800, color: "#dc2626" }}>
-                                  {notif.reportDueDate || "—"}
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* View Case Details Button */}
-                            <div style={{ marginTop: "2px", display: "flex", justifyContent: "flex-end" }}>
-                              <button
-                                type="button"
-                                onClick={() => router.push(`/investigation/add-details?caseNo=${notif.caseNo}`)}
+                  {!isNotificationsMinimized && (
+                    <>
+                      {isNotifLoading ? (
+                        <div className="upcoming-events-loading" style={{ padding: "20px", textAlign: "center", color: "#64748b", fontSize: "13px" }}>
+                          {lang === "si" ? "දැනුම්දීම් පූරණය වෙමින් පවතී..." : "Loading notifications..."}
+                        </div>
+                      ) : subjectOfficerNotifications.length > 0 ? (
+                        <div className="upcoming-events-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "16px" }}>
+                          {(showAllNotifications ? subjectOfficerNotifications : subjectOfficerNotifications.slice(0, 4)).map((notif: any, index: number) => {
+                            return (
+                              <div 
+                                key={notif.id || index} 
+                                className="upcoming-event-card"
                                 style={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: "6px",
-                                  padding: "7px 14px",
-                                  fontSize: "12px",
-                                  fontWeight: 700,
-                                  color: "#ffffff",
-                                  backgroundColor: "#4f46e5",
-                                  border: "none",
-                                  borderRadius: "6px",
-                                  cursor: "pointer",
-                                  boxShadow: "0 1px 2px rgba(0,0,0,0.05)"
+                                  backgroundColor: "#f8fafc",
+                                  borderRadius: "10px",
+                                  border: "1px solid #cbd5e1",
+                                  padding: "16px",
+                                  boxShadow: "0 2px 4px rgba(0,0,0,0.02)",
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  gap: "12px"
                                 }}
                               >
-                                <Eye size={14} />
-                                <span>{lang === "si" ? "විස්තර පරීක්ෂා කරන්න" : "View Case Details"}</span>
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="upcoming-events-empty" style={{ padding: "24px", textAlign: "center", color: "#64748b", fontSize: "13px", backgroundColor: "#f8fafc", borderRadius: "8px" }}>
-                      {lang === "si" ? "විෂය නිලධාරී වෙතින් ලැබුණු නව දැනුම්දීම් නැත." : "No notifications received from Subject Officers yet."}
-                    </div>
+                                {/* Top meta row */}
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                  <span style={{ fontSize: "11px", fontWeight: 700, backgroundColor: "#dcfce7", color: "#15803d", padding: "3px 10px", borderRadius: "12px", display: "inline-flex", alignItems: "center", gap: "5px" }}>
+                                    <CheckCircle size={13} />
+                                    {lang === "si" ? "දිනයන් ඇතුළත් කරන ලදී" : "Dates Submitted by Subject Officer"}
+                                  </span>
+                                  <span style={{ fontSize: "11px", color: "#64748b", fontWeight: 500, display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                    <Clock size={12} />
+                                    {notif.submittedAt}
+                                  </span>
+                                </div>
+
+                                {/* Case No & Subject Officer Name */}
+                                <div>
+                                  <h5 style={{ margin: "0 0 4px 0", fontSize: "15px", fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: "6px" }}>
+                                    <FileText size={16} style={{ color: "#4f46e5" }} />
+                                    <span>{lang === "si" ? "නඩු අංකය: " : "Case No: "}{notif.caseNo}</span>
+                                  </h5>
+                                  <div style={{ fontSize: "13px", color: "#475569", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" }}>
+                                    <User size={14} style={{ color: "#0284c7" }} />
+                                    <span>{lang === "si" ? "විෂය නිලධාරී: " : "Subject Officer: "}{formatSubjectOfficerName(notif.subjectOfficerName, lang)}</span>
+                                  </div>
+                                </div>
+
+                                {/* Prominent Dates Box */}
+                                <div style={{ backgroundColor: "#ffffff", borderRadius: "8px", padding: "12px", border: "1px solid #e2e8f0", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                                  <div style={{ backgroundColor: "#f0f9ff", padding: "8px 10px", borderRadius: "6px", border: "1px solid #bae6fd" }}>
+                                    <div style={{ fontSize: "10px", fontWeight: 700, color: "#0369a1", textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: "4px", display: "flex", alignItems: "center", gap: "4px" }}>
+                                      <CalendarIcon size={12} />
+                                      {lang === "si" ? "පත්වීම් ලිපියේ දිනය" : "Appt. Letter Date"}
+                                    </div>
+                                    <div style={{ fontSize: "13px", fontWeight: 800, color: "#0284c7" }}>
+                                      {notif.appointmentDate || "—"}
+                                    </div>
+                                  </div>
+
+                                  <div style={{ backgroundColor: "#fef2f2", padding: "8px 10px", borderRadius: "6px", border: "1px solid #fecaca" }}>
+                                    <div style={{ fontSize: "10px", fontWeight: 700, color: "#b91c1c", textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: "4px", display: "flex", alignItems: "center", gap: "4px" }}>
+                                      <CalendarIcon size={12} />
+                                      {lang === "si" ? "වාර්තා ලබාදිය යුතු දිනය" : "Report Due Date"}
+                                    </div>
+                                    <div style={{ fontSize: "13px", fontWeight: 800, color: "#dc2626" }}>
+                                      {notif.reportDueDate || "—"}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* View Case Details Button */}
+                                <div style={{ marginTop: "2px", display: "flex", justifyContent: "flex-end" }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => router.push(`/investigation/add-details?caseNo=${notif.caseNo}`)}
+                                    style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: "6px",
+                                      padding: "7px 14px",
+                                      fontSize: "12px",
+                                      fontWeight: 700,
+                                      color: "#ffffff",
+                                      backgroundColor: "#4f46e5",
+                                      border: "none",
+                                      borderRadius: "6px",
+                                      cursor: "pointer",
+                                      boxShadow: "0 1px 2px rgba(0,0,0,0.05)"
+                                    }}
+                                  >
+                                    <Eye size={14} />
+                                    <span>{lang === "si" ? "විස්තර පරීක්ෂා කරන්න" : "View Case Details"}</span>
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="upcoming-events-empty" style={{ padding: "24px", textAlign: "center", color: "#64748b", fontSize: "13px", backgroundColor: "#f8fafc", borderRadius: "8px" }}>
+                          {lang === "si" ? "විෂය නිලධාරී වෙතින් ලැබුණු නව දැනුම්දීම් නැත." : "No notifications received from Subject Officers yet."}
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               </section>
