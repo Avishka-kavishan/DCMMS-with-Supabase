@@ -921,15 +921,13 @@ function InvestigationCaseDetailsContent() {
       extension_term: step3Term,
       extension_start_date: step3StartDate,
       extension_end_date: step3EndDate,
-      reportDueDate: step3EndDate,
-      report_due_date: step3EndDate,
       extensionRequestedByAdmin: true,
       extension_requested_by_admin: true,
-      extensionApprovalStatus: "Approved",
-      extension_approval_status: "Approved",
-      extensionDecisionDate: new Date().toISOString().slice(0, 10),
-      extension_decision_date: new Date().toISOString().slice(0, 10),
-      status: "Extension Granted",
+      extensionApprovalStatus: "Pending",
+      extension_approval_status: "Pending",
+      extensionDecisionDate: null,
+      extension_decision_date: null,
+      status: "Extension Requested",
     };
 
     // 1. Save extension data to dcmms_subject_assignments (localStorage + Supabase)
@@ -950,11 +948,9 @@ function InvestigationCaseDetailsContent() {
           letters[idx].extension_end_date = step3EndDate;
           letters[idx].extensionRequested = true;
           letters[idx].extensionRequestedByAdmin = true;
-          letters[idx].extensionApprovalStatus = "Approved";
-          letters[idx].extensionDecisionDate = new Date().toISOString().slice(0, 10);
-          letters[idx].reportDueDate = step3EndDate;
-          letters[idx].report_due_date = step3EndDate;
-          letters[idx].status = "Extension Granted";
+          letters[idx].extensionApprovalStatus = "Pending";
+          letters[idx].extensionDecisionDate = null;
+          letters[idx].status = "Extension Requested";
         } else {
           letters.push({
             refNo: caseNoParam,
@@ -967,11 +963,9 @@ function InvestigationCaseDetailsContent() {
             extension_end_date: step3EndDate,
             extensionRequested: true,
             extensionRequestedByAdmin: true,
-            extensionApprovalStatus: "Approved",
-            extensionDecisionDate: new Date().toISOString().slice(0, 10),
-            reportDueDate: step3EndDate,
-            report_due_date: step3EndDate,
-            status: "Extension Granted",
+            extensionApprovalStatus: "Pending",
+            extensionDecisionDate: null,
+            status: "Extension Requested",
           });
         }
         localStorage.setItem("dcmms_letters", JSON.stringify(letters));
@@ -991,11 +985,9 @@ function InvestigationCaseDetailsContent() {
           cases[idx].extension_end_date = step3EndDate;
           cases[idx].extensionRequested = true;
           cases[idx].extensionRequestedByAdmin = true;
-          cases[idx].extensionApprovalStatus = "Approved";
-          cases[idx].extensionDecisionDate = new Date().toISOString().slice(0, 10);
-          cases[idx].reportDueDate = step3EndDate;
-          cases[idx].report_due_date = step3EndDate;
-          cases[idx].status = "Extension Granted";
+          cases[idx].extensionApprovalStatus = "Pending";
+          cases[idx].extensionDecisionDate = null;
+          cases[idx].status = "Extension Requested";
         } else {
           cases.push({
             caseNo: caseNoParam,
@@ -1008,11 +1000,9 @@ function InvestigationCaseDetailsContent() {
             extension_end_date: step3EndDate,
             extensionRequested: true,
             extensionRequestedByAdmin: true,
-            extensionApprovalStatus: "Approved",
-            extensionDecisionDate: new Date().toISOString().slice(0, 10),
-            reportDueDate: step3EndDate,
-            report_due_date: step3EndDate,
-            status: "Extension Granted",
+            extensionApprovalStatus: "Pending",
+            extensionDecisionDate: null,
+            status: "Extension Requested",
           });
         }
         localStorage.setItem("dcmms_cases", JSON.stringify(cases));
@@ -1025,7 +1015,7 @@ function InvestigationCaseDetailsContent() {
     if (isSupabaseConfigured) {
       try {
         const subUpdateObj: any = {
-          status: "Extension Granted",
+          status: "Extension Requested",
           updated_at: new Date().toISOString(),
         };
         await supabase
@@ -1038,8 +1028,8 @@ function InvestigationCaseDetailsContent() {
     setIsSaving(false);
     showToast(
       lang === "si"
-        ? `Step 3: දිනයන් දීර්ඝ කිරීම අනුමත කරන ලදී (${step3Term} - ${step3StartDate} සිට ${step3EndDate} දක්වා) විෂය නිලධාරියා වෙත යවන ලදී!`
-        : `Step 3: Extension Granted (${step3Term} — ${step3StartDate} to ${step3EndDate}) to Subject Officer!`
+        ? `Step 3: දිනයන් දීර්ඝ කිරීමේ තොරතුරු (${step3Term} - ${step3StartDate} සිට ${step3EndDate} දක්වා) විෂය නිලධාරියාගේ අනුමැතිය සඳහා යවන ලදී!`
+        : `Step 3: Extension details (${step3Term} — ${step3StartDate} to ${step3EndDate}) sent to Subject Officer for approval!`
     );
   };
 
@@ -2112,7 +2102,7 @@ function InvestigationCaseDetailsContent() {
                           }}
                         >
                           <Send size={15} />
-                          <span>{lang === "si" ? "දීර්ඝ කිරීම අනුමත කර විෂය නිලධාරියා වෙත යවන්න" : "Grant Extension Date to Subject Officer"}</span>
+                          <span>{lang === "si" ? "දිනයන් දීර්ඝ කිරීමේ ඉල්ලීම විෂය නිලධාරියා වෙත යවන්න" : "Send Extension Request to Subject Officer"}</span>
                         </button>
                       </div>
 

@@ -12,7 +12,7 @@ import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { getCurrentProfile, signOut, UserProfile } from "@/lib/auth";
-import { CheckCircle, FileText, Send, Clock, X, AlertCircle, ShieldCheck, Calendar as CalendarIcon, ChevronDown, ChevronUp } from "lucide-react";
+import { CheckCircle, XCircle, FileText, Send, Clock, X, AlertCircle, ShieldCheck, Calendar as CalendarIcon, ChevronDown, ChevronUp } from "lucide-react";
 
 interface Case {
   id: string;
@@ -2076,7 +2076,7 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
                                 const extReq = asgn.extensionRequestedByAdmin || asgn.extension_requested_by_admin || asgn.extensionRequested;
                                 const extensionStatus = asgn.extensionApprovalStatus || asgn.extension_approval_status;
 
-                                const isExtensionGranted = !!(
+                                const hasExtensionData = !!(
                                   extStart ||
                                   extEnd ||
                                   (extTerm && extTerm !== "None") ||
@@ -2084,18 +2084,30 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
                                   (asgn.status && String(asgn.status).toLowerCase().includes("extension"))
                                 );
 
+                                const isApproved = extensionStatus === "Approved";
+                                const isDisapproved = extensionStatus === "Disapproved";
+                                const isPending = hasExtensionData && !isApproved && !isDisapproved;
+
                                 return (
                                   <div style={{ display: "flex", gap: "16px" }}>
                                     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: "36px" }}>
-                                      <div style={{ width: "32px", height: "32px", borderRadius: "50%", backgroundColor: isExtensionGranted ? "#16a34a" : "#cbd5e1", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "12px", flexShrink: 0 }}>3/4</div>
-                                      <div style={{ width: "2px", flex: 1, minHeight: "16px", backgroundColor: isExtensionGranted ? "#16a34a" : "#e2e8f0", marginTop: "4px", marginBottom: "4px" }} />
+                                      <div style={{ width: "32px", height: "32px", borderRadius: "50%", backgroundColor: isApproved ? "#16a34a" : isDisapproved ? "#dc2626" : hasExtensionData ? "#d97706" : "#cbd5e1", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "12px", flexShrink: 0 }}>3/4</div>
+                                      <div style={{ width: "2px", flex: 1, minHeight: "16px", backgroundColor: isApproved ? "#16a34a" : isDisapproved ? "#fca5a5" : hasExtensionData ? "#fde047" : "#e2e8f0", marginTop: "4px", marginBottom: "4px" }} />
                                     </div>
                                     <div style={{ flex: 1, marginBottom: "16px" }}>
-                                      <div style={{ fontSize: "13px", fontWeight: 700, color: isExtensionGranted ? "#15803d" : "#334155", marginBottom: "8px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                      <div style={{ fontSize: "13px", fontWeight: 700, color: isApproved ? "#15803d" : isDisapproved ? "#b91c1c" : hasExtensionData ? "#b45309" : "#334155", marginBottom: "8px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                                         <span>{lang === "si" ? "3 & 4. දිනයන් දීර්ඝ කිරීමේ කොටස (Extension of Days Details)" : "Steps 3 & 4: Extension of Days Details"}</span>
-                                        {isExtensionGranted ? (
+                                        {isApproved ? (
                                           <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "20px", backgroundColor: "#dcfce7", color: "#15803d" }}>
-                                            ✓ {lang === "si" ? "විමර්ශන පරිපාලක විසින් ලබාදෙන ලදී" : "Extension Granted by Investigation Admin"}
+                                            ✓ {lang === "si" ? "අනුමත කරන ලදී (Extension Approved)" : "Extension Approved"}
+                                          </span>
+                                        ) : isDisapproved ? (
+                                          <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "20px", backgroundColor: "#fee2e2", color: "#b91c1c" }}>
+                                            ✕ {lang === "si" ? "ප්‍රතික්ෂේප කරන ලදී (Extension Disapproved)" : "Extension Disapproved"}
+                                          </span>
+                                        ) : hasExtensionData ? (
+                                          <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "20px", backgroundColor: "#fef3c7", color: "#b45309" }}>
+                                            ⏳ {lang === "si" ? "අනුමැතිය අපේක්ෂාවෙන් (Pending Approval)" : "Pending Approval"}
                                           </span>
                                         ) : (
                                           <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "20px", backgroundColor: "#f1f5f9", color: "#64748b" }}>
@@ -2104,29 +2116,85 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
                                         )}
                                       </div>
 
-                                      {isExtensionGranted ? (
-                                        <div style={{ backgroundColor: "#f0fdf4", borderRadius: "10px", border: "1px solid #bbf7d0", padding: "14px 16px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                                      {hasExtensionData ? (
+                                        <div style={{ backgroundColor: isApproved ? "#f0fdf4" : isDisapproved ? "#fef2f2" : "#fffbeb", borderRadius: "10px", border: `1px solid ${isApproved ? "#bbf7d0" : isDisapproved ? "#fca5a5" : "#fde68a"}`, padding: "14px 16px", display: "flex", flexDirection: "column", gap: "12px" }}>
                                           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px", fontSize: "12px" }}>
-                                            <div style={{ backgroundColor: "#ffffff", padding: "10px", borderRadius: "8px", border: "1px solid #bbf7d0" }}>
-                                              <div style={{ fontSize: "10px", color: "#166534", fontWeight: 700, textTransform: "uppercase" }}>{lang === "si" ? "වාරය" : "Extension Term"}</div>
-                                              <div style={{ fontWeight: 700, color: "#15803d", marginTop: "2px", fontSize: "13px" }}>{extTerm || "First"}</div>
+                                            <div style={{ backgroundColor: "#ffffff", padding: "10px", borderRadius: "8px", border: `1px solid ${isApproved ? "#bbf7d0" : isDisapproved ? "#fca5a5" : "#fde68a"}` }}>
+                                              <div style={{ fontSize: "10px", color: isApproved ? "#166534" : isDisapproved ? "#991b1b" : "#92400e", fontWeight: 700, textTransform: "uppercase" }}>{lang === "si" ? "වාරය" : "Extension Term"}</div>
+                                              <div style={{ fontWeight: 700, color: isApproved ? "#15803d" : isDisapproved ? "#b91c1c" : "#b45309", marginTop: "2px", fontSize: "13px" }}>{extTerm || "First"}</div>
                                             </div>
-                                            <div style={{ backgroundColor: "#ffffff", padding: "10px", borderRadius: "8px", border: "1px solid #bbf7d0" }}>
-                                              <div style={{ fontSize: "10px", color: "#166534", fontWeight: 700, textTransform: "uppercase" }}>{lang === "si" ? "ආරම්භ දිනය" : "Start Date"}</div>
-                                              <div style={{ fontWeight: 700, color: "#15803d", marginTop: "2px", fontSize: "13px" }}>{extStart || "—"}</div>
+                                            <div style={{ backgroundColor: "#ffffff", padding: "10px", borderRadius: "8px", border: `1px solid ${isApproved ? "#bbf7d0" : isDisapproved ? "#fca5a5" : "#fde68a"}` }}>
+                                              <div style={{ fontSize: "10px", color: isApproved ? "#166534" : isDisapproved ? "#991b1b" : "#92400e", fontWeight: 700, textTransform: "uppercase" }}>{lang === "si" ? "ආරම්භ දිනය" : "Start Date"}</div>
+                                              <div style={{ fontWeight: 700, color: isApproved ? "#15803d" : isDisapproved ? "#b91c1c" : "#b45309", marginTop: "2px", fontSize: "13px" }}>{extStart || "—"}</div>
                                             </div>
-                                            <div style={{ backgroundColor: "#ffffff", padding: "10px", borderRadius: "8px", border: "1px solid #bbf7d0" }}>
-                                              <div style={{ fontSize: "10px", color: "#166534", fontWeight: 700, textTransform: "uppercase" }}>{lang === "si" ? "අවසාන දිනය" : "End Date"}</div>
-                                              <div style={{ fontWeight: 700, color: "#15803d", marginTop: "2px", fontSize: "13px" }}>{extEnd || "—"}</div>
+                                            <div style={{ backgroundColor: "#ffffff", padding: "10px", borderRadius: "8px", border: `1px solid ${isApproved ? "#bbf7d0" : isDisapproved ? "#fca5a5" : "#fde68a"}` }}>
+                                              <div style={{ fontSize: "10px", color: isApproved ? "#166534" : isDisapproved ? "#991b1b" : "#92400e", fontWeight: 700, textTransform: "uppercase" }}>{lang === "si" ? "අවසාන දිනය" : "End Date"}</div>
+                                              <div style={{ fontWeight: 700, color: isApproved ? "#15803d" : isDisapproved ? "#b91c1c" : "#b45309", marginTop: "2px", fontSize: "13px" }}>{extEnd || "—"}</div>
                                             </div>
                                           </div>
-                                          <div style={{ padding: "10px 14px", borderRadius: "8px", backgroundColor: "#dcfce7", color: "#15803d", fontWeight: 700, fontSize: "13px", display: "flex", alignItems: "center", gap: "8px" }}>
-                                            <CheckCircle size={16} />
+
+                                          <div style={{ padding: "10px 14px", borderRadius: "8px", backgroundColor: isApproved ? "#dcfce7" : isDisapproved ? "#fee2e2" : "#fef3c7", color: isApproved ? "#15803d" : isDisapproved ? "#991b1b" : "#b45309", fontWeight: 700, fontSize: "13px", display: "flex", alignItems: "center", gap: "8px" }}>
+                                            {isApproved ? <CheckCircle size={16} /> : isDisapproved ? <XCircle size={16} /> : <Clock size={16} />}
                                             <span>
-                                              {lang === "si"
-                                                ? `විමර්ශන පරිපාලක (Investigation Admin) විසින් දිනයන් දීර්ඝ කිරීම ලබා දී ඇත. වාර්තා ලබාදීමේ දිනය ${extEnd || ""} දක්වා දීර්ඝ කර ඇත.`
-                                                : `Extension of dates granted by Investigation Admin. Report due date extended to ${extEnd || ""}.`}
+                                              {isApproved
+                                                ? (lang === "si"
+                                                  ? `විමර්ශන පරිපාලක විසින් ලබාදුන් දිනයන් දීර්ඝ කිරීම අනුමත කරන ලදී. වාර්තා ලබාදීමේ දිනය ${extEnd || ""} දක්වා දීර්ඝ කර ඇත.`
+                                                  : `Extension of dates approved. Report due date extended to ${extEnd || ""}.`)
+                                                : isDisapproved
+                                                ? (lang === "si"
+                                                  ? `දිනයන් දීර්ඝ කිරීමේ ඉල්ලීම ප්‍රතික්ෂේප කර ඇත.`
+                                                  : `Extension request has been disapproved.`)
+                                                : (lang === "si"
+                                                  ? `විමර්ශන පරිපාලක (Investigation Admin) විසින් දිනයන් දීර්ඝ කිරීමේ තොරතුරු ලබා දී ඇත. කරුණාකර අනුමත කරන්න හෝ ප්‍රතික්ෂේප කරන්න.`
+                                                  : `Extension dates proposed by Investigation Admin. Please review and approve or disapprove below.`)}
                                             </span>
+                                          </div>
+
+                                          {/* Action Buttons: Approve / Disapprove Buttons */}
+                                          <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "4px", flexWrap: "wrap" }}>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleExtensionDecision(asgn, true)}
+                                              style={{
+                                                padding: "8px 16px",
+                                                borderRadius: "8px",
+                                                backgroundColor: isApproved ? "#15803d" : "#16a34a",
+                                                color: "#ffffff",
+                                                border: "none",
+                                                fontWeight: 700,
+                                                fontSize: "13px",
+                                                cursor: "pointer",
+                                                display: "inline-flex",
+                                                alignItems: "center",
+                                                gap: "6px",
+                                                boxShadow: "0 2px 4px rgba(22,163,74,0.25)",
+                                              }}
+                                            >
+                                              <CheckCircle size={16} />
+                                              <span>{lang === "si" ? "අනුමත කරන්න (Approve)" : "Approve Extension"}</span>
+                                            </button>
+
+                                            <button
+                                              type="button"
+                                              onClick={() => handleExtensionDecision(asgn, false)}
+                                              style={{
+                                                padding: "8px 16px",
+                                                borderRadius: "8px",
+                                                backgroundColor: isDisapproved ? "#b91c1c" : "#dc2626",
+                                                color: "#ffffff",
+                                                border: "none",
+                                                fontWeight: 700,
+                                                fontSize: "13px",
+                                                cursor: "pointer",
+                                                display: "inline-flex",
+                                                alignItems: "center",
+                                                gap: "6px",
+                                                boxShadow: "0 2px 4px rgba(220,38,38,0.25)",
+                                              }}
+                                            >
+                                              <XCircle size={16} />
+                                              <span>{lang === "si" ? "ප්‍රතික්ෂේප කරන්න (Disapprove)" : "Disapprove Extension"}</span>
+                                            </button>
                                           </div>
                                         </div>
                                       ) : (
