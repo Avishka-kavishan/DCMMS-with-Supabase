@@ -3,7 +3,7 @@ import React, { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import "../../../i18n";
 import { Search, UserPlus, X, Edit, Trash2, Check } from "lucide-react";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 
 interface Officer {
   id: string;
@@ -196,6 +196,13 @@ export default function DailyMailOfficersPage() {
           full_name: savedOfficer.fullName,
           role: "daily_mail",
         });
+
+        await logAuditEvent(
+          isEditMode ? "UPDATE_DAILY_MAIL_OFFICER" : "ADD_DAILY_MAIL_OFFICER",
+          "dcmms_profiles",
+          savedOfficer.id,
+          { name: savedOfficer.fullName, email: savedOfficer.email }
+        );
       } catch (err) {
         console.warn("Could not upsert to Supabase. Falling back fully to localStorage.", err);
       }

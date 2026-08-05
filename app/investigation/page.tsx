@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { Sidebar } from "@/components/Sidebar";
 import { SiteFooter } from "@/components/SiteFooter";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 import { signOut, getCurrentProfile } from "@/lib/auth";
 import { 
   UserPlus, X, Edit, Trash2, Check, Eye, ClipboardList, 
@@ -1083,6 +1083,7 @@ export default function InvestigationPage() {
               extensionTerm: dbAsgn.extension_term,
               extensionStartDate: dbAsgn.extension_start_date,
               extensionEndDate: dbAsgn.extension_end_date,
+              extensionRequestedByAdmin: !!(dbAsgn.extension_requested_by_admin),
               extensionApprovalStatus: dbAsgn.extension_approval_status,
               extensionDecisionDate: dbAsgn.extension_decision_date,
               certificationSubmitted: dbAsgn.certification_submitted,
@@ -1375,14 +1376,13 @@ export default function InvestigationPage() {
     if (isSupabaseConfigured) {
       try {
         await supabase.from("dcmms_subject_assignments").upsert({
-          id: updatedRecord.id,
           case_no: caseNo,
           subject_officer_name: targetOfficer || "Subject Officer",
           assigned_officers: [formattedAssignedText],
           chairman: selectedChairman || null,
           members: selectedMembers || null,
           status: "Committee Details Sent to Subject Officer",
-        });
+        }, { onConflict: "case_no" });
 
         // 1. Update all existing daily mail letters for this case
         await supabase
@@ -1605,8 +1605,7 @@ export default function InvestigationPage() {
 
     showToast(lang === "si" ? `Step 2: පත්වීම් ලිපිය දිනය (${step2AppointmentDate}) සහ වාර්තා දිනය (${step2ReportDueDate}) සාර්ථකව සුරකියි!` : `Step 2: Appointment Date (${step2AppointmentDate}) and Due Date (${step2ReportDueDate}) saved!`);
   };
-
-  // ── Step 3 Handler: Admin Requests Extension ──────────────────────────────
+  // ── Step 3 Handler: Admin Requests Extension ──
   const handleStep3RequestExtension = async () => {
     const extensionTermToUse = step3ExtensionTerm !== "None" ? step3ExtensionTerm : subjExtensionTerm;
     const extensionStartToUse = step3ExtensionStartDate || subjExtensionStartDate;
@@ -1624,7 +1623,7 @@ export default function InvestigationPage() {
     if (!caseNo) return;
     const now = new Date().toISOString().slice(0, 10);
 
-    const updatedRecord = {
+    const updatedRecord: any = {
       ...(existingAssignment || {}),
       id: existingAssignment?.id || `asgn-${caseNo}-${Date.now()}`,
       caseNo,
@@ -1632,6 +1631,8 @@ export default function InvestigationPage() {
       extensionStartDate: extensionStartToUse,
       extensionEndDate: extensionEndToUse,
       extensionRequestedByAdmin: true,
+      extensionApprovalStatus: null,
+      extensionDecisionDate: null,
       currentStep: 3,
       status: "Extension Requested",
       updatedAt: now
@@ -1655,14 +1656,56 @@ export default function InvestigationPage() {
         list.push(updatedRecord);
         localStorage.setItem("dcmms_subject_assignments", JSON.stringify(list));
       } catch (e) {}
+
+      try {
+        const storedLetters = localStorage.getItem("dcmms_letters") || "[]";
+        let letters = JSON.parse(storedLetters);
+        const idx = letters.findIndex((l: any) => l.refNo === caseNo || l.caseNo === caseNo);
+        if (idx >= 0) {
+          letters[idx].extensionTerm = extensionTermToUse;
+          letters[idx].extensionStartDate = extensionStartToUse;
+          letters[idx].extensionEndDate = extensionEndToUse;
+          letters[idx].extensionRequested = true;
+          letters[idx].extensionRequestedByAdmin = true;
+          letters[idx].extensionApprovalStatus = null;
+          letters[idx].extensionDecisionDate = null;
+          letters[idx].status = "Extension Requested";
+          localStorage.setItem("dcmms_letters", JSON.stringify(letters));
+        }
+      } catch (e) {}
+
+      try {
+        const storedCases = localStorage.getItem("dcmms_cases") || "[]";
+        let cases = JSON.parse(storedCases);
+        const idx = cases.findIndex((c: any) => c.caseNo === caseNo || c.refNo === caseNo);
+        if (idx >= 0) {
+          cases[idx].extensionTerm = extensionTermToUse;
+          cases[idx].extensionStartDate = extensionStartToUse;
+          cases[idx].extensionEndDate = extensionEndToUse;
+          cases[idx].extensionRequested = true;
+          cases[idx].extensionRequestedByAdmin = true;
+          cases[idx].extensionApprovalStatus = null;
+          cases[idx].extensionDecisionDate = null;
+          cases[idx].status = "Extension Requested";
+          localStorage.setItem("dcmms_cases", JSON.stringify(cases));
+        }
+      } catch (e) {}
+
+      window.dispatchEvent(new CustomEvent("dcmms_assignment_updated"));
+      window.dispatchEvent(new Event("storage"));
     }
 
     if (isSupabaseConfigured) {
       try {
-        await supabase.from("dcmms_subject_assignments").upsert({
-          id: updatedRecord.id,
+        const resolvedOfficerName =
+          subjOfficerName.trim() ||
+          (existingAssignment?.subjectOfficerName !== "Subject Officer" ? existingAssignment?.subjectOfficerName : null) ||
+          selectedCase?.subjectOfficer ||
+          null;
+
+        const upsertPayload: any = {
           case_no: caseNo,
-          subject_officer_name: updatedRecord.subjectOfficerName || existingAssignment?.subjectOfficerName || null,
+          subject_officer_name: resolvedOfficerName,
           assigned_officers: (() => {
             const ao = updatedRecord.assignedOfficers || existingAssignment?.assignedOfficers;
             return Array.isArray(ao) ? ao : (ao ? [ao] : null);
@@ -1675,12 +1718,36 @@ export default function InvestigationPage() {
           extension_start_date: extensionStartToUse,
           extension_end_date: extensionEndToUse,
           extension_requested_by_admin: true,
+          extension_approval_status: null,
+          extension_decision_date: null,
           status: "Extension Requested",
-        });
-      } catch (e) {}
+        };
+
+        const { error: upsertError } = await supabase.from("dcmms_subject_assignments").upsert(upsertPayload, { onConflict: "case_no" });
+
+        if (upsertError) {
+          console.warn("Extension upsert error:", upsertError);
+        }
+
+        const subUpdateObj: any = {
+          status: "Extension Requested",
+          updated_at: new Date().toISOString(),
+        };
+
+        await supabase
+          .from("dcmms_subject")
+          .update(subUpdateObj)
+          .eq("case_no", caseNo);
+      } catch (e) {
+        console.warn("Extension Supabase error:", e);
+      }
     }
 
-    showToast(lang === "si" ? "දිනයන් දීර්ඝ කිරීමේ ඉල්ලීම විෂය නිලධාරී වෙත සාර්ථකව යවන ලදී!" : "Extension request sent to Subject Officer for certification!");
+    showToast(
+      lang === "si"
+        ? "දිනයන් දීර්ඝ කිරීමේ ඉල්ලීම විෂය නිලධාරියා වෙත සාර්ථකව යවන ලදී!"
+        : "Extension request sent to Subject Officer!"
+    );
   };
 
   // ── Step 4 Handler: Admin Submits Final Report & Approval Date ─────────────
@@ -1798,6 +1865,32 @@ export default function InvestigationPage() {
         } catch (invErr) {
           console.warn("Supabase dcmms_investigation upsert warning:", invErr);
         }
+
+        // 5. Upsert preliminary investigation log in dcmms_preliminary_investigations
+        try {
+          await supabase.from("dcmms_preliminary_investigations").upsert({
+            id: `prelim-${caseNo}`,
+            case_no: caseNo,
+            reason: selectedCase.subject,
+            committee_members: selectedMembers,
+            appointment_date: step2AppointmentDate || null,
+            report_due_date: step2ReportDueDate || null,
+            findings: investigationNotes || null,
+            observations: desc,
+            status: investigationStatus,
+            updated_at: new Date().toISOString()
+          });
+        } catch (pErr) {
+          console.warn("Supabase prelim insert warning:", pErr);
+        }
+
+        // 6. Audit log entry
+        await logAuditEvent(
+          "SAVE_INVESTIGATION_DETAILS",
+          "dcmms_investigation",
+          caseNo,
+          { status: investigationStatus, notes: investigationNotes }
+        );
       } catch (err: any) {
         console.error("Failed to save investigation details to Supabase:", err);
       }
@@ -1986,6 +2079,29 @@ export default function InvestigationPage() {
           status: officer.status,
         };
         await supabase.from("dcmms_investigation_officers").upsert(invPayload);
+
+        // Sync schools to dcmms_schools table
+        const allSchools = Array.from(new Set([...(officer.studiedSchools || []), ...(officer.childrenSchools || [])]));
+        for (const schoolName of allSchools) {
+          if (schoolName.trim()) {
+            const schNo = `SCH-${schoolName.trim().toUpperCase().replace(/[^A-Z0-9]/g, "_")}`;
+            await supabase.from("dcmms_schools").upsert(
+              {
+                school_no: schNo,
+                school_name: schoolName.trim()
+              },
+              { onConflict: "school_no" }
+            );
+          }
+        }
+
+        // Audit log entry
+        await logAuditEvent(
+          isOfficerEditMode ? "UPDATE_OFFICER" : "REGISTER_OFFICER",
+          "dcmms_investigation_officers",
+          officer.id,
+          { fullName: officer.fullName, role: officer.officerRole, nicNo: officer.nicNo }
+        );
       } catch (err) {
         console.error("Failed to save officer in Supabase:", err);
       }
@@ -3319,36 +3435,11 @@ export default function InvestigationPage() {
                           <Send size={16} />
                           <span>
                             {lang === "si"
-                              ? "විමර්ශන කමිටු පත්වීම් තොරතුරු අදාළ විෂය නිලධාරියා වෙත යවන්න"
-                              : "Send Committee Assignment Details to Subject Officer"}
+                              ? "විමර්ශන කමිටු පත්කිරීමේ තොරතුරු විෂය නිලධාරී වෙත යවන්න"
+                              : "Send Investigation Committee Assignment details to Subject Officer"}
                           </span>
                         </button>
                       </div>
-
-                    </div>
-                  </div>
-
-                  {/* Step 2: Appointment Letter Date & Report Due Date (From Subject Officer) Card */}
-                  <div style={{ backgroundColor: "#ffffff", padding: "20px", borderRadius: "12px", border: "1px solid #cbd5e1", boxShadow: "0 2px 4px rgba(0,0,0,0.02)" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px", borderBottom: "1px solid #f1f5f9", paddingBottom: "10px" }}>
-                      <h4 style={{ margin: 0, fontSize: "15px", color: "#1e293b", fontWeight: 700, display: "flex", alignItems: "center", gap: "8px" }}>
-                        <CalendarIcon size={18} style={{ color: "#0284c7" }} />
-                        <span>{lang === "si" ? "පත්වීම් ලිපියේ දිනය සහ වාර්තා දිනය (විෂය නිලධාරී වෙතින්)" : "Step 2: Appointment Letter Date & Report Due Date (Received from Subject Officer)"}</span>
-                      </h4>
-                      <span style={{ fontSize: "11px", fontWeight: 700, backgroundColor: (step2Submitted || (step2AppointmentDate && step2ReportDueDate)) ? "#dcfce7" : "#fef3c7", color: (step2Submitted || (step2AppointmentDate && step2ReportDueDate)) ? "#15803d" : "#b45309", padding: "4px 10px", borderRadius: "12px", display: "flex", alignItems: "center", gap: "4px" }}>
-                        {(step2Submitted || (step2AppointmentDate && step2ReportDueDate)) ? (
-                          <>
-                            <CheckCircle size={13} />
-                            {lang === "si" ? "විෂය නිලධාරී විසින් සපයන ලදී" : "Submitted by Subject Officer"}
-                          </>
-                        ) : (
-                          <>
-                            <Clock size={13} />
-                            {lang === "si" ? "විෂය නිලධාරී වෙතින් බලපොරොත්තු වේ" : "Awaiting Subject Officer"}
-                          </>
-                        )}
-                      </span>
-                    </div>
 
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "16px", backgroundColor: "#f0f9ff", padding: "16px", borderRadius: "10px", border: "1px solid #bae6fd" }}>
                       <div>
@@ -3394,24 +3485,24 @@ export default function InvestigationPage() {
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
                         <label style={{ fontSize: "13px", fontWeight: 700, color: "#92400e", display: "flex", alignItems: "center", gap: "6px" }}>
                           <Clock size={16} style={{ color: "#d97706" }} />
-                          <span>{lang === "si" ? "දිනයන් දීර්ඝ කිරීමේ කොටස (Extension of Days Request):" : "Extension of Days Request:"}</span>
+                          <span>{lang === "si" ? "දිනයන් දීර්ඝ කිරීමේ කොටස (අනුමැතිය සඳහා යවන ලදී):" : "Extension of Days Request (Sent for Approval):"}</span>
                         </label>
 
                         {/* Status Badge */}
                         {existingAssignment?.extensionApprovalStatus === "Approved" ? (
                           <span style={{ fontSize: "11px", fontWeight: 700, backgroundColor: "#dcfce7", color: "#15803d", padding: "3px 10px", borderRadius: "12px", display: "flex", alignItems: "center", gap: "4px" }}>
                             <CheckCircle size={13} />
-                            {lang === "si" ? `විෂය නිලධාරී අනුමත කළා (${existingAssignment?.extensionDecisionDate || ""})` : `Approved by Subject Officer (${existingAssignment?.extensionDecisionDate || ""})`}
+                            {lang === "si" ? `අදාළ බලධාරියා අනුමත කළා (${existingAssignment?.extensionDecisionDate || ""})` : `Approved by Relevant Authority (${existingAssignment?.extensionDecisionDate || ""})`}
                           </span>
                         ) : existingAssignment?.extensionApprovalStatus === "Disapproved" ? (
                           <span style={{ fontSize: "11px", fontWeight: 700, backgroundColor: "#fee2e2", color: "#b91c1c", padding: "3px 10px", borderRadius: "12px", display: "flex", alignItems: "center", gap: "4px" }}>
                             <X size={13} />
-                            {lang === "si" ? `විෂය නිලධාරී ප්‍රතික්ෂේප කළා (${existingAssignment?.extensionDecisionDate || ""})` : `Disapproved by Subject Officer (${existingAssignment?.extensionDecisionDate || ""})`}
+                            {lang === "si" ? `අදාළ බලධාරියා ප්‍රතික්ෂේප කළා (${existingAssignment?.extensionDecisionDate || ""})` : `Disapproved by Relevant Authority (${existingAssignment?.extensionDecisionDate || ""})`}
                           </span>
-                        ) : (step3ExtensionRequested || subjExtensionTerm !== "None") ? (
+                        ) : (step3ExtensionRequested || subjExtensionTerm !== "None" || (subjExtensionStartDate && subjExtensionEndDate)) ? (
                           <span style={{ fontSize: "11px", fontWeight: 700, backgroundColor: "#fef3c7", color: "#b45309", padding: "3px 10px", borderRadius: "12px", display: "flex", alignItems: "center", gap: "4px" }}>
                             <Clock size={13} />
-                            {lang === "si" ? "විෂය නිලධාරී තීරණය අපේක්ෂාවෙන්" : "Awaiting Subject Officer Decision"}
+                            {lang === "si" ? "අනුමැතිය අපේක්ෂාවෙන්" : "Awaiting Approval"}
                           </span>
                         ) : (
                           <span style={{ fontSize: "11px", fontWeight: 700, backgroundColor: "#f1f5f9", color: "#64748b", padding: "3px 10px", borderRadius: "12px" }}>
@@ -3481,18 +3572,41 @@ export default function InvestigationPage() {
 
                         </div>
 
-                        {/* Send Extension Request Button */}
-                        <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "10px", marginTop: "4px" }}>
+                        {/* Action Button: Send Extension Request to Subject Officer */}
+                        <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "10px", marginTop: "4px", flexWrap: "wrap" }}>
                           <button
                             type="button"
                             onClick={handleStep3RequestExtension}
                             style={{ padding: "10px 18px", backgroundColor: "#d97706", color: "#ffffff", border: "none", borderRadius: "8px", fontWeight: 600, fontSize: "13px", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px", boxShadow: "0 2px 4px rgba(217,119,6,0.25)" }}
                           >
                             <Send size={15} />
-                            <span>{lang === "si" ? "දිනයන් දීර්ඝ කිරීමේ ඉල්ලීම විෂය නිලධාරී වෙත යවන්න" : "Send Extension Request to Subject Officer"}</span>
+                            <span>{lang === "si" ? "විෂය නිලධාරියා වෙත යවන්න" : "Send to Subject Officer"}</span>
                           </button>
                         </div>
                       </div>
+
+                      {/* ── Subject Officer Decision: Read-only status display for Investigation Admin ── */}
+                      {(step3ExtensionRequested || subjExtensionTerm !== "None" || (subjExtensionStartDate && subjExtensionEndDate) || existingAssignment?.extensionRequestedByAdmin) && existingAssignment?.extensionApprovalStatus && (
+                        <div style={{ marginTop: "16px", paddingTop: "14px", borderTop: "1px solid #fde68a" }}>
+                          {existingAssignment?.extensionApprovalStatus === "Approved" ? (
+                            <div style={{ display: "flex", alignItems: "center", gap: "10px", backgroundColor: "#f0fdf4", padding: "12px 16px", borderRadius: "10px", border: "1px solid #86efac" }}>
+                              <CheckCircle size={20} style={{ color: "#16a34a", flexShrink: 0 }} />
+                              <div>
+                                <div style={{ fontWeight: 700, color: "#15803d", fontSize: "13px" }}>{lang === "si" ? "විෂය නිලධාරියා විසින් අනුමත කරන ලදී" : "Extension Approved by Subject Officer"}</div>
+                                <div style={{ fontSize: "12px", color: "#166534" }}>{lang === "si" ? `නව වාර්තා දිනය: ${step3ExtensionEndDate || subjExtensionEndDate || ""}` : `Decision Date: ${existingAssignment?.extensionDecisionDate || ""} | New Due Date: ${step3ExtensionEndDate || subjExtensionEndDate || ""}`}</div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div style={{ display: "flex", alignItems: "center", gap: "10px", backgroundColor: "#fef2f2", padding: "12px 16px", borderRadius: "10px", border: "1px solid #fca5a5" }}>
+                              <X size={20} style={{ color: "#dc2626", flexShrink: 0 }} />
+                              <div>
+                                <div style={{ fontWeight: 700, color: "#b91c1c", fontSize: "13px" }}>{lang === "si" ? "විෂය නිලධාරියා විසින් ප්‍රතික්ෂේප කරන ලදී" : "Extension Disapproved by Subject Officer"}</div>
+                                <div style={{ fontSize: "12px", color: "#991b1b" }}>{lang === "si" ? `ප්‍රතිඵල දිනය: ${existingAssignment?.extensionDecisionDate || ""}` : `Decision Date: ${existingAssignment?.extensionDecisionDate || ""}`}</div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -3602,6 +3716,7 @@ export default function InvestigationPage() {
                     </div>
                   </div>
 
+                </div>
                 </div>
 
                 <footer className="modal-footer" style={{ marginTop: "24px", paddingTop: "16px", borderTop: "1px solid #e2e8f0", display: "flex", justifyContent: "flex-end", gap: "12px" }}>

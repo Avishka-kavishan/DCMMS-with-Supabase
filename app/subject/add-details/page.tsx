@@ -11,8 +11,9 @@ import { useTranslation } from "react-i18next";
 import { Sidebar } from "@/components/Sidebar";
 import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 import { getCurrentProfile, dashboardPath } from "@/lib/auth";
+import { CheckCircle, X } from "lucide-react";
 const formatStepTaken = (step: string, t: any) => {
   if (!step) return "";
   if (step.startsWith("[EduSecApproval:")) {
@@ -354,6 +355,28 @@ function CaseDetailsForm() {
             } catch (e) {}
           }
           if (typeof window !== "undefined") {
+            try {
+              const storedLetters = localStorage.getItem("dcmms_letters");
+              if (storedLetters) {
+                const letters = JSON.parse(storedLetters);
+                const foundLetter = letters.find((l: any) =>
+                  String(l.refNo || l.caseNo || "").trim().toLowerCase() === String(caseNoParam).trim().toLowerCase()
+                );
+                if (foundLetter) asgn = { ...foundLetter, ...asgn };
+              }
+            } catch (e) {}
+
+            try {
+              const storedCases = localStorage.getItem("dcmms_cases");
+              if (storedCases) {
+                const cases = JSON.parse(storedCases);
+                const foundCase = cases.find((c: any) =>
+                  String(c.caseNo || c.refNo || "").trim().toLowerCase() === String(caseNoParam).trim().toLowerCase()
+                );
+                if (foundCase) asgn = { ...foundCase, ...asgn };
+              }
+            } catch (e) {}
+
             try {
               const stored = localStorage.getItem("dcmms_subject_assignments");
               if (stored) {
@@ -785,6 +808,13 @@ function CaseDetailsForm() {
               status: status || caseData.status,
             });
         }
+
+        await logAuditEvent(
+          "UPDATE_SUBJECT_CASE",
+          "dcmms_subject",
+          refNo,
+          { reportState: status, subjectOfficer }
+        );
       } catch (err: any) {
         console.error("Supabase save failed, falling back to localStorage:", err?.message || err?.details || JSON.stringify(err) || err);
       }

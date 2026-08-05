@@ -9,7 +9,7 @@ import { useTranslation } from "react-i18next";
 import { Sidebar } from "@/components/Sidebar";
 import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 import { getCurrentProfile } from "@/lib/auth";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
@@ -730,6 +730,14 @@ function RegisterComplaintForm() {
             console.warn("Supabase subject assignment write warning:", asgnError.message);
           }
         }
+
+        // Log audit event
+        await logAuditEvent(
+          "REGISTER_DAILY_MAIL",
+          "dcmms_daily_mail",
+          newLetter.refNo,
+          { sender: newLetter.senderName, subject: newLetter.subject, officer: newLetter.officerName }
+        );
 
         // success
         console.debug("Supabase upsert returned:", upserted);

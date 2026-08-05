@@ -3,7 +3,7 @@ import React, { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import "../../../i18n";
 import { UserPlus, X, Edit, Trash2, Check } from "lucide-react";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 
 interface Officer {
   id: string;
@@ -167,6 +167,13 @@ export default function SubjectOfficersPage() {
 
         const { error } = await supabase.from("dcmms_profiles").upsert(payload);
         if (error) throw error;
+
+        await logAuditEvent(
+          isEditMode ? "UPDATE_SUBJECT_OFFICER" : "REGISTER_SUBJECT_OFFICER",
+          "dcmms_profiles",
+          officer.id,
+          { name: officer.fullName, email: officer.email }
+        );
 
         showToast(isEditMode ? "Officer updated successfully!" : t("officerAddedSuccess", "Officer registered successfully!"));
         setIsModalOpen(false);

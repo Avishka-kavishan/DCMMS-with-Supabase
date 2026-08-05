@@ -36,7 +36,7 @@
   "docTitle": "Login | Disciplinary Case Management & Monitoring System",
   "dailyMailReporter": "Daily Mail Reporter",
   "registerLettersDesc": "Register newly received Letters",
-  "adminDashboardTitle": "System Administrator",
+  "adminDashboardTitle": "Administrator",
   "adminDashboardDesc": "Manage users, configure settings, and view audit logs",
   "subjectDashboardTitle": "Subject Officer Dashboard",
   "subjectDashboardDesc": "Monitor and manage disciplinary cases assigned to you",

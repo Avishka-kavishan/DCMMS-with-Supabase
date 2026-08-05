@@ -11,9 +11,26 @@ ALTER TABLE public.dcmms_subject_assignments
 ALTER TABLE public.dcmms_subject_assignments
   ADD COLUMN IF NOT EXISTS extension_decision_date DATE;
 
--- Add extension_requested_by_admin flag (set to TRUE when Investigation Admin sends the request)
+-- Add extension_term column (First / Second / Third)
+ALTER TABLE public.dcmms_subject_assignments
+  ADD COLUMN IF NOT EXISTS extension_term TEXT;
+
+-- Add extension_start_date column (start of extended period)
+ALTER TABLE public.dcmms_subject_assignments
+  ADD COLUMN IF NOT EXISTS extension_start_date DATE;
+
+-- Add extension_end_date column (end of extended period)
+ALTER TABLE public.dcmms_subject_assignments
+  ADD COLUMN IF NOT EXISTS extension_end_date DATE;
+
+-- Add extension_requested_by_admin flag
 ALTER TABLE public.dcmms_subject_assignments
   ADD COLUMN IF NOT EXISTS extension_requested_by_admin BOOLEAN DEFAULT FALSE;
+
+-- Add extension_submitted_by_subject flag
+ALTER TABLE public.dcmms_subject_assignments
+  ADD COLUMN IF NOT EXISTS extension_submitted_by_subject BOOLEAN DEFAULT FALSE;
+
 
 -- Also ensure the after-investigation tracking columns exist
 ALTER TABLE public.dcmms_subject_assignments

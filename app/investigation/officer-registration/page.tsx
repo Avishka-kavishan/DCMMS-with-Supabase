@@ -11,7 +11,7 @@ import { useTranslation } from "react-i18next";
 import { Sidebar } from "@/components/Sidebar";
 import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 import { getCurrentProfile, signOut, dashboardPath } from "@/lib/auth";
 import { 
   UserPlus, ArrowLeft, Check, X, GraduationCap, ShieldCheck, User, 
@@ -167,6 +167,29 @@ export default function InvestigationOfficerRegistrationPage() {
           status: newOfficer.status,
         };
         await supabase.from("dcmms_investigation_officers").upsert(invPayload);
+
+        // Sync schools to dcmms_schools table
+        const allSchools = Array.from(new Set([...(newOfficer.studiedSchools || []), ...(newOfficer.childrenSchools || [])]));
+        for (const schoolName of allSchools) {
+          if (schoolName.trim()) {
+            const schNo = `SCH-${schoolName.trim().toUpperCase().replace(/[^A-Z0-9]/g, "_")}`;
+            await supabase.from("dcmms_schools").upsert(
+              {
+                school_no: schNo,
+                school_name: schoolName.trim()
+              },
+              { onConflict: "school_no" }
+            );
+          }
+        }
+
+        // Audit log entry
+        await logAuditEvent(
+          "REGISTER_OFFICER",
+          "dcmms_investigation_officers",
+          newOfficer.id,
+          { fullName: newOfficer.fullName, role: newOfficer.officerRole, nicNo: newOfficer.nicNo }
+        );
       } catch (err) {
         console.warn("Supabase save warning:", err);
       }

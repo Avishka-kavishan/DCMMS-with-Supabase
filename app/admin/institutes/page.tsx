@@ -3,7 +3,7 @@ import React, { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import "../../../i18n";
 import { Search, Plus, X, Edit, Trash2, Check } from "lucide-react";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 
 interface Institute {
   id: string;
@@ -221,6 +221,13 @@ export default function EducationalInstitutesPage() {
           region_province: savedInst.regionProvince,
           status: savedInst.status.toLowerCase(),
         });
+
+        await logAuditEvent(
+          isEditMode ? "UPDATE_INSTITUTE" : "ADD_INSTITUTE",
+          "dcmms_institutes",
+          savedInst.code,
+          { name: savedInst.name, region: savedInst.regionProvince }
+        );
       } catch (err) {
         console.warn("Could not upsert to Supabase. Falling back fully to localStorage.", err);
       }

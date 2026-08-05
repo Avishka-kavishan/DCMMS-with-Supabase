@@ -561,18 +561,36 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
 
     fetchCases();
 
+    const handleSyncAll = () => {
+      fetchCases();
+      if (typeof fetchAssignments === "function") {
+        fetchAssignments();
+      }
+    };
+
     const channel = supabase
       .channel("subject-realtime-changes")
-      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subject" }, fetchCases)
-      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_daily_mail" }, fetchCases)
-      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subject_assignments" }, fetchCases)
+      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subject" }, handleSyncAll)
+      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_daily_mail" }, handleSyncAll)
+      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subject_assignments" }, handleSyncAll)
       .subscribe();
 
-    const interval = setInterval(fetchCases, 3_000);
+    const interval = setInterval(handleSyncAll, 2_500);
+
+    const handleStorageEvent = (e: StorageEvent) => {
+      if (e.key === "dcmms_subject_assignments" || e.key === "dcmms_cases" || e.key === "dcmms_letters") {
+        handleSyncAll();
+      }
+    };
+
+    window.addEventListener("storage", handleStorageEvent);
+    window.addEventListener("dcmms_assignment_updated", handleSyncAll);
 
     return () => {
       supabase.removeChannel(channel);
       clearInterval(interval);
+      window.removeEventListener("storage", handleStorageEvent);
+      window.removeEventListener("dcmms_assignment_updated", handleSyncAll);
     };
   }, [profile, t]);
 
@@ -654,6 +672,7 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
               extensionApprovalStatus: a.extension_approval_status || a.extensionApprovalStatus,
               extensionDecisionDate: a.extension_decision_date || a.extensionDecisionDate,
               extensionRequestedByAdmin: !!(a.extension_requested_by_admin || a.extensionRequestedByAdmin),
+              extensionSubmittedBySubject: !!(a.extension_submitted_by_subject || a.extensionSubmittedBySubject),
               certificationSubmitted: a.certification_submitted || a.certificationSubmitted,
               reportSubmitDate: a.report_submit_date || a.reportSubmitDate,
               reportContent: a.report_content || a.reportContent,
@@ -706,11 +725,37 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
                 const membersPart = Array.isArray(la.members) && la.members.length > 0 ? `Members: ${la.members.map((m: any) => m.fullName || m.name).join(", ")}` : "";
                 text = [chairmanPart, membersPart].filter(Boolean).join(" | ");
               }
-              const idx = list.findIndex((a) => a.caseNo === la.caseNo);
+              const targetCaseNo = String(la.caseNo || la.case_no || "").trim().toLowerCase();
+              const idx = list.findIndex((a) => String(a.caseNo || a.case_no || "").trim().toLowerCase() === targetCaseNo);
+              
+              const normExtTerm = la.extensionTerm || la.extension_term;
+              const normExtStart = la.extensionStartDate || la.extension_start_date;
+              const normExtEnd = la.extensionEndDate || la.extension_end_date;
+              const normExtApproval = la.extensionApprovalStatus || la.extension_approval_status;
+              const normExtReq = la.extensionRequestedByAdmin !== undefined ? la.extensionRequestedByAdmin : la.extension_requested_by_admin;
+
               if (idx >= 0) {
-                list[idx] = { ...list[idx], ...la, assignedOfficers: text || list[idx].assignedOfficers };
+                list[idx] = { 
+                  ...list[idx], 
+                  ...la, 
+                  assignedOfficers: text || list[idx].assignedOfficers,
+                  extensionTerm: normExtTerm || list[idx].extensionTerm,
+                  extensionStartDate: normExtStart || list[idx].extensionStartDate,
+                  extensionEndDate: normExtEnd || list[idx].extensionEndDate,
+                  extensionApprovalStatus: normExtApproval !== undefined ? normExtApproval : list[idx].extensionApprovalStatus,
+                  extensionRequestedByAdmin: normExtReq !== undefined ? !!normExtReq : list[idx].extensionRequestedByAdmin,
+                };
               } else {
-                list.push({ ...la, assignedOfficers: text });
+                list.push({ 
+                  ...la, 
+                  caseNo: la.caseNo || la.case_no,
+                  assignedOfficers: text,
+                  extensionTerm: normExtTerm,
+                  extensionStartDate: normExtStart,
+                  extensionEndDate: normExtEnd,
+                  extensionApprovalStatus: normExtApproval,
+                  extensionRequestedByAdmin: !!normExtReq,
+                });
               }
             });
           }
@@ -729,24 +774,79 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
           const casesList = JSON.parse(storedCases);
           if (Array.isArray(casesList)) {
             casesList.forEach((c: any) => {
-              if (c.assignedOfficers || c.chairman || c.members || c.committeeDetails || c.status === "Committee Details Sent") {
-                const targetCaseNo = c.caseNo || c.refNo;
-                const idx = list.findIndex((a: any) => a.caseNo === targetCaseNo);
-                if (idx < 0 && targetCaseNo) {
-                  const chairmanPart = c.chairman ? `Chairman: ${c.chairman.fullName || c.chairman.name}` : "";
-                  const membersPart = Array.isArray(c.members) && c.members.length > 0 ? `Members: ${c.members.map((m: any) => m.fullName || m.name).join(", ")}` : "";
-                  const formattedText = c.assignedOfficers || [chairmanPart, membersPart].filter(Boolean).join(" | ") || "Investigation Committee Assigned";
-                  list.push({
-                    id: `asgn-${targetCaseNo}`,
-                    caseNo: targetCaseNo,
-                    subjectOfficerName: c.subjectOfficerName || c.assignedTo || c.subjectOfficer || activeName || "Subject Officer",
-                    assignedOfficers: formattedText,
-                    chairman: c.chairman || null,
-                    members: c.members || [],
-                    status: c.status || "Committee Details Sent to Subject Officer",
-                    committeeSent: true,
-                    datesSubmittedBySubject: false,
-                  });
+              const targetCaseNo = String(c.caseNo || c.refNo || "").trim().toLowerCase();
+              const idx = list.findIndex((a: any) => String(a.caseNo || a.case_no || "").trim().toLowerCase() === targetCaseNo);
+              const extTerm = c.extensionTerm || c.extension_term;
+              const extStart = c.extensionStartDate || c.extension_start_date;
+              const extEnd = c.extensionEndDate || c.extension_end_date;
+              const extReq = c.extensionRequested || c.extensionRequestedByAdmin || c.extension_requested_by_admin;
+              const extApprove = c.extensionApprovalStatus || c.extension_approval_status;
+              const extDate = c.extensionDecisionDate || c.extension_decision_date;
+
+              if (idx >= 0) {
+                if (extTerm) list[idx].extensionTerm = extTerm;
+                if (extStart) list[idx].extensionStartDate = extStart;
+                if (extEnd) {
+                  list[idx].extensionEndDate = extEnd;
+                  list[idx].reportDueDate = extEnd;
+                }
+                if (extReq) list[idx].extensionRequestedByAdmin = true;
+                if (extApprove) list[idx].extensionApprovalStatus = extApprove;
+                if (extDate) list[idx].extensionDecisionDate = extDate;
+              } else if (targetCaseNo && (c.assignedOfficers || c.chairman || c.members || c.committeeDetails || c.status === "Committee Details Sent" || extReq || extStart)) {
+                const chairmanPart = c.chairman ? `Chairman: ${c.chairman.fullName || c.chairman.name}` : "";
+                const membersPart = Array.isArray(c.members) && c.members.length > 0 ? `Members: ${c.members.map((m: any) => m.fullName || m.name).join(", ")}` : "";
+                const formattedText = c.assignedOfficers || [chairmanPart, membersPart].filter(Boolean).join(" | ") || "Investigation Committee Assigned";
+                list.push({
+                  id: `asgn-${c.caseNo || c.refNo}`,
+                  caseNo: c.caseNo || c.refNo,
+                  subjectOfficerName: c.subjectOfficerName || c.assignedTo || c.subjectOfficer || activeName || "Subject Officer",
+                  assignedOfficers: formattedText,
+                  chairman: c.chairman || null,
+                  members: c.members || [],
+                  extensionTerm: extTerm,
+                  extensionStartDate: extStart,
+                  extensionEndDate: extEnd,
+                  reportDueDate: extEnd || c.reportDueDate || c.report_due_date,
+                  extensionApprovalStatus: extApprove || "Approved",
+                  extensionDecisionDate: extDate,
+                  extensionRequestedByAdmin: !!extReq,
+                  status: c.status || "Committee Details Sent to Subject Officer",
+                  committeeSent: true,
+                  datesSubmittedBySubject: false,
+                });
+              }
+            });
+          }
+        }
+      } catch (e) {}
+
+      try {
+        const storedLetters = localStorage.getItem("dcmms_letters");
+        if (storedLetters) {
+          const lettersList = JSON.parse(storedLetters);
+          if (Array.isArray(lettersList)) {
+            lettersList.forEach((l: any) => {
+              const targetCaseNo = String(l.refNo || l.caseNo || "").trim().toLowerCase();
+              const extTerm = l.extensionTerm || l.extension_term;
+              const extStart = l.extensionStartDate || l.extension_start_date;
+              const extEnd = l.extensionEndDate || l.extension_end_date;
+              const extReq = l.extensionRequested || l.extensionRequestedByAdmin || l.extension_requested_by_admin;
+              const extApprove = l.extensionApprovalStatus || l.extension_approval_status;
+              const extDate = l.extensionDecisionDate || l.extension_decision_date;
+
+              if (targetCaseNo && (extTerm || extStart || extReq || extEnd)) {
+                const idx = list.findIndex((a: any) => String(a.caseNo || a.case_no || "").trim().toLowerCase() === targetCaseNo);
+                if (idx >= 0) {
+                  if (extTerm) list[idx].extensionTerm = extTerm;
+                  if (extStart) list[idx].extensionStartDate = extStart;
+                  if (extEnd) {
+                    list[idx].extensionEndDate = extEnd;
+                    list[idx].reportDueDate = extEnd;
+                  }
+                  if (extReq) list[idx].extensionRequestedByAdmin = true;
+                  if (extApprove) list[idx].extensionApprovalStatus = extApprove;
+                  if (extDate) list[idx].extensionDecisionDate = extDate;
                 }
               }
             });
@@ -763,13 +863,13 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
         const hasStringOfficers = typeof asgnOfficers === "string" && asgnOfficers.trim().length > 0 && asgnOfficers.trim() !== "[]" && asgnOfficers.trim() !== "null";
         const hasChairman = !!(a.chairman?.fullName || a.chairman?.name || (typeof a.chairman === "string" && a.chairman.trim().length > 0));
         const hasMembers = Array.isArray(a.members) && a.members.length > 0;
-        const hasDatesOrAdminFlag = !!(a.officersAssignedByAdmin || a.appointmentDate || a.reportDueDate || a.appointment_date || a.report_due_date || a.committeeSent || a.committee_sent || a.status);
+        const hasDatesOrAdminFlag = !!(a.officersAssignedByAdmin || a.appointmentDate || a.reportDueDate || a.appointment_date || a.report_due_date || a.committeeSent || a.committee_sent || a.status || a.extensionStartDate || a.extension_start_date || a.extensionTerm || a.extension_term || a.extensionRequestedByAdmin);
 
         const hasOfficersAssigned = hasArrayOfficers || hasStringOfficers || hasChairman || hasMembers || hasDatesOrAdminFlag;
 
         if (!hasOfficersAssigned) return false;
 
-        // 2. Display only cases assigned to the logged in Subject Officer (or unassigned/generic)
+        // 2. Display cases assigned to the logged in Subject Officer, or any case with date extension details (so every subject officer can see date extension requests)
         const officer = (a.subjectOfficerName || a.subject_officer_name || "").trim().toLowerCase();
 
         const isGenericOfficer =
@@ -787,7 +887,22 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
           activeNameClean === "පවරන ලද විෂය භාර නිලධාරී" ||
           activeNameClean === "assigned subject officer";
 
-        if (isGenericOfficer || isGenericActive) return true;
+        const hasExtensionDetails = !!(
+          a.extensionRequestedByAdmin ||
+          a.extension_requested_by_admin ||
+          a.extensionRequested ||
+          a.extensionStartDate ||
+          a.extension_start_date ||
+          a.extensionEndDate ||
+          a.extension_end_date ||
+          (a.extensionTerm && a.extensionTerm !== "None") ||
+          (a.extension_term && a.extension_term !== "None") ||
+          a.extensionApprovalStatus ||
+          a.extension_approval_status ||
+          (a.status && String(a.status).toLowerCase().includes("extension"))
+        );
+
+        if (hasExtensionDetails || isGenericOfficer || isGenericActive) return true;
 
         return (
           officer === activeNameClean ||
@@ -803,9 +918,32 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
 
   useEffect(() => {
     fetchAssignments();
-    const interval = setInterval(fetchAssignments, 4000);
-    return () => clearInterval(interval);
-  }, [profile]);
+
+    const channel = supabase
+      .channel("subject-assignments-realtime-channel")
+      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subject_assignments" }, fetchAssignments)
+      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subject_details" }, fetchAssignments)
+      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subject" }, fetchAssignments)
+      .subscribe();
+
+    const interval = setInterval(fetchAssignments, 2500);
+
+    const handleStorageEvent = (e: StorageEvent) => {
+      if (e.key === "dcmms_subject_assignments" || e.key === "dcmms_cases" || e.key === "dcmms_letters") {
+        fetchAssignments();
+      }
+    };
+
+    window.addEventListener("storage", handleStorageEvent);
+    window.addEventListener("dcmms_assignment_updated", fetchAssignments);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(interval);
+      window.removeEventListener("storage", handleStorageEvent);
+      window.removeEventListener("dcmms_assignment_updated", fetchAssignments);
+    };
+  }, [profile, t]);
 
   // Step 2 Handler: Subject Officer Submits Appointment Date & Report Due Date
   const handleStep2SubmitDates = (asgn: any, appointmentDate: string, reportDueDate: string) => {
@@ -855,52 +993,190 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
   };
 
   // Step 3/4: Subject Officer Approves or Disapproves Extension Request
-  const handleExtensionDecision = (asgn: any, approved: boolean) => {
+  const handleExtensionDecision = async (asgn: any, approved: boolean) => {
     const today = new Date().toISOString().slice(0, 10);
     const status = approved ? "Approved" : "Disapproved";
-    const updated = {
+    const caseNo = asgn.caseNo || asgn.case_no;
+    const extEnd = asgn.extensionEndDate || asgn.extension_end_date;
+
+    const updated: any = {
       ...asgn,
+      caseNo,
       extensionApprovalStatus: status,
       extensionDecisionDate: today,
       status: approved ? "Extension Approved" : "Extension Disapproved",
       updatedAt: today,
     };
 
+    if (approved && extEnd) {
+      updated.reportDueDate = extEnd;
+      updated.report_due_date = extEnd;
+
+      const dueId = `due-date-${asgn.id || caseNo}`;
+      const dueEl = document.getElementById(dueId) as HTMLInputElement;
+      if (dueEl) {
+        dueEl.value = extEnd;
+      }
+    }
+
+    setAssignments((prev) =>
+      prev.map((item) =>
+        (item.id === asgn.id || item.caseNo === caseNo || item.case_no === caseNo)
+          ? { ...item, ...updated }
+          : item
+      )
+    );
+
     if (typeof window !== "undefined") {
       try {
         const stored = localStorage.getItem("dcmms_subject_assignments") || "[]";
         let list = JSON.parse(stored);
-        list = list.filter((a: any) => a.id !== asgn.id);
+        list = list.filter((a: any) => (a.caseNo || a.case_no) !== caseNo);
         list.push(updated);
         localStorage.setItem("dcmms_subject_assignments", JSON.stringify(list));
       } catch (e) {}
+
+      try {
+        const storedLetters = localStorage.getItem("dcmms_letters") || "[]";
+        let letters = JSON.parse(storedLetters);
+        const idx = letters.findIndex((l: any) => l.refNo === caseNo || l.caseNo === caseNo);
+        if (idx >= 0) {
+          letters[idx].extensionApprovalStatus = status;
+          letters[idx].extensionDecisionDate = today;
+          letters[idx].status = approved ? "Extension Approved" : "Extension Disapproved";
+          if (approved && extEnd) {
+            letters[idx].reportDueDate = extEnd;
+            letters[idx].report_due_date = extEnd;
+          }
+          localStorage.setItem("dcmms_letters", JSON.stringify(letters));
+        }
+      } catch (e) {}
+
+      try {
+        const storedCases = localStorage.getItem("dcmms_cases") || "[]";
+        let cases = JSON.parse(storedCases);
+        const idx = cases.findIndex((c: any) => c.caseNo === caseNo || c.refNo === caseNo);
+        if (idx >= 0) {
+          cases[idx].extensionApprovalStatus = status;
+          cases[idx].extensionDecisionDate = today;
+          cases[idx].status = approved ? "Extension Approved" : "Extension Disapproved";
+          if (approved && extEnd) {
+            cases[idx].reportDueDate = extEnd;
+            cases[idx].report_due_date = extEnd;
+          }
+          localStorage.setItem("dcmms_cases", JSON.stringify(cases));
+        }
+      } catch (e) {}
+
+      // Update calendar events in localStorage if approved — same pattern as syncCalendar for appointment date
+      if (approved && extEnd) {
+        try {
+          const storedCal = localStorage.getItem("dcmms_calendar_events") || "[]";
+          let calEvents = JSON.parse(storedCal);
+          let updatedCal = false;
+          calEvents = calEvents.map((ev: any) => {
+            const evCase = ev.caseNo || ev.case_no || ev.refNo;
+            if ((evCase === caseNo) && (ev.source === "Report Due Date" || ev.type === "report_due" || String(ev.summary || "").toLowerCase().includes("report due"))) {
+              updatedCal = true;
+              return { ...ev, date: extEnd, start: extEnd, end: extEnd, extensionApplied: true };
+            }
+            return ev;
+          });
+          if (!updatedCal) {
+            calEvents.push({
+              id: `ext-due-${caseNo}-${today}`,
+              caseNo,
+              case_no: caseNo,
+              date: extEnd,
+              start: extEnd,
+              end: extEnd,
+              summary: `Extension Due: ${caseNo}`,
+              description: `Extended report due date for Case ${caseNo} after Officer in Charge approval.`,
+              source: "Extension Due Date",
+              type: "extension_due",
+            });
+          }
+          localStorage.setItem("dcmms_calendar_events", JSON.stringify(calEvents));
+        } catch (e) {}
+      }
+
+      window.dispatchEvent(new CustomEvent("dcmms_assignment_updated"));
+      window.dispatchEvent(new Event("storage"));
     }
 
     if (isSupabaseConfigured) {
-      supabase.from("dcmms_subject_assignments").upsert({
-        id: updated.id,
-        case_no: updated.caseNo,
-        subject_officer_name: updated.subjectOfficerName,
-        assigned_officers: Array.isArray(updated.assignedOfficers) ? updated.assignedOfficers : (updated.assignedOfficers ? [updated.assignedOfficers] : null),
-        chairman: updated.chairman || null,
-        members: updated.members || null,
-        appointment_date: updated.appointmentDate,
-        report_due_date: updated.reportDueDate,
-        extension_term: updated.extensionTerm,
-        extension_start_date: updated.extensionStartDate,
-        extension_end_date: updated.extensionEndDate,
-        extension_approval_status: status,
-        extension_decision_date: today,
-        certification_submitted: updated.certificationSubmitted || false,
-        report_submit_date: updated.reportSubmitDate || null,
-        report_content: updated.reportContent || null,
-        status: updated.status,
-      }).then();
+      try {
+        await supabase.from("dcmms_subject_assignments").upsert({
+          case_no: caseNo,
+          subject_officer_name: updated.subjectOfficerName || updated.subject_officer_name || null,
+          assigned_officers: Array.isArray(updated.assignedOfficers) ? updated.assignedOfficers : (updated.assignedOfficers ? [updated.assignedOfficers] : null),
+          chairman: updated.chairman || null,
+          members: updated.members || null,
+          appointment_date: updated.appointmentDate || updated.appointment_date || null,
+          report_due_date: (approved && extEnd) ? extEnd : (updated.reportDueDate || updated.report_due_date || null),
+          extension_term: updated.extensionTerm || updated.extension_term,
+          extension_start_date: updated.extensionStartDate || updated.extension_start_date,
+          extension_end_date: updated.extensionEndDate || updated.extension_end_date,
+          extension_requested_by_admin: true,
+          extension_approval_status: status,
+          extension_decision_date: today,
+          certification_submitted: updated.certificationSubmitted || false,
+          report_submit_date: updated.reportSubmitDate || null,
+          report_content: updated.reportContent || null,
+          status: updated.status,
+        }, { onConflict: "case_no" });
+      } catch (err) {
+        console.warn("Supabase subject assignments update warning:", err);
+      }
+
+      try {
+        const subUpdateObj: any = {
+          status: updated.status,
+        };
+        if (approved && extEnd) {
+          subUpdateObj.report_due_date = extEnd;
+        }
+
+        await supabase.from("dcmms_subject").update(subUpdateObj).eq("case_no", caseNo);
+      } catch (err) {
+        console.warn("Supabase subject update warning:", err);
+      }
+
+      try {
+        const prelimUpdateObj: any = {
+          extension_approval_status: status,
+          extension_decision_date: today,
+          status: approved ? "Extension Approved" : "Extension Disapproved",
+        };
+        if (approved && extEnd) {
+          prelimUpdateObj.report_due_date = extEnd;
+        }
+        await supabase.from("dcmms_preliminary_investigations")
+          .update(prelimUpdateObj)
+          .eq("case_no", caseNo);
+      } catch (err) {
+        console.warn("Supabase prelim update warning:", err);
+      }
+
+      if (approved && extEnd) {
+        try {
+          await supabase.from("dcmms_calendar").upsert({
+            id: `ext-due-${caseNo}`,
+            case_no: caseNo,
+            date: extEnd,
+            summary: `Extension Due: ${caseNo}`,
+            description: `Extended report due date for Case ${caseNo} approved by Subject Officer.`,
+            source: "Extension Due Date",
+          }, { onConflict: "id" });
+        } catch (err) {
+          console.warn("Supabase calendar update warning:", err);
+        }
+      }
     }
 
     showToast(
       approved
-        ? (lang === "si" ? "දීර්ඝ කිරීම අනුමත කළා — Admin වෙත යවා ඇත!" : "Extension Approved and sent to Investigation Admin!")
+        ? (lang === "si" ? `දීර්ඝ කිරීම අනුමත කළා (වාර්තා දිනය ${extEnd || ""} දක්වා දීර්ඝ විය) — Admin වෙත යවා ඇත!` : `Extension Approved (Due date updated to ${extEnd || ""}) and sent to Investigation Admin!`)
         : (lang === "si" ? "දීර්ඝ කිරීම ප්‍රතික්ෂේප කළා — Admin වෙත යවා ඇත!" : "Extension Disapproved and sent to Investigation Admin!")
     );
     fetchAssignments();
@@ -1640,7 +1916,17 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
                                         <input
                                           type="date"
                                           id={apptId}
-                                          defaultValue={asgn.appointmentDate || ""}
+                                          value={asgn.appointmentDate || ""}
+                                          onChange={(e) => {
+                                            const val = e.target.value;
+                                            setAssignments((prev) =>
+                                              prev.map((item) =>
+                                                (item.id === asgn.id || item.caseNo === asgn.caseNo)
+                                                  ? { ...item, appointmentDate: val, appointment_date: val }
+                                                  : item
+                                              )
+                                            );
+                                          }}
                                           style={{ width: "100%", padding: "8px 10px", borderRadius: "8px", border: "1px solid #bae6fd", fontSize: "13px", backgroundColor: "#ffffff" }}
                                         />
                                       </div>
@@ -1651,7 +1937,17 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
                                         <input
                                           type="date"
                                           id={dueId}
-                                          defaultValue={asgn.reportDueDate || ""}
+                                          value={asgn.reportDueDate || ""}
+                                          onChange={(e) => {
+                                            const val = e.target.value;
+                                            setAssignments((prev) =>
+                                              prev.map((item) =>
+                                                (item.id === asgn.id || item.caseNo === asgn.caseNo)
+                                                  ? { ...item, reportDueDate: val, report_due_date: val }
+                                                  : item
+                                              )
+                                            );
+                                          }}
                                           style={{ width: "100%", padding: "8px 10px", borderRadius: "8px", border: "1px solid #fecaca", fontSize: "13px", backgroundColor: "#ffffff" }}
                                         />
                                       </div>
@@ -1672,70 +1968,81 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
                                 </div>
                               </div>
 
-                              {/* ── STEP 3 & 4 ── Extension Request (Admin sent) → Subject Officer Decision */}
-                              {isExtensionRequested && (
-                                <div style={{ display: "flex", gap: "16px" }}>
-                                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: "36px" }}>
-                                    <div style={{ width: "32px", height: "32px", borderRadius: "50%", backgroundColor: extensionStatus === "Approved" ? "#16a34a" : extensionStatus === "Disapproved" ? "#dc2626" : "#d97706", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "12px", flexShrink: 0 }}>3/4</div>
-                                    <div style={{ width: "2px", flex: 1, minHeight: "16px", backgroundColor: extensionStatus ? (extensionStatus === "Approved" ? "#16a34a" : "#dc2626") : "#e2e8f0", marginTop: "4px", marginBottom: "4px" }} />
-                                  </div>
-                                  <div style={{ flex: 1, marginBottom: "16px" }}>
-                                    <div style={{ fontSize: "13px", fontWeight: 700, color: "#b45309", marginBottom: "8px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                                      <span>{lang === "si" ? "3 & 4. දිනය දීර්ඝ කිරීමේ ඉල්ලීම — Admin ගෙන් ලැබුණා" : "Steps 3 & 4: Extension Request Received from Admin — Your Decision Required"}</span>
-                                      {extensionStatus === "Approved" ? (
-                                        <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "20px", backgroundColor: "#dcfce7", color: "#15803d" }}>✓ Approved</span>
-                                      ) : extensionStatus === "Disapproved" ? (
-                                        <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "20px", backgroundColor: "#fee2e2", color: "#b91c1c" }}>✕ Disapproved</span>
-                                      ) : (
-                                        <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "20px", backgroundColor: "#fef3c7", color: "#b45309" }}>{lang === "si" ? "⚡ ඔබේ නිර්ණය අවශ්‍යයි" : "⚡ Your Decision Required"}</span>
-                                      )}
+                              {/* ── STEP 3 & 4 ── Extension of Days Details (Sent/Granted by Investigation Admin) */}
+                              {(() => {
+                                const extTerm = asgn.extensionTerm || asgn.extension_term;
+                                const extStart = asgn.extensionStartDate || asgn.extension_start_date;
+                                const extEnd = asgn.extensionEndDate || asgn.extension_end_date;
+                                const extReq = asgn.extensionRequestedByAdmin || asgn.extension_requested_by_admin || asgn.extensionRequested;
+                                const extensionStatus = asgn.extensionApprovalStatus || asgn.extension_approval_status;
+
+                                const isExtensionGranted = !!(
+                                  extStart ||
+                                  extEnd ||
+                                  (extTerm && extTerm !== "None") ||
+                                  extReq ||
+                                  (asgn.status && String(asgn.status).toLowerCase().includes("extension"))
+                                );
+
+                                return (
+                                  <div style={{ display: "flex", gap: "16px" }}>
+                                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: "36px" }}>
+                                      <div style={{ width: "32px", height: "32px", borderRadius: "50%", backgroundColor: isExtensionGranted ? "#16a34a" : "#cbd5e1", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "12px", flexShrink: 0 }}>3/4</div>
+                                      <div style={{ width: "2px", flex: 1, minHeight: "16px", backgroundColor: isExtensionGranted ? "#16a34a" : "#e2e8f0", marginTop: "4px", marginBottom: "4px" }} />
                                     </div>
-                                    <div style={{ backgroundColor: "#fffbeb", borderRadius: "10px", border: "1px solid #fde68a", padding: "14px 16px", display: "flex", flexDirection: "column", gap: "10px" }}>
-                                      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px", fontSize: "12px" }}>
-                                        <div style={{ backgroundColor: "#ffffff", padding: "10px", borderRadius: "8px", border: "1px solid #fde68a" }}>
-                                          <div style={{ fontSize: "10px", color: "#78350f", fontWeight: 700, textTransform: "uppercase" }}>{lang === "si" ? "ගණන" : "Extension No."}</div>
-                                          <div style={{ fontWeight: 700, color: "#92400e", marginTop: "2px", fontSize: "13px" }}>{asgn.extensionTerm || "First"}</div>
-                                        </div>
-                                        <div style={{ backgroundColor: "#ffffff", padding: "10px", borderRadius: "8px", border: "1px solid #fde68a" }}>
-                                          <div style={{ fontSize: "10px", color: "#78350f", fontWeight: 700, textTransform: "uppercase" }}>{lang === "si" ? "ආරම්භ දිනය" : "Start Date"}</div>
-                                          <div style={{ fontWeight: 700, color: "#92400e", marginTop: "2px", fontSize: "13px" }}>{asgn.extensionStartDate}</div>
-                                        </div>
-                                        <div style={{ backgroundColor: "#ffffff", padding: "10px", borderRadius: "8px", border: "1px solid #fde68a" }}>
-                                          <div style={{ fontSize: "10px", color: "#78350f", fontWeight: 700, textTransform: "uppercase" }}>{lang === "si" ? "අවසාන දිනය" : "End Date"}</div>
-                                          <div style={{ fontWeight: 700, color: "#92400e", marginTop: "2px", fontSize: "13px" }}>{asgn.extensionEndDate}</div>
-                                        </div>
+                                    <div style={{ flex: 1, marginBottom: "16px" }}>
+                                      <div style={{ fontSize: "13px", fontWeight: 700, color: isExtensionGranted ? "#15803d" : "#334155", marginBottom: "8px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                        <span>{lang === "si" ? "3 & 4. දිනයන් දීර්ඝ කිරීමේ කොටස (Extension of Days Details)" : "Steps 3 & 4: Extension of Days Details"}</span>
+                                        {isExtensionGranted ? (
+                                          <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "20px", backgroundColor: "#dcfce7", color: "#15803d" }}>
+                                            ✓ {lang === "si" ? "විමර්ශන පරිපාලක විසින් ලබාදෙන ලදී" : "Extension Granted by Investigation Admin"}
+                                          </span>
+                                        ) : (
+                                          <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "20px", backgroundColor: "#f1f5f9", color: "#64748b" }}>
+                                            {lang === "si" ? "දීර්ඝ කිරීමක් නැත" : "No Extension Granted"}
+                                          </span>
+                                        )}
                                       </div>
-                                      {!extensionStatus && (
-                                        <div style={{ display: "flex", gap: "10px" }}>
-                                          <button
-                                            type="button"
-                                            onClick={() => handleExtensionDecision(asgn, true)}
-                                            style={{ flex: 1, padding: "10px 16px", background: "linear-gradient(135deg, #16a34a, #22c55e)", color: "#ffffff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "13px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
-                                          >
+
+                                      {isExtensionGranted ? (
+                                        <div style={{ backgroundColor: "#f0fdf4", borderRadius: "10px", border: "1px solid #bbf7d0", padding: "14px 16px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                                          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px", fontSize: "12px" }}>
+                                            <div style={{ backgroundColor: "#ffffff", padding: "10px", borderRadius: "8px", border: "1px solid #bbf7d0" }}>
+                                              <div style={{ fontSize: "10px", color: "#166534", fontWeight: 700, textTransform: "uppercase" }}>{lang === "si" ? "වාරය" : "Extension Term"}</div>
+                                              <div style={{ fontWeight: 700, color: "#15803d", marginTop: "2px", fontSize: "13px" }}>{extTerm || "First"}</div>
+                                            </div>
+                                            <div style={{ backgroundColor: "#ffffff", padding: "10px", borderRadius: "8px", border: "1px solid #bbf7d0" }}>
+                                              <div style={{ fontSize: "10px", color: "#166534", fontWeight: 700, textTransform: "uppercase" }}>{lang === "si" ? "ආරම්භ දිනය" : "Start Date"}</div>
+                                              <div style={{ fontWeight: 700, color: "#15803d", marginTop: "2px", fontSize: "13px" }}>{extStart || "—"}</div>
+                                            </div>
+                                            <div style={{ backgroundColor: "#ffffff", padding: "10px", borderRadius: "8px", border: "1px solid #bbf7d0" }}>
+                                              <div style={{ fontSize: "10px", color: "#166534", fontWeight: 700, textTransform: "uppercase" }}>{lang === "si" ? "අවසාන දිනය" : "End Date"}</div>
+                                              <div style={{ fontWeight: 700, color: "#15803d", marginTop: "2px", fontSize: "13px" }}>{extEnd || "—"}</div>
+                                            </div>
+                                          </div>
+                                          <div style={{ padding: "10px 14px", borderRadius: "8px", backgroundColor: "#dcfce7", color: "#15803d", fontWeight: 700, fontSize: "13px", display: "flex", alignItems: "center", gap: "8px" }}>
                                             <CheckCircle size={16} />
-                                            {lang === "si" ? "අනුමත කිරීම (Approve)" : "Approve Extension"}
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={() => handleExtensionDecision(asgn, false)}
-                                            style={{ flex: 1, padding: "10px 16px", background: "linear-gradient(135deg, #dc2626, #ef4444)", color: "#ffffff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "13px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
-                                          >
-                                            <X size={16} />
-                                            {lang === "si" ? "ප්‍රතික්ෂේප කිරීම (Disapprove)" : "Disapprove Extension"}
-                                          </button>
+                                            <span>
+                                              {lang === "si"
+                                                ? `විමර්ශන පරිපාලක (Investigation Admin) විසින් දිනයන් දීර්ඝ කිරීම ලබා දී ඇත. වාර්තා ලබාදීමේ දිනය ${extEnd || ""} දක්වා දීර්ඝ කර ඇත.`
+                                                : `Extension of dates granted by Investigation Admin. Report due date extended to ${extEnd || ""}.`}
+                                            </span>
+                                          </div>
                                         </div>
-                                      )}
-                                      {extensionStatus && (
-                                        <div style={{ padding: "10px 14px", borderRadius: "8px", backgroundColor: extensionStatus === "Approved" ? "#dcfce7" : "#fee2e2", color: extensionStatus === "Approved" ? "#15803d" : "#b91c1c", fontWeight: 700, fontSize: "13px" }}>
-                                          {extensionStatus === "Approved"
-                                            ? `✅ ${lang === "si" ? "ඔබ දීර්ඝ කිරීම අනුමත කළා — Admin වෙත යවා ඇත" : "You approved the extension — Admin has been notified"}`
-                                            : `❌ ${lang === "si" ? "ඔබ දීර්ඝ කිරීම ප්‍රතික්ෂේප කළා — Admin වෙත යවා ඇත" : "You disapproved the extension — Admin has been notified"}`}
+                                      ) : (
+                                        <div style={{ backgroundColor: "#f8fafc", borderRadius: "10px", border: "1px dashed #cbd5e1", padding: "14px 16px", display: "flex", alignItems: "center", gap: "10px", color: "#64748b", fontSize: "13px" }}>
+                                          <Clock size={18} style={{ color: "#94a3b8", flexShrink: 0 }} />
+                                          <span>
+                                            {lang === "si"
+                                              ? "⏳ විමර්ශන පරිපාලක (Investigation Admin) විසින් දිනයන් දීර්ඝ කිරීමක් මෙම නඩුව සඳහා තවම ලබාදී නොමැත."
+                                              : "⏳ No extension of dates has been granted by Investigation Admin for this case yet."}
+                                          </span>
                                         </div>
                                       )}
                                     </div>
                                   </div>
-                                </div>
-                              )}
+                                );
+                              })()}
 
                               {/* ── STEP 5 ── After-Investigation Details Received from Admin */}
                               <div style={{ display: "flex", gap: "16px" }}>
