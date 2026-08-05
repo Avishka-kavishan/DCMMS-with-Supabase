@@ -1829,7 +1829,7 @@ export default function InvestigationPage() {
       extensionStartDate: extensionStartToUse,
       extensionEndDate: extensionEndToUse,
       extensionRequestedByAdmin: true,
-      extensionApprovalStatus: null,
+      extensionApprovalStatus: "Pending",
       extensionDecisionDate: null,
       currentStep: 3,
       status: "Extension Requested",
@@ -1865,7 +1865,7 @@ export default function InvestigationPage() {
           letters[idx].extensionEndDate = extensionEndToUse;
           letters[idx].extensionRequested = true;
           letters[idx].extensionRequestedByAdmin = true;
-          letters[idx].extensionApprovalStatus = null;
+          letters[idx].extensionApprovalStatus = "Pending";
           letters[idx].extensionDecisionDate = null;
           letters[idx].status = "Extension Requested";
           localStorage.setItem("dcmms_letters", JSON.stringify(letters));
@@ -1882,7 +1882,7 @@ export default function InvestigationPage() {
           cases[idx].extensionEndDate = extensionEndToUse;
           cases[idx].extensionRequested = true;
           cases[idx].extensionRequestedByAdmin = true;
-          cases[idx].extensionApprovalStatus = null;
+          cases[idx].extensionApprovalStatus = "Pending";
           cases[idx].extensionDecisionDate = null;
           cases[idx].status = "Extension Requested";
           localStorage.setItem("dcmms_cases", JSON.stringify(cases));
@@ -1890,6 +1890,8 @@ export default function InvestigationPage() {
       } catch (e) {}
 
       window.dispatchEvent(new CustomEvent("dcmms_assignment_updated"));
+      window.dispatchEvent(new Event("dcmms_notifications_updated"));
+      window.dispatchEvent(new Event("dcmms_data_updated"));
       window.dispatchEvent(new Event("storage"));
     }
 
@@ -1920,7 +1922,7 @@ export default function InvestigationPage() {
           extension_start_date: extensionStartToUse,
           extension_end_date: extensionEndToUse,
           extension_requested_by_admin: true,
-          extension_approval_status: null,
+          extension_approval_status: "Pending",
           extension_decision_date: null,
           status: "Extension Requested",
         };

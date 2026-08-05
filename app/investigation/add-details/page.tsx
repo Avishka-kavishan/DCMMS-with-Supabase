@@ -31,6 +31,7 @@ function InvestigationCaseDetailsContent() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [fontScale, setFontScale] = useState<"small" | "medium" | "large">("medium");
   const [isLoading, setIsLoading] = useState(true);
+  const [isInitialLoaded, setIsInitialLoaded] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
 
@@ -695,6 +696,7 @@ function InvestigationCaseDetailsContent() {
 
       setConcernedOfficersList(cleanAccused);
 
+      setIsInitialLoaded(true);
       setIsLoading(false);
     };
 
@@ -760,9 +762,11 @@ function InvestigationCaseDetailsContent() {
 
     if (assignment) {
       setExistingAssignment((prev: any) => ({ ...prev, ...assignment }));
-      if (assignment.extensionTerm) setStep3Term(assignment.extensionTerm);
-      if (assignment.extensionStartDate) setStep3StartDate(assignment.extensionStartDate);
-      if (assignment.extensionEndDate) setStep3EndDate(assignment.extensionEndDate);
+      if (!isInitialLoaded) {
+        if (assignment.extensionTerm) setStep3Term(assignment.extensionTerm);
+        if (assignment.extensionStartDate) setStep3StartDate(assignment.extensionStartDate);
+        if (assignment.extensionEndDate) setStep3EndDate(assignment.extensionEndDate);
+      }
     }
   };
 
@@ -801,7 +805,7 @@ function InvestigationCaseDetailsContent() {
       window.removeEventListener("storage", handleStorageChange);
       window.removeEventListener("dcmms_assignment_updated", reloadAssignmentData);
     };
-  }, [caseNoParam]);
+  }, [caseNoParam, isInitialLoaded]);
 
   const formatSubjectOfficerName = (raw?: string | null): string => {
     if (!raw || typeof raw !== "string" || !raw.trim()) {
@@ -845,6 +849,7 @@ function InvestigationCaseDetailsContent() {
         subjectOfficerName: updatedFields.subjectOfficerName || existing.subjectOfficerName || assignee || "Subject Officer",
         status: status,
         updatedAt: new Date().toISOString(),
+        datesSubmitTimestamp: new Date().toISOString(),
         ...existing,
         ...updatedFields,
         extensionTerm: updatedFields.extensionTerm || updatedFields.extension_term || existing.extensionTerm || existing.extension_term,
@@ -865,6 +870,9 @@ function InvestigationCaseDetailsContent() {
 
       if (typeof window !== "undefined") {
         window.dispatchEvent(new Event("dcmms_assignment_updated"));
+        window.dispatchEvent(new Event("dcmms_notifications_updated"));
+        window.dispatchEvent(new Event("dcmms_data_updated"));
+        window.dispatchEvent(new Event("storage"));
       }
 
       if (isSupabaseConfigured) {
