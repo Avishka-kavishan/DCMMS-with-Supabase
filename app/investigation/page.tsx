@@ -112,7 +112,7 @@ export default function InvestigationPage() {
   // Subject Officer Date Notifications state
   const [subjectOfficerNotifications, setSubjectOfficerNotifications] = useState<any[]>([]);
   const [isNotifLoading, setIsNotifLoading] = useState(true);
-  const [isNotificationsMinimized, setIsNotificationsMinimized] = useState(false);
+  const [isNotificationsMinimized, setIsNotificationsMinimized] = useState(true);
   const [showAllNotifications, setShowAllNotifications] = useState(true);
   const [seenNotifIds, setSeenNotifIds] = useState<string[]>(() => {
     if (typeof window !== "undefined") {

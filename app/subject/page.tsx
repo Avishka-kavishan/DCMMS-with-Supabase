@@ -12,7 +12,7 @@ import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { getCurrentProfile, signOut, UserProfile } from "@/lib/auth";
-import { CheckCircle, XCircle, FileText, Send, Clock, X, AlertCircle, ShieldCheck, Calendar as CalendarIcon, ChevronDown, ChevronUp } from "lucide-react";
+import { CheckCircle, XCircle, FileText, Send, Clock, X, AlertCircle, ShieldCheck, Calendar as CalendarIcon, ChevronDown, ChevronUp, Bell, Eye, MoreHorizontal, Filter, Check } from "lucide-react";
 
 interface Case {
   id: string;
@@ -630,8 +630,107 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
   const [reportDateForm, setReportDateForm] = useState(new Date().toISOString().slice(0, 10));
   const [reportContentForm, setReportContentForm] = useState("");
   const [toastMessage, setToastMessage] = useState("");
-  const [isDirectivesSectionMinimized, setIsDirectivesSectionMinimized] = useState(false);
+  const [isDirectivesSectionMinimized, setIsDirectivesSectionMinimized] = useState(true);
   const [minimizedCaseIds, setMinimizedCaseIds] = useState<Record<string, boolean>>({});
+  const [seenNotifIds, setSeenNotifIds] = useState<string[]>([]);
+  const [notifFilter, setNotifFilter] = useState<"all" | "action" | "completed">("all");
+  const [isNotifDropdownOpen, setIsNotifDropdownOpen] = useState(false);
+  const notifDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem("dcmms_subject_seen_notifs");
+        if (stored) {
+          setSeenNotifIds(JSON.parse(stored));
+        }
+      } catch (e) {}
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (notifDropdownRef.current && !notifDropdownRef.current.contains(event.target as Node)) {
+        setIsNotifDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  const markAsSeen = (id: string) => {
+    if (!id) return;
+    setSeenNotifIds((prev) => {
+      if (prev.includes(id)) return prev;
+      const updated = [...prev, id];
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem("dcmms_subject_seen_notifs", JSON.stringify(updated));
+        } catch (e) {}
+      }
+      return updated;
+    });
+  };
+
+  const markAllAsSeen = () => {
+    const allIds = assignments.map((a) => a.id).filter(Boolean);
+    setSeenNotifIds(allIds);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("dcmms_subject_seen_notifs", JSON.stringify(allIds));
+      } catch (e) {}
+    }
+  };
+
+  const unseenCount = assignments.filter((asgn) => {
+    const isSeen = seenNotifIds.includes(asgn.id) || (asgn.caseNo && seenNotifIds.includes(asgn.caseNo));
+    const isDatesSubmitted = !!asgn.datesSubmittedBySubject;
+    const isExtensionRequested = !!(
+      (asgn.extensionStartDate && asgn.extensionEndDate) ||
+      asgn.extensionRequestedByAdmin ||
+      asgn.status === "Extension Requested" ||
+      asgn.extensionTerm
+    );
+    const isPendingExtension = isExtensionRequested && (!asgn.extensionApprovalStatus || asgn.extensionApprovalStatus === "Pending");
+    const needsAction = !isDatesSubmitted || isPendingExtension;
+    return !isSeen || needsAction;
+  }).length;
+
+  const actionRequiredCount = assignments.filter((asgn) => {
+    const isDatesSubmitted = !!asgn.datesSubmittedBySubject;
+    const isExtensionRequested = !!(
+      (asgn.extensionStartDate && asgn.extensionEndDate) ||
+      asgn.extensionRequestedByAdmin ||
+      asgn.status === "Extension Requested" ||
+      asgn.extensionTerm
+    );
+    const isPendingExtension = isExtensionRequested && (!asgn.extensionApprovalStatus || asgn.extensionApprovalStatus === "Pending");
+    return !isDatesSubmitted || isPendingExtension;
+  }).length;
+
+  const completedCount = assignments.filter((asgn) => {
+    return !!(asgn.afterInvestigationSent || asgn.investigationFileNo || asgn.investigationStatus);
+  }).length;
+
+  const filteredAssignments = assignments.filter((asgn) => {
+    if (notifFilter === "action") {
+      const isDatesSubmitted = !!asgn.datesSubmittedBySubject;
+      const isExtensionRequested = !!(
+        (asgn.extensionStartDate && asgn.extensionEndDate) ||
+        asgn.extensionRequestedByAdmin ||
+        asgn.status === "Extension Requested" ||
+        asgn.extensionTerm
+      );
+      const isPendingExtension = isExtensionRequested && (!asgn.extensionApprovalStatus || asgn.extensionApprovalStatus === "Pending");
+      return !isDatesSubmitted || isPendingExtension;
+    }
+    if (notifFilter === "completed") {
+      return !!(asgn.afterInvestigationSent || asgn.investigationFileNo || asgn.investigationStatus);
+    }
+    return true;
+  });
 
   const toggleCaseMinimize = (caseId: string) => {
     setMinimizedCaseIds((prev) => ({
@@ -952,7 +1051,20 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
         };
       });
 
-      setAssignments(mergedRelevant);
+      const seenKeys = new Set<string>();
+      const deduplicatedAssignments: any[] = [];
+      mergedRelevant.forEach((item: any, idx: number) => {
+        const uniqueKey = String(item.id || item.caseNo || item.case_no || `asgn-${idx}`).trim().toLowerCase();
+        const caseKey = String(item.caseNo || item.case_no || "").trim().toLowerCase();
+        if (seenKeys.has(uniqueKey) || (caseKey && seenKeys.has(`case-${caseKey}`))) {
+          return;
+        }
+        seenKeys.add(uniqueKey);
+        if (caseKey) seenKeys.add(`case-${caseKey}`);
+        deduplicatedAssignments.push(item);
+      });
+
+      setAssignments(deduplicatedAssignments);
     } else {
       setAssignments([]);
     }
@@ -1530,6 +1642,186 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
             </div>
 
             <div className="dashboard-header-right">
+              {/* Facebook-Style Header Notification Bell Button */}
+              <div style={{ position: "relative" }} ref={notifDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setIsNotifDropdownOpen((prev) => !prev)}
+                  style={{
+                    position: "relative",
+                    width: "40px",
+                    height: "40px",
+                    borderRadius: "50%",
+                    backgroundColor: isNotifDropdownOpen || unseenCount > 0 ? "#e7f3ff" : "#f0f2f5",
+                    border: "none",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                    transition: "all 0.2s ease"
+                  }}
+                  title={lang === "si" ? "දැනුම්දීම්" : "Notifications"}
+                >
+                  <Bell size={20} style={{ color: unseenCount > 0 || isNotifDropdownOpen ? "#1877f2" : "#65676b" }} />
+                  {unseenCount > 0 && (
+                    <span style={{
+                      position: "absolute",
+                      top: "-2px",
+                      right: "-2px",
+                      backgroundColor: "#e41e3f",
+                      color: "#ffffff",
+                      fontSize: "11px",
+                      fontWeight: 800,
+                      padding: "1px 6px",
+                      borderRadius: "10px",
+                      border: "2px solid #ffffff",
+                      lineHeight: "1.2"
+                    }}>
+                      {unseenCount}
+                    </span>
+                  )}
+                </button>
+
+                {/* Facebook Notification Dropdown Popover */}
+                {isNotifDropdownOpen && (
+                  <div style={{
+                    position: "absolute",
+                    top: "48px",
+                    right: "0",
+                    width: "360px",
+                    maxHeight: "500px",
+                    backgroundColor: "#ffffff",
+                    borderRadius: "14px",
+                    boxShadow: "0 12px 28px rgba(0, 0, 0, 0.18), 0 2px 4px rgba(0, 0, 0, 0.1)",
+                    border: "1px solid #e4e6eb",
+                    zIndex: 9999,
+                    display: "flex",
+                    flexDirection: "column",
+                    overflow: "hidden"
+                  }}>
+                    {/* FB Dropdown Header */}
+                    <div style={{ padding: "14px 16px 10px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #f0f2f5" }}>
+                      <div>
+                        <h4 style={{ margin: 0, fontSize: "18px", fontWeight: 800, color: "#050505", letterSpacing: "-0.2px" }}>
+                          {lang === "si" ? "දැනුම්දීම්" : "Notifications"}
+                        </h4>
+                        <div style={{ fontSize: "11px", color: "#65676b", marginTop: "2px" }}>
+                          {assignments.length} {lang === "si" ? "ක්‍රියාකාරී නඩු" : "Active Cases"}
+                        </div>
+                      </div>
+                      {unseenCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={markAllAsSeen}
+                          style={{
+                            fontSize: "12px",
+                            fontWeight: 700,
+                            color: "#1877f2",
+                            backgroundColor: "#e7f3ff",
+                            border: "none",
+                            borderRadius: "8px",
+                            padding: "5px 10px",
+                            cursor: "pointer"
+                          }}
+                        >
+                          {lang === "si" ? "සියල්ල කියවූ බවට" : "Mark all as read"}
+                        </button>
+                      )}
+                    </div>
+
+                    {/* FB Dropdown Items List */}
+                    <div style={{ overflowY: "auto", flex: 1, padding: "8px" }}>
+                      {assignments.length > 0 ? (
+                        assignments.map((asgn, idx) => {
+                          const isDatesSubmitted = !!asgn.datesSubmittedBySubject;
+                          const isExtensionRequested = !!(
+                            (asgn.extensionStartDate && asgn.extensionEndDate) ||
+                            asgn.extensionRequestedByAdmin ||
+                            asgn.status === "Extension Requested" ||
+                            asgn.extensionTerm
+                          );
+                          const extensionStatus = asgn.extensionApprovalStatus;
+                          const isPendingExtension = isExtensionRequested && (!extensionStatus || extensionStatus === "Pending");
+                          const hasAfterInvestigation = !!(asgn.afterInvestigationSent || asgn.investigationFileNo || asgn.investigationStatus);
+                          const isUnseen = !seenNotifIds.includes(asgn.id) && !seenNotifIds.includes(asgn.caseNo);
+
+                          return (
+                            <div
+                              key={`dd-${asgn.id || idx}`}
+                              onClick={() => {
+                                markAsSeen(asgn.id);
+                                markAsSeen(asgn.caseNo);
+                                setIsDirectivesSectionMinimized(false);
+                                if (minimizedCaseIds[asgn.id]) {
+                                  toggleCaseMinimize(asgn.id);
+                                }
+                                setIsNotifDropdownOpen(false);
+                                const el = document.getElementById(`directive-case-${asgn.id}`);
+                                if (el) el.scrollIntoView({ behavior: "smooth" });
+                              }}
+                              style={{
+                                display: "flex",
+                                alignItems: "flex-start",
+                                gap: "10px",
+                                padding: "10px 12px",
+                                borderRadius: "10px",
+                                backgroundColor: isUnseen ? "#e7f3ff" : "#ffffff",
+                                border: isUnseen ? "1px solid #cce4ff" : "1px solid transparent",
+                                cursor: "pointer",
+                                marginBottom: "4px",
+                                transition: "all 0.15s ease"
+                              }}
+                            >
+                              {/* FB Badge */}
+                              <div style={{ position: "relative", flexShrink: 0, marginTop: "2px" }}>
+                                <div style={{
+                                  width: "38px",
+                                  height: "38px",
+                                  borderRadius: "50%",
+                                  backgroundColor: hasAfterInvestigation ? "#dcfce7" : isPendingExtension ? "#fef3c7" : !isDatesSubmitted ? "#dbeafe" : "#f0f2f5",
+                                  color: hasAfterInvestigation ? "#15803d" : isPendingExtension ? "#b45309" : !isDatesSubmitted ? "#1d4ed8" : "#65676b",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center"
+                                }}>
+                                  {hasAfterInvestigation ? <CheckCircle size={18} /> : isPendingExtension ? <Clock size={18} /> : !isDatesSubmitted ? <CalendarIcon size={18} /> : <FileText size={18} />}
+                                </div>
+                              </div>
+
+                              {/* FB Content */}
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: "13px", color: "#050505", lineHeight: "1.3" }}>
+                                  <span style={{ fontWeight: 800, color: "#1877f2" }}>Case: {asgn.caseNo}</span>
+                                </div>
+                                <div style={{ fontSize: "12px", color: "#65676b", marginTop: "2px" }}>
+                                  {hasAfterInvestigation
+                                    ? (lang === "si" ? "✓ Step 5 — විමර්ශනය අවසන් විය" : "✓ Step 5 — After-investigation received")
+                                    : isPendingExtension
+                                    ? (lang === "si" ? "⚠️ Steps 3 & 4 — දිනයන් දීර්ඝ කිරීම් ඉල්ලීමක් ඇත" : "⚠️ Steps 3 & 4 — Extension decision pending")
+                                    : !isDatesSubmitted
+                                    ? (lang === "si" ? "⚡ Step 2 — ලිපි හා වාර්තා දිනයන් ඇතුළත් කරන්න" : "⚡ Step 2 — Appointment & Due dates required")
+                                    : (lang === "si" ? "● Step 2 — දිනයන් තහවුරු කළා" : "● Step 2 — Dates submitted to Admin")}
+                                </div>
+                              </div>
+
+                              {isUnseen && (
+                                <span style={{ width: "10px", height: "10px", borderRadius: "50%", backgroundColor: "#1877f2", marginTop: "6px", flexShrink: 0 }}></span>
+                              )}
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div style={{ padding: "20px", textAlign: "center", color: "#65676b", fontSize: "13px" }}>
+                          {lang === "si" ? "දැනුම්දීම් කිසිවක් නැත." : "No notifications found."}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="divider-line" aria-hidden="true" />
+
               {/* Date display badge */}
               <div className="date-badge">
                 <span suppressHydrationWarning>
@@ -1749,534 +2041,773 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
             </div>
           </section>
 
-          {/* ==================== INVESTIGATION DIRECTIVES & DATA FLOW SECTION ==================== */}
+          {/* ==================== NOTIFICATIONS & INVESTIGATION DIRECTIVES SECTION (Facebook UI Style) ==================== */}
           <section style={{ marginBottom: "24px" }}>
-            {/* Section Header */}
-            <div
-              onClick={() => setIsDirectivesSectionMinimized(!isDirectivesSectionMinimized)}
-              style={{
-                background: "linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%)",
-                borderRadius: isDirectivesSectionMinimized ? "16px" : "16px 16px 0 0",
-                padding: "18px 24px",
+            <div style={{
+              backgroundColor: "#ffffff",
+              borderRadius: "16px",
+              border: "1px solid #e4e6eb",
+              padding: "20px 24px",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+              transition: "all 0.2s ease"
+            }}>
+              {/* FB Style Notification Header Bar */}
+              <div style={{
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
-                cursor: "pointer",
-                userSelect: "none",
-                transition: "border-radius 0.2s ease"
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                <Send size={20} style={{ color: "#93c5fd" }} />
-                <div>
-                  <div style={{ color: "#ffffff", fontWeight: 700, fontSize: "15px" }}>
-                    {lang === "si" ? "විමර්ශන නියෝග සහ සහතික කිරීම් — දත්ත ප්‍රවාහය" : "Investigation Directives & Data Flow"}
+                borderBottom: isDirectivesSectionMinimized ? "none" : "1px solid #f0f2f5",
+                paddingBottom: isDirectivesSectionMinimized ? "0" : "16px",
+                marginBottom: isDirectivesSectionMinimized ? "0" : "16px",
+                flexWrap: "wrap",
+                gap: "12px"
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  {/* Circular Avatar Icon Badge */}
+                  <div style={{
+                    position: "relative",
+                    width: "44px",
+                    height: "44px",
+                    borderRadius: "50%",
+                    backgroundColor: unseenCount > 0 ? "#e7f3ff" : "#f0f2f5",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0
+                  }}>
+                    <Bell size={22} style={{ color: unseenCount > 0 ? "#1877f2" : "#65676b" }} />
+                    {unseenCount > 0 && (
+                      <span style={{
+                        position: "absolute",
+                        top: "-2px",
+                        right: "-2px",
+                        backgroundColor: "#e41e3f",
+                        color: "#ffffff",
+                        fontSize: "11px",
+                        fontWeight: 800,
+                        padding: "1px 6px",
+                        borderRadius: "10px",
+                        border: "2px solid #ffffff",
+                        lineHeight: "1.2"
+                      }}>
+                        {unseenCount}
+                      </span>
+                    )}
                   </div>
-                  <div style={{ color: "#93c5fd", fontSize: "12px", marginTop: "2px" }}>
-                    {lang === "si" ? "විෂය නිලධාරී ↔ විමර්ශන පරිපාලක | ක්‍රියාකාරකම් සහ අනුමතිය" : "Subject Officer ↔ Investigation Admin | Actions and approvals"}
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: "19px", fontWeight: 800, color: "#050505", letterSpacing: "-0.3px" }}>
+                      {lang === "si" ? "විමර්ශන නියෝග සහ දැනුම්දීම්" : "Investigation Directives & Notifications"}
+                    </h3>
+                    <div style={{ fontSize: "13px", color: "#65676b", fontWeight: 500, marginTop: "2px" }}>
+                      {lang === "si" ? "විෂය නිලධාරී ↔ විමර්ශන පරිපාලක | ක්‍රියාකාරකම් සහ දැනුම්දීම්" : "Subject Officer ↔ Investigation Admin | Directives & Action Updates"}
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                <span style={{ fontSize: "12px", fontWeight: 700, padding: "4px 14px", borderRadius: "20px", backgroundColor: "rgba(255,255,255,0.15)", color: "#ffffff" }}>
-                  {assignments.length} {lang === "si" ? "නඩු" : "Active Cases"}
-                </span>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setIsDirectivesSectionMinimized(!isDirectivesSectionMinimized);
-                  }}
-                  title={isDirectivesSectionMinimized ? (lang === "si" ? "විහිදුවන්න (Expand)" : "Expand Section") : (lang === "si" ? "හකුලන්න (Minimize)" : "Minimize Section")}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "6px",
-                    padding: "6px 14px",
-                    borderRadius: "20px",
-                    backgroundColor: "rgba(255,255,255,0.2)",
-                    color: "#ffffff",
-                    border: "1px solid rgba(255,255,255,0.35)",
-                    cursor: "pointer",
+
+                {/* Header Right Action Buttons */}
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  {unseenCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={markAllAsSeen}
+                      style={{
+                        fontSize: "13px",
+                        fontWeight: 700,
+                        color: "#1877f2",
+                        backgroundColor: "#e7f3ff",
+                        border: "none",
+                        borderRadius: "8px",
+                        padding: "7px 14px",
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        transition: "all 0.15s ease"
+                      }}
+                      title="Mark all as read"
+                    >
+                      <Check size={16} />
+                      <span>{lang === "si" ? "සියල්ල කියවූ බවට" : "Mark all as read"}</span>
+                    </button>
+                  )}
+
+                  <span style={{
                     fontSize: "12px",
                     fontWeight: 700,
-                    transition: "all 0.2s ease"
-                  }}
-                >
-                  {isDirectivesSectionMinimized ? (
-                    <>
-                      <ChevronDown size={15} />
-                      <span>{lang === "si" ? "විහිදුවන්න" : "Expand"}</span>
-                    </>
-                  ) : (
-                    <>
-                      <ChevronUp size={15} />
-                      <span>{lang === "si" ? "හකුලන්න" : "Minimize"}</span>
-                    </>
-                  )}
-                </button>
+                    padding: "6px 14px",
+                    borderRadius: "20px",
+                    backgroundColor: "#f0f2f5",
+                    color: "#050505"
+                  }}>
+                    {assignments.length} {lang === "si" ? "සක්‍රීය නඩු" : "Active Cases"}
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsDirectivesSectionMinimized(!isDirectivesSectionMinimized)}
+                    title={isDirectivesSectionMinimized ? (lang === "si" ? "විහිදුවන්න (Expand)" : "Expand Section") : (lang === "si" ? "හකුලන්න (Minimize)" : "Minimize Section")}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      padding: "7px 14px",
+                      borderRadius: "8px",
+                      backgroundColor: "#f0f2f5",
+                      color: "#050505",
+                      border: "none",
+                      cursor: "pointer",
+                      fontSize: "13px",
+                      fontWeight: 700,
+                      transition: "all 0.15s ease"
+                    }}
+                  >
+                    {isDirectivesSectionMinimized ? (
+                      <>
+                        <ChevronDown size={16} />
+                        <span>{lang === "si" ? "විහිදුවන්න" : "Expand"}</span>
+                      </>
+                    ) : (
+                      <>
+                        <ChevronUp size={16} />
+                        <span>{lang === "si" ? "හකුලන්න" : "Minimize"}</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
-            </div>
 
-            {!isDirectivesSectionMinimized && (
-              <div style={{ backgroundColor: "#ffffff", borderRadius: "0 0 16px 16px", border: "1px solid #e2e8f0", borderTop: "none" }}>
-                {assignments.length > 0 ? (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "0" }}>
-                    {assignments.map((asgn, asgnIdx) => {
-                      const isDatesSubmitted = !!asgn.datesSubmittedBySubject;
-                      const isExtensionRequested = !!(
-                        (asgn.extensionStartDate && asgn.extensionEndDate) ||
-                        asgn.extensionRequestedByAdmin ||
-                        asgn.status === "Extension Requested" ||
-                        asgn.extensionTerm
-                      );
-                      const extensionStatus = asgn.extensionApprovalStatus;
-                      const hasAfterInvestigation = !!(asgn.afterInvestigationSent || asgn.investigationFileNo || asgn.investigationStatus);
+              {!isDirectivesSectionMinimized && (
+                <div>
+                  {/* Facebook Filter Pills: All / Action Required / Completed */}
+                  <div style={{ display: "flex", gap: "8px", marginBottom: "16px", flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      onClick={() => setNotifFilter("all")}
+                      style={{
+                        fontSize: "13px",
+                        fontWeight: 700,
+                        padding: "7px 18px",
+                        borderRadius: "20px",
+                        border: "none",
+                        backgroundColor: notifFilter === "all" ? "#e7f3ff" : "#f0f2f5",
+                        color: notifFilter === "all" ? "#1877f2" : "#050505",
+                        cursor: "pointer",
+                        transition: "all 0.15s ease"
+                      }}
+                    >
+                      {lang === "si" ? "සියල්ල" : "All Notifications"} ({assignments.length})
+                    </button>
 
-                      const apptId = `app-date-${asgn.id}`;
-                      const dueId = `due-date-${asgn.id}`;
-                      const isCaseMinimized = !!minimizedCaseIds[asgn.id];
+                    <button
+                      type="button"
+                      onClick={() => setNotifFilter("action")}
+                      style={{
+                        fontSize: "13px",
+                        fontWeight: 700,
+                        padding: "7px 18px",
+                        borderRadius: "20px",
+                        border: "none",
+                        backgroundColor: notifFilter === "action" ? "#e7f3ff" : "#f0f2f5",
+                        color: notifFilter === "action" ? "#1877f2" : "#050505",
+                        cursor: "pointer",
+                        transition: "all 0.15s ease"
+                      }}
+                    >
+                      ⚡ {lang === "si" ? "ක්‍රියාකාරකම් අවශ්‍යයි" : "Action Required"} ({actionRequiredCount})
+                    </button>
 
-                      return (
-                        <div key={asgn.id} style={{ borderBottom: asgnIdx < assignments.length - 1 ? "1px solid #f1f5f9" : "none", padding: "24px" }}>
-                          
-                          {/* Case Header */}
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: isCaseMinimized ? "0" : "20px", flexWrap: "wrap", gap: "8px" }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                              <div style={{ width: "44px", height: "44px", borderRadius: "10px", background: "linear-gradient(135deg, #1e3a5f, #2563eb)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                <FileText size={20} style={{ color: "#ffffff" }} />
-                              </div>
-                              <div>
-                                <div style={{ fontWeight: 700, fontSize: "16px", color: "#0f172a" }}>
-                                  {lang === "si" ? "නඩු අංකය:" : "Case:"} {asgn.caseNo}
-                                </div>
-                                <div style={{ fontSize: "12px", color: "#64748b" }}>
-                                  {lang === "si" ? "පවරන ලද විෂය භාර නිලධාරියා:" : "Assigned Subject Officer:"} <strong>{(!asgn.subjectOfficerName || asgn.subjectOfficerName.toLowerCase().includes("kumara") || asgn.subjectOfficerName === "Subject Officer" || asgn.subjectOfficerName === "විෂය නිලධාරී") ? (lang === "si" ? "පවරන ලද විෂය භාර නිලධාරී" : "Assigned Subject Officer") : asgn.subjectOfficerName}</strong>
-                                </div>
-                              </div>
-                            </div>
-                            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                              <span style={{ fontSize: "12px", fontWeight: 700, padding: "5px 14px", borderRadius: "20px", backgroundColor: hasAfterInvestigation ? "#dcfce7" : isDatesSubmitted ? "#dbeafe" : "#fef3c7", color: hasAfterInvestigation ? "#15803d" : isDatesSubmitted ? "#1d4ed8" : "#b45309" }}>
-                                {hasAfterInvestigation ? (lang === "si" ? "✓ Step 5 — විමර්ශනය අවසන්" : "✓ Step 5 — After-Investigation Received") : isDatesSubmitted ? (lang === "si" ? "● Step 2 — දිනයන් තහවුරු කළා" : "● Step 2 — Dates Confirmed") : (lang === "si" ? "● Step 1 — නිලධාරීන් පත් කළා" : "● Step 1 — Officers Assigned")}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => toggleCaseMinimize(asgn.id)}
-                                title={isCaseMinimized ? (lang === "si" ? "විහිදුවන්න (Expand)" : "Expand Case") : (lang === "si" ? "හකුලන්න (Minimize)" : "Minimize Case")}
-                                style={{
-                                  display: "inline-flex",
+                    <button
+                      type="button"
+                      onClick={() => setNotifFilter("completed")}
+                      style={{
+                        fontSize: "13px",
+                        fontWeight: 700,
+                        padding: "7px 18px",
+                        borderRadius: "20px",
+                        border: "none",
+                        backgroundColor: notifFilter === "completed" ? "#e7f3ff" : "#f0f2f5",
+                        color: notifFilter === "completed" ? "#1877f2" : "#050505",
+                        cursor: "pointer",
+                        transition: "all 0.15s ease"
+                      }}
+                    >
+                      ✓ {lang === "si" ? "අවසන් වූ" : "Completed"} ({completedCount})
+                    </button>
+                  </div>
+
+                  {/* Facebook Notifications List */}
+                  {filteredAssignments.length > 0 ? (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                      {filteredAssignments.map((asgn, asgnIdx) => {
+                        const isDatesSubmitted = !!asgn.datesSubmittedBySubject;
+                        const isExtensionRequested = !!(
+                          (asgn.extensionStartDate && asgn.extensionEndDate) ||
+                          asgn.extensionRequestedByAdmin ||
+                          asgn.status === "Extension Requested" ||
+                          asgn.extensionTerm
+                        );
+                        const extensionStatus = asgn.extensionApprovalStatus;
+                        const isPendingExtension = isExtensionRequested && (!extensionStatus || extensionStatus === "Pending");
+                        const hasAfterInvestigation = !!(asgn.afterInvestigationSent || asgn.investigationFileNo || asgn.investigationStatus);
+
+                        const isUnseen = !seenNotifIds.includes(asgn.id) && !seenNotifIds.includes(asgn.caseNo);
+                        const isCaseMinimized = !!minimizedCaseIds[asgn.id];
+
+                        const apptId = `app-date-${asgn.id}`;
+                        const dueId = `due-date-${asgn.id}`;
+
+                        return (
+                          <div
+                            key={asgn.id ? `${asgn.id}-${asgnIdx}` : `asgn-${asgn.caseNo || asgnIdx}-${asgnIdx}`}
+                            id={`directive-case-${asgn.id}`}
+                            style={{
+                              backgroundColor: isUnseen ? "#e7f3ff" : "#ffffff",
+                              borderRadius: "14px",
+                              border: isUnseen ? "1px solid #cce4ff" : "1px solid #e4e6eb",
+                              padding: "16px 20px",
+                              transition: "all 0.2s ease",
+                              boxShadow: isUnseen ? "0 2px 8px rgba(24, 119, 242, 0.08)" : "0 1px 2px rgba(0,0,0,0.04)"
+                            }}
+                          >
+                            {/* FB Notification Item Header (Click to mark seen & expand) */}
+                            <div
+                              onClick={() => {
+                                markAsSeen(asgn.id);
+                                markAsSeen(asgn.caseNo);
+                              }}
+                              style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "14px", cursor: "pointer" }}
+                            >
+                              {/* FB Left Avatar Badge */}
+                              <div style={{ position: "relative", flexShrink: 0 }}>
+                                <div style={{
+                                  width: "50px",
+                                  height: "50px",
+                                  borderRadius: "50%",
+                                  backgroundColor: hasAfterInvestigation ? "#16a34a" : isPendingExtension ? "#d97706" : !isDatesSubmitted ? "#1877f2" : "#4f46e5",
+                                  color: "#ffffff",
+                                  display: "flex",
                                   alignItems: "center",
-                                  gap: "4px",
-                                  padding: "5px 12px",
-                                  borderRadius: "8px",
-                                  backgroundColor: "#f1f5f9",
-                                  color: "#334155",
-                                  border: "1px solid #cbd5e1",
-                                  cursor: "pointer",
-                                  fontSize: "12px",
-                                  fontWeight: 600,
-                                  transition: "all 0.2s ease"
-                                }}
-                              >
-                                {isCaseMinimized ? (
-                                  <>
-                                    <ChevronDown size={14} />
-                                    <span>{lang === "si" ? "විහිදුවන්න" : "Expand"}</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <ChevronUp size={14} />
-                                    <span>{lang === "si" ? "හකුලන්න" : "Minimize"}</span>
-                                  </>
-                                )}
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Step Timeline */}
-                          {!isCaseMinimized && (
-                            <div style={{ display: "flex", flexDirection: "column", gap: "0" }}>
-
-                              {/* ── STEP 1 ── Officers Assigned (Read-Only, from Admin) */}
-                              <div style={{ display: "flex", gap: "16px" }}>
-                                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: "36px" }}>
-                                  <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "linear-gradient(135deg, #4f46e5, #6366f1)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "13px", flexShrink: 0 }}>1</div>
-                                  <div style={{ width: "2px", flex: 1, minHeight: "16px", backgroundColor: "#4f46e5", marginTop: "4px", marginBottom: "4px" }} />
+                                  justifyContent: "center",
+                                  boxShadow: "0 2px 6px rgba(0,0,0,0.12)"
+                                }}>
+                                  <FileText size={24} />
                                 </div>
-                                <div style={{ flex: 1, marginBottom: "16px" }}>
-                                  <div style={{ fontSize: "13px", fontWeight: 700, color: "#1e1b4b", marginBottom: "8px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                                    <span>{lang === "si" ? "1. පත් කළ විමර්ශන නිලධාරීන් (Admin විසින් යවන ලදී)" : "Step 1: Assigned Investigation Officers (Received from Admin)"}</span>
-                                    <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "20px", backgroundColor: "#dbeafe", color: "#1d4ed8" }}>✓ Received</span>
-                                  </div>
-                                  <div style={{ backgroundColor: "#f0f4ff", borderRadius: "10px", border: "1px solid #c7d2fe", padding: "12px 16px" }}>
-                                    <div style={{ fontSize: "12px", color: "#3730a3", fontWeight: 600, marginBottom: "4px" }}>
-                                      {lang === "si" ? "📋 නිලධාරීන් / කමිටුව:" : "📋 Investigation Committee:"}
-                                    </div>
-                                    <div style={{ fontSize: "13px", fontWeight: 700, color: "#1e1b4b" }}>
-                                      {(() => {
-                                        const committee = parseCommitteeDetails(asgn);
-                                        if (!committee.hasDetails) {
-                                          return (
-                                            <span style={{ color: "#64748b", fontWeight: 500, fontStyle: "italic" }}>
-                                              {lang === "si" ? "— (නිලධාරීන් යවා නොමැත)" : "— (Officers not yet assigned)"}
-                                            </span>
-                                          );
-                                        }
-
-                                        return (
-                                          <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "4px" }}>
-                                            {committee.chairmanName && (
-                                              <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-                                                <span style={{ fontSize: "11px", backgroundColor: "#fef3c7", color: "#92400e", border: "1px solid #fde68a", padding: "3px 10px", borderRadius: "12px", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                                                  👑 {lang === "si" ? "සභාපති" : "CHAIRMAN"}
-                                                </span>
-                                                <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "14px" }}>
-                                                  {committee.chairmanName}
-                                                </span>
-                                                {committee.chairmanNic && (
-                                                  <span style={{ fontSize: "11px", color: "#64748b", fontWeight: 500 }}>(NIC: {committee.chairmanNic})</span>
-                                                )}
-                                              </div>
-                                            )}
-
-                                            {committee.memberList.length > 0 && (
-                                              <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px", marginTop: "2px" }}>
-                                                <span style={{ fontSize: "11px", backgroundColor: "#e0e7ff", color: "#3730a3", border: "1px solid #c7d2fe", padding: "3px 10px", borderRadius: "12px", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                                                  👥 {lang === "si" ? `සාමාජිකයින් (${committee.memberList.length})` : `MEMBERS (${committee.memberList.length})`}
-                                                </span>
-                                                {committee.memberList.map((mName, idx) => (
-                                                  <span key={idx} style={{ fontSize: "12px", backgroundColor: "#ffffff", border: "1px solid #cbd5e1", padding: "3px 10px", borderRadius: "6px", color: "#334155", fontWeight: 600 }}>
-                                                    {mName}
-                                                  </span>
-                                                ))}
-                                              </div>
-                                            )}
-
-                                            {!committee.chairmanName && committee.memberList.length === 0 && committee.rawText && (
-                                              <span style={{ fontWeight: 700, color: "#0f172a" }}>
-                                                {committee.rawText}
-                                              </span>
-                                            )}
-                                          </div>
-                                        );
-                                      })()}
-                                    </div>
-                                  </div>
+                                <div style={{
+                                  position: "absolute",
+                                  bottom: "-2px",
+                                  right: "-2px",
+                                  width: "22px",
+                                  height: "22px",
+                                  borderRadius: "50%",
+                                  backgroundColor: hasAfterInvestigation ? "#22c55e" : isPendingExtension ? "#f59e0b" : !isDatesSubmitted ? "#0284c7" : "#6366f1",
+                                  color: "#ffffff",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  border: "2px solid #ffffff"
+                                }}>
+                                  {hasAfterInvestigation ? <CheckCircle size={12} /> : isPendingExtension ? <Clock size={12} /> : !isDatesSubmitted ? <AlertCircle size={12} /> : <CheckCircle size={12} />}
                                 </div>
                               </div>
 
-                              {/* ── STEP 2 ── Subject Officer Enters Appointment Date & Report Due Date */}
-                              <div style={{ display: "flex", gap: "16px" }}>
-                                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: "36px" }}>
-                                  <div style={{ width: "32px", height: "32px", borderRadius: "50%", backgroundColor: isDatesSubmitted ? "#0284c7" : "#e2e8f0", color: isDatesSubmitted ? "#fff" : "#94a3b8", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "13px", flexShrink: 0 }}>2</div>
-                                  <div style={{ width: "2px", flex: 1, minHeight: "16px", backgroundColor: isDatesSubmitted ? "#0284c7" : "#e2e8f0", marginTop: "4px", marginBottom: "4px" }} />
+                              {/* Middle Info Body */}
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                                  <span style={{ fontWeight: 800, fontSize: "16px", color: "#050505" }}>
+                                    {lang === "si" ? "නඩු අංකය:" : "Case:"} {asgn.caseNo}
+                                  </span>
+                                  
+                                  {/* Step Tag */}
+                                  <span style={{
+                                    fontSize: "12px",
+                                    fontWeight: 700,
+                                    padding: "3px 10px",
+                                    borderRadius: "14px",
+                                    backgroundColor: hasAfterInvestigation ? "#dcfce7" : isPendingExtension ? "#fef3c7" : !isDatesSubmitted ? "#fef3c7" : "#dbeafe",
+                                    color: hasAfterInvestigation ? "#15803d" : isPendingExtension ? "#b45309" : !isDatesSubmitted ? "#b45309" : "#1d4ed8"
+                                  }}>
+                                    {hasAfterInvestigation
+                                      ? (lang === "si" ? "✓ Step 5 — විමර්ශනය අවසන්" : "✓ Step 5 — After-Investigation Received")
+                                      : isPendingExtension
+                                      ? (lang === "si" ? "⚠️ Steps 3 & 4 — දිනයන් දීර්ඝ කිරීම් ඉල්ලීමක් ඇත" : "⚠️ Steps 3 & 4 — Extension Decision Required")
+                                      : !isDatesSubmitted
+                                      ? (lang === "si" ? "⚡ Step 2 — දිනයන් ඇතුළත් කිරීම අවශ්‍යයි" : "⚡ Step 2 — Date Entry Required")
+                                      : (lang === "si" ? "● Step 2 — දිනයන් තහවුරු කළා" : "● Step 2 — Dates Confirmed")}
+                                  </span>
                                 </div>
-                                <div style={{ flex: 1, marginBottom: "16px" }}>
-                                  <div style={{ fontSize: "13px", fontWeight: 700, color: isDatesSubmitted ? "#0369a1" : "#1e293b", marginBottom: "8px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                                    <span>{lang === "si" ? "2. පත්වීම් ලිපිය දිනය සහ වාර්තා දිනය ඇතුළත් කරන්න" : "Step 2: Enter Appointment Letter Date & Report Due Date → Send to Admin"}</span>
-                                    {isDatesSubmitted ? (
-                                      <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "20px", backgroundColor: "#dbeafe", color: "#1d4ed8" }}>✓ Sent</span>
-                                    ) : (
-                                      <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "20px", backgroundColor: "#fef3c7", color: "#b45309" }}>{lang === "si" ? "⚡ ඔබේ ක්‍රියාව අවශ්‍යයි" : "⚡ Action Required"}</span>
-                                    )}
-                                  </div>
-                                  <div style={{ backgroundColor: isDatesSubmitted ? "#f0f9ff" : "#f8fafc", borderRadius: "10px", border: `1px solid ${isDatesSubmitted ? "#bae6fd" : "#e2e8f0"}`, padding: "14px 16px", display: "flex", flexDirection: "column", gap: "10px" }}>
-                                    {isDatesSubmitted && (
-                                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "4px" }}>
-                                        <div style={{ backgroundColor: "#ffffff", padding: "10px", borderRadius: "8px", border: "1px solid #bae6fd" }}>
-                                          <div style={{ fontSize: "11px", color: "#64748b", fontWeight: 600 }}>📅 {lang === "si" ? "පත්වීම් ලිපිය දිනය" : "Appointment Letter Date"}</div>
-                                          <div style={{ fontSize: "15px", fontWeight: 700, color: "#0369a1", marginTop: "2px" }}>{asgn.appointmentDate}</div>
-                                        </div>
-                                        <div style={{ backgroundColor: "#ffffff", padding: "10px", borderRadius: "8px", border: "1px solid #fecaca" }}>
-                                          <div style={{ fontSize: "11px", color: "#64748b", fontWeight: 600 }}>⏳ {lang === "si" ? "වාර්තාව ලැබිය යුතු දිනය" : "Report Due Date"}</div>
-                                          <div style={{ fontSize: "15px", fontWeight: 700, color: "#dc2626", marginTop: "2px" }}>{asgn.reportDueDate}</div>
-                                        </div>
-                                      </div>
-                                    )}
-                                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-                                      <div>
-                                        <label style={{ fontSize: "11px", fontWeight: 700, color: "#0369a1", display: "block", marginBottom: "4px" }}>
-                                          📅 {lang === "si" ? "පත්වීම් ලිපිය දිනය:" : "Appointment Letter Date:"}
-                                        </label>
-                                        <input
-                                          type="date"
-                                          id={apptId}
-                                          value={formatToInputDate(asgn.appointmentDate)}
-                                          onChange={(e) => {
-                                            const val = e.target.value;
-                                            const caseKey = asgn.caseNo || asgn.id;
-                                            const currentDrafts = (draftDatesRef.current || {}) as Record<string, any>;
-                                            const updated: Record<string, any> = {
-                                              ...currentDrafts,
-                                              [caseKey]: { ...(currentDrafts[caseKey] || {}), appointmentDate: val }
-                                            };
-                                            if (asgn.id) updated[asgn.id] = { ...(updated[asgn.id] || {}), appointmentDate: val };
-                                            if (asgn.caseNo) updated[asgn.caseNo] = { ...(updated[asgn.caseNo] || {}), appointmentDate: val };
-                                            draftDatesRef.current = updated;
-                                            setDraftDates(updated);
-                                            setAssignments((prev) =>
-                                              prev.map((item) =>
-                                                (item.id === asgn.id || item.caseNo === asgn.caseNo)
-                                                  ? { ...item, appointmentDate: val, appointment_date: val }
-                                                  : item
-                                              )
-                                            );
-                                          }}
-                                          style={{ width: "100%", padding: "8px 10px", borderRadius: "8px", border: "1px solid #bae6fd", fontSize: "13px", backgroundColor: "#ffffff" }}
-                                        />
-                                      </div>
-                                      <div>
-                                        <label style={{ fontSize: "11px", fontWeight: 700, color: "#dc2626", display: "block", marginBottom: "4px" }}>
-                                          ⏳ {lang === "si" ? "වාර්තාව ලැබිය යුතු දිනය:" : "Report Must Be Received By:"}
-                                        </label>
-                                        <input
-                                          type="date"
-                                          id={dueId}
-                                          value={formatToInputDate(asgn.reportDueDate)}
-                                          onChange={(e) => {
-                                            const val = e.target.value;
-                                            const caseKey = asgn.caseNo || asgn.id;
-                                            setDraftDates((prev) => ({
-                                              ...prev,
-                                              [caseKey]: { ...(prev[caseKey] || {}), reportDueDate: val }
-                                            }));
-                                            setAssignments((prev) =>
-                                              prev.map((item) =>
-                                                (item.id === asgn.id || item.caseNo === asgn.caseNo)
-                                                  ? { ...item, reportDueDate: val, report_due_date: val }
-                                                  : item
-                                              )
-                                            );
-                                          }}
-                                          style={{ width: "100%", padding: "8px 10px", borderRadius: "8px", border: "1px solid #fecaca", fontSize: "13px", backgroundColor: "#ffffff" }}
-                                        />
-                                      </div>
-                                    </div>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        const appEl = document.getElementById(apptId) as HTMLInputElement;
-                                        const dueEl = document.getElementById(dueId) as HTMLInputElement;
-                                        handleStep2SubmitDates(asgn, appEl?.value || "", dueEl?.value || "");
-                                      }}
-                                      style={{ padding: "9px 18px", background: "linear-gradient(135deg, #0284c7, #0369a1)", color: "#ffffff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "13px", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", width: "fit-content" }}
-                                    >
-                                      <Send size={14} />
-                                      {isDatesSubmitted ? (lang === "si" ? "දිනයන් යාවත්කාලීන කරන්න (Step 2)" : "Update & Re-send Dates (Step 2)") : (lang === "si" ? "දිනයන් Admin වෙත යවන්න (Step 2)" : "Send Dates to Investigation Admin (Step 2)")}
-                                    </button>
-                                  </div>
-                                </div>
-                              </div>
 
-                              {/* ── STEP 3 & 4 ── Extension of Days Details (Sent/Granted by Investigation Admin) */}
-                              {(() => {
-                                const extTerm = asgn.extensionTerm || asgn.extension_term;
-                                const extStart = asgn.extensionStartDate || asgn.extension_start_date;
-                                const extEnd = asgn.extensionEndDate || asgn.extension_end_date;
-                                const extReq = asgn.extensionRequestedByAdmin || asgn.extension_requested_by_admin || asgn.extensionRequested;
-                                const extensionStatus = asgn.extensionApprovalStatus || asgn.extension_approval_status;
-
-                                const hasExtensionData = !!(
-                                  extStart ||
-                                  extEnd ||
-                                  (extTerm && extTerm !== "None") ||
-                                  extReq ||
-                                  (asgn.status && String(asgn.status).toLowerCase().includes("extension"))
-                                );
-
-                                const isApproved = extensionStatus === "Approved";
-                                const isDisapproved = extensionStatus === "Disapproved";
-                                const isPending = hasExtensionData && !isApproved && !isDisapproved;
-
-                                return (
-                                  <div style={{ display: "flex", gap: "16px" }}>
-                                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: "36px" }}>
-                                      <div style={{ width: "32px", height: "32px", borderRadius: "50%", backgroundColor: isApproved ? "#16a34a" : isDisapproved ? "#dc2626" : hasExtensionData ? "#d97706" : "#cbd5e1", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "12px", flexShrink: 0 }}>3/4</div>
-                                      <div style={{ width: "2px", flex: 1, minHeight: "16px", backgroundColor: isApproved ? "#16a34a" : isDisapproved ? "#fca5a5" : hasExtensionData ? "#fde047" : "#e2e8f0", marginTop: "4px", marginBottom: "4px" }} />
-                                    </div>
-                                    <div style={{ flex: 1, marginBottom: "16px" }}>
-                                      <div style={{ fontSize: "13px", fontWeight: 700, color: isApproved ? "#15803d" : isDisapproved ? "#b91c1c" : hasExtensionData ? "#b45309" : "#334155", marginBottom: "8px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                                        <span>{lang === "si" ? "3 & 4. දිනයන් දීර්ඝ කිරීමේ කොටස (Extension of Days Details)" : "Steps 3 & 4: Extension of Days Details"}</span>
-                                        {isApproved ? (
-                                          <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "20px", backgroundColor: "#dcfce7", color: "#15803d" }}>
-                                            ✓ {lang === "si" ? "අනුමත කරන ලදී (Extension Approved)" : "Extension Approved"}
-                                          </span>
-                                        ) : isDisapproved ? (
-                                          <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "20px", backgroundColor: "#fee2e2", color: "#b91c1c" }}>
-                                            ✕ {lang === "si" ? "ප්‍රතික්ෂේප කරන ලදී (Extension Disapproved)" : "Extension Disapproved"}
-                                          </span>
-                                        ) : hasExtensionData ? (
-                                          <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "20px", backgroundColor: "#fef3c7", color: "#b45309" }}>
-                                            ⏳ {lang === "si" ? "අනුමැතිය අපේක්ෂාවෙන් (Pending Approval)" : "Pending Approval"}
-                                          </span>
-                                        ) : (
-                                          <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "20px", backgroundColor: "#f1f5f9", color: "#64748b" }}>
-                                            {lang === "si" ? "දීර්ඝ කිරීමක් නැත" : "No Extension Granted"}
-                                          </span>
-                                        )}
-                                      </div>
-
-                                      {hasExtensionData ? (
-                                        <div style={{ backgroundColor: isApproved ? "#f0fdf4" : isDisapproved ? "#fef2f2" : "#fffbeb", borderRadius: "10px", border: `1px solid ${isApproved ? "#bbf7d0" : isDisapproved ? "#fca5a5" : "#fde68a"}`, padding: "14px 16px", display: "flex", flexDirection: "column", gap: "12px" }}>
-                                          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px", fontSize: "12px" }}>
-                                            <div style={{ backgroundColor: "#ffffff", padding: "10px", borderRadius: "8px", border: `1px solid ${isApproved ? "#bbf7d0" : isDisapproved ? "#fca5a5" : "#fde68a"}` }}>
-                                              <div style={{ fontSize: "10px", color: isApproved ? "#166534" : isDisapproved ? "#991b1b" : "#92400e", fontWeight: 700, textTransform: "uppercase" }}>{lang === "si" ? "වාරය" : "Extension Term"}</div>
-                                              <div style={{ fontWeight: 700, color: isApproved ? "#15803d" : isDisapproved ? "#b91c1c" : "#b45309", marginTop: "2px", fontSize: "13px" }}>{extTerm || "First"}</div>
-                                            </div>
-                                            <div style={{ backgroundColor: "#ffffff", padding: "10px", borderRadius: "8px", border: `1px solid ${isApproved ? "#bbf7d0" : isDisapproved ? "#fca5a5" : "#fde68a"}` }}>
-                                              <div style={{ fontSize: "10px", color: isApproved ? "#166534" : isDisapproved ? "#991b1b" : "#92400e", fontWeight: 700, textTransform: "uppercase" }}>{lang === "si" ? "ආරම්භ දිනය" : "Start Date"}</div>
-                                              <div style={{ fontWeight: 700, color: isApproved ? "#15803d" : isDisapproved ? "#b91c1c" : "#b45309", marginTop: "2px", fontSize: "13px" }}>{extStart || "—"}</div>
-                                            </div>
-                                            <div style={{ backgroundColor: "#ffffff", padding: "10px", borderRadius: "8px", border: `1px solid ${isApproved ? "#bbf7d0" : isDisapproved ? "#fca5a5" : "#fde68a"}` }}>
-                                              <div style={{ fontSize: "10px", color: isApproved ? "#166534" : isDisapproved ? "#991b1b" : "#92400e", fontWeight: 700, textTransform: "uppercase" }}>{lang === "si" ? "අවසාන දිනය" : "End Date"}</div>
-                                              <div style={{ fontWeight: 700, color: isApproved ? "#15803d" : isDisapproved ? "#b91c1c" : "#b45309", marginTop: "2px", fontSize: "13px" }}>{extEnd || "—"}</div>
-                                            </div>
-                                          </div>
-
-                                          <div style={{ padding: "10px 14px", borderRadius: "8px", backgroundColor: isApproved ? "#dcfce7" : isDisapproved ? "#fee2e2" : "#fef3c7", color: isApproved ? "#15803d" : isDisapproved ? "#991b1b" : "#b45309", fontWeight: 700, fontSize: "13px", display: "flex", alignItems: "center", gap: "8px" }}>
-                                            {isApproved ? <CheckCircle size={16} /> : isDisapproved ? <XCircle size={16} /> : <Clock size={16} />}
-                                            <span>
-                                              {isApproved
-                                                ? (lang === "si"
-                                                  ? `විමර්ශන පරිපාලක විසින් ලබාදුන් දිනයන් දීර්ඝ කිරීම අනුමත කරන ලදී. වාර්තා ලබාදීමේ දිනය ${extEnd || ""} දක්වා දීර්ඝ කර ඇත.`
-                                                  : `Extension of dates approved. Report due date extended to ${extEnd || ""}.`)
-                                                : isDisapproved
-                                                ? (lang === "si"
-                                                  ? `දිනයන් දීර්ඝ කිරීමේ ඉල්ලීම ප්‍රතික්ෂේප කර ඇත.`
-                                                  : `Extension request has been disapproved.`)
-                                                : (lang === "si"
-                                                  ? `විමර්ශන පරිපාලක (Investigation Admin) විසින් දිනයන් දීර්ඝ කිරීමේ තොරතුරු ලබා දී ඇත. කරුණාකර අනුමත කරන්න හෝ ප්‍රතික්ෂේප කරන්න.`
-                                                  : `Extension dates proposed by Investigation Admin. Please review and approve or disapprove below.`)}
-                                            </span>
-                                          </div>
-
-                                          {/* Action Buttons: Approve / Disapprove Buttons */}
-                                          <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "4px", flexWrap: "wrap" }}>
-                                            <button
-                                              type="button"
-                                              onClick={() => handleExtensionDecision(asgn, true)}
-                                              style={{
-                                                padding: "8px 16px",
-                                                borderRadius: "8px",
-                                                backgroundColor: isApproved ? "#15803d" : "#16a34a",
-                                                color: "#ffffff",
-                                                border: "none",
-                                                fontWeight: 700,
-                                                fontSize: "13px",
-                                                cursor: "pointer",
-                                                display: "inline-flex",
-                                                alignItems: "center",
-                                                gap: "6px",
-                                                boxShadow: "0 2px 4px rgba(22,163,74,0.25)",
-                                              }}
-                                            >
-                                              <CheckCircle size={16} />
-                                              <span>{lang === "si" ? "අනුමත කරන්න (Approve)" : "Approve Extension"}</span>
-                                            </button>
-
-                                            <button
-                                              type="button"
-                                              onClick={() => handleExtensionDecision(asgn, false)}
-                                              style={{
-                                                padding: "8px 16px",
-                                                borderRadius: "8px",
-                                                backgroundColor: isDisapproved ? "#b91c1c" : "#dc2626",
-                                                color: "#ffffff",
-                                                border: "none",
-                                                fontWeight: 700,
-                                                fontSize: "13px",
-                                                cursor: "pointer",
-                                                display: "inline-flex",
-                                                alignItems: "center",
-                                                gap: "6px",
-                                                boxShadow: "0 2px 4px rgba(220,38,38,0.25)",
-                                              }}
-                                            >
-                                              <XCircle size={16} />
-                                              <span>{lang === "si" ? "ප්‍රතික්ෂේප කරන්න (Disapprove)" : "Disapprove Extension"}</span>
-                                            </button>
-                                          </div>
-                                        </div>
-                                      ) : (
-                                        <div style={{ backgroundColor: "#f8fafc", borderRadius: "10px", border: "1px dashed #cbd5e1", padding: "14px 16px", display: "flex", alignItems: "center", gap: "10px", color: "#64748b", fontSize: "13px" }}>
-                                          <Clock size={18} style={{ color: "#94a3b8", flexShrink: 0 }} />
-                                          <span>
-                                            {lang === "si"
-                                              ? "⏳ විමර්ශන පරිපාලක (Investigation Admin) විසින් දිනයන් දීර්ඝ කිරීමක් මෙම නඩුව සඳහා තවම ලබාදී නොමැත."
-                                              : "⏳ No extension of dates has been granted by Investigation Admin for this case yet."}
-                                          </span>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                );
-                              })()}
-
-                              {/* ── STEP 5 ── After-Investigation Details Received from Admin */}
-                              <div style={{ display: "flex", gap: "16px" }}>
-                                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: "36px" }}>
-                                  <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: hasAfterInvestigation ? "linear-gradient(135deg, #16a34a, #22c55e)" : "linear-gradient(135deg, #94a3b8, #cbd5e1)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "13px", flexShrink: 0 }}>5</div>
-                                </div>
-                                <div style={{ flex: 1 }}>
-                                  <div style={{ fontSize: "13px", fontWeight: 700, color: hasAfterInvestigation ? "#15803d" : "#94a3b8", marginBottom: "8px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                                    <span>{lang === "si" ? "5. විමර්ශනයෙන් පසු තොරතුරු (Admin ගෙන් ලැබෙයි)" : "Step 5: After-Investigation Details (Received from Admin)"}</span>
-                                    {hasAfterInvestigation && (
-                                      <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "20px", backgroundColor: "#dcfce7", color: "#15803d" }}>✓ Received {asgn.afterInvestigationDate || ""}</span>
-                                    )}
-                                  </div>
-                                  {hasAfterInvestigation ? (
-                                    <div style={{ backgroundColor: "#f0fdf4", borderRadius: "10px", border: "1px solid #bbf7d0", padding: "14px 16px", display: "flex", flexDirection: "column", gap: "10px" }}>
-                                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", fontSize: "12px" }}>
-                                        <div style={{ backgroundColor: "#ffffff", padding: "10px", borderRadius: "8px", border: "1px solid #d1fae5" }}>
-                                          <div style={{ fontSize: "10px", color: "#64748b", fontWeight: 700, textTransform: "uppercase" }}>{lang === "si" ? "ගොනු අංකය" : "Investigation File No."}</div>
-                                          <div style={{ fontWeight: 700, color: "#0f172a", marginTop: "2px" }}>{asgn.investigationFileNo || "—"}</div>
-                                        </div>
-                                        <div style={{ backgroundColor: "#ffffff", padding: "10px", borderRadius: "8px", border: "1px solid #d1fae5" }}>
-                                          <div style={{ fontSize: "10px", color: "#64748b", fontWeight: 700, textTransform: "uppercase" }}>{lang === "si" ? "විමර්ශන තත්ත්වය" : "Investigation Status"}</div>
-                                          <div style={{ fontWeight: 700, color: "#2563eb", marginTop: "2px" }}>{asgn.investigationStatus || asgn.status || "—"}</div>
-                                        </div>
-                                        <div style={{ backgroundColor: "#ffffff", padding: "10px", borderRadius: "8px", border: "1px solid #d1fae5", gridColumn: "1 / -1" }}>
-                                          <div style={{ fontSize: "10px", color: "#64748b", fontWeight: 700, textTransform: "uppercase", marginBottom: "4px" }}>📝 {lang === "si" ? "විමර්ශන සටහන්" : "Investigation Notes"}</div>
-                                          <div style={{ fontSize: "12px", color: "#334155", whiteSpace: "pre-wrap", maxHeight: "80px", overflowY: "auto" }}>{asgn.investigationNotes || "—"}</div>
-                                        </div>
-                                        <div style={{ backgroundColor: "#ffffff", padding: "10px", borderRadius: "8px", border: "1px solid #d1fae5", gridColumn: "1 / -1" }}>
-                                          <div style={{ fontSize: "10px", color: "#64748b", fontWeight: 700, textTransform: "uppercase", marginBottom: "4px" }}>📈 {lang === "si" ? "ප්‍රගති විස්තර" : "Progress Details"}</div>
-                                          <div style={{ fontSize: "12px", color: "#334155", whiteSpace: "pre-wrap", maxHeight: "80px", overflowY: "auto" }}>{asgn.progressDetails || "—"}</div>
-                                        </div>
-                                      </div>
-                                    </div>
+                                {/* Main Message Text */}
+                                <div style={{ fontSize: "14px", color: "#334155", marginTop: "4px", lineHeight: "1.4" }}>
+                                  {isPendingExtension ? (
+                                    <span>
+                                      <strong>{lang === "si" ? "නියෝගය:" : "Directive:"}</strong> {lang === "si" ? "විමර්ශන පරිපාලක විසින් දිනයන් දීර්ඝ කිරීමේ වාරය ලබා දී ඇත (" : "Admin proposed "}
+                                      <strong>{asgn.extensionTerm || "First"}</strong> {lang === "si" ? `වාරය: ${asgn.extensionStartDate || ""} සිට ${asgn.extensionEndDate || ""} දක්වා). කරුණාකර අනුමත කරන්න හෝ ප්‍රතික්ෂේප කරන්න.` : `extension (${asgn.extensionStartDate || ""} to ${asgn.extensionEndDate || ""}). Please review & decision needed.`}
+                                    </span>
+                                  ) : !isDatesSubmitted ? (
+                                    <span>
+                                      <strong>{lang === "si" ? "නියෝගය:" : "Directive:"}</strong> {lang === "si" ? "පත්වීම් ලිපිය දිනය සහ වාර්තාව ලැබිය යුතු දිනය ඇතුළත් කර Admin වෙත යවන්න." : "Please enter Appointment Letter Date & Report Due Date to send to Investigation Admin."}
+                                    </span>
+                                  ) : hasAfterInvestigation ? (
+                                    <span>
+                                      <strong>{lang === "si" ? "නියෝගය:" : "Directive:"}</strong> {lang === "si" ? `විමර්ශන තොරතුරු ලැබුණි. ගොනු අංකය: ${asgn.investigationFileNo || "—"}, තත්ත්වය: ${asgn.investigationStatus || "—"}.` : `After-investigation details received. File No: ${asgn.investigationFileNo || "—"}, Status: ${asgn.investigationStatus || "—"}.`}
+                                    </span>
                                   ) : (
-                                    <div style={{ backgroundColor: "#f8fafc", borderRadius: "10px", border: "1px dashed #cbd5e1", padding: "14px 16px", display: "flex", alignItems: "center", gap: "10px", color: "#94a3b8", fontSize: "13px" }}>
-                                      <Clock size={18} style={{ color: "#cbd5e1", flexShrink: 0 }} />
-                                      <span>{lang === "si" ? "⏳ විමර්ශනය අවසන් වූ විට, Admin ගොනු අංකය, තත්ත්වය, සටහන් සහ ප්‍රගති විස්තර ඔබ වෙත යවනු ඇත." : "⏳ After the investigation, Admin will send the Investigation File No., Status, Notes & Progress Details here."}</span>
-                                    </div>
+                                    <span>
+                                      <strong>{lang === "si" ? "නියෝගය:" : "Directive:"}</strong> {lang === "si" ? "විමර්ශන කමිටුව සහ දිනයන් Admin වෙත යවා ඇත." : "Investigation Committee assigned and dates confirmed."}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Officer & Dates Summary Chips */}
+                                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "8px", flexWrap: "wrap" }}>
+                                  <span style={{ fontSize: "12px", color: "#64748b", fontWeight: 600 }}>
+                                    👤 {asgn.subjectOfficerName || "Assigned Officer"}
+                                  </span>
+                                  {asgn.appointmentDate && (
+                                    <span style={{ fontSize: "11px", fontWeight: 700, backgroundColor: "#eff6ff", color: "#1d4ed8", padding: "2px 8px", borderRadius: "6px" }}>
+                                      📅 Appt: {asgn.appointmentDate}
+                                    </span>
+                                  )}
+                                  {asgn.reportDueDate && (
+                                    <span style={{ fontSize: "11px", fontWeight: 700, backgroundColor: "#fff7ed", color: "#c2410c", padding: "2px 8px", borderRadius: "6px" }}>
+                                      ⏳ Due: {asgn.reportDueDate}
+                                    </span>
                                   )}
                                 </div>
                               </div>
 
-                            </div>
-                          )}
+                              {/* Right side Unread Dot & Expand Button */}
+                              <div style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0 }}>
+                                {isUnseen && (
+                                  <span style={{ width: "12px", height: "12px", borderRadius: "50%", backgroundColor: "#1877f2" }} title="Unread notification"></span>
+                                )}
 
-                        </div>
-                      );
-                    })}
-                </div>
-              ) : (
-                <div style={{ padding: "48px 24px", textAlign: "center" }}>
-                  <div style={{ width: "56px", height: "56px", borderRadius: "50%", backgroundColor: "#f1f5f9", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
-                    <Clock size={24} style={{ color: "#94a3b8" }} />
-                  </div>
-                  <div style={{ fontWeight: 700, fontSize: "15px", color: "#334155", marginBottom: "6px" }}>
-                    {lang === "si" ? "විමර්ශන නිලධාරීන් පත් කර නොමැත" : "No Investigation Directives Yet"}
-                  </div>
-                  <div style={{ fontSize: "13px", color: "#94a3b8" }}>
-                    {lang === "si" ? "Investigation Administrator විසින් නිලධාරීන් පත් කළ විට, ඔවුන් මෙතන දිස්වනු ඇත." : "Once the Investigation Administrator assigns investigation officers, directives will appear here."}
-                  </div>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    markAsSeen(asgn.id);
+                                    markAsSeen(asgn.caseNo);
+                                    toggleCaseMinimize(asgn.id);
+                                  }}
+                                  style={{
+                                    padding: "7px 14px",
+                                    fontSize: "13px",
+                                    fontWeight: 700,
+                                    color: isUnseen ? "#ffffff" : "#1877f2",
+                                    backgroundColor: isUnseen ? "#1877f2" : "#e7f3ff",
+                                    border: "none",
+                                    borderRadius: "8px",
+                                    cursor: "pointer",
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: "6px",
+                                    transition: "all 0.15s ease"
+                                  }}
+                                >
+                                  {isCaseMinimized ? (
+                                    <>
+                                      <ChevronDown size={15} />
+                                      <span>{lang === "si" ? "විස්තර පෙන්වන්න" : "View Directive"}</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <ChevronUp size={15} />
+                                      <span>{lang === "si" ? "හකුලන්න" : "Hide Details"}</span>
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* ── EXPANDABLE FACEBOOK INTERACTIVE ACTION DRAWER ── */}
+                            {!isCaseMinimized && (
+                              <div style={{ marginTop: "16px", paddingTop: "16px", borderTop: "1px solid #f0f2f5" }}>
+                                
+                                {/* Step Timeline */}
+                                <div style={{ display: "flex", flexDirection: "column", gap: "0" }}>
+
+                                  {/* ── STEP 1 ── Officers Assigned (Read-Only, from Admin) */}
+                                  <div style={{ display: "flex", gap: "16px" }}>
+                                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: "36px" }}>
+                                      <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "linear-gradient(135deg, #4f46e5, #6366f1)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "13px", flexShrink: 0 }}>1</div>
+                                      <div style={{ width: "2px", flex: 1, minHeight: "16px", backgroundColor: "#4f46e5", marginTop: "4px", marginBottom: "4px" }} />
+                                    </div>
+                                    <div style={{ flex: 1, marginBottom: "16px" }}>
+                                      <div style={{ fontSize: "13px", fontWeight: 700, color: "#1e1b4b", marginBottom: "8px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                        <span>{lang === "si" ? "1. පත් කළ විමර්ශන නිලධාරීන් (Admin විසින් යවන ලදී)" : "Step 1: Assigned Investigation Officers (Received from Admin)"}</span>
+                                        <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "20px", backgroundColor: "#dbeafe", color: "#1d4ed8" }}>✓ Received</span>
+                                      </div>
+                                      <div style={{ backgroundColor: "#f0f4ff", borderRadius: "10px", border: "1px solid #c7d2fe", padding: "12px 16px" }}>
+                                        <div style={{ fontSize: "12px", color: "#3730a3", fontWeight: 600, marginBottom: "4px" }}>
+                                          {lang === "si" ? "📋 නිලධාරීන් / කමිටුව:" : "📋 Investigation Committee:"}
+                                        </div>
+                                        <div style={{ fontSize: "13px", fontWeight: 700, color: "#1e1b4b" }}>
+                                          {(() => {
+                                            const committee = parseCommitteeDetails(asgn);
+                                            if (!committee.hasDetails) {
+                                              return (
+                                                <span style={{ color: "#64748b", fontWeight: 500, fontStyle: "italic" }}>
+                                                  {lang === "si" ? "— (නිලධාරීන් යවා නොමැත)" : "— (Officers not yet assigned)"}
+                                                </span>
+                                              );
+                                            }
+
+                                            return (
+                                              <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "4px" }}>
+                                                {committee.chairmanName && (
+                                                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                                                    <span style={{ fontSize: "11px", backgroundColor: "#fef3c7", color: "#92400e", border: "1px solid #fde68a", padding: "3px 10px", borderRadius: "12px", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                                      👑 {lang === "si" ? "සභාපති" : "CHAIRMAN"}
+                                                    </span>
+                                                    <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "14px" }}>
+                                                      {committee.chairmanName}
+                                                    </span>
+                                                    {committee.chairmanNic && (
+                                                      <span style={{ fontSize: "11px", color: "#64748b", fontWeight: 500 }}>(NIC: {committee.chairmanNic})</span>
+                                                    )}
+                                                  </div>
+                                                )}
+
+                                                {committee.memberList.length > 0 && (
+                                                  <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px", marginTop: "2px" }}>
+                                                    <span style={{ fontSize: "11px", backgroundColor: "#e0e7ff", color: "#3730a3", border: "1px solid #c7d2fe", padding: "3px 10px", borderRadius: "12px", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                                      👥 {lang === "si" ? `සාමාජිකයින් (${committee.memberList.length})` : `MEMBERS (${committee.memberList.length})`}
+                                                    </span>
+                                                    {committee.memberList.map((mName, idx) => (
+                                                      <span key={idx} style={{ fontSize: "12px", backgroundColor: "#ffffff", border: "1px solid #cbd5e1", padding: "3px 10px", borderRadius: "6px", color: "#334155", fontWeight: 600 }}>
+                                                        {mName}
+                                                      </span>
+                                                    ))}
+                                                  </div>
+                                                )}
+
+                                                {!committee.chairmanName && committee.memberList.length === 0 && committee.rawText && (
+                                                  <span style={{ fontWeight: 700, color: "#0f172a" }}>
+                                                    {committee.rawText}
+                                                  </span>
+                                                )}
+                                              </div>
+                                            );
+                                          })()}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* ── STEP 2 ── Subject Officer Enters Appointment Date & Report Due Date */}
+                                  <div style={{ display: "flex", gap: "16px" }}>
+                                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: "36px" }}>
+                                      <div style={{ width: "32px", height: "32px", borderRadius: "50%", backgroundColor: isDatesSubmitted ? "#0284c7" : "#e2e8f0", color: isDatesSubmitted ? "#fff" : "#94a3b8", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "13px", flexShrink: 0 }}>2</div>
+                                      <div style={{ width: "2px", flex: 1, minHeight: "16px", backgroundColor: isDatesSubmitted ? "#0284c7" : "#e2e8f0", marginTop: "4px", marginBottom: "4px" }} />
+                                    </div>
+                                    <div style={{ flex: 1, marginBottom: "16px" }}>
+                                      <div style={{ fontSize: "13px", fontWeight: 700, color: isDatesSubmitted ? "#0369a1" : "#1e293b", marginBottom: "8px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                        <span>{lang === "si" ? "2. පත්වීම් ලිපිය දිනය සහ වාර්තා දිනය ඇතුළත් කරන්න" : "Step 2: Enter Appointment Letter Date & Report Due Date → Send to Admin"}</span>
+                                        {isDatesSubmitted ? (
+                                          <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "20px", backgroundColor: "#dbeafe", color: "#1d4ed8" }}>✓ Sent</span>
+                                        ) : (
+                                          <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "20px", backgroundColor: "#fef3c7", color: "#b45309" }}>{lang === "si" ? "⚡ ඔබේ ක්‍රියාව අවශ්‍යයි" : "⚡ Action Required"}</span>
+                                        )}
+                                      </div>
+                                      <div style={{ backgroundColor: isDatesSubmitted ? "#f0f9ff" : "#f8fafc", borderRadius: "10px", border: `1px solid ${isDatesSubmitted ? "#bae6fd" : "#e2e8f0"}`, padding: "14px 16px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                                        {isDatesSubmitted && (
+                                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "4px" }}>
+                                            <div style={{ backgroundColor: "#ffffff", padding: "10px", borderRadius: "8px", border: "1px solid #bae6fd" }}>
+                                              <div style={{ fontSize: "11px", color: "#64748b", fontWeight: 600 }}>📅 {lang === "si" ? "පත්වීම් ලිපිය දිනය" : "Appointment Letter Date"}</div>
+                                              <div style={{ fontSize: "15px", fontWeight: 700, color: "#0369a1", marginTop: "2px" }}>{asgn.appointmentDate}</div>
+                                            </div>
+                                            <div style={{ backgroundColor: "#ffffff", padding: "10px", borderRadius: "8px", border: "1px solid #fecaca" }}>
+                                              <div style={{ fontSize: "11px", color: "#64748b", fontWeight: 600 }}>⏳ {lang === "si" ? "වාර්තාව ලැබිය යුතු දිනය" : "Report Due Date"}</div>
+                                              <div style={{ fontSize: "15px", fontWeight: 700, color: "#dc2626", marginTop: "2px" }}>{asgn.reportDueDate}</div>
+                                            </div>
+                                          </div>
+                                        )}
+                                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                                          <div>
+                                            <label style={{ fontSize: "11px", fontWeight: 700, color: "#0369a1", display: "block", marginBottom: "4px" }}>
+                                              📅 {lang === "si" ? "පත්වීම් ලිපිය දිනය:" : "Appointment Letter Date:"}
+                                            </label>
+                                            <input
+                                              type="date"
+                                              id={apptId}
+                                              value={formatToInputDate(asgn.appointmentDate)}
+                                              onChange={(e) => {
+                                                const val = e.target.value;
+                                                const caseKey = asgn.caseNo || asgn.id;
+                                                const currentDrafts = (draftDatesRef.current || {}) as Record<string, any>;
+                                                const updated: Record<string, any> = {
+                                                  ...currentDrafts,
+                                                  [caseKey]: { ...(currentDrafts[caseKey] || {}), appointmentDate: val }
+                                                };
+                                                if (asgn.id) updated[asgn.id] = { ...(updated[asgn.id] || {}), appointmentDate: val };
+                                                if (asgn.caseNo) updated[asgn.caseNo] = { ...(updated[asgn.caseNo] || {}), appointmentDate: val };
+                                                draftDatesRef.current = updated;
+                                                setDraftDates(updated);
+                                                setAssignments((prev) =>
+                                                  prev.map((item) =>
+                                                    (item.id === asgn.id || item.caseNo === asgn.caseNo)
+                                                      ? { ...item, appointmentDate: val, appointment_date: val }
+                                                      : item
+                                                  )
+                                                );
+                                              }}
+                                              style={{ width: "100%", padding: "8px 10px", borderRadius: "8px", border: "1px solid #bae6fd", fontSize: "13px", backgroundColor: "#ffffff" }}
+                                            />
+                                          </div>
+                                          <div>
+                                            <label style={{ fontSize: "11px", fontWeight: 700, color: "#dc2626", display: "block", marginBottom: "4px" }}>
+                                              ⏳ {lang === "si" ? "වාර්තාව ලැබිය යුතු දිනය:" : "Report Must Be Received By:"}
+                                            </label>
+                                            <input
+                                              type="date"
+                                              id={dueId}
+                                              value={formatToInputDate(asgn.reportDueDate)}
+                                              onChange={(e) => {
+                                                const val = e.target.value;
+                                                const caseKey = asgn.caseNo || asgn.id;
+                                                setDraftDates((prev) => ({
+                                                  ...prev,
+                                                  [caseKey]: { ...(prev[caseKey] || {}), reportDueDate: val }
+                                                }));
+                                                setAssignments((prev) =>
+                                                  prev.map((item) =>
+                                                    (item.id === asgn.id || item.caseNo === asgn.caseNo)
+                                                      ? { ...item, reportDueDate: val, report_due_date: val }
+                                                      : item
+                                                  )
+                                                );
+                                              }}
+                                              style={{ width: "100%", padding: "8px 10px", borderRadius: "8px", border: "1px solid #fecaca", fontSize: "13px", backgroundColor: "#ffffff" }}
+                                            />
+                                          </div>
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const appEl = document.getElementById(apptId) as HTMLInputElement;
+                                            const dueEl = document.getElementById(dueId) as HTMLInputElement;
+                                            handleStep2SubmitDates(asgn, appEl?.value || "", dueEl?.value || "");
+                                          }}
+                                          style={{ padding: "9px 18px", backgroundColor: "#1877f2", color: "#ffffff", border: "none", borderRadius: "8px", fontWeight: 700, fontSize: "13px", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", width: "fit-content", boxShadow: "0 2px 4px rgba(24, 119, 242, 0.2)" }}
+                                        >
+                                          <Send size={14} />
+                                          {isDatesSubmitted ? (lang === "si" ? "දිනයන් යාවත්කාලීන කරන්න (Step 2)" : "Update & Re-send Dates (Step 2)") : (lang === "si" ? "දිනයන් Admin වෙත යවන්න (Step 2)" : "Send Dates to Investigation Admin (Step 2)")}
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* ── STEP 3 & 4 ── Extension of Days Details (Sent/Granted by Investigation Admin) */}
+                                  {(() => {
+                                    const extTerm = asgn.extensionTerm || asgn.extension_term;
+                                    const extStart = asgn.extensionStartDate || asgn.extension_start_date;
+                                    const extEnd = asgn.extensionEndDate || asgn.extension_end_date;
+                                    const extReq = asgn.extensionRequestedByAdmin || asgn.extension_requested_by_admin || asgn.extensionRequested;
+                                    const extensionStatus = asgn.extensionApprovalStatus || asgn.extension_approval_status;
+
+                                    const hasExtensionData = !!(
+                                      extStart ||
+                                      extEnd ||
+                                      (extTerm && extTerm !== "None") ||
+                                      extReq ||
+                                      (asgn.status && String(asgn.status).toLowerCase().includes("extension"))
+                                    );
+
+                                    const isApproved = extensionStatus === "Approved";
+                                    const isDisapproved = extensionStatus === "Disapproved";
+
+                                    return (
+                                      <div style={{ display: "flex", gap: "16px" }}>
+                                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: "36px" }}>
+                                          <div style={{ width: "32px", height: "32px", borderRadius: "50%", backgroundColor: isApproved ? "#16a34a" : isDisapproved ? "#dc2626" : hasExtensionData ? "#d97706" : "#cbd5e1", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "12px", flexShrink: 0 }}>3/4</div>
+                                          <div style={{ width: "2px", flex: 1, minHeight: "16px", backgroundColor: isApproved ? "#16a34a" : isDisapproved ? "#fca5a5" : hasExtensionData ? "#fde047" : "#e2e8f0", marginTop: "4px", marginBottom: "4px" }} />
+                                        </div>
+                                        <div style={{ flex: 1, marginBottom: "16px" }}>
+                                          <div style={{ fontSize: "13px", fontWeight: 700, color: isApproved ? "#15803d" : isDisapproved ? "#b91c1c" : hasExtensionData ? "#b45309" : "#334155", marginBottom: "8px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                            <span>{lang === "si" ? "3 & 4. දිනයන් දීර්ඝ කිරීමේ කොටස (Extension of Days Details)" : "Steps 3 & 4: Extension of Days Details"}</span>
+                                            {isApproved ? (
+                                              <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "20px", backgroundColor: "#dcfce7", color: "#15803d" }}>
+                                                ✓ {lang === "si" ? "අනුමත කරන ලදී (Extension Approved)" : "Extension Approved"}
+                                              </span>
+                                            ) : isDisapproved ? (
+                                              <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "20px", backgroundColor: "#fee2e2", color: "#b91c1c" }}>
+                                                ✕ {lang === "si" ? "ප්‍රතික්ෂේප කරන ලදී (Extension Disapproved)" : "Extension Disapproved"}
+                                              </span>
+                                            ) : hasExtensionData ? (
+                                              <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "20px", backgroundColor: "#fef3c7", color: "#b45309" }}>
+                                                ⏳ {lang === "si" ? "අනුමැතිය අපේක්ෂාවෙන් (Pending Approval)" : "Pending Approval"}
+                                              </span>
+                                            ) : (
+                                              <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "20px", backgroundColor: "#f1f5f9", color: "#64748b" }}>
+                                                {lang === "si" ? "දීර්ඝ කිරීමක් නැත" : "No Extension Granted"}
+                                              </span>
+                                            )}
+                                          </div>
+
+                                          {hasExtensionData ? (
+                                            <div style={{ backgroundColor: isApproved ? "#f0fdf4" : isDisapproved ? "#fef2f2" : "#fffbeb", borderRadius: "10px", border: `1px solid ${isApproved ? "#bbf7d0" : isDisapproved ? "#fca5a5" : "#fde68a"}`, padding: "14px 16px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                                              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px", fontSize: "12px" }}>
+                                                <div style={{ backgroundColor: "#ffffff", padding: "10px", borderRadius: "8px", border: `1px solid ${isApproved ? "#bbf7d0" : isDisapproved ? "#fca5a5" : "#fde68a"}` }}>
+                                                  <div style={{ fontSize: "10px", color: isApproved ? "#166534" : isDisapproved ? "#991b1b" : "#92400e", fontWeight: 700, textTransform: "uppercase" }}>{lang === "si" ? "වාරය" : "Extension Term"}</div>
+                                                  <div style={{ fontWeight: 700, color: isApproved ? "#15803d" : isDisapproved ? "#b91c1c" : "#b45309", marginTop: "2px", fontSize: "13px" }}>{extTerm || "First"}</div>
+                                                </div>
+                                                <div style={{ backgroundColor: "#ffffff", padding: "10px", borderRadius: "8px", border: `1px solid ${isApproved ? "#bbf7d0" : isDisapproved ? "#fca5a5" : "#fde68a"}` }}>
+                                                  <div style={{ fontSize: "10px", color: isApproved ? "#166534" : isDisapproved ? "#991b1b" : "#92400e", fontWeight: 700, textTransform: "uppercase" }}>{lang === "si" ? "ආරම්භ දිනය" : "Start Date"}</div>
+                                                  <div style={{ fontWeight: 700, color: isApproved ? "#15803d" : isDisapproved ? "#b91c1c" : "#b45309", marginTop: "2px", fontSize: "13px" }}>{extStart || "—"}</div>
+                                                </div>
+                                                <div style={{ backgroundColor: "#ffffff", padding: "10px", borderRadius: "8px", border: `1px solid ${isApproved ? "#bbf7d0" : isDisapproved ? "#fca5a5" : "#fde68a"}` }}>
+                                                  <div style={{ fontSize: "10px", color: isApproved ? "#166534" : isDisapproved ? "#991b1b" : "#92400e", fontWeight: 700, textTransform: "uppercase" }}>{lang === "si" ? "අවසාන දිනය" : "End Date"}</div>
+                                                  <div style={{ fontWeight: 700, color: isApproved ? "#15803d" : isDisapproved ? "#b91c1c" : "#b45309", marginTop: "2px", fontSize: "13px" }}>{extEnd || "—"}</div>
+                                                </div>
+                                              </div>
+
+                                              <div style={{ padding: "10px 14px", borderRadius: "8px", backgroundColor: isApproved ? "#dcfce7" : isDisapproved ? "#fee2e2" : "#fef3c7", color: isApproved ? "#15803d" : isDisapproved ? "#991b1b" : "#b45309", fontWeight: 700, fontSize: "13px", display: "flex", alignItems: "center", gap: "8px" }}>
+                                                {isApproved ? <CheckCircle size={16} /> : isDisapproved ? <XCircle size={16} /> : <Clock size={16} />}
+                                                <span>
+                                                  {isApproved
+                                                    ? (lang === "si"
+                                                      ? `විමර්ශන පරිපාලක විසින් ලබාදුන් දිනයන් දීර්ඝ කිරීම අනුමත කරන ලදී. වාර්තා ලබාදීමේ දිනය ${extEnd || ""} දක්වා දීර්ඝ කර ඇත.`
+                                                      : `Extension of dates approved. Report due date extended to ${extEnd || ""}.`)
+                                                    : isDisapproved
+                                                    ? (lang === "si"
+                                                      ? `දිනයන් දීර්ඝ කිරීමේ ඉල්ලීම ප්‍රතික්ෂේප කර ඇත.`
+                                                      : `Extension request has been disapproved.`)
+                                                    : (lang === "si"
+                                                      ? `විමර්ශන පරිපාලක (Investigation Admin) විසින් දිනයන් දීර්ඝ කිරීමේ තොරතුරු ලබා දී ඇත. කරුණාකර අනුමත කරන්න හෝ ප්‍රතික්ෂේප කරන්න.`
+                                                      : `Extension dates proposed by Investigation Admin. Please review and approve or disapprove below.`)}
+                                                </span>
+                                              </div>
+
+                                              {/* Action Buttons: Approve / Disapprove Buttons (Facebook Color Palette) */}
+                                              <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "4px", flexWrap: "wrap" }}>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => handleExtensionDecision(asgn, true)}
+                                                  style={{
+                                                    padding: "8px 18px",
+                                                    borderRadius: "8px",
+                                                    backgroundColor: isApproved ? "#15803d" : "#42b72a",
+                                                    color: "#ffffff",
+                                                    border: "none",
+                                                    fontWeight: 700,
+                                                    fontSize: "13px",
+                                                    cursor: "pointer",
+                                                    display: "inline-flex",
+                                                    alignItems: "center",
+                                                    gap: "6px",
+                                                    boxShadow: "0 2px 4px rgba(66, 183, 42, 0.25)",
+                                                  }}
+                                                >
+                                                  <CheckCircle size={16} />
+                                                  <span>{lang === "si" ? "අනුමත කරන්න (Approve)" : "Approve Extension"}</span>
+                                                </button>
+
+                                                <button
+                                                  type="button"
+                                                  onClick={() => handleExtensionDecision(asgn, false)}
+                                                  style={{
+                                                    padding: "8px 18px",
+                                                    borderRadius: "8px",
+                                                    backgroundColor: isDisapproved ? "#b91c1c" : "#e41e3f",
+                                                    color: "#ffffff",
+                                                    border: "none",
+                                                    fontWeight: 700,
+                                                    fontSize: "13px",
+                                                    cursor: "pointer",
+                                                    display: "inline-flex",
+                                                    alignItems: "center",
+                                                    gap: "6px",
+                                                    boxShadow: "0 2px 4px rgba(228, 30, 63, 0.25)",
+                                                  }}
+                                                >
+                                                  <XCircle size={16} />
+                                                  <span>{lang === "si" ? "ප්‍රතික්ෂේප කරන්න (Disapprove)" : "Disapprove Extension"}</span>
+                                                </button>
+                                              </div>
+                                            </div>
+                                          ) : (
+                                            <div style={{ backgroundColor: "#f8fafc", borderRadius: "10px", border: "1px dashed #cbd5e1", padding: "14px 16px", display: "flex", alignItems: "center", gap: "10px", color: "#64748b", fontSize: "13px" }}>
+                                              <Clock size={18} style={{ color: "#94a3b8", flexShrink: 0 }} />
+                                              <span>
+                                                {lang === "si"
+                                                  ? "⏳ විමර්ශන පරිපාලක (Investigation Admin) විසින් දිනයන් දීර්ඝ කිරීමක් මෙම නඩුව සඳහා තවම ලබාදී නොමැත."
+                                                  : "⏳ No extension of dates has been granted by Investigation Admin for this case yet."}
+                                              </span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })()}
+
+                                  {/* ── STEP 5 ── After-Investigation Details Received from Admin */}
+                                  <div style={{ display: "flex", gap: "16px" }}>
+                                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: "36px" }}>
+                                      <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: hasAfterInvestigation ? "linear-gradient(135deg, #16a34a, #22c55e)" : "linear-gradient(135deg, #94a3b8, #cbd5e1)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "13px", flexShrink: 0 }}>5</div>
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                      <div style={{ fontSize: "13px", fontWeight: 700, color: hasAfterInvestigation ? "#15803d" : "#94a3b8", marginBottom: "8px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                        <span>{lang === "si" ? "5. විමර්ශනයෙන් පසු තොරතුරු (Admin ගෙන් ලැබෙයි)" : "Step 5: After-Investigation Details (Received from Admin)"}</span>
+                                        {hasAfterInvestigation && (
+                                          <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "20px", backgroundColor: "#dcfce7", color: "#15803d" }}>✓ Received {asgn.afterInvestigationDate || ""}</span>
+                                        )}
+                                      </div>
+                                      {hasAfterInvestigation ? (
+                                        <div style={{ backgroundColor: "#f0fdf4", borderRadius: "10px", border: "1px solid #bbf7d0", padding: "14px 16px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", fontSize: "12px" }}>
+                                            <div style={{ backgroundColor: "#ffffff", padding: "10px", borderRadius: "8px", border: "1px solid #d1fae5" }}>
+                                              <div style={{ fontSize: "10px", color: "#64748b", fontWeight: 700, textTransform: "uppercase" }}>{lang === "si" ? "ගොනු අංකය" : "Investigation File No."}</div>
+                                              <div style={{ fontWeight: 700, color: "#0f172a", marginTop: "2px" }}>{asgn.investigationFileNo || "—"}</div>
+                                            </div>
+                                            <div style={{ backgroundColor: "#ffffff", padding: "10px", borderRadius: "8px", border: "1px solid #d1fae5" }}>
+                                              <div style={{ fontSize: "10px", color: "#64748b", fontWeight: 700, textTransform: "uppercase" }}>{lang === "si" ? "විමර්ශන තත්ත්වය" : "Investigation Status"}</div>
+                                              <div style={{ fontWeight: 700, color: "#2563eb", marginTop: "2px" }}>{asgn.investigationStatus || asgn.status || "—"}</div>
+                                            </div>
+                                            <div style={{ backgroundColor: "#ffffff", padding: "10px", borderRadius: "8px", border: "1px solid #d1fae5", gridColumn: "1 / -1" }}>
+                                              <div style={{ fontSize: "10px", color: "#64748b", fontWeight: 700, textTransform: "uppercase", marginBottom: "4px" }}>📝 {lang === "si" ? "විමර්ශන සටහන්" : "Investigation Notes"}</div>
+                                              <div style={{ fontSize: "12px", color: "#334155", whiteSpace: "pre-wrap", maxHeight: "80px", overflowY: "auto" }}>{asgn.investigationNotes || "—"}</div>
+                                            </div>
+                                            <div style={{ backgroundColor: "#ffffff", padding: "10px", borderRadius: "8px", border: "1px solid #d1fae5", gridColumn: "1 / -1" }}>
+                                              <div style={{ fontSize: "10px", color: "#64748b", fontWeight: 700, textTransform: "uppercase", marginBottom: "4px" }}>📈 {lang === "si" ? "ප්‍රගති විස්තර" : "Progress Details"}</div>
+                                              <div style={{ fontSize: "12px", color: "#334155", whiteSpace: "pre-wrap", maxHeight: "80px", overflowY: "auto" }}>{asgn.progressDetails || "—"}</div>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div style={{ backgroundColor: "#f8fafc", borderRadius: "10px", border: "1px dashed #cbd5e1", padding: "14px 16px", display: "flex", alignItems: "center", gap: "10px", color: "#94a3b8", fontSize: "13px" }}>
+                                          <Clock size={18} style={{ color: "#cbd5e1", flexShrink: 0 }} />
+                                          <span>{lang === "si" ? "⏳ විමර්ශනය අවසන් වූ විට, Admin ගොනු අංකය, තත්ත්වය, සටහන් සහ ප්‍රගති විස්තර ඔබ වෙත යවනු ඇත." : "⏳ After the investigation, Admin will send the Investigation File No., Status, Notes & Progress Details here."}</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                </div>
+                              </div>
+                            )}
+
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div style={{ padding: "40px 24px", textAlign: "center", backgroundColor: "#f0f2f5", borderRadius: "12px" }}>
+                      <div style={{ width: "52px", height: "52px", borderRadius: "50%", backgroundColor: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>
+                        <Bell size={24} style={{ color: "#65676b" }} />
+                      </div>
+                      <div style={{ fontWeight: 700, fontSize: "15px", color: "#050505", marginBottom: "4px" }}>
+                        {lang === "si" ? "දැනුම්දීම් කිසිවක් නැත" : "No Directives / Notifications Found"}
+                      </div>
+                      <div style={{ fontSize: "13px", color: "#65676b" }}>
+                        {lang === "si" ? "Investigation Administrator විසින් තොරතුරු පත් කළ විට දැනුම්දීම් මෙතන දිස්වනු ඇත." : "Once the Investigation Administrator assigns investigation officers or updates dates, notifications will appear here."}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          )}
-        </section>
+          </section>
 
           {/* ── Case Management Section ── */}
           <section className="letters-list-section">
@@ -2346,13 +2877,13 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
                 </thead>
                 <tbody>
                   {filteredCases.length > 0 ? (
-                    filteredCases.map((item) => {
+                    filteredCases.map((item, idx) => {
                       const matchingAsgn = assignments.find((a: any) =>
                         String(a.caseNo || a.case_no || "").trim().toLowerCase() === String(item.caseNo || "").trim().toLowerCase()
                       );
 
                       return (
-                        <tr key={item.id} className="letter-table-row">
+                        <tr key={item.id ? `${item.id}-${idx}` : `case-${item.caseNo || idx}-${idx}`} className="letter-table-row">
                           <td className="font-semibold">{item.caseNo}</td>
                           <td>
                             {(() => {
