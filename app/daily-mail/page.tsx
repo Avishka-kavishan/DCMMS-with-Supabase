@@ -253,11 +253,19 @@ export default function DailyMailPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subsequent_mails" }, fetchLetters)
       .subscribe();
 
-    // Fallback: auto-refresh every 5 seconds
-    const interval = setInterval(fetchLetters, 5_000);
+    const handleLocalUpdate = () => fetchLetters();
+    window.addEventListener("storage", handleLocalUpdate);
+    window.addEventListener("dcmms_data_updated", handleLocalUpdate);
+    window.addEventListener("dcmms_assignment_updated", handleLocalUpdate);
+
+    // Fallback: auto-refresh every 2.5 seconds
+    const interval = setInterval(fetchLetters, 2500);
 
     return () => {
       supabase.removeChannel(channel);
+      window.removeEventListener("storage", handleLocalUpdate);
+      window.removeEventListener("dcmms_data_updated", handleLocalUpdate);
+      window.removeEventListener("dcmms_assignment_updated", handleLocalUpdate);
       clearInterval(interval);
     };
   }, []);

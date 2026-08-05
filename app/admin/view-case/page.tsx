@@ -262,29 +262,61 @@ function AdminViewCaseInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caseNoParam, router]);
 
-  // ── Supabase Realtime subscription ─────────────────────────────────────
+  // ── Supabase Realtime & Interval subscription ─────────────────────────────
   useEffect(() => {
-    if (!isSupabaseConfigured || !caseNoParam) return;
+    if (!caseNoParam) return;
 
-    const channel = supabase
-      .channel(`tracking-admin-${caseNoParam}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "dcmms_subject_details",
-          filter: `case_no=eq.${caseNoParam}`,
-        },
-        async () => {
-          setIsRefreshing(true);
-          await fetchTracking(caseNoParam);
-          setIsRefreshing(false);
-        }
-      )
-      .subscribe();
+    let channel: any = null;
+    if (isSupabaseConfigured) {
+      channel = supabase
+        .channel(`tracking-admin-${caseNoParam}`)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "dcmms_subject_details" },
+          async () => {
+            setIsRefreshing(true);
+            await fetchTracking(caseNoParam);
+            setIsRefreshing(false);
+          }
+        )
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "dcmms_daily_mail" },
+          async () => {
+            setIsRefreshing(true);
+            await fetchTracking(caseNoParam);
+            setIsRefreshing(false);
+          }
+        )
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "dcmms_subject_assignments" },
+          async () => {
+            setIsRefreshing(true);
+            await fetchTracking(caseNoParam);
+            setIsRefreshing(false);
+          }
+        )
+        .subscribe();
+    }
 
-    return () => { supabase.removeChannel(channel); };
+    const handleLocalUpdate = async () => {
+      await fetchTracking(caseNoParam);
+    };
+
+    window.addEventListener("storage", handleLocalUpdate);
+    window.addEventListener("dcmms_data_updated", handleLocalUpdate);
+    window.addEventListener("dcmms_assignment_updated", handleLocalUpdate);
+
+    const interval = setInterval(handleLocalUpdate, 2500);
+
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+      window.removeEventListener("storage", handleLocalUpdate);
+      window.removeEventListener("dcmms_data_updated", handleLocalUpdate);
+      window.removeEventListener("dcmms_assignment_updated", handleLocalUpdate);
+      clearInterval(interval);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caseNoParam]);
 

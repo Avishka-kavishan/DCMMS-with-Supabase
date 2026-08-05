@@ -95,25 +95,30 @@ export default function DailyMailOfficersPage() {
   useEffect(() => {
     fetchOfficers();
 
+    let channel: any = null;
     if (isSupabaseConfigured) {
-      const channel = supabase
+      channel = supabase
         .channel("daily-mail-officers-realtime")
         .on(
           "postgres_changes",
           { event: "*", schema: "public", table: "dcmms_profiles" },
-          () => {
-            fetchOfficers();
-          }
+          () => fetchOfficers()
         )
         .subscribe();
-
-      const interval = setInterval(fetchOfficers, 4000);
-
-      return () => {
-        supabase.removeChannel(channel);
-        clearInterval(interval);
-      };
     }
+
+    const handleLocalUpdate = () => fetchOfficers();
+    window.addEventListener("storage", handleLocalUpdate);
+    window.addEventListener("dcmms_data_updated", handleLocalUpdate);
+
+    const interval = setInterval(fetchOfficers, 2500);
+
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+      window.removeEventListener("storage", handleLocalUpdate);
+      window.removeEventListener("dcmms_data_updated", handleLocalUpdate);
+      clearInterval(interval);
+    };
   }, []);
 
 

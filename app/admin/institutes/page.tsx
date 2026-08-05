@@ -122,25 +122,30 @@ export default function EducationalInstitutesPage() {
   useEffect(() => {
     fetchInstitutes();
 
+    let channel: any = null;
     if (isSupabaseConfigured) {
-      const channel = supabase
+      channel = supabase
         .channel("institutes-realtime")
         .on(
           "postgres_changes",
           { event: "*", schema: "public", table: "dcmms_institutes" },
-          () => {
-            fetchInstitutes();
-          }
+          () => fetchInstitutes()
         )
         .subscribe();
-
-      const interval = setInterval(fetchInstitutes, 4000);
-
-      return () => {
-        supabase.removeChannel(channel);
-        clearInterval(interval);
-      };
     }
+
+    const handleLocalUpdate = () => fetchInstitutes();
+    window.addEventListener("storage", handleLocalUpdate);
+    window.addEventListener("dcmms_data_updated", handleLocalUpdate);
+
+    const interval = setInterval(fetchInstitutes, 2500);
+
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+      window.removeEventListener("storage", handleLocalUpdate);
+      window.removeEventListener("dcmms_data_updated", handleLocalUpdate);
+      clearInterval(interval);
+    };
   }, []);
 
 
@@ -236,6 +241,7 @@ export default function EducationalInstitutesPage() {
     showToast(isEditMode ? "Institute updated successfully!" : t("instituteAddedSuccess", "Institute added successfully!"));
     setIsModalOpen(false);
     fetchInstitutes();
+    if (typeof window !== "undefined") window.dispatchEvent(new Event("dcmms_data_updated"));
   };
 
   // Delete Handler
@@ -256,6 +262,7 @@ export default function EducationalInstitutesPage() {
     }
     showToast("Institute deleted successfully.");
     fetchInstitutes();
+    if (typeof window !== "undefined") window.dispatchEvent(new Event("dcmms_data_updated"));
   };
 
   // Toggle Status Handler

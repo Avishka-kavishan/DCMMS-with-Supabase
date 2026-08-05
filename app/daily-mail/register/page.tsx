@@ -627,6 +627,7 @@ function RegisterComplaintForm() {
           }
 
           localStorage.setItem("show_register_success", "true");
+          if (typeof window !== "undefined") window.dispatchEvent(new Event("dcmms_data_updated"));
           router.push("/daily-mail");
           return;
         } catch (err: any) {
@@ -661,6 +662,7 @@ function RegisterComplaintForm() {
         localStorage.setItem("dcmms_letters", JSON.stringify(lettersList));
 
         localStorage.setItem("show_register_success", "true");
+        if (typeof window !== "undefined") window.dispatchEvent(new Event("dcmms_data_updated"));
       }
 
       router.push("/daily-mail");
@@ -718,17 +720,13 @@ function RegisterComplaintForm() {
 
         // Also write assignment entry to dcmms_subject_assignments if an officer is assigned
         if (newLetter.officerName) {
-          const { error: asgnError } = await supabase
-            .from("dcmms_subject_assignments")
-            .upsert({
-              id: `asgn-${newLetter.refNo}`,
-              case_no: newLetter.refNo,
-              subject_officer_name: newLetter.officerName.trim(),
-              status: "Step 1: Officers Assigned",
-            });
-          if (asgnError) {
-            console.warn("Supabase subject assignment write warning:", asgnError.message);
-          }
+          await supabase.from("dcmms_subject_assignments").upsert({
+            id: `asgn-${newLetter.refNo}`,
+            case_no: newLetter.refNo,
+            officer_name: newLetter.officerName,
+            assigned_at: newLetter.receivedDate,
+            status: "Assigned",
+          });
         }
 
         // Log audit event
@@ -742,6 +740,7 @@ function RegisterComplaintForm() {
         // success
         console.debug("Supabase upsert returned:", upserted);
         localStorage.setItem("show_register_success", "true");
+        if (typeof window !== "undefined") window.dispatchEvent(new Event("dcmms_data_updated"));
         const nextUrl = "/daily-mail";
         router.push(nextUrl);
         return;

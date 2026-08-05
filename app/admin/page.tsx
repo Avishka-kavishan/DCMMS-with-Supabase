@@ -271,13 +271,23 @@ export default function AdminDashboard() {
       .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subject" }, fetchCases)
       .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_daily_mail" }, fetchCases)
       .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_profiles" }, fetchCases)
+      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subject_assignments" }, fetchCases)
+      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subject_details" }, fetchCases)
       .subscribe();
 
-    // Fallback: auto-refresh every 5 seconds in case Realtime is not enabled/blocked
-    const interval = setInterval(fetchCases, 5_000);
+    const handleLocalUpdate = () => fetchCases();
+    window.addEventListener("storage", handleLocalUpdate);
+    window.addEventListener("dcmms_data_updated", handleLocalUpdate);
+    window.addEventListener("dcmms_assignment_updated", handleLocalUpdate);
+
+    // Fallback: auto-refresh every 2.5 seconds in case Realtime is delayed or blocked
+    const interval = setInterval(fetchCases, 2500);
 
     return () => {
       supabase.removeChannel(channel);
+      window.removeEventListener("storage", handleLocalUpdate);
+      window.removeEventListener("dcmms_data_updated", handleLocalUpdate);
+      window.removeEventListener("dcmms_assignment_updated", handleLocalUpdate);
       clearInterval(interval);
     };
   }, []);

@@ -140,25 +140,37 @@ export default function CalendarPage() {
     if (mounted) {
       fetchEvents();
 
+      let channel: any = null;
       if (isSupabaseConfigured) {
-        const channel = supabase
+        channel = supabase
           .channel("calendar-realtime")
           .on(
             "postgres_changes",
             { event: "*", schema: "public", table: "dcmms_calendar" },
-            () => {
-              fetchEvents();
-            }
+            () => fetchEvents()
+          )
+          .on(
+            "postgres_changes",
+            { event: "*", schema: "public", table: "dcmms_subject_assignments" },
+            () => fetchEvents()
           )
           .subscribe();
-
-        const interval = setInterval(fetchEvents, 5000);
-
-        return () => {
-          supabase.removeChannel(channel);
-          clearInterval(interval);
-        };
       }
+
+      const handleLocalUpdate = () => fetchEvents();
+      window.addEventListener("storage", handleLocalUpdate);
+      window.addEventListener("dcmms_data_updated", handleLocalUpdate);
+      window.addEventListener("dcmms_assignment_updated", handleLocalUpdate);
+
+      const interval = setInterval(fetchEvents, 2500);
+
+      return () => {
+        if (channel) supabase.removeChannel(channel);
+        window.removeEventListener("storage", handleLocalUpdate);
+        window.removeEventListener("dcmms_data_updated", handleLocalUpdate);
+        window.removeEventListener("dcmms_assignment_updated", handleLocalUpdate);
+        clearInterval(interval);
+      };
     }
   }, [mounted]);
 

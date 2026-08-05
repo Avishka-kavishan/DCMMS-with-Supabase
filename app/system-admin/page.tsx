@@ -108,10 +108,16 @@ export default function SystemAdminDashboard() {
       )
       .subscribe();
 
-    const interval = setInterval(loadData, 3000);
+    const handleLocalUpdate = () => loadData();
+    window.addEventListener("storage", handleLocalUpdate);
+    window.addEventListener("dcmms_data_updated", handleLocalUpdate);
+
+    const interval = setInterval(loadData, 2500);
 
     return () => {
       supabase.removeChannel(channel);
+      window.removeEventListener("storage", handleLocalUpdate);
+      window.removeEventListener("dcmms_data_updated", handleLocalUpdate);
       clearInterval(interval);
     };
   }, []);

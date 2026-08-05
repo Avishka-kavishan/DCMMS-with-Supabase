@@ -619,6 +619,33 @@ function CaseDetailsForm() {
     };
 
     verifyAndFetch();
+
+    let channel: any = null;
+    if (isSupabaseConfigured && caseNoParam) {
+      channel = supabase
+        .channel(`subject-add-details-realtime-${caseNoParam}`)
+        .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subject_assignments" }, verifyAndFetch)
+        .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subject_details" }, verifyAndFetch)
+        .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_daily_mail" }, verifyAndFetch)
+        .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subsequent_mails" }, verifyAndFetch)
+        .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_concerned_officers" }, verifyAndFetch)
+        .subscribe();
+    }
+
+    const handleLocalUpdate = () => verifyAndFetch();
+    window.addEventListener("storage", handleLocalUpdate);
+    window.addEventListener("dcmms_data_updated", handleLocalUpdate);
+    window.addEventListener("dcmms_assignment_updated", handleLocalUpdate);
+
+    const interval = setInterval(verifyAndFetch, 2500);
+
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+      window.removeEventListener("storage", handleLocalUpdate);
+      window.removeEventListener("dcmms_data_updated", handleLocalUpdate);
+      window.removeEventListener("dcmms_assignment_updated", handleLocalUpdate);
+      clearInterval(interval);
+    };
   }, [caseNoParam, router]);
 
   const handleLogout = (e: React.MouseEvent) => {
@@ -714,6 +741,10 @@ function CaseDetailsForm() {
       } catch (e) {}
     }
     setAssignmentData(updated);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("dcmms_assignment_updated"));
+      window.dispatchEvent(new Event("dcmms_data_updated"));
+    }
     alert(i18n.language === "si" ? "පත්වීම් ලිපිය දිනය සහ වාර්තා දිනය Admin වෙත යවන ලදී!" : "Appointment Date and Report Due Date submitted to Admin!");
   };
 
@@ -915,6 +946,10 @@ function CaseDetailsForm() {
     }
 
     await saveCaseData(reportState || "In Progress", false);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("dcmms_assignment_updated"));
+      window.dispatchEvent(new Event("dcmms_data_updated"));
+    }
     alert("Case details updated successfully!");
     router.push("/subject");
   };
@@ -929,6 +964,10 @@ function CaseDetailsForm() {
     }
 
     await saveCaseData(reportState || "Pending", true);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("dcmms_assignment_updated"));
+      window.dispatchEvent(new Event("dcmms_data_updated"));
+    }
     alert("Draft saved successfully!");
     router.push("/subject");
   };

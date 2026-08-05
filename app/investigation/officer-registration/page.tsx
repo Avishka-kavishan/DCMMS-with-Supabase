@@ -197,6 +197,7 @@ export default function InvestigationOfficerRegistrationPage() {
 
     setIsSaving(false);
     showToast(lang === "si" ? "පරීක්ෂණ නිලධාරියා සාර්ථකව ලියාපදිංචි කරන ලදී!" : "Investigation Officer Registered Successfully!");
+    if (typeof window !== "undefined") window.dispatchEvent(new Event("dcmms_data_updated"));
 
     setTimeout(() => {
       router.push("/investigation");

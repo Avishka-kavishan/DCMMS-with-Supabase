@@ -1123,21 +1123,24 @@ export default function InvestigationPage() {
     const handleLocalUpdates = () => {
       fetchSubjectOfficerNotifications();
       fetchInquiries();
+      fetchInvestigationOfficers();
     };
 
     window.addEventListener("storage", handleLocalUpdates);
     window.addEventListener("dcmms_assignment_updated", handleLocalUpdates);
+    window.addEventListener("dcmms_data_updated", handleLocalUpdates);
 
     const interval = setInterval(() => {
       fetchInquiries();
       fetchInvestigationOfficers();
       fetchSubjectOfficerNotifications();
-    }, 8000);
+    }, 2500);
 
     return () => {
       supabase.removeChannel(channel1);
       window.removeEventListener("storage", handleLocalUpdates);
       window.removeEventListener("dcmms_assignment_updated", handleLocalUpdates);
+      window.removeEventListener("dcmms_data_updated", handleLocalUpdates);
       clearInterval(interval);
     };
   }, []);
