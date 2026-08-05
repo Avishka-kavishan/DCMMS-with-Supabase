@@ -10,6 +10,12 @@ export const isSupabaseConfigured = !!(
   supabaseAnonKey !== "your_supabase_anon_key"
 );
 
+if (typeof window !== "undefined") {
+  console.log("Supabase URL loaded in browser:", supabaseUrl || "(empty)", "Configured:", isSupabaseConfigured);
+} else {
+  console.log("Supabase URL loaded on server:", supabaseUrl || "(empty)", "Configured:", isSupabaseConfigured);
+}
+
 const isBrowser = typeof window !== "undefined";
 
 // During static export (SSG/SSR build), Supabase auth storage must be

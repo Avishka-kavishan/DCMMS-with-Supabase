@@ -151,8 +151,8 @@ function InvestigationCaseDetailsContent() {
   const [step2ApptDate, setStep2ApptDate] = useState("");
   const [step2DueDate, setStep2DueDate] = useState("");
 
-  // Step 3: Extension of Dates (Start & End Date, Term: First, Second, Third)
-  const [step3Term, setStep3Term] = useState<"First" | "Second" | "Third">("First");
+  // Step 3: Extension of Dates (Start & End Date, Term: First, Second, Third — maximum 3 terms)
+  const [step3Term, setStep3Term] = useState<string>("First");
   const [step3StartDate, setStep3StartDate] = useState("");
   const [step3EndDate, setStep3EndDate] = useState("");
 
@@ -878,7 +878,6 @@ function InvestigationCaseDetailsContent() {
       if (isSupabaseConfigured) {
         try {
           await supabase.from("dcmms_subject_assignments").upsert({
-            id: updated.id,
             case_no: updated.caseNo,
             subject_officer_name: updated.subjectOfficerName,
             status: updated.status,
@@ -902,7 +901,7 @@ function InvestigationCaseDetailsContent() {
             investigation_status: updated.investigationStatus || null,
             investigation_notes: updated.investigationNotes || null,
             progress_details: updated.progressDetails || null,
-          });
+          }, { onConflict: "case_no" });
         } catch (e) {}
       }
     }
@@ -920,6 +919,9 @@ function InvestigationCaseDetailsContent() {
     setIsSaving(true);
     const subjectOfficer = existingAssignment?.subjectOfficerName || assignee || getDisplaySubjectOfficerName() || "Subject Officer";
     const matchKey = String(caseNoParam || "").trim().toLowerCase();
+    const now = new Date().toISOString().slice(0, 10);
+    const actionId = `act-ext-${caseNoParam}-${Date.now()}`;
+    const desc = `Extension of Days Request (Sent for Approval): ${step3Term} Extension (${step3StartDate} to ${step3EndDate}) sent to Subject Officer (${subjectOfficer}) for approval.`;
 
     const updatePayload: any = {
       subjectOfficerName: subjectOfficer,
@@ -941,7 +943,7 @@ function InvestigationCaseDetailsContent() {
     // 1. Save extension data to dcmms_subject_assignments (localStorage + Supabase)
     await saveSubjectAssignment(updatePayload);
 
-    // 2. Also update dcmms_letters in localStorage so Subject Officer's page picks it up
+    // 2. Also update dcmms_letters & action logs in localStorage so Subject Officer's page and timeline pick it up
     if (typeof window !== "undefined") {
       try {
         const storedLetters = localStorage.getItem("dcmms_letters") || "[]";
@@ -959,10 +961,12 @@ function InvestigationCaseDetailsContent() {
           letters[idx].extensionApprovalStatus = "Pending";
           letters[idx].extensionDecisionDate = null;
           letters[idx].status = "Extension Requested";
+          if (subjectOfficer) letters[idx].officerName = subjectOfficer;
         } else {
           letters.push({
             refNo: caseNoParam,
             caseNo: caseNoParam,
+            officerName: subjectOfficer,
             extensionTerm: step3Term,
             extensionStartDate: step3StartDate,
             extensionEndDate: step3EndDate,
@@ -979,7 +983,7 @@ function InvestigationCaseDetailsContent() {
         localStorage.setItem("dcmms_letters", JSON.stringify(letters));
       } catch (e) {}
 
-      // 3. Also update dcmms_cases status
+      // 3. Update dcmms_cases status
       try {
         const storedCases = localStorage.getItem("dcmms_cases") || "[]";
         let cases = JSON.parse(storedCases);
@@ -1016,28 +1020,120 @@ function InvestigationCaseDetailsContent() {
         localStorage.setItem("dcmms_cases", JSON.stringify(cases));
       } catch (e) {}
 
+      // 4. Save action log to previous actions history
+      const newActionItem = {
+        id: actionId,
+        caseNo: caseNoParam,
+        receivedDate: now,
+        reportState: "Extension of Days Request (Sent for Approval)",
+        specialNotes: `Extension Term: ${step3Term} | Start Date: ${step3StartDate} | End Date: ${step3EndDate}`,
+        subjectOfficerName: subjectOfficer,
+        stepTaken: desc,
+      };
+
+      try {
+        const storedActions = localStorage.getItem("dcmms_new_letter_current_case") || "[]";
+        let actionsList = [];
+        try { actionsList = JSON.parse(storedActions); } catch (e) {}
+        if (!Array.isArray(actionsList)) actionsList = [];
+        actionsList.unshift(newActionItem);
+        localStorage.setItem("dcmms_new_letter_current_case", JSON.stringify(actionsList));
+        setPreviousActions((prev) => [newActionItem, ...prev]);
+      } catch (e) {}
+
+      // 5. Write a new notification entry to dcmms_notifications so Subject Officer gets an unread badge immediately
+      try {
+        const notifKey = "dcmms_notifications";
+        const stored = localStorage.getItem(notifKey) || "[]";
+        let notifs: any[] = [];
+        try { notifs = JSON.parse(stored); } catch (e) {}
+        if (!Array.isArray(notifs)) notifs = [];
+        notifs.unshift({
+          id: `notif-ext-${caseNoParam}-${step3Term}-${Date.now()}`,
+          caseNo: caseNoParam,
+          type: "extension_request",
+          title: `Extension of Days Request (${step3Term})`,
+          message: desc,
+          targetOfficer: subjectOfficer,
+          extensionTerm: step3Term,
+          extensionStartDate: step3StartDate,
+          extensionEndDate: step3EndDate,
+          extensionApprovalStatus: "Pending",
+          createdAt: new Date().toISOString(),
+          read: false,
+        });
+        localStorage.setItem(notifKey, JSON.stringify(notifs));
+      } catch (e) {}
+
       window.dispatchEvent(new CustomEvent("dcmms_assignment_updated"));
-      window.dispatchEvent(new Event("storage"));
+      window.dispatchEvent(new CustomEvent("dcmms_notifications_updated"));
+      window.dispatchEvent(new CustomEvent("dcmms_data_updated"));
+      window.dispatchEvent(new StorageEvent("storage", { key: "dcmms_subject_assignments" }));
+      window.dispatchEvent(new StorageEvent("storage", { key: "dcmms_notifications" }));
     }
 
     if (isSupabaseConfigured) {
       try {
-        const subUpdateObj: any = {
-          status: "Extension Requested",
-          updated_at: new Date().toISOString(),
-        };
+        // Update main subject status
         await supabase
           .from("dcmms_subject")
-          .update(subUpdateObj)
+          .update({
+            status: "Extension Requested",
+            updated_at: new Date().toISOString(),
+          })
           .ilike("case_no", caseNoParam.trim());
+
+        // Log extension request action into dcmms_subject_details history log
+        await supabase.from("dcmms_subject_details").insert({
+          id: actionId,
+          case_no: caseNoParam,
+          ref_no: caseNoParam,
+          received_date: now,
+          report_state: "Extension of Days Request (Sent for Approval)",
+          special_notes: `Extension Term: ${step3Term} | Start Date: ${step3StartDate} | End Date: ${step3EndDate}`,
+          subject_officer_name: subjectOfficer,
+          officer_name: subjectOfficer,
+          step_taken: desc,
+        });
+
+        // Create a NEW notification per extension request (unique ID per term) so Subject Officer sees unread badge
+        const extMailId = `mail-ext-${caseNoParam}-${step3Term.toLowerCase()}-${Date.now()}`;
+        await supabase.from("dcmms_daily_mail").insert({
+          id: extMailId,
+          ref_no: caseNoParam,
+          officer_name: subjectOfficer,
+          name_of_subject_officer: subjectOfficer,
+          subject: `Extension of Days Request (${step3Term}) — ${selectedCase?.subject || caseNoParam}`,
+          received_date: now,
+          status: "Extension Requested",
+          extension_term: step3Term,
+          extension_start_date: step3StartDate,
+          extension_end_date: step3EndDate,
+          extension_approval_status: "Pending",
+        }).select();
+
+        // Also keep the base mail record updated so the case still appears on Subject Officer's list
+        await supabase.from("dcmms_daily_mail").upsert({
+          id: `mail-${caseNoParam}-${subjectOfficer.trim().toLowerCase().replace(/\s+/g, "_")}`,
+          ref_no: caseNoParam,
+          officer_name: subjectOfficer,
+          name_of_subject_officer: subjectOfficer,
+          subject: selectedCase?.subject || `Assigned Inquiry Case (${caseNoParam})`,
+          received_date: now,
+          status: "Extension Requested",
+          extension_term: step3Term,
+          extension_start_date: step3StartDate,
+          extension_end_date: step3EndDate,
+          extension_approval_status: "Pending",
+        }, { onConflict: "id" });
       } catch (e) {}
     }
 
     setIsSaving(false);
     showToast(
       lang === "si"
-        ? `Step 3: දිනයන් දීර්ඝ කිරීමේ තොරතුරු (${step3Term} - ${step3StartDate} සිට ${step3EndDate} දක්වා) විෂය නිලධාරියාගේ අනුමැතිය සඳහා යවන ලදී!`
-        : `Step 3: Extension details (${step3Term} — ${step3StartDate} to ${step3EndDate}) sent to Subject Officer for approval!`
+        ? `දිනයන් දීර්ඝ කිරීමේ ඉල්ලීම (අනුමැතිය සඳහා) - ${step3Term} (${step3StartDate} සිට ${step3EndDate} දක්වා) විෂය නිලධාරියා වෙත සාර්ථකව යවන ලදී!`
+        : `Extension of Days Request (Sent for Approval) — ${step3Term} (${step3StartDate} to ${step3EndDate}) sent to Subject Officer!`
     );
   };
 
@@ -2012,7 +2108,7 @@ function InvestigationCaseDetailsContent() {
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
                       <label style={{ fontSize: "13px", fontWeight: 700, color: "#92400e", display: "flex", alignItems: "center", gap: "6px" }}>
                         <Clock size={16} style={{ color: "#d97706" }} />
-                        <span>{lang === "si" ? "දිනයන් දීර්ඝ කිරීමේ කොටස (අනුමැතිය සඳහා යවන ලදී):" : "Extension of Days Request (Sent for Approval):"}</span>
+                        <span>{lang === "si" ? "දිනයන් දීර්ඝ කිරීමේ කොටස (අනුමැතිය සඳහා යවන ලදී - උපරිමය 3 වාරයකි):" : "Extension of Days Request (Sent for Approval - Max 3 Terms):"}</span>
                       </label>
 
                       {/* Status Badge */}
@@ -2054,7 +2150,8 @@ function InvestigationCaseDetailsContent() {
                           >
                             <option value="First">{lang === "si" ? "පළමු දීර්ඝ කිරීම (First Extension)" : "First Extension (1st)"}</option>
                             <option value="Second">{lang === "si" ? "දෙවන දීර්ඝ කිරීම (Second Extension)" : "Second Extension (2nd)"}</option>
-                            <option value="Third">{lang === "si" ? "තෙවන දීර්ඝ කිරීම (Third Extension)" : "Third Extension (3rd)"}</option>
+                            <option value="Third">{lang === "si" ? "තෙවන දීර්ඝ කිරීම (3rd — උපරිමය)" : "Third Extension (3rd) — Maximum"}</option>
+                            
                           </select>
                         </div>
 

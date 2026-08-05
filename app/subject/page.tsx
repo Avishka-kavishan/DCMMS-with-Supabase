@@ -130,6 +130,21 @@ export function parseCommitteeDetails(asgn: any) {
   };
 }
 
+function formatExtensionTermDisplay(term?: string | null, currentLang: string = "en"): string {
+  if (!term || term === "None") return "First Extension (1st)";
+  const lower = String(term).trim().toLowerCase();
+  if (lower === "first" || lower === "1st") {
+    return currentLang === "si" ? "පළමු දීර්ඝ කිරීම (1st Extension)" : "First Extension (1st)";
+  }
+  if (lower === "second" || lower === "2nd") {
+    return currentLang === "si" ? "දෙවන දීර්ඝ කිරීම (2nd Extension)" : "Second Extension (2nd)";
+  }
+  if (lower === "third" || lower === "3rd") {
+    return currentLang === "si" ? "තෙවන දීර්ඝ කිරීම (3rd Extension — උපරිම)" : "Third Extension (3rd) — Maximum";
+  }
+  return term;
+}
+
 export default function SubjectOfficerDashboard() {
   const { t, i18n } = useTranslation();
   const router = useRouter();
@@ -762,7 +777,22 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
         }
 
         if (dbAsgns && dbAsgns.length > 0) {
-          list = dbAsgns.map((a: any) => {
+          // Deduplicate by case_no: keep the row with the latest updated_at (fixes duplicate rows from mixed upsert strategies)
+          const deduped = new Map<string, any>();
+          dbAsgns.forEach((a: any) => {
+            const key = String(a.case_no || a.caseNo || "").trim().toLowerCase();
+            if (!key) return;
+            const existing = deduped.get(key);
+            if (!existing) {
+              deduped.set(key, a);
+            } else {
+              const existingTime = new Date(existing.updated_at || existing.created_at || 0).getTime();
+              const newTime = new Date(a.updated_at || a.created_at || 0).getTime();
+              if (newTime >= existingTime) deduped.set(key, a);
+            }
+          });
+
+          list = Array.from(deduped.values()).map((a: any) => {
             const caseNo = a.case_no || a.caseNo;
             const det = detailsByCase[caseNo];
 
@@ -912,15 +942,19 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
               const extDate = c.extensionDecisionDate || c.extension_decision_date;
 
               if (idx >= 0) {
-                if (extTerm) list[idx].extensionTerm = extTerm;
-                if (extStart) list[idx].extensionStartDate = extStart;
-                if (extEnd) {
+                const isPendingInList = list[idx].extensionApprovalStatus === "Pending";
+                // Always override if incoming is a new Pending extension request
+                const incomingIsPending = extApprove === "Pending";
+                const shouldUpdate = incomingIsPending || !isPendingInList;
+                if (extTerm && (!list[idx].extensionTerm || shouldUpdate)) list[idx].extensionTerm = extTerm;
+                if (extStart && (!list[idx].extensionStartDate || shouldUpdate)) list[idx].extensionStartDate = extStart;
+                if (extEnd && (!list[idx].extensionEndDate || shouldUpdate)) {
                   list[idx].extensionEndDate = extEnd;
-                  list[idx].reportDueDate = extEnd;
+                  if (incomingIsPending) list[idx].reportDueDate = extEnd;
                 }
-                if (extReq) list[idx].extensionRequestedByAdmin = true;
-                if (extApprove) list[idx].extensionApprovalStatus = extApprove;
-                if (extDate) list[idx].extensionDecisionDate = extDate;
+                if (extReq && shouldUpdate) list[idx].extensionRequestedByAdmin = true;
+                if (extApprove && shouldUpdate) list[idx].extensionApprovalStatus = extApprove;
+                if (extDate && !incomingIsPending) list[idx].extensionDecisionDate = extDate;
               } else if (targetCaseNo && (c.assignedOfficers || c.chairman || c.members || c.committeeDetails || c.status === "Committee Details Sent" || extReq || extStart)) {
                 const chairmanPart = c.chairman ? `Chairman: ${c.chairman.fullName || c.chairman.name}` : "";
                 const membersPart = Array.isArray(c.members) && c.members.length > 0 ? `Members: ${c.members.map((m: any) => m.fullName || m.name).join(", ")}` : "";
@@ -967,15 +1001,19 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
               if (targetCaseNo && (extTerm || extStart || extReq || extEnd)) {
                 const idx = list.findIndex((a: any) => String(a.caseNo || a.case_no || "").trim().toLowerCase() === targetCaseNo);
                 if (idx >= 0) {
-                  if (extTerm) list[idx].extensionTerm = extTerm;
-                  if (extStart) list[idx].extensionStartDate = extStart;
-                  if (extEnd) {
+                  const isPendingInList = list[idx].extensionApprovalStatus === "Pending";
+                  // Always override if incoming is a new Pending extension request
+                  const incomingIsPending = extApprove === "Pending";
+                  const shouldUpdate = incomingIsPending || !isPendingInList;
+                  if (extTerm && (!list[idx].extensionTerm || shouldUpdate)) list[idx].extensionTerm = extTerm;
+                  if (extStart && (!list[idx].extensionStartDate || shouldUpdate)) list[idx].extensionStartDate = extStart;
+                  if (extEnd && (!list[idx].extensionEndDate || shouldUpdate)) {
                     list[idx].extensionEndDate = extEnd;
-                    list[idx].reportDueDate = extEnd;
+                    if (incomingIsPending) list[idx].reportDueDate = extEnd;
                   }
-                  if (extReq) list[idx].extensionRequestedByAdmin = true;
-                  if (extApprove) list[idx].extensionApprovalStatus = extApprove;
-                  if (extDate) list[idx].extensionDecisionDate = extDate;
+                  if (extReq && shouldUpdate) list[idx].extensionRequestedByAdmin = true;
+                  if (extApprove && shouldUpdate) list[idx].extensionApprovalStatus = extApprove;
+                  if (extDate && !incomingIsPending) list[idx].extensionDecisionDate = extDate;
                 }
               }
             });
@@ -1051,17 +1089,45 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
         };
       });
 
-      const seenKeys = new Set<string>();
       const deduplicatedAssignments: any[] = [];
-      mergedRelevant.forEach((item: any, idx: number) => {
-        const uniqueKey = String(item.id || item.caseNo || item.case_no || `asgn-${idx}`).trim().toLowerCase();
-        const caseKey = String(item.caseNo || item.case_no || "").trim().toLowerCase();
-        if (seenKeys.has(uniqueKey) || (caseKey && seenKeys.has(`case-${caseKey}`))) {
+      const indexByCase = new Map<string, number>();
+
+      mergedRelevant.forEach((item: any) => {
+        const caseKey = String(item.caseNo || item.case_no || item.id || "").trim().toLowerCase();
+        if (!caseKey) {
+          deduplicatedAssignments.push(item);
           return;
         }
-        seenKeys.add(uniqueKey);
-        if (caseKey) seenKeys.add(`case-${caseKey}`);
-        deduplicatedAssignments.push(item);
+        if (indexByCase.has(caseKey)) {
+          const existingIdx = indexByCase.get(caseKey)!;
+          const existingItem = deduplicatedAssignments[existingIdx];
+
+          // Prefer item with Pending extension (new request) over approved/non-pending
+          const itemIsPendingExt = item.extensionApprovalStatus === "Pending";
+          const existingIsPendingExt = existingItem.extensionApprovalStatus === "Pending";
+
+          // Prefer newer item by updatedAt
+          const itemTime = new Date(item.updatedAt || item.updatedAt || item.createdAt || 0).getTime();
+          const existingTime = new Date(existingItem.updatedAt || existingItem.createdAt || 0).getTime();
+
+          if (itemIsPendingExt && !existingIsPendingExt) {
+            // New extension request wins over non-pending
+            deduplicatedAssignments[existingIdx] = { ...existingItem, ...item };
+          } else if (!itemIsPendingExt && existingIsPendingExt) {
+            // Keep existing pending, only fill gaps from item
+            deduplicatedAssignments[existingIdx] = { ...item, ...existingItem };
+          } else {
+            // Both same status: prefer newer one
+            if (itemTime >= existingTime) {
+              deduplicatedAssignments[existingIdx] = { ...existingItem, ...item };
+            } else {
+              deduplicatedAssignments[existingIdx] = { ...item, ...existingItem };
+            }
+          }
+        } else {
+          indexByCase.set(caseKey, deduplicatedAssignments.length);
+          deduplicatedAssignments.push(item);
+        }
       });
 
       setAssignments(deduplicatedAssignments);
@@ -1090,12 +1156,16 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
 
     window.addEventListener("storage", handleStorageEvent);
     window.addEventListener("dcmms_assignment_updated", fetchAssignments);
+    window.addEventListener("dcmms_notifications_updated", fetchAssignments);
+    window.addEventListener("dcmms_data_updated", fetchAssignments);
 
     return () => {
       supabase.removeChannel(channel);
       clearInterval(interval);
       window.removeEventListener("storage", handleStorageEvent);
       window.removeEventListener("dcmms_assignment_updated", fetchAssignments);
+      window.removeEventListener("dcmms_notifications_updated", fetchAssignments);
+      window.removeEventListener("dcmms_data_updated", fetchAssignments);
     };
   }, [profile, t]);
 
@@ -2650,7 +2720,7 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
                                               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px", fontSize: "12px" }}>
                                                 <div style={{ backgroundColor: "#ffffff", padding: "10px", borderRadius: "8px", border: `1px solid ${isApproved ? "#bbf7d0" : isDisapproved ? "#fca5a5" : "#fde68a"}` }}>
                                                   <div style={{ fontSize: "10px", color: isApproved ? "#166534" : isDisapproved ? "#991b1b" : "#92400e", fontWeight: 700, textTransform: "uppercase" }}>{lang === "si" ? "වාරය" : "Extension Term"}</div>
-                                                  <div style={{ fontWeight: 700, color: isApproved ? "#15803d" : isDisapproved ? "#b91c1c" : "#b45309", marginTop: "2px", fontSize: "13px" }}>{extTerm || "First"}</div>
+                                                  <div style={{ fontWeight: 700, color: isApproved ? "#15803d" : isDisapproved ? "#b91c1c" : "#b45309", marginTop: "2px", fontSize: "13px" }}>{formatExtensionTermDisplay(extTerm, lang)}</div>
                                                 </div>
                                                 <div style={{ backgroundColor: "#ffffff", padding: "10px", borderRadius: "8px", border: `1px solid ${isApproved ? "#bbf7d0" : isDisapproved ? "#fca5a5" : "#fde68a"}` }}>
                                                   <div style={{ fontSize: "10px", color: isApproved ? "#166534" : isDisapproved ? "#991b1b" : "#92400e", fontWeight: 700, textTransform: "uppercase" }}>{lang === "si" ? "ආරම්භ දිනය" : "Start Date"}</div>

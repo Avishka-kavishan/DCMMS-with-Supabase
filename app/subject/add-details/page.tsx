@@ -1344,6 +1344,25 @@ function CaseDetailsForm() {
                         </div>
                       )}
 
+                      {/* Extension Details Banner if requested by Admin */}
+                      {assignmentData && (assignmentData.extensionTerm || assignmentData.extensionStartDate || assignmentData.extension_start_date || assignmentData.extensionRequestedByAdmin) && (
+                        <div style={{ backgroundColor: "#fffbeb", border: "1px solid #fde68a", borderRadius: "10px", padding: "14px 16px", marginBottom: "16px" }}>
+                          <div style={{ fontSize: "12px", fontWeight: 700, color: "#92400e", textTransform: "uppercase", marginBottom: "6px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                            <span>⏳ {i18n.language === "si" ? "දිනයන් දීර්ඝ කිරීමේ තොරතුරු (Investigation Admin වෙතින්):" : "Date Extension Details (From Investigation Admin):"}</span>
+                            <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "12px", backgroundColor: assignmentData.extensionApprovalStatus === "Approved" ? "#dcfce7" : assignmentData.extensionApprovalStatus === "Disapproved" ? "#fee2e2" : "#fef3c7", color: assignmentData.extensionApprovalStatus === "Approved" ? "#15803d" : assignmentData.extensionApprovalStatus === "Disapproved" ? "#b91c1c" : "#b45309" }}>
+                              {assignmentData.extensionApprovalStatus === "Approved" ? (i18n.language === "si" ? "අනුමතයි" : "Approved") : assignmentData.extensionApprovalStatus === "Disapproved" ? (i18n.language === "si" ? "ප්‍රතික්ෂේපයි" : "Disapproved") : (i18n.language === "si" ? "අනුමැතිය අපේක්ෂාවෙන්" : "Pending Approval")}
+                            </span>
+                          </div>
+                          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", fontSize: "13px", fontWeight: 700, color: "#78350f" }}>
+                            <span>{i18n.language === "si" ? "වාරය:" : "Term:"} {assignmentData.extensionTerm || assignmentData.extension_term || "First"}</span>
+                            <span>|</span>
+                            <span>{i18n.language === "si" ? "ආරම්භය:" : "Start:"} {assignmentData.extensionStartDate || assignmentData.extension_start_date || "—"}</span>
+                            <span>|</span>
+                            <span>{i18n.language === "si" ? "අවසානය:" : "End:"} {assignmentData.extensionEndDate || assignmentData.extension_end_date || "—"}</span>
+                          </div>
+                        </div>
+                      )}
+
                       {/* Step 1: Case Administration */}
                       <div className="flowchart-step">
                         <div className="step-indicator">1</div>

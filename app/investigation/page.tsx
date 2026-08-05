@@ -188,7 +188,7 @@ export default function InvestigationPage() {
   const [customSubjectOfficerInput, setCustomSubjectOfficerInput] = useState("");
   const [subjAppointmentDate, setSubjAppointmentDate] = useState("");
   const [subjReportDueDate, setSubjReportDueDate] = useState("");
-  const [subjExtensionTerm, setSubjExtensionTerm] = useState<"None" | "First" | "Second" | "Third">("None");
+  const [subjExtensionTerm, setSubjExtensionTerm] = useState<string>("None");
   const [subjExtensionStartDate, setSubjExtensionStartDate] = useState("");
   const [subjExtensionEndDate, setSubjExtensionEndDate] = useState("");
   const [existingAssignment, setExistingAssignment] = useState<any>(null);
@@ -199,7 +199,7 @@ export default function InvestigationPage() {
   const [step2AppointmentDate, setStep2AppointmentDate] = useState("");
   const [step2ReportDueDate, setStep2ReportDueDate] = useState("");
   const [step2Submitted, setStep2Submitted] = useState(false);
-  const [step3ExtensionTerm, setStep3ExtensionTerm] = useState<"None" | "First" | "Second" | "Third">("None");
+  const [step3ExtensionTerm, setStep3ExtensionTerm] = useState<string>("None");
   const [step3ExtensionStartDate, setStep3ExtensionStartDate] = useState("");
   const [step3ExtensionEndDate, setStep3ExtensionEndDate] = useState("");
   const [step3ExtensionRequested, setStep3ExtensionRequested] = useState(false);
@@ -1820,11 +1820,15 @@ export default function InvestigationPage() {
     const caseNo = selectedCase?.inquiryNo || (selectedCase as any)?.caseNo || (selectedCase as any)?.refNo;
     if (!caseNo) return;
     const now = new Date().toISOString().slice(0, 10);
+    const actionId = `act-ext-${caseNo}-${Date.now()}`;
+    const targetOfficer = subjOfficerName.trim() || (existingAssignment?.subjectOfficerName !== "Subject Officer" ? existingAssignment?.subjectOfficerName : "") || (selectedCase as any)?.subjectOfficer || "Subject Officer";
+    const desc = `Extension of Days Request (Sent for Approval): ${extensionTermToUse} Extension (${extensionStartToUse} to ${extensionEndToUse}) sent to Subject Officer (${targetOfficer}) for approval.`;
 
     const updatedRecord: any = {
       ...(existingAssignment || {}),
       id: existingAssignment?.id || `asgn-${caseNo}-${Date.now()}`,
       caseNo,
+      subjectOfficerName: targetOfficer,
       extensionTerm: extensionTermToUse,
       extensionStartDate: extensionStartToUse,
       extensionEndDate: extensionEndToUse,
@@ -1847,10 +1851,11 @@ export default function InvestigationPage() {
     setWorkflowStep(3);
 
     if (typeof window !== "undefined") {
+      const matchKey = String(caseNo || "").trim().toLowerCase();
       try {
         const storedAssignments = localStorage.getItem("dcmms_subject_assignments") || "[]";
         let list = JSON.parse(storedAssignments);
-        list = list.filter((a: any) => a.caseNo !== caseNo);
+        list = list.filter((a: any) => String(a.caseNo || a.case_no || "").trim().toLowerCase() !== matchKey);
         list.push(updatedRecord);
         localStorage.setItem("dcmms_subject_assignments", JSON.stringify(list));
       } catch (e) {}
@@ -1858,16 +1863,23 @@ export default function InvestigationPage() {
       try {
         const storedLetters = localStorage.getItem("dcmms_letters") || "[]";
         let letters = JSON.parse(storedLetters);
-        const idx = letters.findIndex((l: any) => l.refNo === caseNo || l.caseNo === caseNo);
+        const idx = letters.findIndex((l: any) => String(l.refNo || l.caseNo || "").trim().toLowerCase() === matchKey);
         if (idx >= 0) {
           letters[idx].extensionTerm = extensionTermToUse;
           letters[idx].extensionStartDate = extensionStartToUse;
           letters[idx].extensionEndDate = extensionEndToUse;
+          letters[idx].extension_term = extensionTermToUse;
+          letters[idx].extension_start_date = extensionStartToUse;
+          letters[idx].extension_end_date = extensionEndToUse;
           letters[idx].extensionRequested = true;
           letters[idx].extensionRequestedByAdmin = true;
+          letters[idx].extension_requested_by_admin = true;
           letters[idx].extensionApprovalStatus = "Pending";
+          letters[idx].extension_approval_status = "Pending";
           letters[idx].extensionDecisionDate = null;
+          letters[idx].extension_decision_date = null;
           letters[idx].status = "Extension Requested";
+          if (targetOfficer) letters[idx].officerName = targetOfficer;
           localStorage.setItem("dcmms_letters", JSON.stringify(letters));
         }
       } catch (e) {}
@@ -1875,41 +1887,58 @@ export default function InvestigationPage() {
       try {
         const storedCases = localStorage.getItem("dcmms_cases") || "[]";
         let cases = JSON.parse(storedCases);
-        const idx = cases.findIndex((c: any) => c.caseNo === caseNo || c.refNo === caseNo);
+        const idx = cases.findIndex((c: any) => String(c.caseNo || c.refNo || "").trim().toLowerCase() === matchKey);
         if (idx >= 0) {
           cases[idx].extensionTerm = extensionTermToUse;
           cases[idx].extensionStartDate = extensionStartToUse;
           cases[idx].extensionEndDate = extensionEndToUse;
+          cases[idx].extension_term = extensionTermToUse;
+          cases[idx].extension_start_date = extensionStartToUse;
+          cases[idx].extension_end_date = extensionEndToUse;
           cases[idx].extensionRequested = true;
           cases[idx].extensionRequestedByAdmin = true;
+          cases[idx].extension_requested_by_admin = true;
           cases[idx].extensionApprovalStatus = "Pending";
+          cases[idx].extension_approval_status = "Pending";
           cases[idx].extensionDecisionDate = null;
+          cases[idx].extension_decision_date = null;
           cases[idx].status = "Extension Requested";
           localStorage.setItem("dcmms_cases", JSON.stringify(cases));
         }
       } catch (e) {}
 
+      // Log action into dcmms_new_letter_current_case
+      try {
+        const storedActions = localStorage.getItem("dcmms_new_letter_current_case") || "[]";
+        let actionsList = [];
+        try { actionsList = JSON.parse(storedActions); } catch (e) {}
+        if (!Array.isArray(actionsList)) actionsList = [];
+        actionsList.unshift({
+          id: actionId,
+          caseNo: caseNo,
+          receivedDate: now,
+          reportState: "Extension of Days Request (Sent for Approval)",
+          specialNotes: `Extension Term: ${extensionTermToUse} | Start Date: ${extensionStartToUse} | End Date: ${extensionEndToUse}`,
+          subjectOfficerName: targetOfficer,
+          stepTaken: desc,
+        });
+        localStorage.setItem("dcmms_new_letter_current_case", JSON.stringify(actionsList));
+      } catch (e) {}
+
       window.dispatchEvent(new CustomEvent("dcmms_assignment_updated"));
-      window.dispatchEvent(new Event("dcmms_notifications_updated"));
-      window.dispatchEvent(new Event("dcmms_data_updated"));
+      window.dispatchEvent(new CustomEvent("dcmms_notifications_updated"));
+      window.dispatchEvent(new CustomEvent("dcmms_data_updated"));
       window.dispatchEvent(new Event("storage"));
     }
 
     if (isSupabaseConfigured) {
       try {
-        const resolvedOfficerName =
-          subjOfficerName.trim() ||
-          (existingAssignment?.subjectOfficerName !== "Subject Officer" ? existingAssignment?.subjectOfficerName : null) ||
-          selectedCase?.subjectOfficer ||
-          null;
-
-        // Use the existing row's id (asgn-{caseNo}) so the upsert updates the correct row via primary key
         const existingId = existingAssignment?.id || `asgn-${caseNo}`;
 
         const upsertPayload: any = {
           id: existingId,
           case_no: caseNo,
-          subject_officer_name: resolvedOfficerName,
+          subject_officer_name: targetOfficer,
           assigned_officers: (() => {
             const ao = updatedRecord.assignedOfficers || existingAssignment?.assignedOfficers;
             return Array.isArray(ao) ? ao : (ao ? [ao] : null);
@@ -3717,7 +3746,8 @@ export default function InvestigationPage() {
                               <option value="None">{lang === "si" ? "-- තෝරන්න (None) --" : "-- Select Term --"}</option>
                               <option value="First">{lang === "si" ? "පළමු දීර්ඝ කිරීම (First Extension)" : "First Extension (1st)"}</option>
                               <option value="Second">{lang === "si" ? "දෙවන දීර්ඝ කිරීම (Second Extension)" : "Second Extension (2nd)"}</option>
-                              <option value="Third">{lang === "si" ? "තෙවන දීර්ඝ කිරීම (Third Extension)" : "Third Extension (3rd)"}</option>
+                              <option value="Third">{lang === "si" ? "තෙවන දීර්ඝ කිරීම (3rd — උපරිමය)" : "Third Extension (3rd) — Maximum"}</option>
+                              
                             </select>
                           </div>
 
