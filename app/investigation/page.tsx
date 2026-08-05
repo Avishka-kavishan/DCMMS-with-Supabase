@@ -29,6 +29,8 @@ interface Inquiry {
   subjectOfficer?: string;
   notes?: string;
   createdAt?: string;
+  appointmentDate?: string;
+  reportDueDate?: string;
 }
 
 interface Officer {
@@ -72,6 +74,25 @@ export default function InvestigationPage() {
     return trimmed;
   };
 
+  const formatToInputDate = (dateStr?: string | null): string => {
+    if (!dateStr || typeof dateStr !== "string") return "";
+    const trimmed = dateStr.trim();
+    if (!trimmed) return "";
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+    if (trimmed.includes("T")) {
+      const parts = trimmed.split("T")[0];
+      if (/^\d{4}-\d{2}-\d{2}$/.test(parts)) return parts;
+    }
+    const parsed = new Date(trimmed);
+    if (!isNaN(parsed.getTime())) {
+      const yyyy = parsed.getFullYear();
+      const mm = String(parsed.getMonth() + 1).padStart(2, "0");
+      const dd = String(parsed.getDate()).padStart(2, "0");
+      return `${yyyy}-${mm}-${dd}`;
+    }
+    return trimmed;
+  };
+
   // Tabs state
   const [activeTab, setActiveTab] = useState<"cases" | "officers">("cases");
 
@@ -92,7 +113,7 @@ export default function InvestigationPage() {
   const [subjectOfficerNotifications, setSubjectOfficerNotifications] = useState<any[]>([]);
   const [isNotifLoading, setIsNotifLoading] = useState(true);
   const [isNotificationsMinimized, setIsNotificationsMinimized] = useState(false);
-  const [showAllNotifications, setShowAllNotifications] = useState(false);
+  const [showAllNotifications, setShowAllNotifications] = useState(true);
   const [seenNotifIds, setSeenNotifIds] = useState<string[]>(() => {
     if (typeof window !== "undefined") {
       try {
@@ -130,6 +151,13 @@ export default function InvestigationPage() {
   };
 
   const unseenCount = subjectOfficerNotifications.filter((n) => !seenNotifIds.includes(n.id)).length;
+  const [notifFilter, setNotifFilter] = useState<"all" | "unread">("all");
+  const displayedNotifs = subjectOfficerNotifications.filter((n) => {
+    if (notifFilter === "unread") {
+      return !seenNotifIds.includes(n.id);
+    }
+    return true;
+  });
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState("");
@@ -384,12 +412,15 @@ export default function InvestigationPage() {
   };
 
   // ── Fetch Inquiries & Officers ────────────────────────────────────────────
+  // ── Fetch Inquiries & Officers ────────────────────────────────────────────
   const fetchInquiries = async () => {
+    const datesMap = new Map<string, { appointmentDate?: string; reportDueDate?: string }>();
+
     if (isSupabaseConfigured) {
       try {
         const { data: assignmentsData } = await supabase
           .from("dcmms_subject_assignments")
-          .select("case_no, subject_officer_name");
+          .select("case_no, subject_officer_name, appointment_date, report_due_date");
 
         const asgnMap = new Map<string, string>();
         if (assignmentsData) {
@@ -398,6 +429,12 @@ export default function InvestigationPage() {
             const officerName = a.subject_officer_name || a.subjectOfficerName;
             if (key && officerName && typeof officerName === "string" && officerName.trim()) {
               asgnMap.set(key, officerName.trim());
+            }
+            if (key && (a.appointment_date || a.appointmentDate || a.report_due_date || a.reportDueDate)) {
+              datesMap.set(key, {
+                appointmentDate: formatToInputDate(a.appointment_date || a.appointmentDate),
+                reportDueDate: formatToInputDate(a.report_due_date || a.reportDueDate),
+              });
             }
           });
         }
@@ -444,6 +481,7 @@ export default function InvestigationPage() {
             .map((item: any) => {
               const itemNo = (item.case_no || item.inquiryNo || item.caseNo || "").trim().toLowerCase();
               const assignedSubjOfficer = asgnMap.get(itemNo) || item.subject_officer_name || item.officer_name || item.subjectOfficerName || item.subject_officer || item.subjectOfficer || "";
+              const dateInfo = datesMap.get(itemNo) || {};
               return {
                 id: item.id,
                 inquiryNo: item.case_no,
@@ -452,6 +490,8 @@ export default function InvestigationPage() {
                 status: item.status as Inquiry["status"],
                 assignedOfficer: item.officer_name || item.assigned_officer,
                 subjectOfficer: assignedSubjOfficer,
+                appointmentDate: dateInfo.appointmentDate || formatToInputDate(item.appointment_date || item.appointmentDate),
+                reportDueDate: dateInfo.reportDueDate || formatToInputDate(item.report_due_date || item.reportDueDate),
                 createdAt: item.created_at || new Date().toISOString(),
               };
             });
@@ -468,6 +508,7 @@ export default function InvestigationPage() {
           });
 
           setInquiries(mappedInquiries);
+          fetchSubjectOfficerNotifications(mappedInquiries);
           return;
         }
       } catch (err) {
@@ -491,6 +532,12 @@ export default function InvestigationPage() {
             const officerName = a.subjectOfficerName || a.subject_officer_name;
             if (key && officerName && typeof officerName === "string" && officerName.trim()) {
               localAsgnMap.set(key, officerName.trim());
+            }
+            if (key && (a.appointmentDate || a.appointment_date || a.reportDueDate || a.report_due_date)) {
+              datesMap.set(key, {
+                appointmentDate: formatToInputDate(a.appointmentDate || a.appointment_date),
+                reportDueDate: formatToInputDate(a.reportDueDate || a.report_due_date),
+              });
             }
           });
         } catch (e) {}
@@ -525,6 +572,14 @@ export default function InvestigationPage() {
                   localAsgnMap.set(key, officerName.trim());
                 }
               }
+              if (key && (l.appointmentDate || l.reportDueDate)) {
+                if (!datesMap.has(key)) {
+                  datesMap.set(key, {
+                    appointmentDate: formatToInputDate(l.appointmentDate),
+                    reportDueDate: formatToInputDate(l.reportDueDate),
+                  });
+                }
+              }
             });
           }
         } catch (e) {}
@@ -537,6 +592,7 @@ export default function InvestigationPage() {
             .map((item: any) => {
               const itemNo = (item.caseNo || item.inquiryNo || item.case_no || "").trim().toLowerCase();
               const assignedSubjOfficer = localAsgnMap.get(itemNo) || item.subjectOfficerName || item.subject_officer_name || item.subjectOfficer || item.subject_officer || "";
+              const dateInfo = datesMap.get(itemNo) || {};
               return {
                 id: item.id || `case-${item.caseNo}`,
                 inquiryNo: item.caseNo,
@@ -545,6 +601,8 @@ export default function InvestigationPage() {
                 status: item.status,
                 assignedOfficer: item.assignedOfficer || item.assignedTo || item.officerName,
                 subjectOfficer: assignedSubjOfficer,
+                appointmentDate: dateInfo.appointmentDate || formatToInputDate(item.appointmentDate || item.appointment_date),
+                reportDueDate: dateInfo.reportDueDate || formatToInputDate(item.reportDueDate || item.report_due_date),
                 createdAt: item.createdAt || item.created_at || new Date().toISOString(),
               };
             });
@@ -598,6 +656,7 @@ export default function InvestigationPage() {
       },
     ];
     setInquiries(defaults);
+    fetchSubjectOfficerNotifications(defaults);
   };
 
   const fetchInvestigationOfficers = async () => {
@@ -842,11 +901,18 @@ export default function InvestigationPage() {
     }
   };
 
-  const fetchSubjectOfficerNotifications = async () => {
+  const fetchSubjectOfficerNotifications = async (currentInquiries?: any[]) => {
     setIsNotifLoading(true);
-    let notifList: any[] = [];
+    const notifMap = new Map<string, any>();
+
+    const formatVal = (v: any) => {
+      if (!v || v === "—") return "—";
+      const formatted = formatToInputDate(v);
+      return formatted || v;
+    };
 
     if (isSupabaseConfigured) {
+      // 1. Fetch from dcmms_subject_assignments table
       try {
         const { data, error } = await supabase
           .from("dcmms_subject_assignments")
@@ -855,49 +921,152 @@ export default function InvestigationPage() {
 
         if (!error && data && data.length > 0) {
           data.forEach((item: any) => {
-            if (item.dates_submitted_by_subject || item.appointment_date || item.report_due_date) {
-              notifList.push({
-                id: item.id || `notif-${item.case_no}`,
-                caseNo: item.case_no,
-                subjectOfficerName: item.subject_officer_name || "Assigned Subject Officer",
-                appointmentDate: item.appointment_date || "—",
-                reportDueDate: item.report_due_date || "—",
-                submittedAt: item.updated_at ? new Date(item.updated_at).toLocaleDateString() : new Date().toLocaleDateString(),
-                status: item.status || "Dates Submitted"
-              });
-            }
+            const caseNo = item.case_no || item.caseNo;
+            if (!caseNo) return;
+            const appt = formatVal(item.appointment_date || item.appointmentDate);
+            const due = formatVal(item.report_due_date || item.reportDueDate);
+            const key = caseNo.trim().toLowerCase();
+            notifMap.set(key, {
+              id: item.id || `notif-${caseNo}`,
+              caseNo: caseNo,
+              subjectOfficerName: item.subject_officer_name || item.subjectOfficerName || "Assigned Subject Officer",
+              appointmentDate: appt,
+              reportDueDate: due,
+              submittedAt: item.updated_at ? (typeof item.updated_at === "string" ? item.updated_at.split("T")[0] : new Date(item.updated_at).toLocaleDateString()) : new Date().toLocaleDateString(),
+              status: item.status || "Dates Submitted"
+            });
           });
         }
       } catch (err) {
         console.error("Failed to fetch subject officer notifications from Supabase", err);
       }
-    }
 
-    // Merge/fallback from localStorage
-    try {
-      const stored = localStorage.getItem("dcmms_subject_assignments");
-      if (stored) {
-        const localList = JSON.parse(stored);
-        localList.forEach((item: any) => {
-          if (item.datesSubmittedBySubject || item.appointmentDate || item.reportDueDate) {
-            const exists = notifList.some((n) => n.caseNo === item.caseNo);
-            if (!exists) {
-              notifList.push({
-                id: item.id || `local-notif-${item.caseNo}`,
-                caseNo: item.caseNo,
-                subjectOfficerName: item.subjectOfficerName || "Assigned Subject Officer",
-                appointmentDate: item.appointmentDate || "—",
-                reportDueDate: item.reportDueDate || "—",
-                submittedAt: item.datesSubmitTimestamp || item.updatedAt || new Date().toLocaleDateString(),
+      // 2. Fetch from dcmms_subject table
+      try {
+        const { data, error } = await supabase
+          .from("dcmms_subject")
+          .select("*")
+          .order("updated_at", { ascending: false });
+
+        if (!error && data && data.length > 0) {
+          data.forEach((item: any) => {
+            const caseNo = item.case_no || item.inquiryNo || item.caseNo;
+            if (!caseNo) return;
+            const appt = formatVal(item.appointment_date || item.appointmentDate);
+            const due = formatVal(item.report_due_date || item.reportDueDate || item.assigned_date);
+            const key = caseNo.trim().toLowerCase();
+            const existing = notifMap.get(key);
+            const subjName = item.subject_officer_name || item.officer_name || item.subjectOfficerName || "Assigned Subject Officer";
+
+            if (!existing) {
+              notifMap.set(key, {
+                id: item.id || `sub-notif-${caseNo}`,
+                caseNo: caseNo,
+                subjectOfficerName: subjName,
+                appointmentDate: appt,
+                reportDueDate: due,
+                submittedAt: item.updated_at ? (typeof item.updated_at === "string" ? item.updated_at.split("T")[0] : new Date(item.updated_at).toLocaleDateString()) : new Date().toLocaleDateString(),
                 status: item.status || "Dates Submitted"
               });
+            } else {
+              if (existing.appointmentDate === "—" && appt !== "—") existing.appointmentDate = appt;
+              if (existing.reportDueDate === "—" && due !== "—") existing.reportDueDate = due;
+              if ((!existing.subjectOfficerName || existing.subjectOfficerName === "Assigned Subject Officer") && subjName !== "Assigned Subject Officer") {
+                existing.subjectOfficerName = subjName;
+              }
             }
-          }
-        });
+          });
+        }
+      } catch (err) {
+        console.error("Failed to fetch dcmms_subject for notifications", err);
       }
-    } catch (err) {
-      console.error("Failed to read local subject assignments for notifications", err);
     }
+
+    // 3. Merge/fallback from localStorage keys
+    const localKeys = ["dcmms_subject_assignments", "dcmms_cases", "dcmms_letters", "dcmms_inquiries", "dcmms_subject", "dcmms_new_letter_current_case", "dcmms_daily_mail"];
+    localKeys.forEach((keyName) => {
+      try {
+        const stored = localStorage.getItem(keyName);
+        if (stored) {
+          const localList = JSON.parse(stored);
+          if (Array.isArray(localList)) {
+            localList.forEach((item: any) => {
+              const caseNo = item.caseNo || item.case_no || item.inquiryNo || item.refNo;
+              if (!caseNo) return;
+              const appt = formatVal(item.appointmentDate || item.appointment_date);
+              const due = formatVal(item.reportDueDate || item.report_due_date || item.targetDate || item.assignedDate);
+              const normKey = caseNo.trim().toLowerCase();
+              const existing = notifMap.get(normKey);
+              const subjName = item.subjectOfficerName || item.subject_officer_name || item.subjectOfficer || item.officer_name || "Assigned Subject Officer";
+
+              if (!existing) {
+                const rawSubTime = item.datesSubmitTimestamp || item.updatedAt || item.updated_at;
+                const cleanSubTime = rawSubTime ? (typeof rawSubTime === "string" ? rawSubTime.split("T")[0] : new Date(rawSubTime).toLocaleDateString()) : new Date().toLocaleDateString();
+                notifMap.set(normKey, {
+                  id: item.id || `local-${keyName}-${caseNo}`,
+                  caseNo: caseNo,
+                  subjectOfficerName: subjName,
+                  appointmentDate: appt,
+                  reportDueDate: due,
+                  submittedAt: cleanSubTime,
+                  status: item.status || "Dates Submitted"
+                });
+              } else {
+                if (existing.appointmentDate === "—" && appt !== "—") existing.appointmentDate = appt;
+                if (existing.reportDueDate === "—" && due !== "—") existing.reportDueDate = due;
+                if ((!existing.subjectOfficerName || existing.subjectOfficerName === "Assigned Subject Officer") && subjName !== "Assigned Subject Officer") {
+                  existing.subjectOfficerName = subjName;
+                }
+              }
+            });
+          }
+        }
+      } catch (err) {
+        console.error(`Failed to read ${keyName} for notifications`, err);
+      }
+    });
+
+    // 4. Merge all active inquiries from parameter or state
+    const inqsToMerge = currentInquiries && currentInquiries.length > 0 ? currentInquiries : inquiries;
+    if (Array.isArray(inqsToMerge) && inqsToMerge.length > 0) {
+      inqsToMerge.forEach((inq: any) => {
+        const caseNo = inq.inquiryNo || inq.caseNo;
+        if (!caseNo) return;
+        const normKey = caseNo.trim().toLowerCase();
+        const appt = formatVal(inq.appointmentDate || inq.appointment_date);
+        const due = formatVal(inq.reportDueDate || inq.report_due_date || inq.targetDate);
+        const subjName = inq.subjectOfficer || inq.subject_officer_name || inq.assignedOfficer || "Assigned Subject Officer";
+        const existing = notifMap.get(normKey);
+
+        if (!existing) {
+          notifMap.set(normKey, {
+            id: inq.id || `inq-notif-${caseNo}`,
+            caseNo: caseNo,
+            subjectOfficerName: subjName,
+            appointmentDate: appt,
+            reportDueDate: due,
+            submittedAt: inq.createdAt ? new Date(inq.createdAt).toLocaleDateString() : new Date().toLocaleDateString(),
+            status: "Dates Submitted by Subject Officer"
+          });
+        } else {
+          if (existing.appointmentDate === "—" && appt !== "—") existing.appointmentDate = appt;
+          if (existing.reportDueDate === "—" && due !== "—") existing.reportDueDate = due;
+          if ((!existing.subjectOfficerName || existing.subjectOfficerName === "Assigned Subject Officer") && subjName !== "Assigned Subject Officer") {
+            existing.subjectOfficerName = subjName;
+          }
+        }
+      });
+    }
+
+    let notifList = Array.from(notifMap.values());
+
+    // Sort notifications so cases with valid dates appear first
+    notifList.sort((a, b) => {
+      const aHasDates = (a.appointmentDate !== "—" ? 1 : 0) + (a.reportDueDate !== "—" ? 1 : 0);
+      const bHasDates = (b.appointmentDate !== "—" ? 1 : 0) + (b.reportDueDate !== "—" ? 1 : 0);
+      if (aHasDates !== bHasDates) return bHasDates - aHasDates;
+      return a.caseNo.localeCompare(b.caseNo);
+    });
 
     // Fallback demonstration notifications if none found
     if (notifList.length === 0) {
@@ -943,10 +1112,21 @@ export default function InvestigationPage() {
     // Real-time subscription
     const channel1 = supabase
       .channel("invest-realtime-enhanced")
-      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subject" }, fetchInquiries)
+      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subject" }, () => {
+        fetchInquiries();
+        fetchSubjectOfficerNotifications();
+      })
       .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_profiles" }, fetchInvestigationOfficers)
-      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subject_assignments" }, fetchSubjectOfficerNotifications)
+      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subject_assignments" }, () => fetchSubjectOfficerNotifications())
       .subscribe();
+
+    const handleLocalUpdates = () => {
+      fetchSubjectOfficerNotifications();
+      fetchInquiries();
+    };
+
+    window.addEventListener("storage", handleLocalUpdates);
+    window.addEventListener("dcmms_assignment_updated", handleLocalUpdates);
 
     const interval = setInterval(() => {
       fetchInquiries();
@@ -956,6 +1136,8 @@ export default function InvestigationPage() {
 
     return () => {
       supabase.removeChannel(channel1);
+      window.removeEventListener("storage", handleLocalUpdates);
+      window.removeEventListener("dcmms_assignment_updated", handleLocalUpdates);
       clearInterval(interval);
     };
   }, []);
@@ -992,22 +1174,28 @@ export default function InvestigationPage() {
         const storedAssignments = localStorage.getItem("dcmms_subject_assignments");
         if (storedAssignments) {
           const list = JSON.parse(storedAssignments);
-          const found = list.find((a: any) => a.caseNo === inq.inquiryNo);
+          const searchKey = String(inq.inquiryNo || (inq as any).caseNo || (inq as any).refNo || "").trim().toLowerCase();
+          const found = list.find((a: any) => 
+            String(a.caseNo || a.case_no || a.id || "").trim().toLowerCase() === searchKey ||
+            searchKey.includes(String(a.caseNo || a.case_no || "").trim().toLowerCase())
+          );
           if (found) {
             setExistingAssignment(found);
             setSubjOfficerName(found.subjectOfficerName || inq.subjectOfficer || "");
-            setSubjAppointmentDate(found.appointmentDate || "");
-            setSubjReportDueDate(found.reportDueDate || inq.targetDate || "");
+            const appt = formatToInputDate(found.appointmentDate || found.appointment_date || inq.appointmentDate);
+            const due = formatToInputDate(found.reportDueDate || found.report_due_date || inq.reportDueDate || inq.targetDate);
+            setSubjAppointmentDate(appt);
+            setSubjReportDueDate(due);
+            setStep2AppointmentDate(appt);
+            setStep2ReportDueDate(due);
+            setStep2Submitted(!!found.datesSubmittedBySubject);
+
             setSubjExtensionTerm(found.extensionTerm || "None");
             setSubjExtensionStartDate(found.extensionStartDate || "");
             setSubjExtensionEndDate(found.extensionEndDate || "");
 
-            // Sequential workflow states
             setWorkflowStep(found.currentStep || (found.reportApprovedByAdmin ? 5 : (found.datesSubmittedBySubject ? 3 : (found.subjectOfficerName ? 2 : 1))));
             setStep1AssignedOfficers(Array.isArray(found.assignedOfficers) ? found.assignedOfficers : (found.subjectOfficerName ? [found.subjectOfficerName] : []));
-            setStep2AppointmentDate(found.appointmentDate || "");
-            setStep2ReportDueDate(found.reportDueDate || "");
-            setStep2Submitted(!!found.datesSubmittedBySubject);
             setStep3ExtensionTerm(found.extensionTerm || "None");
             setStep3ExtensionStartDate(found.extensionStartDate || "");
             setStep3ExtensionEndDate(found.extensionEndDate || "");
@@ -1019,17 +1207,15 @@ export default function InvestigationPage() {
           } else {
             setExistingAssignment(null);
             setSubjOfficerName(inq.subjectOfficer || "");
-            setSubjAppointmentDate("");
-            setSubjReportDueDate(inq.targetDate || "");
-            setSubjExtensionTerm("None");
-            setSubjExtensionStartDate("");
-            setSubjExtensionEndDate("");
+            const appt = formatToInputDate(inq.appointmentDate);
+            const due = formatToInputDate(inq.reportDueDate || inq.targetDate);
+            setSubjAppointmentDate(appt);
+            setSubjReportDueDate(due);
+            setStep2AppointmentDate(appt);
+            setStep2ReportDueDate(due);
 
-            // Sequential workflow defaults
             setWorkflowStep(inq.assignedOfficer ? 2 : 1);
             setStep1AssignedOfficers(inq.assignedOfficer ? [inq.assignedOfficer] : []);
-            setStep2AppointmentDate("");
-            setStep2ReportDueDate(inq.targetDate || "");
             setStep2Submitted(false);
             setStep3ExtensionTerm("None");
             setStep3ExtensionStartDate("");
@@ -1043,11 +1229,12 @@ export default function InvestigationPage() {
         } else {
           setExistingAssignment(null);
           setSubjOfficerName(inq.assignedOfficer || "");
-          setSubjAppointmentDate("");
-          setSubjReportDueDate(inq.targetDate || "");
-          setSubjExtensionTerm("None");
-          setSubjExtensionStartDate("");
-          setSubjExtensionEndDate("");
+          const appt = formatToInputDate(inq.appointmentDate);
+          const due = formatToInputDate(inq.reportDueDate || inq.targetDate);
+          setSubjAppointmentDate(appt);
+          setSubjReportDueDate(due);
+          setStep2AppointmentDate(appt);
+          setStep2ReportDueDate(due);
         }
       } catch (e) {
         console.error("Failed to load assignment data", e);
@@ -1069,6 +1256,9 @@ export default function InvestigationPage() {
             .ilike("case_no", searchCaseNo)
             .maybeSingle();
           if (dbAsgn) {
+            const appt = formatToInputDate(dbAsgn.appointment_date || dbAsgn.appointmentDate);
+            const due = formatToInputDate(dbAsgn.report_due_date || dbAsgn.reportDueDate);
+
             const found = {
               id: dbAsgn.id,
               caseNo: dbAsgn.case_no,
@@ -1077,8 +1267,8 @@ export default function InvestigationPage() {
               assignedOfficers: dbAsgn.assigned_officers,
               chairman: dbAsgn.chairman,
               members: dbAsgn.members,
-              appointmentDate: dbAsgn.appointment_date,
-              reportDueDate: dbAsgn.report_due_date,
+              appointmentDate: appt,
+              reportDueDate: due,
               datesSubmittedBySubject: dbAsgn.dates_submitted_by_subject || dbAsgn.datesSubmittedBySubject || false,
               extensionTerm: dbAsgn.extension_term,
               extensionStartDate: dbAsgn.extension_start_date,
@@ -1093,13 +1283,18 @@ export default function InvestigationPage() {
               investigationStatus: dbAsgn.investigation_status,
               investigationNotes: dbAsgn.investigation_notes,
             };
-            setExistingAssignment((prev: any) => ({ ...prev, ...found }));
+            setExistingAssignment((prev: any) => ({
+              ...prev,
+              ...found,
+              appointmentDate: appt || prev?.appointmentDate,
+              reportDueDate: due || prev?.reportDueDate,
+            }));
             setSubjOfficerName(found.subjectOfficerName || inq.subjectOfficer || "");
-            if (found.appointmentDate) setSubjAppointmentDate(found.appointmentDate);
-            if (found.reportDueDate) setSubjReportDueDate(found.reportDueDate);
-            if (found.appointmentDate) setStep2AppointmentDate(found.appointmentDate);
-            if (found.reportDueDate) setStep2ReportDueDate(found.reportDueDate);
-            setStep2Submitted(!!found.datesSubmittedBySubject);
+            if (appt) setSubjAppointmentDate(appt);
+            if (due) setSubjReportDueDate(due);
+            if (appt) setStep2AppointmentDate(appt);
+            if (due) setStep2ReportDueDate(due);
+            if (found.datesSubmittedBySubject) setStep2Submitted(true);
             if (found.extensionTerm) {
               setSubjExtensionTerm(found.extensionTerm as any);
               setStep3ExtensionTerm(found.extensionTerm as any);
@@ -1703,7 +1898,11 @@ export default function InvestigationPage() {
           selectedCase?.subjectOfficer ||
           null;
 
+        // Use the existing row's id (asgn-{caseNo}) so the upsert updates the correct row via primary key
+        const existingId = existingAssignment?.id || `asgn-${caseNo}`;
+
         const upsertPayload: any = {
+          id: existingId,
           case_no: caseNo,
           subject_officer_name: resolvedOfficerName,
           assigned_officers: (() => {
@@ -1723,7 +1922,7 @@ export default function InvestigationPage() {
           status: "Extension Requested",
         };
 
-        const { error: upsertError } = await supabase.from("dcmms_subject_assignments").upsert(upsertPayload, { onConflict: "case_no" });
+        const { error: upsertError } = await supabase.from("dcmms_subject_assignments").upsert(upsertPayload, { onConflict: "id" });
 
         if (upsertError) {
           console.warn("Extension upsert error:", upsertError);
@@ -2445,41 +2644,32 @@ export default function InvestigationPage() {
           {/* ==================== TAB 1: CASES LIST ==================== */}
           {activeTab === "cases" && (
             <>
-              {/* Notifications Widget: Subject Officer Date Submissions */}
-              <section className="upcoming-events-widget" style={{ backgroundColor: "#ffffff", borderRadius: "12px", border: "1px solid #cbd5e1", padding: "20px", marginBottom: "24px", boxShadow: "0 2px 4px rgba(0,0,0,0.02)" }}>
+              {/* Notifications Widget: Facebook-Style Subject Officer Notifications */}
+              <section className="upcoming-events-widget" style={{ backgroundColor: "#ffffff", borderRadius: "16px", border: "1px solid #e4e6eb", padding: "16px 20px", marginBottom: "24px", boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
                 <div className="upcoming-events-container">
-                  <div className="upcoming-events-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: isNotificationsMinimized ? "none" : "1px solid #f1f5f9", paddingBottom: isNotificationsMinimized ? "0" : "12px", marginBottom: isNotificationsMinimized ? "0" : "16px", flexWrap: "wrap", gap: "10px" }}>
-                    <h4 className="upcoming-events-title" style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "16px", color: "#1e293b", margin: 0, fontWeight: 700, flexWrap: "wrap" }}>
-                      <div style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center", width: "36px", height: "36px", borderRadius: "50%", backgroundColor: unseenCount > 0 ? "#fef2f2" : "#eff6ff", border: unseenCount > 0 ? "1px solid #fca5a5" : "1px solid #bfdbfe" }}>
-                        <BellRing size={18} style={{ color: unseenCount > 0 ? "#dc2626" : "#2563eb" }} />
+                  {/* FB Header */}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: isNotificationsMinimized ? "none" : "1px solid #f0f2f5", paddingBottom: isNotificationsMinimized ? "0" : "12px", marginBottom: isNotificationsMinimized ? "0" : "12px", flexWrap: "wrap", gap: "10px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <div style={{ position: "relative", width: "40px", height: "40px", borderRadius: "50%", backgroundColor: unseenCount > 0 ? "#e7f3ff" : "#f0f2f5", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <Bell size={20} style={{ color: unseenCount > 0 ? "#1877f2" : "#65676b" }} />
                         {unseenCount > 0 && (
-                          <span style={{ position: "absolute", top: "2px", right: "2px", width: "10px", height: "10px", borderRadius: "50%", backgroundColor: "#ef4444", border: "2px solid #ffffff" }}></span>
+                          <span style={{ position: "absolute", top: "-2px", right: "-2px", backgroundColor: "#e41e3f", color: "#ffffff", fontSize: "11px", fontWeight: 800, padding: "1px 6px", borderRadius: "10px", border: "2px solid #ffffff" }}>
+                            {unseenCount}
+                          </span>
                         )}
                       </div>
-                      <span>
-                        {lang === "si"
-                          ? "විෂය නිලධාරී දැනුම්දීම්: පත්වීම් ලිපිය සහ වාර්තා දිනයන් ලැබීම"
-                          : "Subject Officer Notifications (Appointment & Report Due Dates)"}
-                      </span>
+                      <div>
+                        <h4 style={{ margin: 0, fontSize: "18px", fontWeight: 800, color: "#050505", letterSpacing: "-0.2px" }}>
+                          {lang === "si" ? "විෂය නිලධාරී දැනුම්දීම්" : "Notifications"}
+                        </h4>
+                        <div style={{ fontSize: "12px", color: "#65676b", fontWeight: 600 }}>
+                          {lang === "si" ? "පත්වීම් ලිපිය සහ වාර්තා දිනයන් ලැබීම" : "Subject Officer Appointment & Report Due Dates"}
+                        </div>
+                      </div>
+                    </div>
 
-                      {/* Unseen Count Highlight Badge */}
-                      {unseenCount > 0 ? (
-                        <span style={{ fontSize: "12px", fontWeight: 800, backgroundColor: "#fee2e2", color: "#991b1b", border: "1px solid #fca5a5", padding: "4px 12px", borderRadius: "14px", display: "inline-flex", alignItems: "center", gap: "5px", boxShadow: "0 1px 2px rgba(239,68,68,0.1)" }}>
-                          <span style={{ display: "inline-block", width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#ef4444" }}></span>
-                          <span>{unseenCount}</span>
-                          <span>{lang === "si" ? "නුදුටු දැනුම්දීම්" : "Unseen"}</span>
-                        </span>
-                      ) : (
-                        <span style={{ fontSize: "12px", fontWeight: 700, backgroundColor: "#f1f5f9", color: "#64748b", border: "1px solid #e2e8f0", padding: "3px 10px", borderRadius: "12px", display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                          <CheckCircle size={13} style={{ color: "#16a34a" }} />
-                          <span>{subjectOfficerNotifications.length}</span>
-                          <span>{lang === "si" ? "සියල්ල බලන ලදී" : "All Read"}</span>
-                        </span>
-                      )}
-                    </h4>
-
-                    {/* Action buttons: Mark All Read, See All & Minimize/Expand */}
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                    {/* Header Action Controls */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                       {unseenCount > 0 && (
                         <button
                           type="button"
@@ -2487,52 +2677,22 @@ export default function InvestigationPage() {
                           style={{
                             fontSize: "12px",
                             fontWeight: 700,
-                            color: "#166534",
-                            backgroundColor: "#f0fdf4",
-                            border: "1px solid #bbf7d0",
-                            borderRadius: "6px",
+                            color: "#1877f2",
+                            backgroundColor: "#e7f3ff",
+                            border: "none",
+                            borderRadius: "8px",
                             padding: "6px 12px",
                             cursor: "pointer",
                             display: "inline-flex",
                             alignItems: "center",
-                            gap: "5px",
-                            transition: "all 0.15s ease"
+                            gap: "5px"
                           }}
-                          title="Mark all notifications as read"
+                          title="Mark all as read"
                         >
                           <CheckCircle size={14} />
-                          <span>{lang === "si" ? "සියල්ල කියවූ බවට ලකුණු කරන්න" : "Mark All Read"}</span>
+                          <span>{lang === "si" ? "සියල්ල කියවූ බවට" : "Mark all as read"}</span>
                         </button>
                       )}
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (isNotificationsMinimized) setIsNotificationsMinimized(false);
-                          setShowAllNotifications((prev) => !prev);
-                        }}
-                        style={{
-                          fontSize: "12px",
-                          fontWeight: 700,
-                          color: showAllNotifications ? "#ffffff" : "#2563eb",
-                          backgroundColor: showAllNotifications ? "#2563eb" : "#eff6ff",
-                          border: "1px solid #bfdbfe",
-                          borderRadius: "6px",
-                          padding: "6px 14px",
-                          cursor: "pointer",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "6px",
-                          transition: "all 0.15s ease"
-                        }}
-                      >
-                        <Eye size={14} />
-                        <span>
-                          {showAllNotifications
-                            ? (lang === "si" ? "අඩුවෙන් බලන්න" : "Show Less")
-                            : (lang === "si" ? "සියල්ල බලන්න" : "See All")}
-                        </span>
-                      </button>
 
                       <button
                         type="button"
@@ -2540,157 +2700,172 @@ export default function InvestigationPage() {
                         style={{
                           fontSize: "12px",
                           fontWeight: 700,
-                          color: "#475569",
-                          backgroundColor: "#f1f5f9",
-                          border: "1px solid #cbd5e1",
-                          borderRadius: "6px",
-                          padding: "6px 14px",
+                          color: "#65676b",
+                          backgroundColor: "#f0f2f5",
+                          border: "none",
+                          borderRadius: "8px",
+                          padding: "6px 12px",
                           cursor: "pointer",
                           display: "inline-flex",
                           alignItems: "center",
-                          gap: "6px",
-                          transition: "all 0.15s ease"
+                          gap: "4px"
                         }}
                         title={isNotificationsMinimized ? "Expand Notifications" : "Minimize Notifications"}
                       >
-                        {isNotificationsMinimized ? (
-                          <>
-                            <ChevronDown size={15} />
-                            <span>{lang === "si" ? "දිගහරින්න" : "Expand"}</span>
-                          </>
-                        ) : (
-                          <>
-                            <ChevronUp size={15} />
-                            <span>{lang === "si" ? "හකුළන්න" : "Minimize"}</span>
-                          </>
-                        )}
+                        {isNotificationsMinimized ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
                       </button>
                     </div>
                   </div>
-                  
+
                   {!isNotificationsMinimized && (
                     <>
+                      {/* FB Filter Pills: All / Unread */}
+                      <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
+                        <button
+                          type="button"
+                          onClick={() => setNotifFilter("all")}
+                          style={{
+                            fontSize: "13px",
+                            fontWeight: 700,
+                            padding: "6px 16px",
+                            borderRadius: "18px",
+                            border: "none",
+                            backgroundColor: notifFilter === "all" ? "#e7f3ff" : "#f0f2f5",
+                            color: notifFilter === "all" ? "#1877f2" : "#050505",
+                            cursor: "pointer"
+                          }}
+                        >
+                          {lang === "si" ? "සියල්ල" : "All"} ({subjectOfficerNotifications.length})
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setNotifFilter("unread")}
+                          style={{
+                            fontSize: "13px",
+                            fontWeight: 700,
+                            padding: "6px 16px",
+                            borderRadius: "18px",
+                            border: "none",
+                            backgroundColor: notifFilter === "unread" ? "#e7f3ff" : "#f0f2f5",
+                            color: notifFilter === "unread" ? "#1877f2" : "#050505",
+                            cursor: "pointer"
+                          }}
+                        >
+                          {lang === "si" ? "නුදුටු" : "Unread"} ({unseenCount})
+                        </button>
+                      </div>
+
+                      {/* FB Notification Items List */}
                       {isNotifLoading ? (
-                        <div className="upcoming-events-loading" style={{ padding: "20px", textAlign: "center", color: "#64748b", fontSize: "13px" }}>
+                        <div style={{ padding: "20px", textAlign: "center", color: "#65676b", fontSize: "13px" }}>
                           {lang === "si" ? "දැනුම්දීම් පූරණය වෙමින් පවතී..." : "Loading notifications..."}
                         </div>
-                      ) : subjectOfficerNotifications.length > 0 ? (
-                        <div className="upcoming-events-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "16px" }}>
-                          {(showAllNotifications ? subjectOfficerNotifications : subjectOfficerNotifications.slice(0, 4)).map((notif: any, index: number) => {
-                            const isUnseen = !seenNotifIds.includes(notif.id);
-                            return (
-                              <div 
-                                key={notif.id || index} 
-                                className="upcoming-event-card"
-                                onClick={() => markAsSeen(notif.id)}
-                                style={{
-                                  backgroundColor: isUnseen ? "#f0f9ff" : "#f8fafc",
-                                  borderRadius: "10px",
-                                  border: isUnseen ? "1.5px solid #60a5fa" : "1px solid #cbd5e1",
-                                  borderLeft: isUnseen ? "6px solid #2563eb" : "1px solid #cbd5e1",
-                                  padding: "16px",
-                                  boxShadow: isUnseen ? "0 4px 12px rgba(37,99,235,0.12)" : "0 2px 4px rgba(0,0,0,0.02)",
-                                  display: "flex",
-                                  flexDirection: "column",
-                                  gap: "12px",
-                                  cursor: "pointer",
-                                  transition: "all 0.2s ease"
-                                }}
-                              >
-                                {/* Top meta row */}
-                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                                    {isUnseen ? (
-                                      <span style={{ fontSize: "10px", fontWeight: 800, backgroundColor: "#ef4444", color: "#ffffff", padding: "2px 8px", borderRadius: "10px", letterSpacing: "0.4px" }}>
-                                        {lang === "si" ? "නව • නුදුටු" : "NEW • UNSEEN"}
-                                      </span>
-                                    ) : (
-                                      <span style={{ fontSize: "10px", fontWeight: 700, backgroundColor: "#f1f5f9", color: "#64748b", padding: "2px 8px", borderRadius: "10px" }}>
-                                        {lang === "si" ? "කියවූ" : "READ"}
-                                      </span>
-                                    )}
-                                    <span style={{ fontSize: "11px", fontWeight: 700, backgroundColor: "#dcfce7", color: "#15803d", padding: "3px 10px", borderRadius: "12px", display: "inline-flex", alignItems: "center", gap: "5px" }}>
-                                      <CheckCircle size={13} />
-                                      {lang === "si" ? "දිනයන් ඇතුළත් කරන ලදී" : "Dates Submitted by Subject Officer"}
-                                    </span>
-                                  </div>
-
-                                  <span style={{ fontSize: "11px", color: "#64748b", fontWeight: 500, display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                                    <Clock size={12} />
-                                    {notif.submittedAt}
-                                  </span>
-                                </div>
-
-                                {/* Case No & Subject Officer Name */}
-                                <div>
-                                  <h5 style={{ margin: "0 0 4px 0", fontSize: "15px", fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: "6px" }}>
-                                    <FileText size={16} style={{ color: "#4f46e5" }} />
-                                    <span>{lang === "si" ? "නඩු අංකය: " : "Case No: "}{notif.caseNo}</span>
-                                  </h5>
-                                  <div style={{ fontSize: "13px", color: "#475569", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" }}>
-                                    <User size={14} style={{ color: "#0284c7" }} />
-                                    <span>{lang === "si" ? "විෂය නිලධාරී: " : "Subject Officer: "}{formatSubjectOfficerName(notif.subjectOfficerName, lang)}</span>
-                                  </div>
-                                </div>
-
-                                {/* Prominent Dates Box */}
-                                <div style={{ backgroundColor: "#ffffff", borderRadius: "8px", padding: "12px", border: "1px solid #e2e8f0", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                                  <div style={{ backgroundColor: "#f0f9ff", padding: "8px 10px", borderRadius: "6px", border: "1px solid #bae6fd" }}>
-                                    <div style={{ fontSize: "10px", fontWeight: 700, color: "#0369a1", textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: "4px", display: "flex", alignItems: "center", gap: "4px" }}>
-                                      <CalendarIcon size={12} />
-                                      {lang === "si" ? "පත්වීම් ලිපියේ දිනය" : "Appt. Letter Date"}
-                                    </div>
-                                    <div style={{ fontSize: "13px", fontWeight: 800, color: "#0284c7" }}>
-                                      {notif.appointmentDate || "—"}
-                                    </div>
-                                  </div>
-
-                                  <div style={{ backgroundColor: "#fef2f2", padding: "8px 10px", borderRadius: "6px", border: "1px solid #fecaca" }}>
-                                    <div style={{ fontSize: "10px", fontWeight: 700, color: "#b91c1c", textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: "4px", display: "flex", alignItems: "center", gap: "4px" }}>
-                                      <CalendarIcon size={12} />
-                                      {lang === "si" ? "වාර්තා ලබාදිය යුතු දිනය" : "Report Due Date"}
-                                    </div>
-                                    <div style={{ fontSize: "13px", fontWeight: 800, color: "#dc2626" }}>
-                                      {notif.reportDueDate || "—"}
-                                    </div>
-                                  </div>
-                                </div>
-
-                                {/* View Case Details Button */}
-                                <div style={{ marginTop: "2px", display: "flex", justifyContent: "flex-end" }}>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      markAsSeen(notif.id);
-                                      router.push(`/investigation/add-details?caseNo=${notif.caseNo}`);
-                                    }}
-                                    style={{
-                                      display: "inline-flex",
-                                      alignItems: "center",
-                                      gap: "6px",
-                                      padding: "7px 14px",
-                                      fontSize: "12px",
-                                      fontWeight: 700,
-                                      color: "#ffffff",
-                                      backgroundColor: isUnseen ? "#2563eb" : "#4f46e5",
-                                      border: "none",
-                                      borderRadius: "6px",
-                                      cursor: "pointer",
-                                      boxShadow: "0 1px 2px rgba(0,0,0,0.05)"
-                                    }}
-                                  >
-                                    <Eye size={14} />
-                                    <span>{lang === "si" ? "විස්තර පරීක්ෂා කරන්න" : "View Case Details"}</span>
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
                       ) : (
-                        <div className="upcoming-events-empty" style={{ padding: "24px", textAlign: "center", color: "#64748b", fontSize: "13px", backgroundColor: "#f8fafc", borderRadius: "8px" }}>
-                          {lang === "si" ? "විෂය නිලධාරී වෙතින් ලැබුණු නව දැනුම්දීම් නැත." : "No notifications received from Subject Officers yet."}
+                        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                          {displayedNotifs.length > 0 ? (
+                            displayedNotifs.map((notif: any, index: number) => {
+                              const isUnseen = !seenNotifIds.includes(notif.id);
+                              const initial = (notif.subjectOfficerName || "S").trim().charAt(0).toUpperCase();
+                              const displayDate = typeof notif.submittedAt === "string" && notif.submittedAt.includes("T") ? notif.submittedAt.split("T")[0] : notif.submittedAt;
+
+                              return (
+                                <div
+                                  key={notif.id || index}
+                                  onClick={() => markAsSeen(notif.id)}
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "space-between",
+                                    padding: "12px 14px",
+                                    borderRadius: "12px",
+                                    backgroundColor: isUnseen ? "#e7f3ff" : "#ffffff",
+                                    border: isUnseen ? "1px solid #cce4ff" : "1px solid #f0f2f5",
+                                    cursor: "pointer",
+                                    transition: "all 0.15s ease",
+                                    gap: "12px"
+                                  }}
+                                >
+                                  {/* Left FB Avatar with Badge */}
+                                  <div style={{ position: "relative", flexShrink: 0 }}>
+                                    <div style={{ width: "46px", height: "46px", borderRadius: "50%", backgroundColor: isUnseen ? "#1877f2" : "#e4e6eb", color: isUnseen ? "#ffffff" : "#050505", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px", fontWeight: 800 }}>
+                                      {initial}
+                                    </div>
+                                    <div style={{ position: "absolute", bottom: "-2px", right: "-2px", width: "20px", height: "20px", borderRadius: "50%", backgroundColor: "#42b72a", color: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", border: "2px solid #ffffff" }}>
+                                      <CalendarIcon size={11} />
+                                    </div>
+                                  </div>
+
+                                  {/* Middle Content */}
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontSize: "14px", color: "#050505", lineHeight: "1.35" }}>
+                                      <span style={{ fontWeight: 800, color: "#1877f2" }}>
+                                        {formatSubjectOfficerName(notif.subjectOfficerName, lang)}
+                                      </span>{" "}
+                                      <span>{lang === "si" ? "විසින් දිනයන් ඇතුළත් කරන ලදී: " : "submitted dates for "}</span>
+                                      <span style={{ fontWeight: 800, color: "#050505" }}>
+                                        {lang === "si" ? "නඩු අංක " : "Case No: "}{notif.caseNo}
+                                      </span>
+                                    </div>
+
+                                    {/* Prominent Appt & Due Date Pills */}
+                                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "6px", flexWrap: "wrap" }}>
+                                      <span style={{ fontSize: "11px", fontWeight: 700, backgroundColor: "#eff6ff", color: "#1d4ed8", padding: "3px 10px", borderRadius: "6px", border: "1px solid #bfdbfe", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                        <CalendarIcon size={12} />
+                                        <span>{lang === "si" ? "පත්වීම් දිනය: " : "Appt: "}{notif.appointmentDate || "—"}</span>
+                                      </span>
+
+                                      <span style={{ fontSize: "11px", fontWeight: 700, backgroundColor: "#fff7ed", color: "#c2410c", padding: "3px 10px", borderRadius: "6px", border: "1px solid #fed7aa", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                        <Clock size={12} />
+                                        <span>{lang === "si" ? "වාර්තා දිනය: " : "Report Due: "}{notif.reportDueDate || "—"}</span>
+                                      </span>
+
+                                      <span style={{ fontSize: "11px", color: "#65676b", fontWeight: 600 }}>
+                                        • {displayDate}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {/* Right side Indicator & Action Button */}
+                                  <div style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0 }}>
+                                    {isUnseen && (
+                                      <span style={{ width: "12px", height: "12px", borderRadius: "50%", backgroundColor: "#1877f2" }} title="Unread notification"></span>
+                                    )}
+
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        markAsSeen(notif.id);
+                                        router.push(`/investigation/add-details?caseNo=${notif.caseNo}`);
+                                      }}
+                                      style={{
+                                        padding: "7px 14px",
+                                        fontSize: "12px",
+                                        fontWeight: 700,
+                                        color: isUnseen ? "#ffffff" : "#1877f2",
+                                        backgroundColor: isUnseen ? "#1877f2" : "#e7f3ff",
+                                        border: "none",
+                                        borderRadius: "8px",
+                                        cursor: "pointer",
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        gap: "5px",
+                                        transition: "all 0.15s ease"
+                                      }}
+                                    >
+                                      <Eye size={14} />
+                                      <span>{lang === "si" ? "විස්තර" : "View Case"}</span>
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })
+                          ) : (
+                            <div style={{ padding: "24px", textAlign: "center", color: "#65676b", fontSize: "13px", backgroundColor: "#f0f2f5", borderRadius: "12px" }}>
+                              {lang === "si" ? "දැනුම්දීම් කිසිවක් නැත." : "No notifications found."}
+                            </div>
+                          )}
                         </div>
                       )}
                     </>
@@ -2840,6 +3015,8 @@ export default function InvestigationPage() {
                         <th scope="col">{t("targetCompletionDate", lang === "si" ? "අති.ලේ වෙත ලද දිනය" : "Date Received at Addl. Sec.")}</th>
                         <th scope="col">{lang === "si" ? "විෂය කරුණ" : "Subject / Matter"}</th>
                         <th scope="col">{t("assignedSubjectOfficer", "Assigned Subject Officer")}</th>
+                        <th scope="col">{lang === "si" ? "පත්වීම් ලිපියේ දිනය" : "Appt. Letter Date"}</th>
+                        <th scope="col">{lang === "si" ? "වාර්තා දිනය" : "Report Due Date"}</th>
                         <th scope="col">{lang === "si" ? "තත්ත්වය" : "Status"}</th>
                         <th scope="col" className="text-center">{lang === "si" ? "ක්‍රියාමාර්ග" : "Actions"}</th>
                       </tr>
@@ -2847,7 +3024,7 @@ export default function InvestigationPage() {
                     <tbody>
                       {isLoading ? (
                         <tr>
-                          <td colSpan={6} className="text-center py-4 text-muted">
+                          <td colSpan={8} className="text-center py-4 text-muted">
                             {lang === "si" ? "තොරතුරු පූරණය වෙමින් පවතී..." : "Loading inquiries..."}
                           </td>
                         </tr>
@@ -2863,7 +3040,7 @@ export default function InvestigationPage() {
                             <td>
                               <span style={{ fontWeight: 500, color: "#334155" }}>{item.targetDate || "-"}</span>
                             </td>
-                            <td className="subject-cell" style={{ maxWidth: "340px" }}>
+                            <td className="subject-cell" style={{ maxWidth: "300px" }}>
                               <div style={{ fontWeight: 600, color: "#1e293b" }}>{item.subject}</div>
                             </td>
                             <td>
@@ -2871,6 +3048,26 @@ export default function InvestigationPage() {
                                 <User size={14} style={{ color: "#4f46e5" }} />
                                 <span>{formatSubjectOfficerName(item.subjectOfficer, lang)}</span>
                               </div>
+                            </td>
+                            <td>
+                              {item.appointmentDate ? (
+                                <span style={{ fontWeight: 700, color: "#0369a1", backgroundColor: "#f0f9ff", border: "1px solid #bae6fd", padding: "4px 8px", borderRadius: "6px", fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "4px", whiteSpace: "nowrap" }}>
+                                  <CalendarIcon size={12} />
+                                  {item.appointmentDate}
+                                </span>
+                              ) : (
+                                <span style={{ color: "#94a3b8", fontSize: "12px", fontStyle: "italic" }}>—</span>
+                              )}
+                            </td>
+                            <td>
+                              {item.reportDueDate ? (
+                                <span style={{ fontWeight: 700, color: "#b91c1c", backgroundColor: "#fef2f2", border: "1px solid #fca5a5", padding: "4px 8px", borderRadius: "6px", fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "4px", whiteSpace: "nowrap" }}>
+                                  <Clock size={12} />
+                                  {item.reportDueDate}
+                                </span>
+                              ) : (
+                                <span style={{ color: "#94a3b8", fontSize: "12px", fontStyle: "italic" }}>—</span>
+                              )}
                             </td>
                             <td>
                               <span className={`badge-badge ${
@@ -2898,7 +3095,7 @@ export default function InvestigationPage() {
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={6} className="text-center py-4 text-muted">
+                          <td colSpan={8} className="text-center py-4 text-muted">
                             <div style={{ padding: "30px 0", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
                               <AlertCircle size={28} style={{ color: "#94a3b8" }} />
                               <span>{t("noCasesFound", "No matching inquiry cases found")}</span>
@@ -3442,42 +3639,25 @@ export default function InvestigationPage() {
                       </div>
 
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "16px", backgroundColor: "#f0f9ff", padding: "16px", borderRadius: "10px", border: "1px solid #bae6fd" }}>
-                      <div>
-                        <label htmlFor="modalStep2ApptDateInput" style={{ fontSize: "12px", fontWeight: 700, color: "#0369a1", display: "flex", alignItems: "center", gap: "6px", marginBottom: "6px" }}>
-                          <CalendarIcon size={14} /> {lang === "si" ? "පත්වීම් ලිපියේ දිනය (Appointment Letter Date):" : "Appointment Letter Date:"}
-                        </label>
-                        <input
-                          id="modalStep2ApptDateInput"
-                          type="date"
-                          value={step2AppointmentDate}
-                          onChange={(e) => setStep2AppointmentDate(e.target.value)}
-                          style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid #7dd3fc", fontSize: "14px", fontWeight: 700, color: "#0369a1", backgroundColor: "#ffffff" }}
-                        />
+                      <div style={{ backgroundColor: "#ffffff", padding: "12px 14px", borderRadius: "8px", border: "1px solid #bae6fd" }}>
+                        <div style={{ fontSize: "11px", fontWeight: 700, color: "#0369a1", textTransform: "uppercase", letterSpacing: "0.5px", display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
+                          <CalendarIcon size={14} />
+                          {lang === "si" ? "පත්වීම් ලිපියේ දිනය" : "Appointment Letter Date"}
+                        </div>
+                        <div style={{ fontSize: "15px", fontWeight: 800, color: (step2AppointmentDate || existingAssignment?.appointmentDate) ? "#0284c7" : "#94a3b8" }}>
+                          {step2AppointmentDate || existingAssignment?.appointmentDate || (lang === "si" ? "තවමත් විෂය නිලධාරී විසින් ඇතුළත් කර නැත" : "Not assigned yet by Subject Officer")}
+                        </div>
                       </div>
 
-                      <div>
-                        <label htmlFor="modalStep2DueDateInput" style={{ fontSize: "12px", fontWeight: 700, color: "#b91c1c", display: "flex", alignItems: "center", gap: "6px", marginBottom: "6px" }}>
-                          <CalendarIcon size={14} /> {lang === "si" ? "වාර්තාව ලබාදිය යුතු දිනය (Report Due Date):" : "Report Due Date:"}
-                        </label>
-                        <input
-                          id="modalStep2DueDateInput"
-                          type="date"
-                          value={step2ReportDueDate}
-                          onChange={(e) => setStep2ReportDueDate(e.target.value)}
-                          style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid #fca5a5", fontSize: "14px", fontWeight: 700, color: "#b91c1c", backgroundColor: "#ffffff" }}
-                        />
+                      <div style={{ backgroundColor: "#ffffff", padding: "12px 14px", borderRadius: "8px", border: "1px solid #fca5a5" }}>
+                        <div style={{ fontSize: "11px", fontWeight: 700, color: "#b91c1c", textTransform: "uppercase", letterSpacing: "0.5px", display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
+                          <Clock size={14} />
+                          {lang === "si" ? "වාර්තාව ලබාදිය යුතු දිනය" : "Report Due Date"}
+                        </div>
+                        <div style={{ fontSize: "15px", fontWeight: 800, color: (step2ReportDueDate || existingAssignment?.reportDueDate) ? "#dc2626" : "#94a3b8" }}>
+                          {step2ReportDueDate || existingAssignment?.reportDueDate || (lang === "si" ? "තවමත් විෂය නිලධාරී විසින් ඇතුළත් කර නැත" : "Not assigned yet by Subject Officer")}
+                        </div>
                       </div>
-                    </div>
-
-                    <div style={{ marginTop: "14px", display: "flex", justifyContent: "flex-end" }}>
-                      <button
-                        type="button"
-                        onClick={handleStep2ConfirmDatesAdmin}
-                        style={{ padding: "10px 18px", backgroundColor: "#0284c7", color: "#ffffff", border: "none", borderRadius: "8px", fontWeight: 600, fontSize: "13px", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px", boxShadow: "0 2px 4px rgba(2,132,199,0.25)" }}
-                      >
-                        <CheckCircle size={15} />
-                        <span>{lang === "si" ? "පත්වීම් සහ වාර්තා දිනයන් තහවුරු කරන්න / සුරකින්න" : "Confirm & Save Appointment & Due Dates"}</span>
-                      </button>
                     </div>
 
                     {/* ── Extension of Days Subsection (Directly inside Step 2 card under appointment/due dates) ── */}

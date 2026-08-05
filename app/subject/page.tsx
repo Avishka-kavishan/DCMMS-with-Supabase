@@ -4,7 +4,7 @@ import "../../i18n";
 import "../daily-mail/daily-mail.css";
 import "../dashboard-common.css";
 import "./subject.css";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { Sidebar } from "@/components/Sidebar";
@@ -26,6 +26,25 @@ interface Case {
   status: "In Progress" | "Closed" | "Pending";
   isOld?: boolean;
 }
+
+export const formatToInputDate = (dateStr?: string | null): string => {
+  if (!dateStr || typeof dateStr !== "string") return "";
+  const trimmed = dateStr.trim();
+  if (!trimmed) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  if (trimmed.includes("T")) {
+    const parts = trimmed.split("T")[0];
+    if (/^\d{4}-\d{2}-\d{2}$/.test(parts)) return parts;
+  }
+  const parsed = new Date(trimmed);
+  if (!isNaN(parsed.getTime())) {
+    const yyyy = parsed.getFullYear();
+    const mm = String(parsed.getMonth() + 1).padStart(2, "0");
+    const dd = String(parsed.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  return "";
+};
 
 export function parseCommitteeDetails(asgn: any) {
   let chairmanName = "";
@@ -600,6 +619,12 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
 
   // Subject Officer Assignment Data Flow State & Handlers
   const [assignments, setAssignments] = useState<any[]>([]);
+  const [draftDates, setDraftDates] = useState<Record<string, { appointmentDate?: string; reportDueDate?: string }>>({});
+  const draftDatesRef = useRef<Record<string, { appointmentDate?: string; reportDueDate?: string }>>({});
+
+  useEffect(() => {
+    draftDatesRef.current = draftDates;
+  }, [draftDates]);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [activeAssignment, setActiveAssignment] = useState<any>(null);
   const [reportDateForm, setReportDateForm] = useState(new Date().toISOString().slice(0, 10));
@@ -664,8 +689,8 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
               assignedOfficers: text,
               chairman: chairman,
               members: members,
-              appointmentDate: a.appointment_date || a.appointmentDate,
-              reportDueDate: a.report_due_date || a.reportDueDate,
+              appointmentDate: formatToInputDate(a.appointment_date || a.appointmentDate),
+              reportDueDate: formatToInputDate(a.report_due_date || a.reportDueDate),
               extensionTerm: a.extension_term || a.extensionTerm,
               extensionStartDate: a.extension_start_date || a.extensionStartDate,
               extensionEndDate: a.extension_end_date || a.extensionEndDate,
@@ -739,6 +764,8 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
                   ...list[idx], 
                   ...la, 
                   assignedOfficers: text || list[idx].assignedOfficers,
+                  appointmentDate: formatToInputDate(la.appointmentDate || la.appointment_date || list[idx].appointmentDate),
+                  reportDueDate: formatToInputDate(la.reportDueDate || la.report_due_date || list[idx].reportDueDate),
                   extensionTerm: normExtTerm || list[idx].extensionTerm,
                   extensionStartDate: normExtStart || list[idx].extensionStartDate,
                   extensionEndDate: normExtEnd || list[idx].extensionEndDate,
@@ -750,6 +777,8 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
                   ...la, 
                   caseNo: la.caseNo || la.case_no,
                   assignedOfficers: text,
+                  appointmentDate: formatToInputDate(la.appointmentDate || la.appointment_date),
+                  reportDueDate: formatToInputDate(la.reportDueDate || la.report_due_date),
                   extensionTerm: normExtTerm,
                   extensionStartDate: normExtStart,
                   extensionEndDate: normExtEnd,
@@ -807,7 +836,8 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
                   extensionTerm: extTerm,
                   extensionStartDate: extStart,
                   extensionEndDate: extEnd,
-                  reportDueDate: extEnd || c.reportDueDate || c.report_due_date,
+                  appointmentDate: formatToInputDate(c.appointmentDate || c.appointment_date),
+                  reportDueDate: formatToInputDate(extEnd || c.reportDueDate || c.report_due_date),
                   extensionApprovalStatus: extApprove || "Approved",
                   extensionDecisionDate: extDate,
                   extensionRequestedByAdmin: !!extReq,
@@ -857,7 +887,6 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
 
     if (list.length > 0) {
       const relevant = list.filter((a: any) => {
-        // 1. Must have investigation officers assigned by Investigation Administrator
         const asgnOfficers = a.assignedOfficers || a.assigned_officers;
         const hasArrayOfficers = Array.isArray(asgnOfficers) && asgnOfficers.length > 0;
         const hasStringOfficers = typeof asgnOfficers === "string" && asgnOfficers.trim().length > 0 && asgnOfficers.trim() !== "[]" && asgnOfficers.trim() !== "null";
@@ -869,7 +898,6 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
 
         if (!hasOfficersAssigned) return false;
 
-        // 2. Display cases assigned to the logged in Subject Officer, or any case with date extension details (so every subject officer can see date extension requests)
         const officer = (a.subjectOfficerName || a.subject_officer_name || "").trim().toLowerCase();
 
         const isGenericOfficer =
@@ -910,7 +938,21 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
           activeNameClean.includes(officer)
         );
       });
-      setAssignments(relevant);
+
+      const mergedRelevant = relevant.map((a: any) => {
+        const caseKey = a.caseNo || a.id;
+        const currentDrafts = draftDatesRef.current;
+        const draft = (caseKey && currentDrafts[caseKey]) || (a.id && currentDrafts[a.id]) || (a.caseNo && currentDrafts[a.caseNo]);
+        const appt = draft?.appointmentDate !== undefined ? draft.appointmentDate : formatToInputDate(a.appointmentDate || a.appointment_date);
+        const due = draft?.reportDueDate !== undefined ? draft.reportDueDate : formatToInputDate(a.reportDueDate || a.report_due_date);
+        return {
+          ...a,
+          appointmentDate: appt,
+          reportDueDate: due,
+        };
+      });
+
+      setAssignments(mergedRelevant);
     } else {
       setAssignments([]);
     }
@@ -947,15 +989,18 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
 
   // Step 2 Handler: Subject Officer Submits Appointment Date & Report Due Date
   const handleStep2SubmitDates = (asgn: any, appointmentDate: string, reportDueDate: string) => {
-    if (!appointmentDate || !reportDueDate) {
+    const finalAppt = formatToInputDate(appointmentDate);
+    const finalDue = formatToInputDate(reportDueDate);
+
+    if (!finalAppt || !finalDue) {
       showToast("Please select both Appointment Date and Report Due Date!");
       return;
     }
     const today = new Date().toISOString().slice(0, 10);
     const updated = {
       ...asgn,
-      appointmentDate,
-      reportDueDate,
+      appointmentDate: finalAppt,
+      reportDueDate: finalDue,
       datesSubmittedBySubject: true,
       datesSubmitTimestamp: today,
       currentStep: 3,
@@ -963,14 +1008,54 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
       updatedAt: today,
     };
 
+    const caseKey = asgn.caseNo || asgn.id;
+    const updatedDrafts = { ...draftDatesRef.current };
+    delete updatedDrafts[caseKey];
+    if (asgn.id) delete updatedDrafts[asgn.id];
+    if (asgn.caseNo) delete updatedDrafts[asgn.caseNo];
+    draftDatesRef.current = updatedDrafts;
+    setDraftDates(updatedDrafts);
+
     if (typeof window !== "undefined") {
       try {
         const stored = localStorage.getItem("dcmms_subject_assignments") || "[]";
         let list = JSON.parse(stored);
-        list = list.filter((a: any) => a.id !== asgn.id);
+        list = list.filter((a: any) => a.id !== asgn.id && a.caseNo !== asgn.caseNo);
         list.push(updated);
         localStorage.setItem("dcmms_subject_assignments", JSON.stringify(list));
       } catch (e) {}
+
+      try {
+        const storedCases = localStorage.getItem("dcmms_cases") || "[]";
+        let cases = JSON.parse(storedCases);
+        const matchKey = String(asgn.caseNo || "").trim().toLowerCase();
+        const idx = cases.findIndex((c: any) => String(c.caseNo || c.refNo || "").trim().toLowerCase() === matchKey);
+        if (idx >= 0) {
+          cases[idx].appointmentDate = finalAppt;
+          cases[idx].reportDueDate = finalDue;
+          cases[idx].targetDate = finalDue;
+          cases[idx].datesSubmittedBySubject = true;
+          cases[idx].status = "Dates Confirmed";
+        }
+        localStorage.setItem("dcmms_cases", JSON.stringify(cases));
+      } catch (e) {}
+
+      try {
+        const storedLetters = localStorage.getItem("dcmms_letters") || "[]";
+        let letters = JSON.parse(storedLetters);
+        const matchKey = String(asgn.caseNo || "").trim().toLowerCase();
+        const idx = letters.findIndex((l: any) => String(l.refNo || l.caseNo || "").trim().toLowerCase() === matchKey);
+        if (idx >= 0) {
+          letters[idx].appointmentDate = finalAppt;
+          letters[idx].reportDueDate = finalDue;
+          letters[idx].datesSubmittedBySubject = true;
+          letters[idx].status = "Dates Confirmed";
+        }
+        localStorage.setItem("dcmms_letters", JSON.stringify(letters));
+      } catch (e) {}
+
+      window.dispatchEvent(new CustomEvent("dcmms_assignment_updated"));
+      window.dispatchEvent(new Event("storage"));
     }
 
     if (isSupabaseConfigured) {
@@ -981,8 +1066,8 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
         assigned_officers: Array.isArray(updated.assignedOfficers) ? updated.assignedOfficers : (updated.assignedOfficers ? [updated.assignedOfficers] : null),
         chairman: updated.chairman || null,
         members: updated.members || null,
-        appointment_date: updated.appointmentDate,
-        report_due_date: updated.reportDueDate,
+        appointment_date: finalAppt,
+        report_due_date: finalDue,
         dates_submitted_by_subject: true,
         status: updated.status,
       }).then();
@@ -1916,9 +2001,19 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
                                         <input
                                           type="date"
                                           id={apptId}
-                                          value={asgn.appointmentDate || ""}
+                                          value={formatToInputDate(asgn.appointmentDate)}
                                           onChange={(e) => {
                                             const val = e.target.value;
+                                            const caseKey = asgn.caseNo || asgn.id;
+                                            const currentDrafts = (draftDatesRef.current || {}) as Record<string, any>;
+                                            const updated: Record<string, any> = {
+                                              ...currentDrafts,
+                                              [caseKey]: { ...(currentDrafts[caseKey] || {}), appointmentDate: val }
+                                            };
+                                            if (asgn.id) updated[asgn.id] = { ...(updated[asgn.id] || {}), appointmentDate: val };
+                                            if (asgn.caseNo) updated[asgn.caseNo] = { ...(updated[asgn.caseNo] || {}), appointmentDate: val };
+                                            draftDatesRef.current = updated;
+                                            setDraftDates(updated);
                                             setAssignments((prev) =>
                                               prev.map((item) =>
                                                 (item.id === asgn.id || item.caseNo === asgn.caseNo)
@@ -1937,9 +2032,14 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
                                         <input
                                           type="date"
                                           id={dueId}
-                                          value={asgn.reportDueDate || ""}
+                                          value={formatToInputDate(asgn.reportDueDate)}
                                           onChange={(e) => {
                                             const val = e.target.value;
+                                            const caseKey = asgn.caseNo || asgn.id;
+                                            setDraftDates((prev) => ({
+                                              ...prev,
+                                              [caseKey]: { ...(prev[caseKey] || {}), reportDueDate: val }
+                                            }));
                                             setAssignments((prev) =>
                                               prev.map((item) =>
                                                 (item.id === asgn.id || item.caseNo === asgn.caseNo)

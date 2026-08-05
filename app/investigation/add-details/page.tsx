@@ -126,6 +126,25 @@ function InvestigationCaseDetailsContent() {
     if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   };
+
+  const formatToInputDate = (dateStr?: string | null): string => {
+    if (!dateStr || typeof dateStr !== "string") return "";
+    const trimmed = dateStr.trim();
+    if (!trimmed) return "";
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+    if (trimmed.includes("T")) {
+      const parts = trimmed.split("T")[0];
+      if (/^\d{4}-\d{2}-\d{2}$/.test(parts)) return parts;
+    }
+    const parsed = new Date(trimmed);
+    if (!isNaN(parsed.getTime())) {
+      const yyyy = parsed.getFullYear();
+      const mm = String(parsed.getMonth() + 1).padStart(2, "0");
+      const dd = String(parsed.getDate()).padStart(2, "0");
+      return `${yyyy}-${mm}-${dd}`;
+    }
+    return trimmed;
+  };
   
   // Step 2: Check / Set Appointment Date & Report Due Date
   const [step2ApptDate, setStep2ApptDate] = useState("");
@@ -369,21 +388,52 @@ function InvestigationCaseDetailsContent() {
         if (storedAsgn) {
           try {
             const list = JSON.parse(storedAsgn);
+            const matchKey = String(caseNoParam || "").trim().toLowerCase();
             const found = list.find((a: any) => 
-              (a.caseNo && String(a.caseNo).trim().toLowerCase() === String(caseNoParam).trim().toLowerCase()) ||
-              (a.case_no && String(a.case_no).trim().toLowerCase() === String(caseNoParam).trim().toLowerCase())
+              String(a.caseNo || a.case_no || a.id || "").trim().toLowerCase() === matchKey ||
+              String(a.caseNo || a.case_no || "").trim().toLowerCase().includes(matchKey)
             );
             if (found) {
-              assignment = { ...assignment, ...found };
+              assignment = {
+                ...found,
+                ...assignment,
+                appointmentDate: assignment?.appointmentDate || assignment?.appointment_date || found.appointmentDate || found.appointment_date,
+                reportDueDate: assignment?.reportDueDate || assignment?.report_due_date || found.reportDueDate || found.report_due_date,
+                datesSubmittedBySubject: assignment?.datesSubmittedBySubject || found.datesSubmittedBySubject || found.dates_submitted_by_subject,
+              };
+            }
+          } catch (e) {}
+        }
+
+        if (!assignment?.appointmentDate || !assignment?.reportDueDate) {
+          try {
+            const storedCases = localStorage.getItem("dcmms_cases");
+            if (storedCases) {
+              const casesList = JSON.parse(storedCases);
+              const matchKey = String(caseNoParam || "").trim().toLowerCase();
+              const foundCase = casesList.find((c: any) =>
+                String(c.caseNo || c.refNo || c.case_no || "").trim().toLowerCase() === matchKey
+              );
+              if (foundCase) {
+                assignment = {
+                  ...(assignment || {}),
+                  appointmentDate: assignment?.appointmentDate || foundCase.appointmentDate || foundCase.appointment_date,
+                  reportDueDate: assignment?.reportDueDate || foundCase.reportDueDate || foundCase.report_due_date,
+                  datesSubmittedBySubject: assignment?.datesSubmittedBySubject || foundCase.datesSubmittedBySubject,
+                };
+              }
             }
           } catch (e) {}
         }
       }
+
       setExistingAssignment(assignment);
       if (assignment) {
+        const apptVal = formatToInputDate(assignment.appointmentDate || assignment.appointment_date);
+        const dueVal = formatToInputDate(assignment.reportDueDate || assignment.report_due_date);
         if (assignment.assignedOfficers) setStep1AssignedOfficers(assignment.assignedOfficers);
-        if (assignment.appointmentDate) setStep2ApptDate(assignment.appointmentDate);
-        if (assignment.reportDueDate) setStep2DueDate(assignment.reportDueDate);
+        if (apptVal) setStep2ApptDate(apptVal);
+        if (dueVal) setStep2DueDate(dueVal);
         if (assignment.extensionTerm) setStep3Term(assignment.extensionTerm);
         if (assignment.extensionStartDate) setStep3StartDate(assignment.extensionStartDate);
         if (assignment.extensionEndDate) setStep3EndDate(assignment.extensionEndDate);
@@ -1920,61 +1970,43 @@ function InvestigationCaseDetailsContent() {
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px", borderBottom: "1px solid #f1f5f9", paddingBottom: "10px" }}>
                     <h4 style={{ margin: 0, fontSize: "15px", color: "#1e293b", fontWeight: 700, display: "flex", alignItems: "center", gap: "8px" }}>
                       <CalendarIcon size={18} style={{ color: "#0284c7" }} />
-                      <span>{lang === "si" ? "පත්වීම් ලිපියේ දිනය සහ වාර්තා දිනය (විෂය නිලධාරී වෙතින්)" : "Step 2: Appointment Letter Date & Report Due Date (Received from Subject Officer)"}</span>
+                      <span>{lang === "si" ? "පත්වීම් ලිපියේ දිනය සහ වාර්තා දිනය (විෂය නිලධාරී වෙතින්)" : "Step 2: Appointment Letter Date & Report Due Date (Assigned by Subject Officer)"}</span>
                     </h4>
                     <span style={{ fontSize: "11px", fontWeight: 700, backgroundColor: (existingAssignment?.datesSubmittedBySubject || (step2ApptDate && step2DueDate)) ? "#dcfce7" : "#fef3c7", color: (existingAssignment?.datesSubmittedBySubject || (step2ApptDate && step2DueDate)) ? "#15803d" : "#b45309", padding: "4px 10px", borderRadius: "12px", display: "flex", alignItems: "center", gap: "4px" }}>
                       {(existingAssignment?.datesSubmittedBySubject || (step2ApptDate && step2DueDate)) ? (
                         <>
                           <CheckCircle size={13} />
-                          {lang === "si" ? "විෂය නිලධාරී විසින් සපයන ලදී" : "Submitted by Subject Officer"}
+                          {lang === "si" ? "විෂය නිලධාරී විසින් සපයන ලදී" : "Assigned by Subject Officer"}
                         </>
                       ) : (
                         <>
                           <Clock size={13} />
-                          {lang === "si" ? "විෂය නිලධාරී වෙතින් බලපොරොත්තු වේ" : "Awaiting Subject Officer"}
+                          {lang === "si" ? "විෂය නිලධාරී වෙතින් බලපොරොත්තු වේ" : "Awaiting Subject Officer Assignment"}
                         </>
                       )}
                     </span>
                   </div>
 
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "16px", backgroundColor: "#f0f9ff", padding: "16px", borderRadius: "10px", border: "1px solid #bae6fd" }}>
-                    <div>
-                      <label htmlFor="step2ApptDateInput" style={{ fontSize: "12px", fontWeight: 700, color: "#0369a1", display: "flex", alignItems: "center", gap: "6px", marginBottom: "6px" }}>
-                        <CalendarIcon size={14} /> {lang === "si" ? "පත්වීම් ලිපියේ දිනය (Appointment Letter Date):" : "Appointment Letter Date:"}
-                      </label>
-                      <input
-                        id="step2ApptDateInput"
-                        type="date"
-                        value={step2ApptDate}
-                        onChange={(e) => setStep2ApptDate(e.target.value)}
-                        style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid #7dd3fc", fontSize: "14px", fontWeight: 700, color: "#0369a1", backgroundColor: "#ffffff" }}
-                      />
+                    <div style={{ backgroundColor: "#ffffff", padding: "12px 14px", borderRadius: "8px", border: "1px solid #bae6fd" }}>
+                      <div style={{ fontSize: "11px", fontWeight: 700, color: "#0369a1", textTransform: "uppercase", letterSpacing: "0.5px", display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
+                        <CalendarIcon size={14} />
+                        {lang === "si" ? "පත්වීම් ලිපියේ දිනය" : "Appointment Letter Date"}
+                      </div>
+                      <div style={{ fontSize: "15px", fontWeight: 800, color: (step2ApptDate || existingAssignment?.appointmentDate) ? "#0284c7" : "#94a3b8" }}>
+                        {step2ApptDate || existingAssignment?.appointmentDate || (lang === "si" ? "තවමත් විෂය නිලධාරී විසින් ඇතුළත් කර නැත" : "Not assigned yet by Subject Officer")}
+                      </div>
                     </div>
 
-                    <div>
-                      <label htmlFor="step2DueDateInput" style={{ fontSize: "12px", fontWeight: 700, color: "#b91c1c", display: "flex", alignItems: "center", gap: "6px", marginBottom: "6px" }}>
-                        <CalendarIcon size={14} /> {lang === "si" ? "වාර්තාව ලබාදිය යුතු දිනය (Report Due Date):" : "Report Due Date:"}
-                      </label>
-                      <input
-                        id="step2DueDateInput"
-                        type="date"
-                        value={step2DueDate}
-                        onChange={(e) => setStep2DueDate(e.target.value)}
-                        style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid #fca5a5", fontSize: "14px", fontWeight: 700, color: "#b91c1c", backgroundColor: "#ffffff" }}
-                      />
+                    <div style={{ backgroundColor: "#ffffff", padding: "12px 14px", borderRadius: "8px", border: "1px solid #fca5a5" }}>
+                      <div style={{ fontSize: "11px", fontWeight: 700, color: "#b91c1c", textTransform: "uppercase", letterSpacing: "0.5px", display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
+                        <Clock size={14} />
+                        {lang === "si" ? "වාර්තාව ලබාදිය යුතු දිනය" : "Report Due Date"}
+                      </div>
+                      <div style={{ fontSize: "15px", fontWeight: 800, color: (step2DueDate || existingAssignment?.reportDueDate) ? "#dc2626" : "#94a3b8" }}>
+                        {step2DueDate || existingAssignment?.reportDueDate || (lang === "si" ? "තවමත් විෂය නිලධාරී විසින් ඇතුළත් කර නැත" : "Not assigned yet by Subject Officer")}
+                      </div>
                     </div>
-                  </div>
-
-                  <div style={{ marginTop: "14px", display: "flex", justifyContent: "flex-end" }}>
-                    <button
-                      type="button"
-                      onClick={handleStep2SubmitDatesAdmin}
-                      disabled={isSaving}
-                      style={{ padding: "10px 18px", backgroundColor: "#0284c7", color: "#ffffff", border: "none", borderRadius: "8px", fontWeight: 600, fontSize: "13px", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px", boxShadow: "0 2px 4px rgba(2,132,199,0.25)" }}
-                    >
-                      <CheckCircle size={15} />
-                      <span>{lang === "si" ? "පත්වීම් සහ වාර්තා දිනයන් තහවුරු කරන්න / සුරකින්න" : "Confirm & Save Appointment & Due Dates"}</span>
-                    </button>
                   </div>
 
                   {/* ── Extension of Days Subsection (Directly inside Step 2 card under appointment/due dates) ── */}
