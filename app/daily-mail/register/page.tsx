@@ -141,6 +141,7 @@ function RegisterComplaintForm() {
     receivedDate: "",
     priority: "medium" as "high" | "medium" | "low",
     status: "registered" as "registered" | "assigned" | "pending",
+    isAnswerLetter: "false",
   });
 
   // Sync document properties
@@ -402,6 +403,7 @@ function RegisterComplaintForm() {
                 letterType: d.letter_type,
                 letterDate: d.mail_date,
                 receivedDate: d.received_date,
+                isAnswerLetter: d.is_answer_letter,
               })));
             }
           } catch (e) {
@@ -455,7 +457,17 @@ function RegisterComplaintForm() {
               const mailsList = JSON.parse(storedMails);
               if (Array.isArray(mailsList)) {
                 const found = mailsList.filter((m: any) => m.caseNo === caseNo);
-                setPreviousLetters(found);
+                setPreviousLetters(found.map((m: any) => ({
+                  id: m.id,
+                  caseNo: m.caseNo,
+                  officerName: m.mailOfficerName || m.officerName,
+                  senderName: m.senderName,
+                  subject: m.letterTitle || m.subject,
+                  letterType: m.letterType,
+                  letterDate: m.mailDate || m.letterDate,
+                  receivedDate: m.receivedDate,
+                  isAnswerLetter: m.isAnswerLetter,
+                })));
               }
             } catch (e) {
               console.error("Failed to parse local storage subsequent mails", e);
@@ -496,6 +508,7 @@ function RegisterComplaintForm() {
               receivedDate: data.received_date || "",
               priority: data.priority || "medium",
               status: data.status || "registered",
+              isAnswerLetter: "false",
             });
             return;
           }
@@ -526,6 +539,7 @@ function RegisterComplaintForm() {
                 receivedDate: found.receivedDate || "",
                 priority: found.priority || "medium",
                 status: found.status || "registered",
+                isAnswerLetter: "false",
               });
             }
           } catch (err) {
@@ -586,20 +600,34 @@ function RegisterComplaintForm() {
             console.warn("Case upsert warning (may already exist):", caseUpsertError.message);
           }
 
+          let subMailPayload: any = {
+            id: newLetter.id,
+            case_no: newLetter.refNo,
+            mail_officer_name: newLetter.officerName || null,
+            sender_name: newLetter.senderName,
+            letter_title: newLetter.subject,
+            letter_type: newLetter.letterType || null,
+            mail_date: newLetter.letterDate,
+            received_date: newLetter.receivedDate,
+            is_answer_letter: formState.isAnswerLetter === "true",
+          };
+
           const { error } = await supabase
             .from("dcmms_subsequent_mails")
-            .insert({
-              id: newLetter.id,
-              case_no: newLetter.refNo,
-              mail_officer_name: newLetter.officerName || null,
-              sender_name: newLetter.senderName,
-              letter_title: newLetter.subject,
-              letter_type: newLetter.letterType || null,
-              mail_date: newLetter.letterDate,
-              received_date: newLetter.receivedDate,
-            });
+            .insert(subMailPayload);
 
-          if (error) throw error;
+          if (error) {
+            if (error.code === "42703" || (error.message && error.message.includes("is_answer_letter"))) {
+              console.warn("Column is_answer_letter missing in DB, retrying insert without column");
+              delete subMailPayload.is_answer_letter;
+              const { error: retryError } = await supabase
+                .from("dcmms_subsequent_mails")
+                .insert(subMailPayload);
+              if (retryError) throw retryError;
+            } else {
+              throw error;
+            }
+          }
 
           // Also insert into dcmms_daily_mail so that it displays in the daily mail recent add/list ledger
           const { error: mailError } = await supabase
@@ -651,6 +679,7 @@ function RegisterComplaintForm() {
           letterType: newLetter.letterType,
           mailDate: newLetter.letterDate,
           receivedDate: newLetter.receivedDate,
+          isAnswerLetter: formState.isAnswerLetter,
         });
         localStorage.setItem("dcmms_new_mail_current_case", JSON.stringify(list));
 
@@ -1203,6 +1232,7 @@ function RegisterComplaintForm() {
                           <th scope="col">{t("letterDate", "Letter Date")}</th>
                           <th scope="col">{t("receivedDate", "Received Date")}</th>
                           <th scope="col">{t("nameOfOfficer", "Mail Officer")}</th>
+                          <th scope="col">{t("answerLetterColumn", "Answer Letter")}</th>
                           <th scope="col">{t("letterTitle", "Subject")}</th>
                         </tr>
                       </thead>
@@ -1214,6 +1244,11 @@ function RegisterComplaintForm() {
                             <td>{mail.letterDate || mail.mailDate || "—"}</td>
                             <td>{mail.receivedDate || "—"}</td>
                             <td>{mail.officerName || mail.mailOfficerName || "—"}</td>
+                            <td>
+                              <span className={`badge-badge ${mail.isAnswerLetter === "true" || mail.isAnswerLetter === true ? "badge-status-closed" : "badge-status-inprogress"}`}>
+                                {mail.isAnswerLetter === "true" || mail.isAnswerLetter === true ? t("yes", "Yes") : t("no", "No")}
+                              </span>
+                            </td>
                             <td className="subject-cell">{mail.subject || mail.letterTitle || "—"}</td>
                           </tr>
                         ))}
@@ -1284,6 +1319,37 @@ function RegisterComplaintForm() {
                           ))}
                         </select>
                       </div>
+
+                      {/* Is Answer Letter (Only in Register New Letter for Current Complaint form) */}
+                      {isSubsequentMode && (
+                        <div className="form-field-group">
+                          <label className="field-label">{t("isAnswerLetter", "Is this an answer letter?")}</label>
+                          <div className="radio-group-container">
+                            <label className="radio-option-label">
+                              <input
+                                type="radio"
+                                name="isAnswerLetter"
+                                value="true"
+                                checked={formState.isAnswerLetter === "true"}
+                                onChange={() => setFormState({ ...formState, isAnswerLetter: "true" })}
+                                className="radio-input-styled"
+                              />
+                              {t("yes", "Yes")}
+                            </label>
+                            <label className="radio-option-label">
+                              <input
+                                type="radio"
+                                name="isAnswerLetter"
+                                value="false"
+                                checked={formState.isAnswerLetter === "false"}
+                                onChange={() => setFormState({ ...formState, isAnswerLetter: "false" })}
+                                className="radio-input-styled"
+                              />
+                              {t("no", "No")}
+                            </label>
+                          </div>
+                        </div>
+                      )}
 
                     </div>
                   </div>

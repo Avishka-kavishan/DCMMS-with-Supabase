@@ -90,6 +90,7 @@ CREATE TABLE IF NOT EXISTS public.dcmms_subsequent_mails (
   classification_of_letter               TEXT,
   manner_of_receipt                      TEXT,
   priority                               TEXT CHECK (priority IN ('Today', 'in 3 Days', 'in 14/21 Days', 'high', 'medium', 'low')),
+  is_answer_letter                       BOOLEAN DEFAULT FALSE,
   created_at                             TIMESTAMPTZ DEFAULT NOW()
 );
 

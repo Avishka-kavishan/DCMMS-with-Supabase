@@ -290,6 +290,7 @@ CREATE TABLE IF NOT EXISTS public.dcmms_subsequent_mails (
   letter_type                    TEXT,
   mail_date                      DATE,
   received_date                  DATE,
+  is_answer_letter               BOOLEAN DEFAULT FALSE,
   created_at                     TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -311,6 +312,7 @@ ALTER TABLE public.dcmms_subsequent_mails ADD COLUMN IF NOT EXISTS letter_title 
 ALTER TABLE public.dcmms_subsequent_mails ADD COLUMN IF NOT EXISTS letter_type TEXT;
 ALTER TABLE public.dcmms_subsequent_mails ADD COLUMN IF NOT EXISTS mail_date DATE;
 ALTER TABLE public.dcmms_subsequent_mails ADD COLUMN IF NOT EXISTS received_date DATE;
+ALTER TABLE public.dcmms_subsequent_mails ADD COLUMN IF NOT EXISTS is_answer_letter BOOLEAN DEFAULT FALSE;
 
 -- -----------------------------------------------------------------------------
 -- 8. CONCERNED OFFICERS TABLE
