@@ -62,7 +62,7 @@ export function subscribeToTables(
 }
 
 /**
- * Log system audit events directly to dcmms_audit_logs table in Supabase
+ * Log system audit events directly to audit_logs table in Supabase
  */
 export async function logAuditEvent(
   action: string,
@@ -74,16 +74,30 @@ export async function logAuditEvent(
   if (!isSupabaseConfigured) return;
   try {
     const username = performedBy || (typeof window !== "undefined" ? localStorage.getItem("dcmms_username") || "system_user" : "system_user");
-    await supabase.from("dcmms_audit_logs").insert([
+    // Try inserting into new audit_logs table
+    const { error: newErr } = await supabase.from("audit_logs").insert([
       {
-        user_id: username,
+        user_id: null, // If UUID, null if string username
         action: action,
-        entity_type: entityType || null,
-        entity_id: entityId || null,
-        details: details ? JSON.stringify(details) : null,
-        timestamp: new Date().toISOString()
+        table_name: entityType || null,
+        record_id: null,
+        created_at: new Date().toISOString()
       }
     ]);
+
+    if (newErr) {
+      // Fallback to legacy dcmms_audit_logs if audit_logs table is pending migration
+      await supabase.from("dcmms_audit_logs").insert([
+        {
+          user_id: username,
+          action: action,
+          entity_type: entityType || null,
+          entity_id: entityId || null,
+          details: details ? JSON.stringify(details) : null,
+          timestamp: new Date().toISOString()
+        }
+      ]);
+    }
   } catch (err) {
     console.error("Failed to write audit log:", err);
   }

@@ -1,8 +1,10 @@
 -- =============================================================================
--- DMMS Complete System Database Schema Script (Fully Comprehensive - 18 Tables)
--- Target Project ID: qhkrndgnfzifswnvpilb
--- Run this script in Supabase SQL Editor:
--- https://supabase.com/dashboard/project/qhkrndgnfzifswnvpilb/sql/new
+-- DMMS Updated 18-Table Unified System Database Schema
+-- Standardized schema with single 'users' table, roles, schools, persons,
+-- letters, cases, case_status, subject_categories, investigations,
+-- investigation_officers, investigation_assignments, provincial_investigations,
+-- formal_investigations, documents, notifications, audit_logs, workflow_history,
+-- and case_letters.
 -- =============================================================================
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -134,7 +136,7 @@ CREATE TABLE IF NOT EXISTS public.cases (
   created_at               TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Cyclic FK constraint for letters.current_case_id
+-- Add Foreign Key from letters.current_case_id -> cases.case_id
 DO $$
 BEGIN
   IF NOT EXISTS (

@@ -36,7 +36,29 @@ export async function getCurrentProfile(): Promise<UserProfile | null> {
 
   if (!session?.user) return null;
 
-  // 1. Try Supabase dcmms_profiles table
+  // 1. Try Supabase unified 'users' table first
+  const { data: userData, error: userErr } = await supabase
+    .from("users")
+    .select("user_id, full_name, role_id")
+    .eq("user_id", session.user.id)
+    .single();
+
+  if (!userErr && userData) {
+    const roleIdMap: Record<number, UserRole> = {
+      1: "admin",
+      2: "system_admin",
+      3: "daily_mail",
+      4: "subject_officer",
+      5: "investigation_officer"
+    };
+    return {
+      id: userData.user_id,
+      full_name: userData.full_name,
+      role: (userData.role_id ? roleIdMap[userData.role_id] : "subject_officer") as UserRole
+    };
+  }
+
+  // Fallback: Try Supabase dcmms_profiles table
   const { data, error } = await supabase
     .from("dcmms_profiles")
     .select("id, full_name, role")
@@ -50,8 +72,14 @@ export async function getCurrentProfile(): Promise<UserProfile | null> {
   const authFullName = userMeta?.full_name || session.user.email?.split("@")[0] || "User";
   const authRole = (userMeta?.role as UserRole) || "subject_officer";
 
-  // Auto-heal: Insert missing profile row into dcmms_profiles table
+  // Auto-heal: Insert missing user row into users and dcmms_profiles table
   try {
+    await supabase.from("users").upsert({
+      user_id: session.user.id,
+      full_name: authFullName,
+      email: session.user.email || null,
+      role_id: 4, // Subject Officer
+    });
     await supabase.from("dcmms_profiles").upsert({
       id: session.user.id,
       full_name: authFullName,
