@@ -153,16 +153,18 @@ export function collectAnswerLetters(
   isOfficerMatchedFn: (name: string) => boolean
 ) {
   const list: any[] = [];
+  const assignedRefNosClean = (assignedRefNos || []).map((r) => String(r || "").trim().toLowerCase());
 
   if (Array.isArray(subsequentData)) {
     subsequentData.forEach((m: any) => {
       const isAnswer = m.is_answer_letter === true || m.is_answer_letter === "true" || String(m.is_answer_letter || "") === "true";
       const mailOfficer = m.mail_officer_name || m.officer_name || "";
-      const isMatch = isOfficerMatchedFn(mailOfficer) || (m.case_no && assignedRefNos.includes(m.case_no));
+      const targetCaseNo = m.case_no || m.ref_no || "";
+      const isMatch = isOfficerMatchedFn(mailOfficer) || (targetCaseNo && assignedRefNosClean.includes(String(targetCaseNo).trim().toLowerCase()));
       if (isAnswer && isMatch) {
         list.push({
-          id: m.id || `sub-${m.case_no}-${m.received_date || m.created_at}`,
-          caseNo: m.case_no,
+          id: m.id || `sub-${targetCaseNo}-${m.received_date || m.created_at}`,
+          caseNo: targetCaseNo,
           senderName: m.sender_name || "N/A",
           subject: m.letter_title || m.subject || "Answer Letter",
           letterType: m.letter_type || "Subsequent Answer Letter",
@@ -179,11 +181,12 @@ export function collectAnswerLetters(
     lettersData.forEach((l: any) => {
       const isAnswer = l.is_answer_letter === true || l.is_answer_letter === "true" || String(l.is_answer_letter || "") === "true";
       const mailOfficer = l.officer_name || "";
-      const isMatch = isOfficerMatchedFn(mailOfficer) || (l.ref_no && assignedRefNos.includes(l.ref_no));
+      const targetCaseNo = l.ref_no || l.case_no || "";
+      const isMatch = isOfficerMatchedFn(mailOfficer) || (targetCaseNo && assignedRefNosClean.includes(String(targetCaseNo).trim().toLowerCase()));
       if (isAnswer && isMatch) {
         list.push({
-          id: l.id || `daily-${l.ref_no}`,
-          caseNo: l.ref_no,
+          id: l.id || `daily-${targetCaseNo}`,
+          caseNo: targetCaseNo,
           senderName: l.sender_name || l.sender || "N/A",
           subject: l.subject || "Answer Letter",
           letterType: "Daily Mail Answer Letter",
@@ -203,11 +206,35 @@ export function collectAnswerLetters(
         localSub.forEach((sm: any) => {
           const isAnswer = sm.isAnswerLetter === "true" || sm.isAnswerLetter === true || String(sm.isAnswerLetter || "") === "true";
           const mailOfficer = sm.mailOfficerName || sm.officerName || "";
-          const isMatch = isOfficerMatchedFn(mailOfficer) || (sm.caseNo && assignedRefNos.includes(sm.caseNo));
+          const targetCaseNo = sm.caseNo || sm.case_no || sm.refNo || "";
+          const isMatch = isOfficerMatchedFn(mailOfficer) || (targetCaseNo && assignedRefNosClean.includes(String(targetCaseNo).trim().toLowerCase()));
           if (isAnswer && isMatch) {
             list.push({
-              id: sm.id || `local-sub-${sm.caseNo}-${sm.receivedDate || sm.createdAt}`,
-              caseNo: sm.caseNo,
+              id: sm.id || `local-sub-${targetCaseNo}-${sm.receivedDate || sm.createdAt}`,
+              caseNo: targetCaseNo,
+              senderName: sm.senderName || "N/A",
+              subject: sm.subject || sm.letterTitle || "Answer Letter",
+              letterType: sm.letterType || "Subsequent Answer Letter",
+              letterDate: sm.letterDate || sm.mailDate || sm.receivedDate,
+              receivedDate: sm.receivedDate || sm.createdAt,
+              officerName: mailOfficer || "Subject Officer",
+              isAnswerLetter: true,
+            });
+          }
+        });
+      }
+
+      const localNewMailCase = JSON.parse(localStorage.getItem("dcmms_new_mail_current_case") || "[]");
+      if (Array.isArray(localNewMailCase)) {
+        localNewMailCase.forEach((sm: any) => {
+          const isAnswer = sm.isAnswerLetter === "true" || sm.isAnswerLetter === true || String(sm.isAnswerLetter || "") === "true";
+          const mailOfficer = sm.mailOfficerName || sm.officerName || "";
+          const targetCaseNo = sm.caseNo || sm.case_no || sm.refNo || "";
+          const isMatch = isOfficerMatchedFn(mailOfficer) || (targetCaseNo && assignedRefNosClean.includes(String(targetCaseNo).trim().toLowerCase()));
+          if (isAnswer && isMatch) {
+            list.push({
+              id: sm.id || `local-case-mail-${targetCaseNo}-${sm.receivedDate || sm.createdAt}`,
+              caseNo: targetCaseNo,
               senderName: sm.senderName || "N/A",
               subject: sm.subject || sm.letterTitle || "Answer Letter",
               letterType: sm.letterType || "Subsequent Answer Letter",
@@ -225,11 +252,12 @@ export function collectAnswerLetters(
         localLetters.forEach((l: any) => {
           const isAnswer = l.isAnswerLetter === "true" || l.isAnswerLetter === true || String(l.isAnswerLetter || "") === "true";
           const mailOfficer = l.officerName || "";
-          const isMatch = isOfficerMatchedFn(mailOfficer) || (l.refNo && assignedRefNos.includes(l.refNo));
+          const targetCaseNo = l.refNo || l.caseNo || "";
+          const isMatch = isOfficerMatchedFn(mailOfficer) || (targetCaseNo && assignedRefNosClean.includes(String(targetCaseNo).trim().toLowerCase()));
           if (isAnswer && isMatch) {
             list.push({
-              id: l.id || `local-daily-${l.refNo}`,
-              caseNo: l.refNo,
+              id: l.id || `local-daily-${targetCaseNo}`,
+              caseNo: targetCaseNo,
               senderName: l.senderName || l.sender || "N/A",
               subject: l.subject || "Answer Letter",
               letterType: "Daily Mail Answer Letter",
@@ -744,12 +772,19 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
       .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subject" }, handleSyncAll)
       .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_daily_mail" }, handleSyncAll)
       .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subject_assignments" }, handleSyncAll)
+      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subsequent_mails" }, handleSyncAll)
       .subscribe();
 
     const interval = setInterval(handleSyncAll, 2_500);
 
     const handleStorageEvent = (e: StorageEvent) => {
-      if (e.key === "dcmms_subject_assignments" || e.key === "dcmms_cases" || e.key === "dcmms_letters") {
+      if (
+        e.key === "dcmms_subject_assignments" ||
+        e.key === "dcmms_cases" ||
+        e.key === "dcmms_letters" ||
+        e.key === "dcmms_subsequent_mails" ||
+        e.key === "dcmms_new_mail_current_case"
+      ) {
         handleSyncAll();
       }
     };

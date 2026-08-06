@@ -101,6 +101,7 @@ CREATE TABLE IF NOT EXISTS public.dcmms_daily_mail (
   officer_name                   TEXT,
   region_province                TEXT,
   status                         TEXT DEFAULT 'registered',
+  is_answer_letter               BOOLEAN DEFAULT FALSE,
   created_at                     TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -129,6 +130,7 @@ ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS reporter_email TEXT
 ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS officer_name TEXT;
 ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS region_province TEXT;
 ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'registered';
+ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS is_answer_letter BOOLEAN DEFAULT FALSE;
 
 -- -----------------------------------------------------------------------------
 -- 4. SUBJECT OFFICER'S CASES TABLE

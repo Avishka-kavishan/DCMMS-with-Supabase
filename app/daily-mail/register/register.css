@@ -256,6 +256,12 @@
   /* Align vertical height with other fields */
 }
 
+.radio-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .radio-option-label {
   display: flex;
   align-items: center;
@@ -270,34 +276,11 @@
 
 /* Custom styled radios */
 .radio-input-styled {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 16px;
-  height: 16px;
-  border: 2px solid #cbd5e1;
-  border-radius: 50%;
-  outline: none;
-  background-color: #ffffff;
+  width: 18px;
+  height: 18px;
+  accent-color: #0e162f;
   cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
   margin: 0;
-}
-
-.radio-input-styled:checked {
-  border-color: #0e162f;
-  background-color: #cbd5e1;
-  /* matched the gray check style */
-}
-
-.radio-input-styled:checked::before {
-  content: "";
-  width: 8px;
-  height: 8px;
-  background-color: #0e162f;
-  border-radius: 50%;
 }
 
 .register-form-actions {

@@ -141,7 +141,7 @@ function RegisterComplaintForm() {
     receivedDate: "",
     priority: "medium" as "high" | "medium" | "low",
     status: "registered" as "registered" | "assigned" | "pending",
-    isAnswerLetter: "false",
+    isAnswerLetter: false as boolean | string,
   });
 
   // Sync document properties
@@ -508,7 +508,7 @@ function RegisterComplaintForm() {
               receivedDate: data.received_date || "",
               priority: data.priority || "medium",
               status: data.status || "registered",
-              isAnswerLetter: "false",
+              isAnswerLetter: data.is_answer_letter === true || String(data.is_answer_letter) === "true",
             });
             return;
           }
@@ -539,7 +539,7 @@ function RegisterComplaintForm() {
                 receivedDate: found.receivedDate || "",
                 priority: found.priority || "medium",
                 status: found.status || "registered",
-                isAnswerLetter: "false",
+                isAnswerLetter: found.isAnswerLetter === true || String(found.isAnswerLetter) === "true",
               });
             }
           } catch (err) {
@@ -579,6 +579,7 @@ function RegisterComplaintForm() {
       subjectCategory: formState.subjectCategory,
       instituteName: formState.instituteName,
       regionProvince: formState.regionProvince,
+      isAnswerLetter: formState.isAnswerLetter,
     };
 
     if (isSubsequentMode) {
@@ -630,28 +631,40 @@ function RegisterComplaintForm() {
           }
 
           // Also insert into dcmms_daily_mail so that it displays in the daily mail recent add/list ledger
-          const { error: mailError } = await supabase
+          const dailyMailPayload: any = {
+            id: newLetter.id,
+            ref_no: newLetter.refNo,
+            sender_name: newLetter.senderName,
+            sender_address: newLetter.senderAddress || "N/A",
+            letter_date: newLetter.letterDate,
+            received_date: newLetter.receivedDate,
+            subject: newLetter.subject,
+            priority: newLetter.priority || "medium",
+            status: "registered",
+            letter_no: newLetter.letterNo || null,
+            letter_type: newLetter.letterType || null,
+            officer_name: newLetter.officerName || null,
+            subject_category: newLetter.subjectCategory || null,
+            institute_name: newLetter.instituteName || null,
+            region_province: mapRegionProvince(newLetter.regionProvince),
+            is_answer_letter: formState.isAnswerLetter === "true",
+          };
+
+          let { error: mailError } = await supabase
             .from("dcmms_daily_mail")
-            .insert({
-              id: newLetter.id,
-              ref_no: newLetter.refNo,
-              sender_name: newLetter.senderName,
-              sender_address: newLetter.senderAddress || "N/A",
-              letter_date: newLetter.letterDate,
-              received_date: newLetter.receivedDate,
-              subject: newLetter.subject,
-              priority: newLetter.priority || "medium",
-              status: "registered",
-              letter_no: newLetter.letterNo || null,
-              letter_type: newLetter.letterType || null,
-              officer_name: newLetter.officerName || null,
-              subject_category: newLetter.subjectCategory || null,
-              institute_name: newLetter.instituteName || null,
-              region_province: mapRegionProvince(newLetter.regionProvince),
-            });
+            .insert(dailyMailPayload);
+
+          if (mailError && (mailError.code === "42703" || (mailError.message && mailError.message.includes("is_answer_letter")))) {
+            console.warn("Column is_answer_letter missing in dcmms_daily_mail DB, retrying insert without column");
+            delete dailyMailPayload.is_answer_letter;
+            const { error: retryMailError } = await supabase
+              .from("dcmms_daily_mail")
+              .insert(dailyMailPayload);
+            mailError = retryMailError;
+          }
 
           if (mailError) {
-            console.error("Error inserting subsequent mail to dcmms_daily_mail:", mailError);
+            console.error("Error inserting subsequent mail to dcmms_daily_mail:", mailError.message || mailError.details || JSON.stringify(mailError) || mailError);
           }
 
           localStorage.setItem("show_register_success", "true");
@@ -703,26 +716,40 @@ function RegisterComplaintForm() {
       console.log("[DMMS Debug] isSupabaseConfigured:", isSupabaseConfigured);
       console.log("[DMMS Debug] Session at submit:", dbgSession ? `✓ user=${dbgSession.user.email}` : "✗ NO SESSION (anon)");
       try {
-        const { data: upserted, error } = await supabase
+        const dailyMailUpsertPayload: any = {
+          id: newLetter.id,
+          ref_no: newLetter.refNo,
+          sender_name: newLetter.senderName,
+          sender_address: newLetter.senderAddress,
+          letter_date: newLetter.letterDate,
+          received_date: newLetter.receivedDate,
+          subject: newLetter.subject,
+          priority: newLetter.priority,
+          status: newLetter.status,
+          letter_no: newLetter.letterNo || null,
+          letter_type: newLetter.letterType || null,
+          officer_name: newLetter.officerName || null,
+          subject_category: newLetter.subjectCategory || null,
+          institute_name: newLetter.instituteName || null,
+          region_province: mapRegionProvince(newLetter.regionProvince),
+          is_answer_letter: formState.isAnswerLetter === "true",
+        };
+
+        let { data: upserted, error } = await supabase
           .from("dcmms_daily_mail")
-          .upsert({
-            id: newLetter.id,
-            ref_no: newLetter.refNo,
-            sender_name: newLetter.senderName,
-            sender_address: newLetter.senderAddress,
-            letter_date: newLetter.letterDate,
-            received_date: newLetter.receivedDate,
-            subject: newLetter.subject,
-            priority: newLetter.priority,
-            status: newLetter.status,
-            letter_no: newLetter.letterNo || null,
-            letter_type: newLetter.letterType || null,
-            officer_name: newLetter.officerName || null,
-            subject_category: newLetter.subjectCategory || null,
-            institute_name: newLetter.instituteName || null,
-            region_province: mapRegionProvince(newLetter.regionProvince),
-          })
+          .upsert(dailyMailUpsertPayload)
           .select();
+
+        if (error && (error.code === "42703" || (error.message && error.message.includes("is_answer_letter")))) {
+          console.warn("Column is_answer_letter missing in dcmms_daily_mail DB, retrying upsert without column");
+          delete dailyMailUpsertPayload.is_answer_letter;
+          const { data: retryUpserted, error: retryError } = await supabase
+            .from("dcmms_daily_mail")
+            .upsert(dailyMailUpsertPayload)
+            .select();
+          upserted = retryUpserted;
+          error = retryError;
+        }
 
         if (error) {
           console.error("Supabase letters write error:", error?.message || error?.details || JSON.stringify(error) || error);
@@ -1320,36 +1347,57 @@ function RegisterComplaintForm() {
                         </select>
                       </div>
 
-                      {/* Is Answer Letter (Only in Register New Letter for Current Complaint form) */}
-                      {isSubsequentMode && (
-                        <div className="form-field-group">
-                          <label className="field-label">{t("isAnswerLetter", "Is this an answer letter?")}</label>
-                          <div className="radio-group-container">
-                            <label className="radio-option-label">
-                              <input
-                                type="radio"
-                                name="isAnswerLetter"
-                                value="true"
-                                checked={formState.isAnswerLetter === "true"}
-                                onChange={() => setFormState({ ...formState, isAnswerLetter: "true" })}
-                                className="radio-input-styled"
-                              />
-                              {t("yes", "Yes")}
-                            </label>
-                            <label className="radio-option-label">
-                              <input
-                                type="radio"
-                                name="isAnswerLetter"
-                                value="false"
-                                checked={formState.isAnswerLetter === "false"}
-                                onChange={() => setFormState({ ...formState, isAnswerLetter: "false" })}
-                                className="radio-input-styled"
-                              />
-                              {t("no", "No")}
-                            </label>
-                          </div>
+                      {/* Is Answer Letter */}
+                      <div className="form-field-group">
+                        <label className="field-label">{t("isAnswerLetter", "Is this an answer letter?")}</label>
+                        <div className="radio-group-container">
+                          <label
+                            id="labelIsAnswerYes"
+                            className="radio-option-item"
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "8px",
+                              cursor: "pointer",
+                              userSelect: "none"
+                            }}
+                          >
+                            <input
+                              id="isAnswerYes"
+                              type="radio"
+                              name="isAnswerLetterRadio"
+                              value="true"
+                              checked={String(formState.isAnswerLetter) === "true"}
+                              onChange={() => setFormState((prev) => ({ ...prev, isAnswerLetter: "true" }))}
+                              style={{ width: "18px", height: "18px", accentColor: "#0e162f", cursor: "pointer" }}
+                            />
+                            <span style={{ fontWeight: 700, color: "#0e162f", fontSize: "13px" }}>{t("yes", "Yes")}</span>
+                          </label>
+
+                          <label
+                            id="labelIsAnswerNo"
+                            className="radio-option-item"
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "8px",
+                              cursor: "pointer",
+                              userSelect: "none"
+                            }}
+                          >
+                            <input
+                              id="isAnswerNo"
+                              type="radio"
+                              name="isAnswerLetterRadio"
+                              value="false"
+                              checked={String(formState.isAnswerLetter) !== "true"}
+                              onChange={() => setFormState((prev) => ({ ...prev, isAnswerLetter: "false" }))}
+                              style={{ width: "18px", height: "18px", accentColor: "#0e162f", cursor: "pointer" }}
+                            />
+                            <span style={{ fontWeight: 700, color: "#0e162f", fontSize: "13px" }}>{t("no", "No")}</span>
+                          </label>
                         </div>
-                      )}
+                      </div>
 
                     </div>
                   </div>
