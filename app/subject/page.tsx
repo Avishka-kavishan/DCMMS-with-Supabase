@@ -12,7 +12,7 @@ import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { getCurrentProfile, signOut, UserProfile } from "@/lib/auth";
-import { CheckCircle, XCircle, FileText, Send, Clock, X, AlertCircle, ShieldCheck, Calendar as CalendarIcon, ChevronDown, ChevronUp, Bell, Eye, MoreHorizontal, Filter, Check } from "lucide-react";
+import { CheckCircle, XCircle, FileText, Send, Clock, X, AlertCircle, ShieldCheck, Calendar as CalendarIcon, ChevronDown, ChevronUp, Bell, Eye, MoreHorizontal, Filter, Check, MailCheck, ClipboardList } from "lucide-react";
 
 interface Case {
   id: string;
@@ -145,6 +145,122 @@ function formatExtensionTermDisplay(term?: string | null, currentLang: string = 
   return term;
 }
 
+export function collectAnswerLetters(
+  lettersData: any[],
+  subsequentData: any[],
+  assignedRefNos: string[],
+  activeNameClean: string,
+  isOfficerMatchedFn: (name: string) => boolean
+) {
+  const list: any[] = [];
+
+  if (Array.isArray(subsequentData)) {
+    subsequentData.forEach((m: any) => {
+      const isAnswer = m.is_answer_letter === true || m.is_answer_letter === "true" || String(m.is_answer_letter || "") === "true";
+      const mailOfficer = m.mail_officer_name || m.officer_name || "";
+      const isMatch = isOfficerMatchedFn(mailOfficer) || (m.case_no && assignedRefNos.includes(m.case_no));
+      if (isAnswer && isMatch) {
+        list.push({
+          id: m.id || `sub-${m.case_no}-${m.received_date || m.created_at}`,
+          caseNo: m.case_no,
+          senderName: m.sender_name || "N/A",
+          subject: m.letter_title || m.subject || "Answer Letter",
+          letterType: m.letter_type || "Subsequent Answer Letter",
+          letterDate: m.mail_date || m.letter_date || m.received_date,
+          receivedDate: m.received_date || m.created_at,
+          officerName: mailOfficer || "Subject Officer",
+          isAnswerLetter: true,
+        });
+      }
+    });
+  }
+
+  if (Array.isArray(lettersData)) {
+    lettersData.forEach((l: any) => {
+      const isAnswer = l.is_answer_letter === true || l.is_answer_letter === "true" || String(l.is_answer_letter || "") === "true";
+      const mailOfficer = l.officer_name || "";
+      const isMatch = isOfficerMatchedFn(mailOfficer) || (l.ref_no && assignedRefNos.includes(l.ref_no));
+      if (isAnswer && isMatch) {
+        list.push({
+          id: l.id || `daily-${l.ref_no}`,
+          caseNo: l.ref_no,
+          senderName: l.sender_name || l.sender || "N/A",
+          subject: l.subject || "Answer Letter",
+          letterType: "Daily Mail Answer Letter",
+          letterDate: l.letter_date || l.received_date,
+          receivedDate: l.received_date || l.created_at,
+          officerName: mailOfficer || "Subject Officer",
+          isAnswerLetter: true,
+        });
+      }
+    });
+  }
+
+  if (typeof window !== "undefined") {
+    try {
+      const localSub = JSON.parse(localStorage.getItem("dcmms_subsequent_mails") || "[]");
+      if (Array.isArray(localSub)) {
+        localSub.forEach((sm: any) => {
+          const isAnswer = sm.isAnswerLetter === "true" || sm.isAnswerLetter === true || String(sm.isAnswerLetter || "") === "true";
+          const mailOfficer = sm.mailOfficerName || sm.officerName || "";
+          const isMatch = isOfficerMatchedFn(mailOfficer) || (sm.caseNo && assignedRefNos.includes(sm.caseNo));
+          if (isAnswer && isMatch) {
+            list.push({
+              id: sm.id || `local-sub-${sm.caseNo}-${sm.receivedDate || sm.createdAt}`,
+              caseNo: sm.caseNo,
+              senderName: sm.senderName || "N/A",
+              subject: sm.subject || sm.letterTitle || "Answer Letter",
+              letterType: sm.letterType || "Subsequent Answer Letter",
+              letterDate: sm.letterDate || sm.mailDate || sm.receivedDate,
+              receivedDate: sm.receivedDate || sm.createdAt,
+              officerName: mailOfficer || "Subject Officer",
+              isAnswerLetter: true,
+            });
+          }
+        });
+      }
+
+      const localLetters = JSON.parse(localStorage.getItem("dcmms_letters") || "[]");
+      if (Array.isArray(localLetters)) {
+        localLetters.forEach((l: any) => {
+          const isAnswer = l.isAnswerLetter === "true" || l.isAnswerLetter === true || String(l.isAnswerLetter || "") === "true";
+          const mailOfficer = l.officerName || "";
+          const isMatch = isOfficerMatchedFn(mailOfficer) || (l.refNo && assignedRefNos.includes(l.refNo));
+          if (isAnswer && isMatch) {
+            list.push({
+              id: l.id || `local-daily-${l.refNo}`,
+              caseNo: l.refNo,
+              senderName: l.senderName || l.sender || "N/A",
+              subject: l.subject || "Answer Letter",
+              letterType: "Daily Mail Answer Letter",
+              letterDate: l.letterDate || l.receivedDate,
+              receivedDate: l.receivedDate || l.createdAt,
+              officerName: mailOfficer || "Subject Officer",
+              isAnswerLetter: true,
+            });
+          }
+        });
+      }
+    } catch (e) {
+      console.error("Local storage answer letters parsing error", e);
+    }
+  }
+
+  const uniqueMap = new Map<string, any>();
+  list.forEach((item) => {
+    const key = item.id || `${item.caseNo}-${item.letterDate}-${item.subject}`;
+    if (!uniqueMap.has(key)) {
+      uniqueMap.set(key, item);
+    }
+  });
+
+  return Array.from(uniqueMap.values()).sort((a, b) => {
+    const timeA = new Date(a.receivedDate || a.letterDate || 0).getTime();
+    const timeB = new Date(b.receivedDate || b.letterDate || 0).getTime();
+    return timeB - timeA;
+  });
+}
+
 export default function SubjectOfficerDashboard() {
   const { t, i18n } = useTranslation();
   const router = useRouter();
@@ -237,7 +353,7 @@ export default function SubjectOfficerDashboard() {
             // 1. Fetch letters from dcmms_daily_mail
             const { data: letters, error: lettersError } = await supabase
               .from("dcmms_daily_mail")
-              .select("ref_no, received_date, letter_date, created_at, officer_name, subject, priority");
+              .select("*");
 
             if (lettersError) throw lettersError;
 
@@ -249,7 +365,7 @@ export default function SubjectOfficerDashboard() {
             // 3. Fetch subsequent mails from dcmms_subsequent_mails
             const { data: subsequentData } = await supabase
               .from("dcmms_subsequent_mails")
-              .select("case_no, mail_officer_name, received_date");
+              .select("*");
 
             const refToReceivedDate = new Map<string, string>();
             const refToLetterDate = new Map<string, string>();
@@ -407,6 +523,14 @@ export default function SubjectOfficerDashboard() {
                 return dateB - dateA;
               });
 
+              const answerList = collectAnswerLetters(
+                letters || [],
+                subsequentData || [],
+                assignedRefNos,
+                activeNameClean,
+                isOfficerMatched
+              );
+              setAssignedAnswerLetters(answerList);
               setCases(mapped);
               return;
             }
@@ -585,6 +709,19 @@ export default function SubjectOfficerDashboard() {
 const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).getTime();
               return dateB - dateA;
             });
+            const fallbackAnswerList = collectAnswerLetters(
+              lettersList || [],
+              [],
+              finalRefNos,
+              activeNameClean,
+              (targetName) => {
+                if (!activeNameClean) return true;
+                if (!targetName || typeof targetName !== "string" || !targetName.trim()) return false;
+                const cleanTarget = targetName.trim().toLowerCase();
+                return cleanTarget === activeNameClean || cleanTarget.includes(activeNameClean) || activeNameClean.includes(cleanTarget);
+              }
+            );
+            setAssignedAnswerLetters(fallbackAnswerList);
             setCases(filtered);
           } catch (e) {
             console.error("Error parsing localStorage fallback data");
@@ -627,6 +764,11 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
       window.removeEventListener("dcmms_assignment_updated", handleSyncAll);
     };
   }, [profile, t]);
+
+  // Tab navigation state
+  const [activeTab, setActiveTab] = useState<"cases" | "answer_letters">("cases");
+  const [assignedAnswerLetters, setAssignedAnswerLetters] = useState<any[]>([]);
+  const [answerSearchQuery, setAnswerSearchQuery] = useState("");
 
   // Search & filter state
   const [searchQuery, setSearchQuery] = useState("");
@@ -1672,6 +1814,18 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
     return matchesSearch && matchesPriority;
   });
 
+  // Filter answer letters list in real-time
+  const filteredAnswerLetters = assignedAnswerLetters.filter((item) => {
+    if (!answerSearchQuery.trim()) return true;
+    const q = answerSearchQuery.toLowerCase();
+    return (
+      (item.caseNo && item.caseNo.toLowerCase().includes(q)) ||
+      (item.senderName && item.senderName.toLowerCase().includes(q)) ||
+      (item.subject && item.subject.toLowerCase().includes(q)) ||
+      (item.officerName && item.officerName.toLowerCase().includes(q))
+    );
+  });
+
   return (
     <div className="dashboard-container" data-font-scale={fontScale}>
       {/* ── Skip Link (A11y) ── */}
@@ -2111,8 +2265,45 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
             </div>
           </section>
 
-          {/* ==================== NOTIFICATIONS & INVESTIGATION DIRECTIVES SECTION (Facebook UI Style) ==================== */}
-          <section style={{ marginBottom: "24px" }}>
+          {/* ── Navigation Tab Bar ── */}
+          <div className="navigation-tab-list" style={{ marginTop: "24px", marginBottom: "24px" }}>
+            <button
+              type="button"
+              className={`nav-tab-btn${activeTab === "cases" ? " active" : ""}`}
+              onClick={() => setActiveTab("cases")}
+            >
+              <ClipboardList className="tab-icon" />
+              <span>{lang === "si" ? "පවරන ලද නඩු ලේඛනය" : "Assigned Cases"}</span>
+            </button>
+            <button
+              type="button"
+              className={`nav-tab-btn${activeTab === "answer_letters" ? " active" : ""}`}
+              onClick={() => setActiveTab("answer_letters")}
+            >
+              <MailCheck className="tab-icon" />
+              <span>{lang === "si" ? "පවරන ලද පිළිතුරු ලිපි" : "Assigned Answers letters"}</span>
+              {assignedAnswerLetters.length > 0 && (
+                <span style={{
+                  backgroundColor: activeTab === "answer_letters" ? "#4f46e5" : "#94a3b8",
+                  color: "#ffffff",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  padding: "2px 8px",
+                  borderRadius: "12px",
+                  marginLeft: "4px",
+                  transition: "all 0.2s ease"
+                }}>
+                  {assignedAnswerLetters.length}
+                </span>
+              )}
+            </button>
+          </div>
+
+          {/* ==================== TAB 1: ASSIGNED CASES VIEW ==================== */}
+          {activeTab === "cases" && (
+            <>
+              {/* ==================== NOTIFICATIONS & INVESTIGATION DIRECTIVES SECTION (Facebook UI Style) ==================== */}
+              <section style={{ marginBottom: "24px" }}>
             <div style={{
               backgroundColor: "#ffffff",
               borderRadius: "16px",
@@ -3050,6 +3241,119 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
               </table>
             </div>
           </section>
+            </>
+          )}
+
+          {/* ==================== TAB 2: ASSIGNED ANSWER LETTERS VIEW ==================== */}
+          {activeTab === "answer_letters" && (
+            <section style={{ marginBottom: "30px" }}>
+              <div className="section-header-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "18px", flexWrap: "wrap", gap: "12px" }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "20px", fontWeight: 800, color: "#1e1b4b", display: "flex", alignItems: "center", gap: "10px" }}>
+                    <MailCheck style={{ color: "#4f46e5", width: "24px", height: "24px" }} />
+                    <span>{lang === "si" ? "පවරන ලද පිළිතුරු ලිපි" : "Assigned Answers letters"}</span>
+                  </h3>
+                  <p style={{ margin: "4px 0 0 0", fontSize: "13px", color: "#64748b" }}>
+                    {lang === "si" ? "ඔබට පවරන ලද පැමිණිලි සඳහා ලැබී ඇති සියලුම පිළිතුරු ලිපි ලැයිස්තුව" : "Overview of all answer letters registered for your assigned complaint cases."}
+                  </p>
+                </div>
+
+                <div className="table-filter-bar" style={{ margin: 0 }}>
+                  <div className="search-box">
+                    <svg className="search-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    <input
+                      type="text"
+                      value={answerSearchQuery}
+                      onChange={(e) => setAnswerSearchQuery(e.target.value)}
+                      placeholder={lang === "si" ? "ලිපි සොයන්න (නඩු අංකය, යවන්නා, විෂය)..." : "Search answer letters (Case No, Sender, Subject)..."}
+                      className="search-input"
+                    />
+                  </div>
+
+                  {answerSearchQuery && (
+                    <a href="#" className="view-all-reset-link" onClick={(e) => { e.preventDefault(); setAnswerSearchQuery(""); }}>
+                      {t("viewAll")} <span className="arrow-span">→</span>
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              <div className="table-responsive-container">
+                <table className="letters-data-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">{t("caseNo")}</th>
+                      <th scope="col">{lang === "si" ? "යවන්නාගේ නම / ආයතනය" : "Sender / Institution"}</th>
+                      <th scope="col">{t("subjectText")}</th>
+                      <th scope="col">{t("letterDate")}</th>
+                      <th scope="col">{lang === "si" ? "ලැබුණු දිනය" : "Received Date"}</th>
+                      <th scope="col">{t("status", "Status")}</th>
+                      <th scope="col" className="text-center">{t("actions", "Actions")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredAnswerLetters.length > 0 ? (
+                      filteredAnswerLetters.map((item, idx) => (
+                        <tr key={item.id ? `${item.id}-${idx}` : `ans-${item.caseNo}-${idx}`} className="letter-table-row">
+                          <td className="font-semibold" style={{ color: "#1e1b4b" }}>{item.caseNo}</td>
+                          <td>
+                            <span style={{ fontWeight: 600, color: "#334155" }}>
+                              {item.senderName || "—"}
+                            </span>
+                          </td>
+                          <td className="subject-cell">{item.subject}</td>
+                          <td>{item.letterDate || "—"}</td>
+                          <td>{item.receivedDate || "—"}</td>
+                          <td>
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "6px",
+                                backgroundColor: "#dcfce7",
+                                color: "#15803d",
+                                padding: "4px 10px",
+                                borderRadius: "12px",
+                                fontSize: "12px",
+                                fontWeight: 700,
+                                border: "1px solid #bbf7d0"
+                              }}
+                            >
+                              <CheckCircle size={13} />
+                              {lang === "si" ? "පිළිතුරු ලිපිය" : "Answer Letter"}
+                            </span>
+                          </td>
+                          <td className="text-center actions-cell">
+                            <Link
+                              href={`/subject/add-details?caseNo=${item.caseNo}`}
+                              className="add-details-link"
+                            >
+                              {t("addDetails", "Add Details / View Case")}
+                            </Link>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={7} className="text-center py-5 text-muted" style={{ padding: "40px 20px" }}>
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px" }}>
+                            <MailCheck size={40} style={{ color: "#cbd5e1" }} />
+                            <span style={{ fontSize: "15px", fontWeight: 600, color: "#64748b" }}>
+                              {answerSearchQuery
+                                ? (lang === "si" ? "සෙවීමට ගැළපෙන පිළිතුරු ලිපි හමු නොවිණි" : "No answer letters found matching search")
+                                : (lang === "si" ? "පවරන ලද පිළිතුරු ලිපි නොමැත" : "No assigned answer letters found")}
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
 
           {/* Footer Branding Notice */}
           <SiteFooter />
