@@ -1,0 +1,422 @@
+/* ============================================================
+   PROVINCIAL PRELIMINARY INVESTIGATION PAGE STYLES
+   ============================================================ */
+
+.provincial-page-container {
+  min-height: 100vh;
+  background-color: #f8fafc;
+  padding: 24px 32px 40px 32px;
+  font-family: var(--font-sans, "Poppins", system-ui, -apple-system, sans-serif);
+  color: #1e1b4b;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+/* Header Section */
+.provincial-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.provincial-title-group h1 {
+  font-size: calc(24px * var(--font-scale, 1));
+  font-weight: 700;
+  color: #1e1b4b;
+  margin: 0 0 6px 0;
+  letter-spacing: -0.2px;
+}
+
+.provincial-title-group p {
+  font-size: calc(14px * var(--font-scale, 1));
+  color: #64748b;
+  margin: 0;
+  font-weight: 500;
+}
+
+.provincial-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn-back-home-gray {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background-color: #d1d5db;
+  color: #1e293b;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 18px;
+  font-size: calc(13px * var(--font-scale, 1));
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.2s ease-in-out;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.btn-back-home-gray:hover {
+  background-color: #9ca3af;
+  color: #0f172a;
+}
+
+.btn-save-blue {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #2563eb;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  width: 38px;
+  height: 38px;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  box-shadow: 0 2px 4px rgba(37, 99, 235, 0.25);
+}
+
+.btn-save-blue:hover {
+  background-color: #1d4ed8;
+  transform: translateY(-1px);
+}
+
+/* Card 1: Later details in the Letter */
+.details-card {
+  background-color: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  padding: 20px 24px 28px 24px;
+  margin-bottom: 28px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+}
+
+.details-banner-pill {
+  background-color: #e5e7eb;
+  border: 1px solid #d1d5db;
+  border-radius: 12px;
+  padding: 12px 20px;
+  margin-bottom: 24px;
+}
+
+.details-banner-pill h2 {
+  font-size: calc(18px * var(--font-scale, 1));
+  font-weight: 700;
+  color: #1e1b4b;
+  margin: 0;
+}
+
+.details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 20px 32px;
+  padding: 0 4px;
+}
+
+.detail-item {
+  font-size: calc(14px * var(--font-scale, 1));
+  line-height: 1.5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.detail-label {
+  font-weight: 700;
+  color: #1e1b4b;
+}
+
+.detail-value {
+  font-weight: 500;
+  color: #334155;
+}
+
+/* Card 2: Conducting provincial preliminary investigation Form */
+.form-card {
+  background-color: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  padding: 28px;
+  margin-bottom: 32px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+}
+
+.form-card-title {
+  font-size: calc(20px * var(--font-scale, 1));
+  font-weight: 700;
+  color: #1e1b4b;
+  margin: 0 0 24px 0;
+}
+
+.form-grid-3col {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 1024px) {
+  .form-grid-3col {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .form-grid-3col {
+    grid-template-columns: 1fr;
+  }
+}
+
+.form-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-field-label {
+  font-size: calc(14px * var(--font-scale, 1));
+  font-weight: 700;
+  color: #1e1b4b;
+}
+
+.input-with-icon {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.provincial-input,
+.provincial-select,
+.provincial-textarea {
+  width: 100%;
+  background-color: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: calc(14px * var(--font-scale, 1));
+  font-family: inherit;
+  color: #1e293b;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
+}
+
+.provincial-input:focus,
+.provincial-select:focus,
+.provincial-textarea:focus {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
+}
+
+.provincial-input[type="date"] {
+  color-scheme: light;
+  padding-right: 40px;
+  position: relative;
+}
+
+.provincial-input[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  cursor: pointer;
+}
+
+.calendar-action-btn {
+  position: absolute;
+  right: 10px;
+  background: transparent;
+  border: none;
+  color: #6366f1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+}
+
+.select-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.provincial-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 36px;
+  cursor: pointer;
+}
+
+.select-chevron {
+  position: absolute;
+  right: 12px;
+  pointer-events: none;
+  color: #6366f1;
+}
+
+/* Officers Input Group */
+.officers-input-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.officers-input-group .provincial-input {
+  flex: 1;
+}
+
+.btn-add-officer {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  width: 42px;
+  height: 42px;
+  color: #3b82f6;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  flex-shrink: 0;
+}
+
+.btn-add-officer:hover {
+  background-color: #f1f5f9;
+  border-color: #3b82f6;
+}
+
+.officers-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.officer-tag-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background-color: #e0e7ff;
+  color: #3730a3;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: calc(13px * var(--font-scale, 1));
+  font-weight: 600;
+}
+
+.officer-tag-remove {
+  background: transparent;
+  border: none;
+  color: #4338ca;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 0;
+}
+
+.officer-tag-remove:hover {
+  color: #991b1b;
+}
+
+/* Textarea styling */
+.provincial-textarea {
+  min-height: 140px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+/* Action Buttons Container */
+.provincial-actions-row {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 24px;
+  margin-top: 12px;
+  margin-bottom: 36px;
+}
+
+.btn-pill-cancel {
+  background-color: #800000;
+  color: #ffffff;
+  border: none;
+  border-radius: 9999px;
+  padding: 12px 48px;
+  font-size: calc(15px * var(--font-scale, 1));
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  box-shadow: 0 4px 6px -1px rgba(128, 0, 0, 0.2);
+}
+
+.btn-pill-cancel:hover {
+  background-color: #991b1b;
+  transform: translateY(-1px);
+}
+
+.btn-pill-submit {
+  background-color: #15803d;
+  color: #ffffff;
+  border: none;
+  border-radius: 9999px;
+  padding: 12px 48px;
+  font-size: calc(15px * var(--font-scale, 1));
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  box-shadow: 0 4px 6px -1px rgba(21, 128, 61, 0.2);
+}
+
+.btn-pill-submit:hover {
+  background-color: #16a34a;
+  transform: translateY(-1px);
+}
+
+/* Site Footer */
+.provincial-footer {
+  text-align: center;
+  font-size: calc(13px * var(--font-scale, 1));
+  font-weight: 600;
+  color: #1e293b;
+  margin-top: auto;
+  padding-top: 16px;
+}
+
+/* Toast Message */
+.toast-notification {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background-color: #1e1b4b;
+  color: #ffffff;
+  padding: 14px 24px;
+  border-radius: 10px;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
+  z-index: 9999;
+  font-weight: 600;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
