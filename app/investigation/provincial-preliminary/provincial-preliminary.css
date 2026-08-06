@@ -250,9 +250,9 @@
 }
 
 .provincial-select {
-  appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
+  appearance: none;
   padding-right: 36px;
   cursor: pointer;
 }

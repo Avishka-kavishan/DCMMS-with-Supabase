@@ -68,7 +68,7 @@ function ProvincialPreliminaryContent() {
   // Fetch initial data from Supabase if parameter exists
   useEffect(() => {
     const fetchData = async () => {
-      if (!isSupabaseConfigured()) return;
+      if (!isSupabaseConfigured) return;
       setIsLoading(true);
       try {
         const queryNo = caseNoParam || letterNoParam;
@@ -138,7 +138,7 @@ function ProvincialPreliminaryContent() {
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      if (isSupabaseConfigured()) {
+      if (isSupabaseConfigured) {
         const payload = {
           id: `PRELIM_${subjectFileNo.replace(/[^a-zA-Z0-9]/g, "_")}`,
           case_no: subjectFileNo,
@@ -155,7 +155,7 @@ function ProvincialPreliminaryContent() {
 
         await supabase.from("dcmms_preliminary_investigations").upsert(payload);
         const profile = await getCurrentProfile();
-        await logAuditEvent(profile?.email || "user", "SAVE_PRELIMINARY_DRAFT", `Saved preliminary draft for ${subjectFileNo}`);
+        await logAuditEvent(profile?.full_name || profile?.id || "user", "SAVE_PRELIMINARY_DRAFT", `Saved preliminary draft for ${subjectFileNo}`);
       }
       showToast("Draft saved successfully!");
     } catch (err) {
@@ -171,7 +171,7 @@ function ProvincialPreliminaryContent() {
     e.preventDefault();
     setIsSaving(true);
     try {
-      if (isSupabaseConfigured()) {
+      if (isSupabaseConfigured) {
         const payload = {
           id: `PRELIM_${subjectFileNo.replace(/[^a-zA-Z0-9]/g, "_")}`,
           case_no: subjectFileNo,
@@ -188,7 +188,7 @@ function ProvincialPreliminaryContent() {
 
         await supabase.from("dcmms_preliminary_investigations").upsert(payload);
         const profile = await getCurrentProfile();
-        await logAuditEvent(profile?.email || "user", "SUBMIT_PRELIMINARY_INVESTIGATION", `Submitted preliminary investigation for ${subjectFileNo}`);
+        await logAuditEvent(profile?.full_name || profile?.id || "user", "SUBMIT_PRELIMINARY_INVESTIGATION", `Submitted preliminary investigation for ${subjectFileNo}`);
       }
       showToast("Provincial preliminary investigation submitted successfully!");
       setTimeout(() => {
