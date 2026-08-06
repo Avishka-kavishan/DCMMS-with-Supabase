@@ -59,7 +59,13 @@
   box-shadow: none;
 }
 
+.sidebar:not(.open) {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .sidebar.open {
+  visibility: visible;
   transform: translateX(0);
   box-shadow: 4px 0 25px rgba(0, 0, 0, 0.35);
 }
