@@ -47,7 +47,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       };
     }
     return {
-      title: t("adminDashboardTitle", "Administrator"),
+      title: t("adminDashboardTitle", "Discipline Branch Administrator"),
       subtitle: t("adminDashboardDesc", "Manage cases and user access")
     };
   };

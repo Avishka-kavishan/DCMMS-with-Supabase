@@ -136,7 +136,7 @@ export default function RegisterPage() {
   };
 
   const roleOptions = [
-    { value: "admin", label: "Administrator" },
+    { value: "admin", label: "Discipline Branch Administrator" },
     { value: "daily_mail", label: "Daily Mail Officer" },
     { value: "subject_officer", label: "Subject Officer" },
     { value: "investigation_officer", label: "Investigation Administrator" },

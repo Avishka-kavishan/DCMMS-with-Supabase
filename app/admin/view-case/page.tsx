@@ -359,7 +359,7 @@ function AdminViewCaseInner() {
                 </svg>
               </button>
               <div className="dashboard-title-area">
-                <h2 className="dashboard-main-title">{t("adminDashboardTitle", "Administrator")}</h2>
+                <h2 className="dashboard-main-title">{t("adminDashboardTitle", "Discipline Branch Administrator")}</h2>
                 <p className="dashboard-main-subtitle">{t("adminDashboardDesc", "Manage users and view case details")}</p>
               </div>
             </div>
