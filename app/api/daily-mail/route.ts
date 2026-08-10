@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getDailyMailRecordsServer, saveDailyMailRecordServer, saveDailyMailToNewTableServer } from "@/lib/db-actions";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const mailRecords = await prisma.dcmmsDailyMail.findMany({
-      orderBy: { created_at: "desc" },
-    });
-    return NextResponse.json({ success: true, data: mailRecords });
+    const res = await getDailyMailRecordsServer();
+    if (!res.success) {
+      return NextResponse.json({ error: res.error }, { status: 500 });
+    }
+    return NextResponse.json({ success: true, data: res.data });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -17,23 +18,13 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const newMail = await prisma.dcmmsDailyMail.create({
-      data: {
-        serial_no: body.serial_no,
-        received_date: body.received_date ? new Date(body.received_date) : undefined,
-        letter_no: body.letter_no,
-        submitted_date: body.submitted_date ? new Date(body.submitted_date) : undefined,
-        subject: body.subject,
-        sender: body.sender,
-        method: body.method,
-        type: body.type,
-        classification: body.classification,
-        action_officer: body.action_officer,
-        status: body.status || "Pending",
-      },
-    });
-    return NextResponse.json({ success: true, data: newMail });
+    const saveRes = await saveDailyMailRecordServer(body);
+    if (!saveRes.success) {
+      return NextResponse.json({ error: saveRes.error }, { status: 500 });
+    }
+    return NextResponse.json({ success: true, data: saveRes.data });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+

@@ -484,6 +484,26 @@ model DcmmsDailyMail {
   @@map("dcmms_daily_mail")
 }
 
+model DailyMail {
+  daily_mail_id                               BigInt    @id @default(autoincrement())
+  letter_number                               String    @unique
+  received_letter_number                      String?
+  mode_of_receipt                             String
+  sender_party                                String?
+  nature_of_letter                            String?
+  subject_category                            String?
+  subject_of_letter                           String
+  date_received_by_additional_secretary       DateTime? @db.Date
+  date_letter_handed_over_to_dicipline_branch DateTime? @db.Date
+  subject_officer_id                          BigInt?
+  priority                                    String    @default("Normal")
+  created_at                                  DateTime  @default(now())
+  updated_at                                  DateTime  @default(now()) @updatedAt
+
+  @@map("daily_mail")
+}
+
+
 model DcmmsSubject {
   id           String   @id @default(uuid())
   subject_id   String?

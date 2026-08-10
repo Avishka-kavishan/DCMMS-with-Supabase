@@ -2,12 +2,21 @@
 
 import { prisma } from "@/lib/prisma";
 
+function serializeForServerAction<T>(obj: T): T {
+  if (obj === null || obj === undefined) return obj;
+  return JSON.parse(
+    JSON.stringify(obj, (key, value) =>
+      typeof value === "bigint" ? value.toString() : value
+    )
+  );
+}
+
 export async function checkDatabaseConnection() {
   try {
     await prisma.$queryRaw`SELECT 1`;
-    return { connected: true };
+    return serializeForServerAction({ connected: true });
   } catch (error: any) {
-    return { connected: false, error: error?.message || "Database connection failed" };
+    return serializeForServerAction({ connected: false, error: error?.message || "Database connection failed" });
   }
 }
 
@@ -16,13 +25,78 @@ export async function checkDatabaseConnection() {
 // -------------------------------------------------------------
 export async function getDailyMailRecordsServer() {
   try {
-    const records = await prisma.dcmmsDailyMail.findMany({
-      orderBy: { created_at: "desc" },
-    });
-    return { success: true, data: records };
+    let combinedData: any[] = [];
+    const idsSeen = new Set<string>();
+
+    // 1. Fetch from daily_mail table
+    try {
+      const rawDailyMail: any[] = await prisma.$queryRaw`
+        SELECT 
+          daily_mail_id::text as id,
+          letter_number as letter_no,
+          received_letter_number as serial_no,
+          mode_of_receipt as method,
+          sender_party as sender,
+          nature_of_letter as type,
+          subject_category as classification,
+          subject_of_letter as subject,
+          date_received_by_additional_secretary as received_date,
+          date_letter_handed_over_to_dicipline_branch as submitted_date,
+          priority,
+          created_at,
+          updated_at
+        FROM daily_mail
+        ORDER BY created_at DESC;
+      `;
+      if (rawDailyMail && rawDailyMail.length > 0) {
+        rawDailyMail.forEach((row) => {
+          combinedData.push({
+            id: row.id,
+            serial_no: row.serial_no || row.letter_no,
+            letter_no: row.letter_no,
+            received_date: row.received_date ? new Date(row.received_date).toISOString().split("T")[0] : "",
+            submitted_date: row.submitted_date ? new Date(row.submitted_date).toISOString().split("T")[0] : "",
+            subject: row.subject,
+            sender: row.sender || "N/A",
+            method: row.method || "Post",
+            type: row.type || "Complaint",
+            classification: row.classification || "",
+            action_officer: "",
+            priority: row.priority ? row.priority.toLowerCase() : "normal",
+            status: "registered",
+            created_at: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+            updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString(),
+          });
+          if (row.serial_no) idsSeen.add(row.serial_no);
+          if (row.letter_no) idsSeen.add(row.letter_no);
+        });
+      }
+    } catch (e) {
+      console.warn("Could not query daily_mail table:", e);
+    }
+
+    // 2. Fetch from dcmms_daily_mail as fallback/legacy merge
+    try {
+      const legacyRecords = await prisma.dcmmsDailyMail.findMany({
+        orderBy: { created_at: "desc" },
+      });
+      legacyRecords.forEach((rec: any) => {
+        if (!rec.serial_no?.startsWith("__SECURITY_")) {
+          const key = rec.serial_no || rec.letter_no || rec.id;
+          if (!idsSeen.has(key)) {
+            combinedData.push(rec);
+            idsSeen.add(key);
+          }
+        }
+      });
+    } catch (e) {
+      console.warn("Could not query dcmms_daily_mail table:", e);
+    }
+
+    return serializeForServerAction({ success: true, data: combinedData });
   } catch (error: any) {
     console.error("Error fetching daily mail records:", error);
-    return { success: false, error: error.message, data: [] };
+    return serializeForServerAction({ success: false, error: error.message, data: [] });
   }
 }
 
@@ -30,6 +104,25 @@ export async function saveDailyMailRecordServer(mailData: any) {
   try {
     let result;
     const actionOfficer = mailData.action_officer || mailData.officer_name || mailData.officerName || null;
+
+    // Dual save to daily_mail table
+    try {
+      await saveDailyMailToNewTableServer({
+        letter_number: mailData.letter_no || mailData.letterNo || mailData.serial_no || mailData.refNo || `LT-${Date.now()}`,
+        received_letter_number: mailData.serial_no || mailData.refNo,
+        mode_of_receipt: mailData.method || mailData.letterType || "Post",
+        sender_party: mailData.sender || mailData.senderName,
+        nature_of_letter: mailData.type || mailData.letterType || mailData.regionProvince || "Complaint",
+        subject_category: mailData.classification || mailData.subjectCategory,
+        subject_of_letter: mailData.subject || "N/A",
+        date_received_by_additional_secretary: mailData.received_date || mailData.receivedDate,
+        date_letter_handed_over_to_dicipline_branch: mailData.submitted_date || mailData.letterDate,
+        priority: mailData.priority || "Normal",
+      });
+    } catch (dmErr) {
+      console.warn("Save to daily_mail table failed in saveDailyMailRecordServer:", dmErr);
+    }
+
     if (mailData.id) {
       result = await prisma.dcmmsDailyMail.update({
         where: { id: mailData.id },
@@ -83,10 +176,10 @@ export async function saveDailyMailRecordServer(mailData: any) {
         console.warn("Dual-sync to Letter table skipped or failed:", err);
       }
     }
-    return { success: true, data: result };
+    return serializeForServerAction({ success: true, data: result });
   } catch (error: any) {
     console.error("Error saving daily mail record:", error);
-    return { success: false, error: error.message };
+    return serializeForServerAction({ success: false, error: error.message });
   }
 }
 
@@ -108,8 +201,11 @@ export async function saveDailyMailToNewTableServer(data: {
     let validPriority = 'Normal';
     if (pInput.toLowerCase().includes('high') || pInput.toLowerCase().includes('urgent')) validPriority = 'High';
     else if (pInput.toLowerCase().includes('low')) validPriority = 'Low';
-    else if (pInput.toLowerCase().includes('urgent')) validPriority = 'Urgent';
     else if (['Low', 'Normal', 'High', 'Urgent'].includes(pInput)) validPriority = pInput;
+
+    const letterNumber = data.letter_number?.trim() || `LT-${Date.now()}`;
+    const modeOfReceipt = data.mode_of_receipt?.trim() || 'Post';
+    const subjectOfLetter = data.subject_of_letter?.trim() || 'N/A';
 
     const result = await prisma.$executeRawUnsafe(
       `INSERT INTO daily_mail (
@@ -141,22 +237,22 @@ export async function saveDailyMailToNewTableServer(data: {
         subject_officer_id = EXCLUDED.subject_officer_id,
         priority = EXCLUDED.priority,
         updated_at = CURRENT_TIMESTAMP`,
-      data.letter_number,
+      letterNumber,
       data.received_letter_number || null,
-      data.mode_of_receipt || 'Post',
+      modeOfReceipt,
       data.sender_party || null,
       data.nature_of_letter || null,
       data.subject_category || null,
-      data.subject_of_letter,
+      subjectOfLetter,
       data.date_received_by_additional_secretary || null,
       data.date_letter_handed_over_to_dicipline_branch || null,
       data.subject_officer_id ? Number(data.subject_officer_id) : null,
       validPriority
     );
-    return { success: true, count: result };
+    return serializeForServerAction({ success: true, count: Number(result) });
   } catch (error: any) {
     console.error("Error inserting into daily_mail table:", error);
-    return { success: false, error: error.message };
+    return serializeForServerAction({ success: false, error: error.message });
   }
 }
 
@@ -277,10 +373,10 @@ export async function getSubjectOfficersServer() {
       });
     } catch (e) {}
 
-    return { success: true, data: Array.from(namesSet) };
+    return serializeForServerAction({ success: true, data: Array.from(namesSet) });
   } catch (error: any) {
     console.error("Error fetching subject officers from database:", error);
-    return { success: false, error: error.message, data: [] };
+    return serializeForServerAction({ success: false, error: error.message, data: [] });
   }
 }
 
@@ -487,10 +583,10 @@ export async function getRegisterOfficersServer(roleFilter?: string) {
     query += ` ORDER BY created_at DESC`;
     
     const records: any[] = await prisma.$queryRawUnsafe(query, ...params);
-    return { success: true, data: records };
+    return serializeForServerAction({ success: true, data: records });
   } catch (error: any) {
     console.error("Error fetching register officer records:", error);
-    return { success: false, error: error.message, data: [] };
+    return serializeForServerAction({ success: false, error: error.message, data: [] });
   }
 }
 
@@ -605,10 +701,10 @@ export async function saveRegisterOfficerServer(officerData: {
       // Secondary DB sync warning (ignored if second DB does not exist)
     }
 
-    return { success: true, data: resultRecord };
+    return serializeForServerAction({ success: true, data: resultRecord });
   } catch (error: any) {
     console.error("Error saving register officer:", error);
-    return { success: false, error: error.message || "Failed to save officer to database" };
+    return serializeForServerAction({ success: false, error: error.message || "Failed to save officer to database" });
   }
 }
 
@@ -664,7 +760,7 @@ export async function loginOfficerServer(emailOrEmpNo: string, passwordInput: st
       return { success: false, error: "Invalid email/employee number or password." };
     }
 
-    return {
+    return serializeForServerAction({
       success: true,
       data: {
         id: officer.id,
@@ -673,10 +769,10 @@ export async function loginOfficerServer(emailOrEmpNo: string, passwordInput: st
         email: officer.email,
         role: officer.role,
       },
-    };
+    });
   } catch (error: any) {
     console.error("Login officer server error:", error);
-    return { success: false, error: error.message || "Authentication failed" };
+    return serializeForServerAction({ success: false, error: error.message || "Authentication failed" });
   }
 }
 

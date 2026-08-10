@@ -807,36 +807,43 @@ function RegisterComplaintForm() {
         // success
         console.debug("Supabase upsert returned:", upserted);
 
-        // Always dual-persist to local PostgreSQL via Prisma Server Action
-        saveDailyMailRecordServer({
-          id: newLetter.id,
-          serial_no: newLetter.refNo,
-          received_date: newLetter.receivedDate,
-          letter_no: newLetter.letterNo,
-          submitted_date: newLetter.letterDate,
-          subject: newLetter.subject,
-          sender: newLetter.senderName,
-          method: "Post",
-          type: newLetter.letterType,
-          classification: newLetter.subjectCategory,
-          action_officer: newLetter.officerName,
-          status: newLetter.status || "Pending",
-        }).catch((e) => console.error("PostgreSQL Prisma save error:", e));
+        // Always persist to local PostgreSQL daily_mail table via Server Action
+        try {
+          await saveDailyMailToNewTableServer({
+            letter_number: newLetter.letterNo || newLetter.refNo,
+            received_letter_number: newLetter.refNo,
+            mode_of_receipt: newLetter.letterType || "Post",
+            sender_party: newLetter.senderName,
+            nature_of_letter: formState.regionProvince || "Complaint",
+            subject_category: newLetter.subjectCategory,
+            subject_of_letter: newLetter.subject || "N/A",
+            date_received_by_additional_secretary: newLetter.receivedDate || undefined,
+            date_letter_handed_over_to_dicipline_branch: newLetter.letterDate || undefined,
+            subject_officer_id: null,
+            priority: newLetter.priority,
+          });
+        } catch (e) {
+          console.error("PostgreSQL daily_mail write error:", e);
+        }
 
-        // Direct insert into daily_mail table
-        saveDailyMailToNewTableServer({
-          letter_number: newLetter.letterNo || newLetter.refNo,
-          received_letter_number: newLetter.refNo,
-          mode_of_receipt: newLetter.letterType || "Post",
-          sender_party: newLetter.senderName,
-          nature_of_letter: formState.regionProvince || "Complaint",
-          subject_category: newLetter.subjectCategory,
-          subject_of_letter: newLetter.subject || "N/A",
-          date_received_by_additional_secretary: newLetter.receivedDate || undefined,
-          date_letter_handed_over_to_dicipline_branch: newLetter.letterDate || undefined,
-          subject_officer_id: null,
-          priority: newLetter.priority,
-        }).catch((e) => console.error("PostgreSQL daily_mail write error:", e));
+        try {
+          await saveDailyMailRecordServer({
+            id: newLetter.id,
+            serial_no: newLetter.refNo,
+            received_date: newLetter.receivedDate,
+            letter_no: newLetter.letterNo,
+            submitted_date: newLetter.letterDate,
+            subject: newLetter.subject,
+            sender: newLetter.senderName,
+            method: "Post",
+            type: newLetter.letterType,
+            classification: newLetter.subjectCategory,
+            action_officer: newLetter.officerName,
+            status: newLetter.status || "Pending",
+          });
+        } catch (e) {
+          console.error("PostgreSQL Prisma save error:", e);
+        }
 
         localStorage.setItem("show_register_success", "true");
         if (typeof window !== "undefined") window.dispatchEvent(new Event("dcmms_data_updated"));
