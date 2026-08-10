@@ -11,6 +11,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { signOut, getCurrentProfile } from "@/lib/auth";
+import { getDailyMailRecordsServer } from "@/lib/db-actions";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
@@ -61,15 +62,14 @@ export default function DailyMailPage() {
     }
 
     const loadGreeting = async () => {
-      let displayName = t("welcomeUser");
-      if (isSupabaseConfigured) {
-        const prof = await getCurrentProfile();
-        if (prof) {
-          displayName = prof.full_name;
-        }
+      let displayName = t("welcomeUser", "User");
+      const prof = await getCurrentProfile();
+      if (prof && prof.full_name) {
+        displayName = prof.full_name;
       }
-      const firstName = displayName.split(" ")[0];
-      setGreeting(`${t(greetingKey)}, ${firstName}!`);
+      const defaultText = hour >= 12 && hour < 17 ? "Good Afternoon" : hour >= 17 || hour < 5 ? "Good Evening" : "Good Morning";
+      const timeGreeting = t(greetingKey, defaultText);
+      setGreeting(`${timeGreeting}, ${displayName}!`);
     };
     loadGreeting();
   }, [t]);
@@ -120,78 +120,34 @@ export default function DailyMailPage() {
   // Fetch letters from Supabase (or fallback to localStorage) on mount
   useEffect(() => {
     const fetchLetters = async () => {
-      if (isSupabaseConfigured) {
-        try {
-          const { data, error } = await supabase
-            .from("dcmms_daily_mail")
-            .select("*")
-            .order("created_at", { ascending: false });
-
-          if (error) throw error;
-
-          if (data) {
-            const mapped = data
-              .filter((db: any) => !db.ref_no?.startsWith("__SECURITY_"))
-              .map((db: any) => ({
+      // Fetch from local PostgreSQL via Prisma Server Action
+      try {
+        const res = await getDailyMailRecordsServer();
+        if (res.success && res.data && res.data.length > 0) {
+          const mapped = res.data
+            .filter((db: any) => !db.serial_no?.startsWith("__SECURITY_"))
+            .map((db: any) => ({
               id: db.id,
-              refNo: db.ref_no,
+              refNo: db.serial_no || db.letter_no || "",
               letterNo: db.letter_no || "",
-              receivedDate: db.received_date,
-              letterDate: db.letter_date,
-              senderName: db.sender_name,
-              senderAddress: db.sender_address || "N/A",
-              subject: db.subject,
-              priority: db.priority,
-              status: db.status,
-              letterType: db.letter_type || "",
-              officerName: db.officer_name || "",
-              subjectCategory: db.subject_category || "",
-              instituteName: db.institute_name || "",
-              regionProvince: db.region_province || "",
+              receivedDate: db.received_date ? new Date(db.received_date).toISOString().split("T")[0] : "",
+              letterDate: db.submitted_date ? new Date(db.submitted_date).toISOString().split("T")[0] : "",
+              senderName: db.sender || "N/A",
+              senderAddress: "N/A",
+              subject: db.subject || "",
+              priority: db.priority || "medium",
+              status: db.status || "registered",
+              letterType: db.type || "",
+              officerName: db.action_officer || "",
+              subjectCategory: db.classification || "",
+              instituteName: "",
+              regionProvince: "",
             }));
-            setLetters(mapped);
-          }
-
-          // Also fetch which cases have subject officer actions (dcmms_subject_details)
-          try {
-            const { data: detailsData, error: detailsError } = await supabase
-              .from("dcmms_subject_details")
-              .select("case_no, report_state, created_at, received_date");
-
-            if (!detailsError && detailsData) {
-              const submittedCaseNos = new Set(
-                detailsData
-                  .filter((d: any) => d.report_state !== "Pending")
-                  .map((d: any) => d.case_no)
-              );
-              setCasesWithDetails(submittedCaseNos);
-              setSubjectSubmissions(detailsData.map((d: any) => ({
-                caseNo: d.case_no,
-                createdAt: d.created_at,
-                receivedDate: d.received_date,
-                reportState: d.report_state
-              })));
-            }
-          } catch (e) {
-            console.error("Failed to fetch subject details status", e);
-          }
-
-          // Fetch subsequent mails (dcmms_subsequent_mails) to identify "new" vs "old"
-          try {
-            const { data: subsequentData, error: subsequentError } = await supabase
-              .from("dcmms_subsequent_mails")
-              .select("id");
-            if (!subsequentError && subsequentData) {
-              setSubsequentMailIds(new Set(subsequentData.map((d: any) => d.id)));
-            }
-          } catch (e) {
-            console.error("Failed to fetch subsequent mails", e);
-          }
-
+          setLetters(mapped);
           return;
-        } catch (err) {
-          console.error("Supabase letters fetch error, falling back to local storage:", err);
         }
+      } catch (err) {
+        console.error("Local PostgreSQL letters fetch error, falling back to local storage:", err);
       }
 
       // Local storage fallback
@@ -287,8 +243,8 @@ export default function DailyMailPage() {
 
   // Session guard — redirect to login if not authenticated
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session?.user) router.replace("/");
+    getCurrentProfile().then((profile) => {
+      if (!profile || profile.role !== "daily_mail") router.replace("/");
     });
   }, [router]);
 

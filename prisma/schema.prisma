@@ -1,0 +1,572 @@
+// Prisma Schema for DCMMS (Discipline Management System)
+// 3NF Normalized Relational Database Schema for PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// -------------------------------------------------------------
+// 1. Roles
+// -------------------------------------------------------------
+model Role {
+  role_id     Int       @id @default(autoincrement())
+  role_name   String    @unique
+  description String?
+  is_active   Boolean?  @default(true)
+  created_at  DateTime? @default(now())
+
+  users User[]
+
+  @@map("roles")
+}
+
+// -------------------------------------------------------------
+// 2. Users
+// -------------------------------------------------------------
+model User {
+  user_id       String    @id @default(uuid())
+  employee_no   String?   @unique
+  full_name     String
+  email         String?   @unique
+  password_hash String?
+  role_id       Int?
+  phone         String?
+  is_active     Boolean?  @default(true)
+  created_at    DateTime? @default(now())
+  updated_at    DateTime? @updatedAt
+
+  role Role? @relation(fields: [role_id], references: [role_id])
+
+  lettersCreated           Letter[]                  @relation("LetterCreatedBy")
+  caseLettersLinked        CaseLetter[]              @relation("CaseLetterLinkedBy")
+  caseStatusHistoryChanged CaseStatusHistory[]       @relation("StatusHistoryChangedBy")
+  investigationAssignments InvestigationAssignment[] @relation("AssignmentAssignedBy")
+  documentsUploaded        Document[]                @relation("DocumentUploadedBy")
+  notifications            Notification[]
+  auditLogs                AuditLog[]
+  caseActions              CaseAction[]              @relation("ActionPerformedBy")
+  caseComments             CaseComment[]
+
+  @@map("users")
+}
+
+// -------------------------------------------------------------
+// 3. Provinces
+// -------------------------------------------------------------
+model Province {
+  province_id   Int    @id @default(autoincrement())
+  province_name String
+
+  zones   EducationZone[]
+  schools School[]
+
+  @@map("provinces")
+}
+
+// -------------------------------------------------------------
+// 4. Education Zones
+// -------------------------------------------------------------
+model EducationZone {
+  zone_id     Int    @id @default(autoincrement())
+  province_id Int
+  zone_name   String
+
+  province Province @relation(fields: [province_id], references: [province_id])
+  schools  School[]
+
+  @@map("education_zones")
+}
+
+// -------------------------------------------------------------
+// 5. Schools
+// -------------------------------------------------------------
+model School {
+  school_id   String    @id @default(uuid())
+  school_no   String?   @unique
+  school_name String
+  school_type String?
+  address     String?
+  province_id Int?
+  zone_id     Int?
+  created_at  DateTime? @default(now())
+
+  province Province?      @relation(fields: [province_id], references: [province_id])
+  zone     EducationZone? @relation(fields: [zone_id], references: [zone_id])
+
+  persons Person[]
+  cases   Case[]
+
+  @@map("schools")
+}
+
+// -------------------------------------------------------------
+// 6. Persons
+// -------------------------------------------------------------
+model Person {
+  person_id        String    @id @default(uuid())
+  nic              String?   @unique
+  full_name        String
+  date_of_birth    DateTime?
+  address          String?
+  appointment_date DateTime?
+  school_id        String?
+  designation      String?
+  created_at       DateTime? @default(now())
+
+  school School? @relation(fields: [school_id], references: [school_id])
+  cases  Case[]
+
+  @@map("persons")
+}
+
+// -------------------------------------------------------------
+// 7. Letter Categories
+// -------------------------------------------------------------
+model LetterCategory {
+  category_id   Int    @id @default(autoincrement())
+  category_name String
+
+  letters Letter[]
+
+  @@map("letter_categories")
+}
+
+// -------------------------------------------------------------
+// 8. Letter Classifications
+// -------------------------------------------------------------
+model LetterClassification {
+  classification_id   Int    @id @default(autoincrement())
+  classification_name String
+
+  letters Letter[]
+
+  @@map("letter_classifications")
+}
+
+// -------------------------------------------------------------
+// 9. Subject Categories
+// -------------------------------------------------------------
+model SubjectCategory {
+  subject_id   Int     @id @default(autoincrement())
+  subject_name String
+  description  String?
+
+  letters Letter[]
+
+  @@map("subject_categories")
+}
+
+// -------------------------------------------------------------
+// 10. Letters
+// -------------------------------------------------------------
+model Letter {
+  letter_id       String    @id @default(uuid())
+  serial_number   String?   @unique
+  letter_number   String?
+  sender_name     String?
+  sender_address  String?
+  sender_contact  String?
+  received_date   DateTime?
+  received_method String?
+  submission_date DateTime?
+  subject_id      Int?
+  category_id     Int?
+  classification_id Int?
+  priority        String?
+  description     String?
+  created_by      String?
+  created_at      DateTime? @default(now())
+
+  subject        SubjectCategory?      @relation(fields: [subject_id], references: [subject_id])
+  category       LetterCategory?       @relation(fields: [category_id], references: [category_id])
+  classification LetterClassification? @relation(fields: [classification_id], references: [classification_id])
+  creator        User?                 @relation("LetterCreatedBy", fields: [created_by], references: [user_id])
+
+  caseLetters CaseLetter[]
+  documents   Document[]
+
+  @@map("letters")
+}
+
+// -------------------------------------------------------------
+// 11. Cases
+// -------------------------------------------------------------
+model Case {
+  case_id            String    @id @default(uuid())
+  case_number        String    @unique
+  subject_officer_id String?
+  school_id          String?
+  person_id          String?
+  current_status_id  Int?
+  secretary_approval Boolean?  @default(false)
+  approval_date      DateTime?
+  complaint_summary  String?
+  created_date       DateTime? @default(now())
+  updated_date       DateTime? @updatedAt
+
+  school        School?     @relation(fields: [school_id], references: [school_id])
+  person        Person?     @relation(fields: [person_id], references: [person_id])
+  currentStatus CaseStatus? @relation(fields: [current_status_id], references: [status_id])
+
+  caseLetters        CaseLetter[]
+  statusHistory      CaseStatusHistory[]
+  investigations     Investigation[]
+  documents          Document[]
+  actions            CaseAction[]
+  comments           CaseComment[]
+
+  @@map("cases")
+}
+
+// -------------------------------------------------------------
+// 12. Case Letters
+// -------------------------------------------------------------
+model CaseLetter {
+  case_letter_id String    @id @default(uuid())
+  case_id        String
+  letter_id      String
+  linked_by      String?
+  linked_date    DateTime? @default(now())
+
+  case   Case   @relation(fields: [case_id], references: [case_id])
+  letter Letter @relation(fields: [letter_id], references: [letter_id])
+  linker User?  @relation("CaseLetterLinkedBy", fields: [linked_by], references: [user_id])
+
+  @@map("case_letters")
+}
+
+// -------------------------------------------------------------
+// 13. Case Status
+// -------------------------------------------------------------
+model CaseStatus {
+  status_id          Int      @id @default(autoincrement())
+  status_name        String
+  status_description String?
+  status_order       Int?
+  is_active          Boolean? @default(true)
+
+  cases         Case[]
+  statusHistory CaseStatusHistory[]
+
+  @@map("case_status")
+}
+
+// -------------------------------------------------------------
+// 14. Case Status History
+// -------------------------------------------------------------
+model CaseStatusHistory {
+  history_id String    @id @default(uuid())
+  case_id    String
+  status_id  Int
+  changed_by String?
+  remarks    String?
+  changed_at DateTime? @default(now())
+
+  case       Case       @relation(fields: [case_id], references: [case_id])
+  status     CaseStatus @relation(fields: [status_id], references: [status_id])
+  user       User?      @relation("StatusHistoryChangedBy", fields: [changed_by], references: [user_id])
+
+  @@map("case_status_history")
+}
+
+// -------------------------------------------------------------
+// 15. Investigations
+// -------------------------------------------------------------
+model Investigation {
+  investigation_id     String    @id @default(uuid())
+  case_id              String
+  investigation_type   String?
+  investigation_no     String?
+  assigned_date        DateTime?
+  due_date             DateTime?
+  report_received_date DateTime?
+  extension_days       Int?
+  recommendation       String?
+  approval_date        DateTime?
+  next_action          String?
+  status               String?   @default("Ongoing")
+
+  case Case @relation(fields: [case_id], references: [case_id])
+
+  assignments                       InvestigationAssignment[]
+  provincialInvestigations          ProvincialInvestigation[]
+  formalDisciplinaryInvestigations FormalDisciplinaryInvestigation[]
+  documents                         Document[]
+
+  @@map("investigations")
+}
+
+// -------------------------------------------------------------
+// 16. Investigation Officers
+// -------------------------------------------------------------
+model InvestigationOfficer {
+  officer_id       String    @id @default(uuid())
+  officer_name     String
+  nic              String?
+  designation      String?
+  school_attended  String?
+  children_school  String?
+  appointment_date DateTime?
+  is_active        Boolean?  @default(true)
+
+  assignments InvestigationAssignment[]
+
+  @@map("investigation_officers")
+}
+
+// -------------------------------------------------------------
+// 17. Investigation Assignments
+// -------------------------------------------------------------
+model InvestigationAssignment {
+  assignment_id    String    @id @default(uuid())
+  investigation_id String
+  officer_id       String
+  assigned_by      String?
+  assigned_date    DateTime? @default(now())
+
+  investigation Investigation        @relation(fields: [investigation_id], references: [investigation_id])
+  officer       InvestigationOfficer @relation(fields: [officer_id], references: [officer_id])
+  assigner      User?                @relation("AssignmentAssignedBy", fields: [assigned_by], references: [user_id])
+
+  @@map("investigation_assignments")
+}
+
+// -------------------------------------------------------------
+// 18. Provincial Investigations
+// -------------------------------------------------------------
+model ProvincialInvestigation {
+  provincial_id        String    @id @default(uuid())
+  investigation_id     String
+  recommendation       String?
+  appointment_date     DateTime?
+  due_date             DateTime?
+  report_received_date DateTime?
+  approved_date        DateTime?
+  next_action          String?
+
+  investigation Investigation @relation(fields: [investigation_id], references: [investigation_id])
+
+  @@map("provincial_investigations")
+}
+
+// -------------------------------------------------------------
+// 19. Formal Disciplinary Investigations
+// -------------------------------------------------------------
+model FormalDisciplinaryInvestigation {
+  formal_id            String    @id @default(uuid())
+  investigation_id     String
+  recommendation       String?
+  report_received_date DateTime?
+  approved_date        DateTime?
+  disciplinary_order   String?
+  next_action          String?
+
+  investigation Investigation @relation(fields: [investigation_id], references: [investigation_id])
+
+  @@map("formal_disciplinary_investigations")
+}
+
+// -------------------------------------------------------------
+// 20. Documents
+// -------------------------------------------------------------
+model Document {
+  document_id      String    @id @default(uuid())
+  case_id          String?
+  investigation_id String?
+  letter_id        String?
+  document_type    String?
+  file_name        String
+  file_path        String
+  uploaded_by      String?
+  uploaded_at      DateTime? @default(now())
+
+  case          Case?          @relation(fields: [case_id], references: [case_id])
+  investigation Investigation? @relation(fields: [investigation_id], references: [investigation_id])
+  letter        Letter?        @relation(fields: [letter_id], references: [letter_id])
+  uploader      User?          @relation("DocumentUploadedBy", fields: [uploaded_by], references: [user_id])
+
+  @@map("documents")
+}
+
+// -------------------------------------------------------------
+// 21. Notifications
+// -------------------------------------------------------------
+model Notification {
+  notification_id String    @id @default(uuid())
+  user_id         String
+  title           String
+  message         String
+  is_read         Boolean?  @default(false)
+  created_at      DateTime? @default(now())
+
+  user User @relation(fields: [user_id], references: [user_id])
+
+  @@map("notifications")
+}
+
+// -------------------------------------------------------------
+// 22. Audit Logs
+// -------------------------------------------------------------
+model AuditLog {
+  audit_id   String    @id @default(uuid())
+  user_id    String?
+  action     String
+  table_name String?
+  record_id  String?
+  old_value  Json?
+  new_value  Json?
+  ip_address String?
+  created_at DateTime? @default(now())
+
+  user User? @relation(fields: [user_id], references: [user_id])
+
+  @@map("audit_logs")
+}
+
+// -------------------------------------------------------------
+// 23. Case Actions
+// -------------------------------------------------------------
+model CaseAction {
+  action_id          String    @id @default(uuid())
+  case_id            String
+  action_type        String?
+  action_description String?
+  performed_by       String?
+  performed_at       DateTime? @default(now())
+
+  case      Case  @relation(fields: [case_id], references: [case_id])
+  performer User? @relation("ActionPerformedBy", fields: [performed_by], references: [user_id])
+
+  @@map("case_actions")
+}
+
+// -------------------------------------------------------------
+// 24. Case Comments
+// -------------------------------------------------------------
+model CaseComment {
+  comment_id String    @id @default(uuid())
+  case_id    String
+  user_id    String
+  comment    String
+  created_at DateTime? @default(now())
+
+  case Case @relation(fields: [case_id], references: [case_id])
+  user User @relation(fields: [user_id], references: [user_id])
+
+  @@map("case_comments")
+}
+
+// -------------------------------------------------------------
+// Legacy & App Compatibility Tables
+// -------------------------------------------------------------
+
+model DcmmsDailyMail {
+  id              String    @id @default(uuid())
+  serial_no       String?
+  received_date   DateTime?
+  letter_no       String?
+  submitted_date  DateTime?
+  subject         String?
+  sender          String?
+  method          String?
+  type            String?
+  classification  String?
+  action_officer  String?
+  status          String?   @default("Pending")
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @default(now())
+
+  @@map("dcmms_daily_mail")
+}
+
+model DcmmsSubject {
+  id           String   @id @default(uuid())
+  subject_id   String?
+  subject_name String
+  designation  String?
+  workplace    String?
+  nic          String?
+  contact_no   String?
+  created_at   DateTime @default(now())
+
+  @@map("dcmms_subject")
+}
+
+model DcmmsSubjectDetails {
+  id             String   @id @default(uuid())
+  subject_id     String
+  charge_details String?
+  status         String?
+  created_at     DateTime @default(now())
+
+  @@map("dcmms_subject_details")
+}
+
+model DcmmsAuditLog {
+  id          String   @id @default(uuid())
+  user_id     String?
+  action      String
+  entity_type String?
+  entity_id   String?
+  details     String?
+  timestamp   DateTime @default(now())
+
+  @@map("dcmms_audit_logs")
+}
+
+model DcmmsSession {
+  id         String   @id @default(uuid())
+  user_id    String
+  role       String?
+  login_time DateTime @default(now())
+  is_active  Boolean  @default(true)
+
+  @@map("dcmms_sessions")
+}
+
+model DcmmsProfile {
+  id         String   @id @default(uuid())
+  username   String   @unique
+  full_name  String?
+  role       String   @default("User")
+  created_at DateTime @default(now())
+
+  @@map("dcmms_profiles")
+}
+
+model DcmmsInvestigationOfficer {
+  id               String    @id @default(uuid())
+  officer_name     String
+  nic              String?
+  designation      String?
+  school_attended  String?
+  children_school  String?
+  appointment_date DateTime?
+  created_at       DateTime  @default(now())
+
+  @@map("dcmms_investigation_officers")
+}
+
+model RegisterOfficerTable {
+  id          String                 @id @default(uuid())
+  employee_no String                 @unique
+  full_name   String
+  email       String                 @unique
+  password    String                 @default("123456")
+  role        String?                @default("Register Officer")
+  is_active   Boolean?               @default(true)
+  created_by  String?
+  created_at  DateTime?              @default(now())
+  updated_at  DateTime?              @default(now()) @updatedAt
+
+  creator     RegisterOfficerTable?  @relation("RegisterOfficerCreatedBy", fields: [created_by], references: [id])
+  created     RegisterOfficerTable[] @relation("RegisterOfficerCreatedBy")
+
+  @@map("register_officer_table")
+}
+

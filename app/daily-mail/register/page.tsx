@@ -11,6 +11,7 @@ import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 import { getCurrentProfile } from "@/lib/auth";
+import { saveDailyMailRecordServer, logAuditEventServer, getSubjectOfficersServer } from "@/lib/db-actions";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
@@ -160,13 +161,25 @@ function RegisterComplaintForm() {
         "Aruni Rajapaksha",
       ]);
 
-      // 1. Load from Supabase profiles (role = subject_officer)
+      // 1. Load from PostgreSQL via Prisma Server Action
+      try {
+        const res = await getSubjectOfficersServer();
+        if (res.success && res.data && res.data.length > 0) {
+          res.data.forEach((name: string) => {
+            if (name) namesSet.add(name);
+          });
+        }
+      } catch (e) {
+        console.error("Failed to load subject officers from PostgreSQL", e);
+      }
+
+      // 2. Load from Supabase profiles (role = subject_officer)
       if (isSupabaseConfigured) {
         try {
           const { data, error } = await supabase
             .from("dcmms_profiles")
             .select("full_name")
-            .eq("role", "subject_officer");
+            .ilike("role", "%subject%");
           if (!error && data) {
             data.forEach((d: any) => {
               if (d.full_name) namesSet.add(d.full_name);
@@ -189,14 +202,14 @@ function RegisterComplaintForm() {
         } catch (e) {}
       }
 
-      // 2. Load from localStorage custom profiles (role = subject_officer)
+      // 3. Load from localStorage custom profiles (role = subject_officer)
       if (typeof window !== "undefined") {
         const stored = localStorage.getItem("dcmms_custom_profiles");
         if (stored) {
           try {
             const list = JSON.parse(stored);
             list
-              .filter((p: any) => p.role === "subject_officer")
+              .filter((p: any) => !p.role || p.role.toLowerCase().includes("subject"))
               .forEach((p: any) => {
                 if (p.fullName) namesSet.add(p.fullName);
               });
@@ -712,9 +725,7 @@ function RegisterComplaintForm() {
     }
 
     if (isSupabaseConfigured) {
-      const { data: { session: dbgSession } } = await supabase.auth.getSession();
       console.log("[DMMS Debug] isSupabaseConfigured:", isSupabaseConfigured);
-      console.log("[DMMS Debug] Session at submit:", dbgSession ? `✓ user=${dbgSession.user.email}` : "✗ NO SESSION (anon)");
       try {
         const dailyMailUpsertPayload: any = {
           id: newLetter.id,
@@ -795,6 +806,23 @@ function RegisterComplaintForm() {
 
         // success
         console.debug("Supabase upsert returned:", upserted);
+
+        // Always dual-persist to local PostgreSQL via Prisma Server Action
+        saveDailyMailRecordServer({
+          id: newLetter.id,
+          serial_no: newLetter.refNo,
+          received_date: newLetter.receivedDate,
+          letter_no: newLetter.letterNo,
+          submitted_date: newLetter.letterDate,
+          subject: newLetter.subject,
+          sender: newLetter.senderName,
+          method: "Post",
+          type: newLetter.letterType,
+          classification: newLetter.subjectCategory,
+          action_officer: newLetter.officerName,
+          status: newLetter.status || "Pending",
+        }).catch((e) => console.error("PostgreSQL Prisma save error:", e));
+
         localStorage.setItem("show_register_success", "true");
         if (typeof window !== "undefined") window.dispatchEvent(new Event("dcmms_data_updated"));
         const nextUrl = "/daily-mail";

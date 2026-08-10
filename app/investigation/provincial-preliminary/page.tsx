@@ -10,6 +10,7 @@ import { useTranslation } from "react-i18next";
 import Link from "next/link";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 import { getCurrentProfile } from "@/lib/auth";
+import { saveProvincialInvestigationServer, logAuditEventServer } from "@/lib/db-actions";
 import {
   ArrowLeft,
   Save,
@@ -190,6 +191,28 @@ function ProvincialPreliminaryContent() {
         const profile = await getCurrentProfile();
         await logAuditEvent(profile?.full_name || profile?.id || "user", "SUBMIT_PRELIMINARY_INVESTIGATION", `Submitted preliminary investigation for ${subjectFileNo}`);
       }
+
+      // Always dual-persist to local PostgreSQL via Prisma Action
+      saveProvincialInvestigationServer({
+        case_id: subjectFileNo,
+        investigation_type: "Provincial Preliminary",
+        investigation_no: `PRELIM_${subjectFileNo.replace(/[^a-zA-Z0-9]/g, "_")}`,
+        appointment_date: appointmentDate || undefined,
+        due_date: dueDate || undefined,
+        report_received_date: reportReceivedDate || undefined,
+        approved_date: approvalDate || undefined,
+        recommendation: recommendations || undefined,
+        next_action: nextStepsStatus || undefined,
+        status: nextStepsStatus || "Completed",
+      }).catch((e) => console.error("PostgreSQL Prisma preliminary save error:", e));
+
+      logAuditEventServer(
+        "SUBMIT_PRELIMINARY_INVESTIGATION",
+        "provincial_investigations",
+        subjectFileNo,
+        { recommendation: recommendations }
+      ).catch((e) => console.error("PostgreSQL audit error:", e));
+
       showToast("Provincial preliminary investigation submitted successfully!");
       setTimeout(() => {
         router.push("/investigation");

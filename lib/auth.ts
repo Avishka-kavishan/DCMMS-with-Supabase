@@ -1,5 +1,3 @@
-import { supabase } from "./supabase";
-
 export type UserRole =
   | "admin"
   | "daily_mail"
@@ -11,121 +9,65 @@ export interface UserProfile {
   id: string;
   full_name: string;
   role: UserRole;
+  email?: string;
+  employee_no?: string;
 }
 
-/** Returns the currently signed-in user's profile (id, full_name, role), or null. */
+export function normalizeRole(roleStr?: string): UserRole {
+  if (!roleStr) return "daily_mail";
+  const lower = roleStr.toLowerCase().trim();
+  if (lower.includes("system") || lower === "system_admin") return "system_admin";
+  if (lower.includes("branch") || lower.includes("administrator") || lower === "admin") return "admin";
+  if (lower.includes("subject") || lower === "subject_officer") return "subject_officer";
+  if (lower.includes("investigation") || lower === "investigation_officer") return "investigation_officer";
+  if (lower.includes("daily") || lower.includes("mail") || lower === "daily_mail") return "daily_mail";
+  return "daily_mail";
+}
+
+/** Returns the currently signed-in user's profile (id, full_name, role, email), or null. */
 export async function getCurrentProfile(): Promise<UserProfile | null> {
-  // Guard: cannot access auth session during static build (no browser)
   if (typeof window === "undefined") return null;
 
-  // Check for active simulated session (offline fallback mode)
-  if (typeof window !== "undefined") {
-    const simSession = localStorage.getItem("dcmms_simulated_session");
-    if (simSession) {
-      try {
-        return JSON.parse(simSession) as UserProfile;
-      } catch (e) {
-        console.error("Failed to parse simulated session:", e);
+  // 1. Check for active local session
+  const simSession = localStorage.getItem("dcmms_simulated_session");
+  if (simSession) {
+    try {
+      const parsed = JSON.parse(simSession);
+      if (parsed && (parsed.full_name || parsed.fullName || parsed.role)) {
+        return {
+          id: parsed.id || "local-user",
+          full_name: parsed.full_name || parsed.fullName || "User",
+          role: normalizeRole(parsed.role),
+          email: parsed.email || "",
+          employee_no: parsed.employee_no || "",
+        };
       }
+    } catch (e) {
+      console.error("Failed to parse local session:", e);
     }
   }
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  // 2. Check for stored local credentials
+  const storedUsername = localStorage.getItem("dcmms_username") || localStorage.getItem("dcmms_current_user");
+  const storedRole = localStorage.getItem("dcmms_user_role");
 
-  if (!session?.user) return null;
-
-  // 1. Try Supabase unified 'users' table first
-  const { data: userData, error: userErr } = await supabase
-    .from("users")
-    .select("user_id, full_name, role_id")
-    .eq("user_id", session.user.id)
-    .single();
-
-  if (!userErr && userData) {
-    const roleIdMap: Record<number, UserRole> = {
-      1: "admin",
-      2: "system_admin",
-      3: "daily_mail",
-      4: "subject_officer",
-      5: "investigation_officer"
-    };
+  if (storedUsername) {
     return {
-      id: userData.user_id,
-      full_name: userData.full_name,
-      role: (userData.role_id ? roleIdMap[userData.role_id] : "subject_officer") as UserRole
+      id: `usr-${storedUsername.toLowerCase().replace(/[^a-z0-9]/g, "_")}`,
+      full_name: storedUsername,
+      role: normalizeRole(storedRole || "daily_mail"),
     };
   }
 
-  // Fallback: Try Supabase dcmms_profiles table
-  const { data, error } = await supabase
-    .from("dcmms_profiles")
-    .select("id, full_name, role")
-    .eq("id", session.user.id)
-    .single();
-
-  if (!error && data) return data as UserProfile;
-
-  // 2. Fallback & Auto-heal: use auth metadata
-  const userMeta = session.user.user_metadata;
-  const authFullName = userMeta?.full_name || session.user.email?.split("@")[0] || "User";
-  const authRole = (userMeta?.role as UserRole) || "subject_officer";
-
-  // Auto-heal: Insert missing user row into users and dcmms_profiles table
-  try {
-    await supabase.from("users").upsert({
-      user_id: session.user.id,
-      full_name: authFullName,
-      email: session.user.email || null,
-      role_id: 4, // Subject Officer
-    });
-    await supabase.from("dcmms_profiles").upsert({
-      id: session.user.id,
-      full_name: authFullName,
-      email: session.user.email || null,
-      role: authRole,
-    });
-  } catch (err) {
-    console.error("Auto-heal profile insertion failed:", err);
-  }
-
-  // Check if there's a matching custom profile in localStorage
-  if (typeof window !== "undefined") {
-    const stored = localStorage.getItem("dcmms_custom_profiles");
-    if (stored) {
-      try {
-        const list = JSON.parse(stored);
-        // Match by name (case-insensitive) from auth metadata
-        const match = list.find(
-          (p: any) =>
-            p.fullName?.toLowerCase() === authFullName.toLowerCase() ||
-            p.email?.toLowerCase() === session.user.email?.toLowerCase()
-        );
-        if (match) {
-          return {
-            id: session.user.id,
-            full_name: match.fullName,
-            role: match.role as UserRole,
-          };
-        }
-      } catch (e) {
-        console.error("Failed to parse dcmms_custom_profiles", e);
-      }
-    }
-  }
-
-  // 3. Last resort: build profile from auth metadata
-  return {
-    id: session.user.id,
-    full_name: authFullName,
-    role: authRole,
-  };
+  return null;
 }
 
 /** Returns the dashboard route for the given role. */
-export function dashboardPath(role: UserRole): string {
-  switch (role) {
+export function dashboardPath(role: string): string {
+  if (!role) return "/";
+  const normalized = normalizeRole(role);
+  
+  switch (normalized) {
     case "admin":
       return "/admin";
     case "daily_mail":
@@ -141,10 +83,15 @@ export function dashboardPath(role: UserRole): string {
   }
 }
 
-/** Sign out and return to home. */
+/** Sign out and return to login. */
 export async function signOut() {
   if (typeof window !== "undefined") {
     localStorage.removeItem("dcmms_simulated_session");
+    localStorage.removeItem("dcmms_username");
+    localStorage.removeItem("dcmms_user_role");
+    localStorage.removeItem("dcmms_current_user");
+    localStorage.removeItem("dcmms_current_session_id");
   }
-  await supabase.auth.signOut();
 }
+
+

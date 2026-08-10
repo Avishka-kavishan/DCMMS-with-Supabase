@@ -326,16 +326,15 @@ export default function SubjectOfficerDashboard() {
     }
 
     const loadProfileAndGreeting = async () => {
-      let displayName = t("subjectName");
-      if (isSupabaseConfigured) {
-        const prof = await getCurrentProfile();
-        if (prof) {
-          setProfile(prof);
-          displayName = prof.full_name;
-        }
+      let displayName = t("subjectName", "Subject Officer");
+      const prof = await getCurrentProfile();
+      if (prof && prof.full_name) {
+        setProfile(prof);
+        displayName = prof.full_name;
       }
-      const firstName = displayName.split(" ")[0];
-      setGreeting(`${t(greetingKey)}, ${firstName}!`);
+      const defaultText = hour >= 12 && hour < 17 ? "Good Afternoon" : hour >= 17 || hour < 5 ? "Good Evening" : "Good Morning";
+      const timeGreeting = t(greetingKey, defaultText);
+      setGreeting(`${timeGreeting}, ${displayName}!`);
     };
 
     loadProfileAndGreeting();
@@ -1749,8 +1748,8 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
 
   // Session guard — redirect to login if not authenticated
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session?.user) router.replace("/");
+    getCurrentProfile().then((profile) => {
+      if (!profile || profile.role !== "subject_officer") router.replace("/");
     });
   }, [router]);
 

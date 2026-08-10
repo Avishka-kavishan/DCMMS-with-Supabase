@@ -1,68 +1,59 @@
 import { createClient } from "@supabase/supabase-js";
+import { logAuditEventServer } from "@/lib/db-actions";
 
 export const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 export const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 
-export const isSupabaseConfigured = !!(
-  supabaseUrl &&
-  supabaseAnonKey &&
-  supabaseUrl !== "your_supabase_project_url" &&
-  supabaseAnonKey !== "your_supabase_anon_key"
-);
+// Supabase is completely disabled — System operates 100% on local PostgreSQL
+export const isSupabaseConfigured = false;
 
 if (typeof window !== "undefined") {
-  console.log("Supabase URL loaded in browser:", supabaseUrl || "(empty)", "Configured:", isSupabaseConfigured);
-} else {
-  console.log("Supabase URL loaded on server:", supabaseUrl || "(empty)", "Configured:", isSupabaseConfigured);
+  console.log("DCMMS Database Mode: Local PostgreSQL (Supabase Disabled)");
 }
 
-const isBrowser = typeof window !== "undefined";
+export const supabase: {
+  auth: {
+    getSession: () => Promise<{ data: { session: any }; error: any }>;
+    signOut: () => Promise<{ error: any }>;
+    onAuthStateChange: (callback: any) => { data: { subscription: { unsubscribe: () => void } } };
+    signInWithPassword: (credentials: any) => Promise<{ data: any; error: any }>;
+    signUp: (credentials: any) => Promise<{ data: any; error: any }>;
+  };
+  from: (table: string) => any;
+  channel: (name: string) => any;
+  removeChannel: (channel: any) => void;
+} = {
+  auth: {
+    getSession: async () => ({ data: { session: null }, error: null }),
+    signOut: async () => ({ error: null }),
+    onAuthStateChange: (callback: any) => ({ data: { subscription: { unsubscribe: () => {} } } }),
+    signInWithPassword: async () => ({ data: { user: null, session: null }, error: null }),
+    signUp: async () => ({ data: { user: null, session: null }, error: null }),
+  },
+  from: () => ({
+    select: () => ({ order: () => Promise.resolve({ data: [], error: null }), single: () => Promise.resolve({ data: null, error: null }), eq: () => Promise.resolve({ data: [], error: null }), or: () => Promise.resolve({ data: [], error: null }) }),
+    upsert: () => Promise.resolve({ data: null, error: null }),
+    insert: () => Promise.resolve({ data: null, error: null }),
+    update: () => Promise.resolve({ data: null, error: null }),
+    delete: () => Promise.resolve({ data: null, error: null }),
+  }),
+  channel: () => ({
+    on: function() { return this; },
+    subscribe: () => {},
+  }),
+  removeChannel: () => {},
+};
 
-// During static export (SSG/SSR build), Supabase auth storage must be
-// disabled to prevent build-time crashes on GitHub Pages.
-export const supabase = createClient(
-  isSupabaseConfigured ? supabaseUrl : "https://placeholder-url.supabase.co",
-  isSupabaseConfigured ? supabaseAnonKey : "placeholder-key",
-  {
-    auth: {
-      // Only persist session in the browser, not during build
-      persistSession: isBrowser,
-      // Use localStorage only when available
-      storage: isBrowser ? window.localStorage : undefined,
-      autoRefreshToken: isBrowser,
-      detectSessionInUrl: isBrowser,
-    },
-  }
-);
-
-// Standardized real-time listener subscription helper
 export function subscribeToTables(
   channelName: string,
   tables: string[],
   onChange: () => void
 ) {
-  if (!isSupabaseConfigured) return () => {};
-
-  let channel = supabase.channel(channelName);
-  tables.forEach((table) => {
-    channel = channel.on(
-      "postgres_changes",
-      { event: "*", schema: "public", table },
-      () => {
-        onChange();
-      }
-    );
-  });
-
-  channel.subscribe();
-
-  return () => {
-    supabase.removeChannel(channel);
-  };
+  return () => {};
 }
 
 /**
- * Log system audit events directly to audit_logs table in Supabase
+ * Log system audit events directly to PostgreSQL via Prisma server action
  */
 export async function logAuditEvent(
   action: string,
@@ -71,35 +62,11 @@ export async function logAuditEvent(
   details?: Record<string, any>,
   performedBy?: string
 ) {
-  if (!isSupabaseConfigured) return;
   try {
     const username = performedBy || (typeof window !== "undefined" ? localStorage.getItem("dcmms_username") || "system_user" : "system_user");
-    // Try inserting into new audit_logs table
-    const { error: newErr } = await supabase.from("audit_logs").insert([
-      {
-        user_id: null, // If UUID, null if string username
-        action: action,
-        table_name: entityType || null,
-        record_id: null,
-        created_at: new Date().toISOString()
-      }
-    ]);
-
-    if (newErr) {
-      // Fallback to legacy dcmms_audit_logs if audit_logs table is pending migration
-      await supabase.from("dcmms_audit_logs").insert([
-        {
-          user_id: username,
-          action: action,
-          entity_type: entityType || null,
-          entity_id: entityId || null,
-          details: details ? JSON.stringify(details) : null,
-          timestamp: new Date().toISOString()
-        }
-      ]);
-    }
+    await logAuditEventServer(action, entityType, entityId, details, username);
   } catch (err) {
-    console.error("Failed to write audit log:", err);
+    console.warn("Failed to log local audit event:", err);
   }
 }
 

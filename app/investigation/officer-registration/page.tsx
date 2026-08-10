@@ -13,6 +13,7 @@ import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 import { getCurrentProfile, signOut, dashboardPath } from "@/lib/auth";
+import { upsertInvestigationOfficerServer, logAuditEventServer, saveRegisterOfficerServer } from "@/lib/db-actions";
 import { 
   UserPlus, ArrowLeft, Check, X, GraduationCap, ShieldCheck, User, 
   CreditCard, Mail, Building, Award, RefreshCw 
@@ -194,6 +195,30 @@ export default function InvestigationOfficerRegistrationPage() {
         console.warn("Supabase save warning:", err);
       }
     }
+
+    // Always dual-persist to local PostgreSQL via Prisma Server Action
+    saveRegisterOfficerServer({
+      employee_no: newOfficer.nicNo || `EMP-${Date.now().toString().slice(-6)}`,
+      full_name: newOfficer.fullName,
+      email: newOfficer.email,
+      role: "Investigation officer",
+      is_active: newOfficer.status === "Active",
+    }).catch((e) => console.error("PostgreSQL saveRegisterOfficerServer error:", e));
+
+    upsertInvestigationOfficerServer({
+      officer_name: newOfficer.fullName,
+      nic: newOfficer.nicNo,
+      designation: newOfficer.officerRole,
+      school_attended: newOfficer.studiedSchools.join(", "),
+      children_school: newOfficer.childrenSchools.join(", "),
+    }).catch((e) => console.error("PostgreSQL upsertInvestigationOfficer error:", e));
+
+    logAuditEventServer(
+      "REGISTER_OFFICER",
+      "investigation_officers",
+      newOfficer.id,
+      { fullName: newOfficer.fullName, role: newOfficer.officerRole, nicNo: newOfficer.nicNo }
+    ).catch((e) => console.error("PostgreSQL audit error:", e));
 
     setIsSaving(false);
     showToast(lang === "si" ? "පරීක්ෂණ නිලධාරියා සාර්ථකව ලියාපදිංචි කරන ලදී!" : "Investigation Officer Registered Successfully!");

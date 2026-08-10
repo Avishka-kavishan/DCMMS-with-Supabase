@@ -4,7 +4,13 @@ import { useTranslation } from "react-i18next";
 import "../../../i18n";
 import { useRouter } from "next/navigation";
 import { UserPlus, X, Edit, Trash2, Check, GraduationCap } from "lucide-react";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
+import { 
+  getRegisterOfficersServer, 
+  saveRegisterOfficerServer, 
+  deleteRegisterOfficerServer, 
+  toggleRegisterOfficerStatusServer 
+} from "@/lib/db-actions";
 
 interface Officer {
   id: string;
@@ -73,38 +79,52 @@ export default function InvestigationOfficersPage() {
     setTimeout(() => setToastMessage(""), 3500);
   };
 
-  // ── Fetch officers — DB primary, localStorage fallback ─────────────────────
+  // ── Fetch officers from register_officer_table ─────────────────────
   const fetchOfficers = async () => {
     setIsLoading(true);
     let result: Officer[] = [];
 
-    if (isSupabaseConfigured) {
+    // 1. Primary: Server Action querying register_officer_table
+    try {
+      const res = await getRegisterOfficersServer("Investigation");
+      if (res.success && res.data && res.data.length > 0) {
+        result = res.data.map((p: any) => ({
+          id: p.id,
+          fullName: p.full_name || "",
+          nicNo: p.employee_no || "",
+          officerRole: "Member",
+          studiedSchools: [],
+          childrenSchools: [],
+          email: p.email || "",
+          role: "investigation_officer",
+          status: p.is_active === false ? "Inactive" : "Active",
+          createdAt: p.created_at ? new Date(p.created_at).toISOString().slice(0, 10) : "",
+        }));
+      }
+    } catch (err) {
+      console.error("Failed to load investigation officers via server action:", err);
+    }
+
+    // 2. Supabase fallback querying register_officer_table
+    if (result.length === 0 && isSupabaseConfigured) {
       try {
         const { data, error } = await supabase
-          .from("dcmms_profiles")
-          .select("id, full_name, nic_no, officer_role, studied_schools, children_schools, email, status, created_at")
-          .eq("role", "investigation_officer")
+          .from("register_officer_table")
+          .select("*")
+          .or("role.eq.Investigation officer,role.eq.investigation_officer,role.ilike.%investigation%")
           .order("created_at", { ascending: false });
 
         if (!error && data) {
           result = data.map((p: any) => ({
             id: p.id,
             fullName: p.full_name || "",
-            nicNo: p.nic_no || "",
-            officerRole: p.officer_role === "Chairman" ? "Chairman" : "Member",
-            studiedSchools: Array.isArray(p.studied_schools)
-              ? p.studied_schools
-              : typeof p.studied_schools === "string" && p.studied_schools.startsWith("[")
-              ? JSON.parse(p.studied_schools)
-              : [],
-            childrenSchools: Array.isArray(p.children_schools)
-              ? p.children_schools
-              : typeof p.children_schools === "string" && p.children_schools.startsWith("[")
-              ? JSON.parse(p.children_schools)
-              : [],
+            nicNo: p.employee_no || "",
+            officerRole: "Member",
+            studiedSchools: [],
+            childrenSchools: [],
             email: p.email || "",
             role: "investigation_officer",
-            status: (p.status === "Inactive" ? "Inactive" : "Active") as "Active" | "Inactive",
+            status: p.is_active === false ? "Inactive" : "Active",
             createdAt: (p.created_at || "").slice(0, 10),
           }));
         }
@@ -119,7 +139,7 @@ export default function InvestigationOfficersPage() {
       if (stored) {
         try {
           const list = JSON.parse(stored) as Officer[];
-          const localInvestigation = list.filter((o) => o.role === "investigation_officer");
+          const localInvestigation = list.filter((o) => o.role === "investigation_officer" || o.role === "Investigation officer");
           const dbIds = new Set(result.map((o) => o.id));
           localInvestigation.forEach((lo) => {
             if (!dbIds.has(lo.id)) {
@@ -149,12 +169,7 @@ export default function InvestigationOfficersPage() {
         .channel("investigation-officers-realtime")
         .on(
           "postgres_changes",
-          { event: "*", schema: "public", table: "dcmms_profiles" },
-          () => fetchOfficers()
-        )
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "dcmms_investigation_officers" },
+          { event: "*", schema: "public", table: "register_officer_table" },
           () => fetchOfficers()
         )
         .subscribe();
@@ -164,7 +179,7 @@ export default function InvestigationOfficersPage() {
     window.addEventListener("storage", handleLocalUpdate);
     window.addEventListener("dcmms_data_updated", handleLocalUpdate);
 
-    const interval = setInterval(fetchOfficers, 2500);
+    const interval = setInterval(fetchOfficers, 3000);
 
     return () => {
       if (channel) supabase.removeChannel(channel);
@@ -221,68 +236,55 @@ export default function InvestigationOfficersPage() {
     setIsModalOpen(true);
   };
 
-  // ── Save (Add / Edit) ──────────────────────────────────────────────────────
+  // ── Save (Add / Edit) to register_officer_table ──────────────────────────────
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
 
-    const now = new Date().toISOString();
     const isNew = !isEditMode || !editingId;
-    const newId = isNew ? `inv-${Date.now()}` : editingId!;
+    const targetId = isNew ? undefined : editingId!;
 
-    const officer: Officer = {
-      id: newId,
-      fullName: formName.trim(),
-      nicNo: formNic.trim(),
-      officerRole: formOfficerRole,
-      studiedSchools: formStudiedSchools,
-      childrenSchools: formChildrenSchools,
+    const payload = {
+      id: targetId,
+      employee_no: formNic.trim() || `EMP-${Date.now().toString().slice(-6)}`,
+      full_name: formName.trim(),
       email: formEmail.trim().toLowerCase(),
-      role: "investigation_officer",
-      status: formStatus,
-      createdAt: isNew
-        ? now.slice(0, 10)
-        : officers.find((o) => o.id === editingId)?.createdAt || now.slice(0, 10),
+      role: "Investigation officer",
+      is_active: formStatus === "Active",
     };
 
-    // 1. Write to Supabase (primary)
-    if (isSupabaseConfigured) {
-      try {
-        const payload: any = {
-          full_name: officer.fullName,
-          nic_no: officer.nicNo,
-          officer_role: officer.officerRole,
-          studied_schools: officer.studiedSchools,
-          children_schools: officer.childrenSchools,
-          email: officer.email,
-          role: "investigation_officer",
-          status: officer.status,
-        };
-        // Only include `id` for real UUID edits (not temp local ids starting with "inv-")
-        if (!isNew && !officer.id.startsWith("inv-")) {
-          payload.id = officer.id;
-        }
-
-        await supabase.from("dcmms_investigation_officers").upsert(payload);
-        const { error } = await supabase.from("dcmms_profiles").upsert(payload);
-        if (error) console.warn("Supabase upsert warning:", error);
-      } catch (err: any) {
-        console.error("Supabase upsert failed:", err?.message ?? err);
+    // 1. Save via Server Action to PostgreSQL register_officer_table
+    try {
+      const res = await saveRegisterOfficerServer(payload);
+      if (res.success) {
+        await logAuditEvent(
+          isEditMode ? "UPDATE_INVESTIGATION_OFFICER" : "REGISTER_INVESTIGATION_OFFICER",
+          "register_officer_table",
+          res.data?.id || editingId || "new",
+          { name: payload.full_name, email: payload.email, employee_no: payload.employee_no }
+        );
       }
+    } catch (err) {
+      console.error("Error saving officer via server action:", err);
     }
 
-    // 2. Fallback: localStorage
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("dcmms_custom_profiles");
-      let list: Officer[] = [];
+    // 2. Dual write via Supabase if configured
+    if (isSupabaseConfigured) {
       try {
-        list = stored ? JSON.parse(stored) : [];
-      } catch {
-        list = [];
+        const supaPayload: any = {
+          employee_no: payload.employee_no,
+          full_name: payload.full_name,
+          email: payload.email,
+          role: "Investigation officer",
+          is_active: payload.is_active,
+        };
+        if (payload.id && !payload.id.startsWith("inv-")) {
+          supaPayload.id = payload.id;
+        }
+        await supabase.from("register_officer_table").upsert(supaPayload);
+      } catch (e) {
+        console.error("Supabase upsert failed:", e);
       }
-      list = list.filter((o) => o.id !== officer.id);
-      list.push(officer);
-      localStorage.setItem("dcmms_custom_profiles", JSON.stringify(list));
     }
 
     showToast(isEditMode ? "Officer updated successfully!" : t("officerAddedSuccess", "Officer registered successfully!"));
@@ -294,35 +296,14 @@ export default function InvestigationOfficersPage() {
   const handleDelete = async (officer: Officer) => {
     if (!confirm("Are you sure you want to delete this officer?")) return;
 
-    // 1. Delete from Supabase if it has a real (non-temp) id
-    if (isSupabaseConfigured && officer.id && !officer.id.startsWith("inv-") && !officer.id.startsWith("off-")) {
+    try {
+      await deleteRegisterOfficerServer(officer.id);
+    } catch (e) {}
+
+    if (isSupabaseConfigured && !officer.id.startsWith("inv-")) {
       try {
-        await supabase.from("dcmms_profiles").delete().eq("id", officer.id);
-        await supabase.from("dcmms_investigation_officers").delete().eq("id", officer.id);
-      } catch (err: any) {
-        console.warn("Supabase delete info:", err?.message ?? err);
-      }
-    }
-
-    // 2. Remove from localStorage
-    if (typeof window !== "undefined") {
-      const storedCustom = localStorage.getItem("dcmms_custom_profiles");
-      if (storedCustom) {
-        try {
-          let list = JSON.parse(storedCustom) as Officer[];
-          list = list.filter((o) => o.id !== officer.id && o.fullName !== officer.fullName);
-          localStorage.setItem("dcmms_custom_profiles", JSON.stringify(list));
-        } catch {}
-      }
-
-      const storedInv = localStorage.getItem("dcmms_investigation_officers");
-      if (storedInv) {
-        try {
-          let list = JSON.parse(storedInv);
-          list = list.filter((o: any) => o.id !== officer.id && o.fullName !== officer.fullName);
-          localStorage.setItem("dcmms_investigation_officers", JSON.stringify(list));
-        } catch {}
-      }
+        await supabase.from("register_officer_table").delete().eq("id", officer.id);
+      } catch (err) {}
     }
 
     showToast("Officer deleted successfully.");
@@ -331,32 +312,31 @@ export default function InvestigationOfficersPage() {
 
   // ── Toggle Status ──────────────────────────────────────────────────────────
   const handleToggleStatus = async (officer: Officer) => {
-    const newStatus: "Active" | "Inactive" = officer.status === "Active" ? "Inactive" : "Active";
+    const newActive = officer.status !== "Active";
+    const newStatusStr = newActive ? "Active" : "Inactive";
 
+    try {
+      await toggleRegisterOfficerStatusServer(officer.id, newActive);
+    } catch (e) {}
 
-
-    // 2. Update localStorage
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("dcmms_custom_profiles");
-      let list: Officer[] = [];
+    if (isSupabaseConfigured && !officer.id.startsWith("inv-")) {
       try {
-        list = stored ? JSON.parse(stored) : [];
-      } catch {
-        list = [];
-      }
-      list = list.filter((o) => o.id !== officer.id);
-      list.push({ ...officer, status: newStatus });
-      localStorage.setItem("dcmms_custom_profiles", JSON.stringify(list));
+        await supabase
+          .from("register_officer_table")
+          .update({ is_active: newActive })
+          .eq("id", officer.id);
+      } catch (e) {}
     }
 
-    showToast(`Status of ${officer.fullName} updated to ${newStatus}.`);
+    showToast(`Status of ${officer.fullName} updated to ${newStatusStr}.`);
     fetchOfficers();
   };
 
   const filteredOfficers = officers.filter(
     (o) =>
       o.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      o.email.toLowerCase().includes(searchQuery.toLowerCase())
+      o.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (o.nicNo || "").toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   // ── Render ─────────────────────────────────────────────────────────────────

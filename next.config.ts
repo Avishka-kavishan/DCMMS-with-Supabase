@@ -1,11 +1,13 @@
 import type { NextConfig } from "next";
 
+const isStaticExport = process.env.BUILD_TARGET === "static";
+
 const nextConfig: NextConfig = {
-  output: "export",          // Generates a static `out/` folder
-  basePath: process.env.NEXT_PUBLIC_BASE_PATH ?? "", // Set by CI for GitHub Pages sub-path
-  trailingSlash: true,     // Ensures static folders are generated with index.html for correct subpage routing
+  ...(isStaticExport ? { output: "export" } : {}),
+  basePath: process.env.NEXT_PUBLIC_BASE_PATH ?? "",
+  trailingSlash: true,
   images: {
-    unoptimized: true,       // Required — Next.js image optimisation is not available in static export
+    unoptimized: true,
   },
 };
 

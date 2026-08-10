@@ -10,7 +10,7 @@ import { useTranslation } from "react-i18next";
 import { Sidebar } from "@/components/Sidebar";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
-import { signOut } from "@/lib/auth";
+import { signOut, getCurrentProfile } from "@/lib/auth";
 
 interface CalendarEvent {
   id: string;
@@ -206,8 +206,8 @@ export default function CalendarPage() {
 
   // Session guard — redirect to login if not authenticated
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session?.user) router.replace("/");
+    getCurrentProfile().then((profile) => {
+      if (!profile) router.replace("/");
     });
   }, [router]);
 

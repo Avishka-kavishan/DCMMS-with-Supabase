@@ -4,12 +4,19 @@ import { useTranslation } from "react-i18next";
 import "../../../i18n";
 import { UserPlus, X, Edit, Trash2, Check } from "lucide-react";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
+import { 
+  getRegisterOfficersServer, 
+  saveRegisterOfficerServer, 
+  deleteRegisterOfficerServer, 
+  toggleRegisterOfficerStatusServer 
+} from "@/lib/db-actions";
 
 interface Officer {
   id: string;
+  employeeNo: string;
   fullName: string;
   email: string;
-  role: "subject_officer";
+  role: string;
   status: "Active" | "Inactive";
   createdAt: string;
 }
@@ -26,6 +33,7 @@ export default function SubjectOfficersPage() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
+  const [formEmployeeNo, setFormEmployeeNo] = useState("");
   const [formName, setFormName] = useState("");
   const [formEmail, setFormEmail] = useState("");
   const [formStatus, setFormStatus] = useState<"Active" | "Inactive">("Active");
@@ -36,26 +44,46 @@ export default function SubjectOfficersPage() {
     setTimeout(() => setToastMessage(""), 3500);
   };
 
-  // ── Fetch officers — DB primary, localStorage fallback ─────────────────────
+  // ── Fetch officers from register_officer_table ─────────────────────
   const fetchOfficers = async () => {
     setIsLoading(true);
     let result: Officer[] = [];
 
-    if (isSupabaseConfigured) {
+    // 1. Primary: Server Action querying register_officer_table
+    try {
+      const res = await getRegisterOfficersServer("Subject");
+      if (res.success && res.data && res.data.length > 0) {
+        result = res.data.map((p: any) => ({
+          id: p.id,
+          employeeNo: p.employee_no || "",
+          fullName: p.full_name || "",
+          email: p.email || "",
+          role: "subject_officer",
+          status: p.is_active === false ? "Inactive" : "Active",
+          createdAt: p.created_at ? new Date(p.created_at).toISOString().slice(0, 10) : "",
+        }));
+      }
+    } catch (err) {
+      console.error("Failed to load subject officers via server action:", err);
+    }
+
+    // 2. Supabase fallback querying register_officer_table
+    if (result.length === 0 && isSupabaseConfigured) {
       try {
         const { data, error } = await supabase
-          .from("dcmms_profiles")
-          .select("id, full_name, email, status, created_at")
-          .eq("role", "subject_officer")
+          .from("register_officer_table")
+          .select("*")
+          .or("role.eq.Subject officer,role.eq.subject_officer,role.ilike.%subject%")
           .order("created_at", { ascending: false });
 
         if (!error && data) {
           result = data.map((p: any) => ({
             id: p.id,
+            employeeNo: p.employee_no || "",
             fullName: p.full_name || "",
             email: p.email || "",
             role: "subject_officer",
-            status: (p.status === "Inactive" ? "Inactive" : "Active") as "Active" | "Inactive",
+            status: p.is_active === false ? "Inactive" : "Active",
             createdAt: (p.created_at || "").slice(0, 10),
           }));
         }
@@ -64,13 +92,13 @@ export default function SubjectOfficersPage() {
       }
     }
 
-    // Merge any locally-created officers that aren't in the DB yet
+    // 3. Fallback: Merge custom local profiles if any
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("dcmms_custom_profiles");
       if (stored) {
         try {
           const list = JSON.parse(stored) as Officer[];
-          const localSubject = list.filter((o) => o.role === "subject_officer");
+          const localSubject = list.filter((o) => o.role === "subject_officer" || o.role === "Subject officer");
           const dbIds = new Set(result.map((o) => o.id));
           localSubject.forEach((lo) => {
             if (!dbIds.has(lo.id)) result.push(lo);
@@ -94,7 +122,7 @@ export default function SubjectOfficersPage() {
         .channel("subject-officers-realtime")
         .on(
           "postgres_changes",
-          { event: "*", schema: "public", table: "dcmms_profiles" },
+          { event: "*", schema: "public", table: "register_officer_table" },
           () => fetchOfficers()
         )
         .subscribe();
@@ -104,7 +132,7 @@ export default function SubjectOfficersPage() {
     window.addEventListener("storage", handleLocalUpdate);
     window.addEventListener("dcmms_data_updated", handleLocalUpdate);
 
-    const interval = setInterval(fetchOfficers, 2500);
+    const interval = setInterval(fetchOfficers, 3000);
 
     return () => {
       if (channel) supabase.removeChannel(channel);
@@ -114,10 +142,10 @@ export default function SubjectOfficersPage() {
     };
   }, []);
 
-
   // ── Validation ─────────────────────────────────────────────────────────────
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
+    if (!formEmployeeNo.trim()) newErrors.employeeNo = "Employee Number / Staff ID is required.";
     if (!formName.trim()) newErrors.name = t("pleaseFillAllFields", "Please fill out all fields.");
     if (!formEmail.trim()) {
       newErrors.email = t("pleaseFillAllFields", "Please fill out all fields.");
@@ -130,104 +158,127 @@ export default function SubjectOfficersPage() {
 
   // ── Modal helpers ──────────────────────────────────────────────────────────
   const openAddModal = () => {
-    setIsEditMode(false); setEditingId(null);
-    setFormName(""); setFormEmail(""); setFormStatus("Active");
-    setErrors({}); setIsModalOpen(true);
-  };
-  const openEditModal = (o: Officer) => {
-    setIsEditMode(true); setEditingId(o.id);
-    setFormName(o.fullName); setFormEmail(o.email); setFormStatus(o.status);
-    setErrors({}); setIsModalOpen(true);
+    setIsEditMode(false); 
+    setEditingId(null);
+    setFormEmployeeNo(""); 
+    setFormName(""); 
+    setFormEmail(""); 
+    setFormStatus("Active");
+    setErrors({}); 
+    setIsModalOpen(true);
   };
 
-  // ── Save (Add / Edit) ──────────────────────────────────────────────────────
+  const openEditModal = (o: Officer) => {
+    setIsEditMode(true); 
+    setEditingId(o.id);
+    setFormEmployeeNo(o.employeeNo);
+    setFormName(o.fullName); 
+    setFormEmail(o.email); 
+    setFormStatus(o.status);
+    setErrors({}); 
+    setIsModalOpen(true);
+  };
+
+  // ── Save (Add / Edit) to register_officer_table ──────────────────────────────
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
 
-    const now = new Date().toISOString();
     const isNew = !isEditMode || !editingId;
-    const newId = isNew ? `sub-${Date.now()}` : editingId!;
+    const targetId = isNew ? undefined : editingId!;
 
-    const officer: Officer = {
-      id: newId,
-      fullName: formName.trim(),
+    const payload = {
+      id: targetId,
+      employee_no: formEmployeeNo.trim() || `EMP-${Date.now().toString().slice(-6)}`,
+      full_name: formName.trim(),
       email: formEmail.trim().toLowerCase(),
-      role: "subject_officer",
-      status: formStatus,
-      createdAt: isNew
-        ? now.slice(0, 10)
-        : officers.find((o) => o.id === editingId)?.createdAt || now.slice(0, 10),
+      role: "Subject officer",
+      is_active: formStatus === "Active",
     };
 
-    // 1. Write to Supabase (primary)
-    if (isSupabaseConfigured) {
-      try {
-        const payload: any = {
-          full_name: officer.fullName,
-          role: "subject_officer",
-        };
-        // Only include `id` for real UUID edits (not temp local ids)
-        if (!isNew && !officer.id.startsWith("sub-")) payload.id = officer.id;
+    let saveSuccess = false;
+    let errorMsg = "";
 
-        const { error } = await supabase.from("dcmms_profiles").upsert(payload);
-        if (error) throw error;
-
+    // 1. Save via Server Action to PostgreSQL register_officer_table
+    try {
+      const res = await saveRegisterOfficerServer(payload);
+      if (res.success) {
+        saveSuccess = true;
         await logAuditEvent(
           isEditMode ? "UPDATE_SUBJECT_OFFICER" : "REGISTER_SUBJECT_OFFICER",
-          "dcmms_profiles",
-          officer.id,
-          { name: officer.fullName, email: officer.email }
+          "register_officer_table",
+          res.data?.id || editingId || "new",
+          { name: payload.full_name, email: payload.email, employee_no: payload.employee_no }
         );
+      } else {
+        errorMsg = res.error || "Failed to save officer in PostgreSQL";
+      }
+    } catch (err: any) {
+      console.error("Error saving officer via server action:", err);
+      errorMsg = err?.message || "Server error";
+    }
 
-        showToast(isEditMode ? "Officer updated successfully!" : t("officerAddedSuccess", "Officer registered successfully!"));
-        setIsModalOpen(false);
-        fetchOfficers();
-        return;
-      } catch (err: any) {
-        console.error("Supabase upsert failed:", err?.message ?? err);
+    // 2. Dual write via Supabase if configured
+    if (isSupabaseConfigured) {
+      try {
+        const supaPayload: any = {
+          employee_no: payload.employee_no,
+          full_name: payload.full_name,
+          email: payload.email,
+          role: "Subject officer",
+          is_active: payload.is_active,
+        };
+        if (payload.id && !payload.id.startsWith("sub-")) {
+          supaPayload.id = payload.id;
+        }
+        const { error } = await supabase.from("register_officer_table").upsert(supaPayload);
+        if (!error) saveSuccess = true;
+      } catch (e) {
+        console.error("Supabase upsert failed:", e);
       }
     }
 
-    // 2. Fallback: localStorage
+    // 3. Fallback: Save locally if DB operations failed
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("dcmms_custom_profiles");
-      let list: Officer[] = [];
+      let list: any[] = [];
       try { list = stored ? JSON.parse(stored) : []; } catch { list = []; }
-      list = list.filter((o) => o.id !== officer.id);
-      list.push(officer);
+      const newObj = {
+        id: payload.id || `sub-${Date.now()}`,
+        employeeNo: payload.employee_no,
+        fullName: payload.full_name,
+        email: payload.email,
+        role: "subject_officer",
+        status: formStatus,
+        createdAt: new Date().toISOString().slice(0, 10),
+      };
+      list = list.filter((o: any) => o.id !== newObj.id);
+      list.push(newObj);
       localStorage.setItem("dcmms_custom_profiles", JSON.stringify(list));
+      saveSuccess = true;
     }
 
-    showToast(isEditMode ? "Officer updated successfully!" : t("officerAddedSuccess", "Officer registered successfully!"));
-    setIsModalOpen(false);
-    fetchOfficers();
+    if (saveSuccess) {
+      showToast(isEditMode ? "Officer updated successfully!" : t("officerAddedSuccess", "Officer registered successfully!"));
+      setIsModalOpen(false);
+      fetchOfficers();
+    } else {
+      showToast(`Error: ${errorMsg || "Failed to save officer"}`);
+    }
   };
 
   // ── Delete ─────────────────────────────────────────────────────────────────
   const handleDelete = async (officer: Officer) => {
     if (!confirm("Are you sure you want to delete this officer?")) return;
 
-    // 1. Delete from Supabase if it has a real (non-temp) id
+    try {
+      await deleteRegisterOfficerServer(officer.id);
+    } catch (e) {}
+
     if (isSupabaseConfigured && !officer.id.startsWith("sub-")) {
       try {
-        const { error } = await supabase.from("dcmms_profiles").delete().eq("id", officer.id);
-        if (error) throw error;
-      } catch (err: any) {
-        console.error("Supabase delete failed:", err?.message ?? err);
-      }
-    }
-
-    // 2. Remove from localStorage
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("dcmms_custom_profiles");
-      if (stored) {
-        try {
-          let list = JSON.parse(stored) as Officer[];
-          list = list.filter((o) => o.id !== officer.id);
-          localStorage.setItem("dcmms_custom_profiles", JSON.stringify(list));
-        } catch { /* ignore */ }
-      }
+        await supabase.from("register_officer_table").delete().eq("id", officer.id);
+      } catch (err) {}
     }
 
     showToast("Officer deleted successfully.");
@@ -236,28 +287,31 @@ export default function SubjectOfficersPage() {
 
   // ── Toggle Status ──────────────────────────────────────────────────────────
   const handleToggleStatus = async (officer: Officer) => {
-    const newStatus: "Active" | "Inactive" = officer.status === "Active" ? "Inactive" : "Active";
+    const newActive = officer.status !== "Active";
+    const newStatusStr = newActive ? "Active" : "Inactive";
 
+    try {
+      await toggleRegisterOfficerStatusServer(officer.id, newActive);
+    } catch (e) {}
 
-
-    // 2. Update localStorage
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("dcmms_custom_profiles");
-      let list: Officer[] = [];
-      try { list = stored ? JSON.parse(stored) : []; } catch { list = []; }
-      list = list.filter((o) => o.id !== officer.id);
-      list.push({ ...officer, status: newStatus });
-      localStorage.setItem("dcmms_custom_profiles", JSON.stringify(list));
+    if (isSupabaseConfigured && !officer.id.startsWith("sub-")) {
+      try {
+        await supabase
+          .from("register_officer_table")
+          .update({ is_active: newActive })
+          .eq("id", officer.id);
+      } catch (e) {}
     }
 
-    showToast(`Status of ${officer.fullName} updated to ${newStatus}.`);
+    showToast(`Status of ${officer.fullName} updated to ${newStatusStr}.`);
     fetchOfficers();
   };
 
   const filteredOfficers = officers.filter(
     (o) =>
       o.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      o.email.toLowerCase().includes(searchQuery.toLowerCase())
+      o.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      o.employeeNo.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -271,7 +325,7 @@ export default function SubjectOfficersPage() {
           </svg>
           <input
             type="text"
-            placeholder={t("searchUserPlaceholder", "Search by name, role, email…")}
+            placeholder={t("searchUserPlaceholder", "Search by name, employee no, role, email…")}
             className="search-input"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -289,6 +343,7 @@ export default function SubjectOfficersPage() {
           <table className="letters-data-table">
             <thead>
               <tr>
+                <th scope="col">Employee No</th>
                 <th scope="col">{t("officerFullName", "Officer Full Name")}</th>
                 <th scope="col">{t("emailAddress", "E-mail Address")}</th>
                 <th scope="col">{t("assignedSystemRole", "Assigned System Role")}</th>
@@ -299,13 +354,14 @@ export default function SubjectOfficersPage() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={5} className="admin-table-no-data table-no-data-padding">
+                  <td colSpan={6} className="admin-table-no-data table-no-data-padding">
                     {t("loadingData", "Loading officers from database…")}
                   </td>
                 </tr>
               ) : filteredOfficers.length > 0 ? (
                 filteredOfficers.map((item) => (
                   <tr key={item.id} className="letter-table-row">
+                    <td className="font-mono text-sm">{item.employeeNo || "—"}</td>
                     <td className="admin-table-case-no font-semibold">{item.fullName}</td>
                     <td>{item.email || "—"}</td>
                     <td>{t("roleSubject", "Subject Officer")}</td>
@@ -331,9 +387,9 @@ export default function SubjectOfficersPage() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={5} className="admin-table-no-data table-no-data-padding">
+                  <td colSpan={6} className="admin-table-no-data table-no-data-padding">
                     {officers.length === 0
-                      ? t("noOfficersInDatabase", "No subject officers found in the database.")
+                      ? t("noOfficersInDatabase", "No subject officers found in register_officer_table.")
                       : t("noLettersFound", "No entries found matching search.")}
                   </td>
                 </tr>
@@ -358,6 +414,21 @@ export default function SubjectOfficersPage() {
 
             <form onSubmit={handleSave}>
               <div className="modal-body">
+                <div className="form-field-group">
+                  <label htmlFor="employeeNo" className="field-label">
+                    Employee No / Staff ID <span className="required-star">*</span>
+                  </label>
+                  <input
+                    id="employeeNo"
+                    type="text"
+                    placeholder="e.g. 200399100111"
+                    value={formEmployeeNo}
+                    onChange={(e) => setFormEmployeeNo(e.target.value)}
+                    className={`field-input ${errors.employeeNo ? "field-input-invalid" : ""}`}
+                  />
+                  {errors.employeeNo && <span className="field-error-text">{errors.employeeNo}</span>}
+                </div>
+
                 <div className="form-field-group">
                   <label htmlFor="fullName" className="field-label">
                     {t("officerFullName", "Officer Full Name")} <span className="required-star">*</span>

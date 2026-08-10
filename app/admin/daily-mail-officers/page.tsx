@@ -2,94 +2,118 @@
 import React, { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import "../../../i18n";
-import { Search, UserPlus, X, Edit, Trash2, Check } from "lucide-react";
+import { UserPlus, X, Edit, Trash2, Check } from "lucide-react";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
+import { 
+  getRegisterOfficersServer, 
+  saveRegisterOfficerServer, 
+  deleteRegisterOfficerServer, 
+  toggleRegisterOfficerStatusServer 
+} from "@/lib/db-actions";
 
 interface Officer {
   id: string;
+  employeeNo: string;
   fullName: string;
   email: string;
-  role: "subject_officer" | "investigation_officer" | "daily_mail";
+  role: string;
   status: "Active" | "Inactive";
   createdAt: string;
 }
 
 export default function DailyMailOfficersPage() {
-  const { t, i18n } = useTranslation();
-  const lang = i18n.language;
+  const { t } = useTranslation();
 
-  // Search & data states
   const [searchQuery, setSearchQuery] = useState("");
   const [officers, setOfficers] = useState<Officer[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [toastMessage, setToastMessage] = useState("");
 
-  // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  // Form states
+  const [formEmployeeNo, setFormEmployeeNo] = useState("");
   const [formName, setFormName] = useState("");
   const [formEmail, setFormEmail] = useState("");
   const [formStatus, setFormStatus] = useState<"Active" | "Inactive">("Active");
-
-  // Error states
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Show Toast Helper
   const showToast = (msg: string) => {
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(""), 3000);
+    setTimeout(() => setToastMessage(""), 3500);
   };
 
-  // Fetch Officers list
+  // ── Fetch officers from register_officer_table ─────────────────────
   const fetchOfficers = async () => {
-    let dbOfficers: Officer[] = [];
+    setIsLoading(true);
+    let result: Officer[] = [];
 
-    if (isSupabaseConfigured) {
+    // 1. Primary: Server Action querying register_officer_table
+    try {
+      const res = await getRegisterOfficersServer("Daily mail");
+      if (res.success && res.data && res.data.length > 0) {
+        result = res.data.map((p: any) => ({
+          id: p.id,
+          employeeNo: p.employee_no || "",
+          fullName: p.full_name || "",
+          email: p.email || "",
+          role: "daily_mail",
+          status: p.is_active === false ? "Inactive" : "Active",
+          createdAt: p.created_at ? new Date(p.created_at).toISOString().slice(0, 10) : "",
+        }));
+      }
+    } catch (err) {
+      console.error("Failed to load daily mail officers via server action:", err);
+    }
+
+    // 2. Supabase fallback querying register_officer_table
+    if (result.length === 0 && isSupabaseConfigured) {
       try {
         const { data, error } = await supabase
-          .from("dcmms_profiles")
+          .from("register_officer_table")
           .select("*")
-          .eq("role", "daily_mail");
+          .or("role.eq.Daily mail officer,role.eq.daily_mail,role.ilike.%daily%mail%")
+          .order("created_at", { ascending: false });
 
         if (!error && data) {
-          dbOfficers = data.map((profile: any) => ({
-            id: profile.id,
-            fullName: profile.full_name,
-            email: profile.email || `${profile.full_name.toLowerCase().replace(/\s+/g, "")}@gmail.com`,
+          result = data.map((p: any) => ({
+            id: p.id,
+            employeeNo: p.employee_no || "",
+            fullName: p.full_name || "",
+            email: p.email || "",
             role: "daily_mail",
-            status: profile.status || "Active",
-            createdAt: profile.created_at || new Date().toISOString().split("T")[0],
+            status: p.is_active === false ? "Inactive" : "Active",
+            createdAt: (p.created_at || "").slice(0, 10),
           }));
         }
       } catch (err) {
-        console.error("Error loading daily mail officers from database:", err);
+        console.error("Failed to load daily mail officers from Supabase:", err);
       }
     }
 
-    // Load custom officers from localStorage
-    let localOfficers: Officer[] = [];
+    // 3. Fallback: Merge custom local profiles if any
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("dcmms_custom_profiles");
       if (stored) {
         try {
-          const parsed = JSON.parse(stored);
-          localOfficers = parsed.filter((o: Officer) => o.role === "daily_mail");
+          const list = JSON.parse(stored) as Officer[];
+          const localDailyMail = list.filter((o) => o.role === "daily_mail" || o.role === "Daily mail officer");
+          const dbIds = new Set(result.map((o) => o.id));
+          const dbEmails = new Set(result.map((o) => (o.email || "").toLowerCase()));
+          localDailyMail.forEach((lo) => {
+            if (!dbIds.has(lo.id) && !dbEmails.has((lo.email || "").toLowerCase())) {
+              result.push(lo);
+            }
+          });
         } catch (e) {
-          console.error("Error parsing custom profiles from localStorage:", e);
+          console.error("Failed to parse local profiles:", e);
         }
       }
     }
 
-    // Combine lists, preferring DB entry on ID conflicts
-    const combinedMap = new Map<string, Officer>();
-    
-    // Add default templates if nothing is present
-    localOfficers.forEach(l => combinedMap.set(l.id, l));
-    dbOfficers.forEach(d => combinedMap.set(d.id, d));
-
-    setOfficers(Array.from(combinedMap.values()));
+    setOfficers(result);
+    setIsLoading(false);
   };
 
   useEffect(() => {
@@ -101,7 +125,7 @@ export default function DailyMailOfficersPage() {
         .channel("daily-mail-officers-realtime")
         .on(
           "postgres_changes",
-          { event: "*", schema: "public", table: "dcmms_profiles" },
+          { event: "*", schema: "public", table: "register_officer_table" },
           () => fetchOfficers()
         )
         .subscribe();
@@ -111,7 +135,7 @@ export default function DailyMailOfficersPage() {
     window.addEventListener("storage", handleLocalUpdate);
     window.addEventListener("dcmms_data_updated", handleLocalUpdate);
 
-    const interval = setInterval(fetchOfficers, 2500);
+    const interval = setInterval(fetchOfficers, 3000);
 
     return () => {
       if (channel) supabase.removeChannel(channel);
@@ -121,13 +145,11 @@ export default function DailyMailOfficersPage() {
     };
   }, []);
 
-
-  // Validation
+  // ── Validation ─────────────────────────────────────────────────────────────
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
-    if (!formName.trim()) {
-      newErrors.name = t("pleaseFillAllFields", "Please fill out all fields.");
-    }
+    if (!formEmployeeNo.trim()) newErrors.employeeNo = "Employee Number / Staff ID is required.";
+    if (!formName.trim()) newErrors.name = t("pleaseFillAllFields", "Please fill out all fields.");
     if (!formEmail.trim()) {
       newErrors.email = t("pleaseFillAllFields", "Please fill out all fields.");
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formEmail.trim())) {
@@ -137,147 +159,165 @@ export default function DailyMailOfficersPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  // Open Modal Helpers
+  // ── Modal helpers ──────────────────────────────────────────────────────────
   const openAddModal = () => {
-    setIsEditMode(false);
+    setIsEditMode(false); 
     setEditingId(null);
-    setFormName("");
-    setFormEmail("");
+    setFormEmployeeNo(""); 
+    setFormName(""); 
+    setFormEmail(""); 
     setFormStatus("Active");
-    setErrors({});
+    setErrors({}); 
     setIsModalOpen(true);
   };
 
-  const openEditModal = (officer: Officer) => {
-    setIsEditMode(true);
-    setEditingId(officer.id);
-    setFormName(officer.fullName);
-    setFormEmail(officer.email);
-    setFormStatus(officer.status);
-    setErrors({});
+  const openEditModal = (o: Officer) => {
+    setIsEditMode(true); 
+    setEditingId(o.id);
+    setFormEmployeeNo(o.employeeNo);
+    setFormName(o.fullName); 
+    setFormEmail(o.email); 
+    setFormStatus(o.status);
+    setErrors({}); 
     setIsModalOpen(true);
   };
 
-  // Save Form Handler
+  // ── Save (Add / Edit) to register_officer_table ──────────────────────────────
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
 
-    const savedOfficer: Officer = {
-      id: isEditMode && editingId ? editingId : `dm-${Date.now()}`,
-      fullName: formName.trim(),
+    const isNew = !isEditMode || !editingId;
+    const targetId = isNew ? undefined : editingId!;
+
+    const payload = {
+      id: targetId,
+      employee_no: formEmployeeNo.trim() || `EMP-${Date.now().toString().slice(-6)}`,
+      full_name: formName.trim(),
       email: formEmail.trim().toLowerCase(),
-      role: "daily_mail",
-      status: formStatus,
-      createdAt: isEditMode && editingId
-        ? officers.find(o => o.id === editingId)?.createdAt || new Date().toISOString().split("T")[0]
-        : new Date().toISOString().split("T")[0],
+      role: "Daily mail officer",
+      is_active: formStatus === "Active",
     };
 
-    // Save custom profiles in localStorage
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("dcmms_custom_profiles");
-      let list: Officer[] = [];
-      if (stored) {
-        try {
-          list = JSON.parse(stored);
-        } catch (e) {
-          list = [];
-        }
-      }
+    let saveSuccess = false;
+    let errorMsg = "";
 
-      if (isEditMode) {
-        list = list.filter(o => o.id !== savedOfficer.id);
+    // 1. Save via Server Action to PostgreSQL register_officer_table
+    try {
+      const res = await saveRegisterOfficerServer(payload);
+      if (res.success) {
+        saveSuccess = true;
+        await logAuditEvent(
+          isEditMode ? "UPDATE_DAILY_MAIL_OFFICER" : "REGISTER_DAILY_MAIL_OFFICER",
+          "register_officer_table",
+          res.data?.id || editingId || "new",
+          { name: payload.full_name, email: payload.email, employee_no: payload.employee_no }
+        );
+      } else {
+        errorMsg = res.error || "Failed to save officer in PostgreSQL";
       }
-      list.push(savedOfficer);
-      localStorage.setItem("dcmms_custom_profiles", JSON.stringify(list));
+    } catch (err: any) {
+      console.error("Error saving officer via server action:", err);
+      errorMsg = err?.message || "Server error";
     }
 
-    // Try DB upsert
+    // 2. Dual write via Supabase if configured
     if (isSupabaseConfigured) {
       try {
-        await supabase.from("dcmms_profiles").upsert({
-          id: savedOfficer.id.startsWith("dm-") || savedOfficer.id.startsWith("default-") ? undefined : savedOfficer.id,
-          full_name: savedOfficer.fullName,
-          role: "daily_mail",
-        });
-
-        await logAuditEvent(
-          isEditMode ? "UPDATE_DAILY_MAIL_OFFICER" : "ADD_DAILY_MAIL_OFFICER",
-          "dcmms_profiles",
-          savedOfficer.id,
-          { name: savedOfficer.fullName, email: savedOfficer.email }
-        );
-      } catch (err) {
-        console.warn("Could not upsert to Supabase. Falling back fully to localStorage.", err);
+        const supaPayload: any = {
+          employee_no: payload.employee_no,
+          full_name: payload.full_name,
+          email: payload.email,
+          role: "Daily mail officer",
+          is_active: payload.is_active,
+        };
+        if (payload.id && !payload.id.startsWith("dm-")) {
+          supaPayload.id = payload.id;
+        }
+        const { error } = await supabase.from("register_officer_table").upsert(supaPayload);
+        if (!error) saveSuccess = true;
+      } catch (e) {
+        console.error("Supabase upsert failed:", e);
       }
     }
 
-    showToast(isEditMode ? "Officer updated successfully!" : t("officerAddedSuccess", "Officer registered successfully!"));
-    setIsModalOpen(false);
-    fetchOfficers();
+    // 3. Fallback: Save locally if DB operations failed
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("dcmms_custom_profiles");
+      let list: any[] = [];
+      try { list = stored ? JSON.parse(stored) : []; } catch { list = []; }
+      const newObj = {
+        id: payload.id || `dm-${Date.now()}`,
+        employeeNo: payload.employee_no,
+        fullName: payload.full_name,
+        email: payload.email,
+        role: "daily_mail",
+        status: formStatus,
+        createdAt: new Date().toISOString().slice(0, 10),
+      };
+      list = list.filter((o: any) => o.id !== newObj.id);
+      list.push(newObj);
+      localStorage.setItem("dcmms_custom_profiles", JSON.stringify(list));
+      saveSuccess = true;
+    }
+
+    if (saveSuccess) {
+      showToast(isEditMode ? "Officer updated successfully!" : t("officerAddedSuccess", "Officer registered successfully!"));
+      setIsModalOpen(false);
+      fetchOfficers();
+    } else {
+      showToast(`Error: ${errorMsg || "Failed to save officer"}`);
+    }
   };
 
-  // Delete Handler
-  const handleDelete = async (id: string) => {
+  // ── Delete ─────────────────────────────────────────────────────────────────
+  const handleDelete = async (officer: Officer) => {
     if (!confirm("Are you sure you want to delete this officer?")) return;
 
-    if (isSupabaseConfigured) {
+    try {
+      await deleteRegisterOfficerServer(officer.id);
+    } catch (e) {}
+
+    if (isSupabaseConfigured && !officer.id.startsWith("dm-")) {
       try {
-        await supabase.from("dcmms_profiles").delete().eq("id", id);
-      } catch (err) {
-        console.error("Failed to delete from Supabase", err);
-      }
+        await supabase.from("register_officer_table").delete().eq("id", officer.id);
+      } catch (err) {}
     }
 
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("dcmms_custom_profiles");
-      if (stored) {
-        try {
-          let list = JSON.parse(stored);
-          list = list.filter((o: Officer) => o.id !== id);
-          localStorage.setItem("dcmms_custom_profiles", JSON.stringify(list));
-        } catch (e) {
-          console.error(e);
-        }
-      }
-    }
     showToast("Officer deleted successfully.");
     fetchOfficers();
   };
 
-  // Toggle Status Handler
+  // ── Toggle Status ──────────────────────────────────────────────────────────
   const handleToggleStatus = async (officer: Officer) => {
-    const newStatus: "Active" | "Inactive" = officer.status === "Active" ? "Inactive" : "Active";
-    const updated: Officer = { ...officer, status: newStatus };
+    const newActive = officer.status !== "Active";
+    const newStatusStr = newActive ? "Active" : "Inactive";
 
+    try {
+      await toggleRegisterOfficerStatusServer(officer.id, newActive);
+    } catch (e) {}
 
-
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("dcmms_custom_profiles");
-      let list: Officer[] = [];
-      if (stored) {
-        try {
-          list = JSON.parse(stored);
-        } catch (e) {
-          list = [];
-        }
-      }
-      list = list.filter(o => o.id !== officer.id);
-      list.push(updated);
-      localStorage.setItem("dcmms_custom_profiles", JSON.stringify(list));
+    if (isSupabaseConfigured && !officer.id.startsWith("dm-")) {
+      try {
+        await supabase
+          .from("register_officer_table")
+          .update({ is_active: newActive })
+          .eq("id", officer.id);
+      } catch (e) {}
     }
 
-    showToast(`Status of ${officer.fullName} updated to ${newStatus}`);
+    showToast(`Status of ${officer.fullName} updated to ${newStatusStr}.`);
     fetchOfficers();
   };
 
-  // Filter list by search query
-  const filteredOfficers = officers.filter(o =>
-    o.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    o.email.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredOfficers = officers.filter(
+    (o) =>
+      o.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      o.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      o.employeeNo.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="admin-dashboard-container">
       {/* Action Bar */}
@@ -288,7 +328,7 @@ export default function DailyMailOfficersPage() {
           </svg>
           <input
             type="text"
-            placeholder={t("searchUserPlaceholder", "Search by name, role, email...")}
+            placeholder={t("searchUserPlaceholder", "Search by name, employee no, role, email…")}
             className="search-input"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -306,6 +346,7 @@ export default function DailyMailOfficersPage() {
           <table className="letters-data-table">
             <thead>
               <tr>
+                <th scope="col">Employee No</th>
                 <th scope="col">{t("officerFullName", "Officer Full Name")}</th>
                 <th scope="col">{t("emailAddress", "E-mail Address")}</th>
                 <th scope="col">{t("assignedSystemRole", "Assigned System Role")}</th>
@@ -314,12 +355,19 @@ export default function DailyMailOfficersPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredOfficers.length > 0 ? (
+              {isLoading ? (
+                <tr>
+                  <td colSpan={6} className="admin-table-no-data table-no-data-padding">
+                    {t("loadingData", "Loading officers from database…")}
+                  </td>
+                </tr>
+              ) : filteredOfficers.length > 0 ? (
                 filteredOfficers.map((item) => (
                   <tr key={item.id} className="letter-table-row">
+                    <td className="font-mono text-sm">{item.employeeNo || "—"}</td>
                     <td className="admin-table-case-no font-semibold">{item.fullName}</td>
-                    <td>{item.email}</td>
-                    <td>{t("roleDailyMail", "Daily mail officer")}</td>
+                    <td>{item.email || "—"}</td>
+                    <td>{t("roleDailyMail", "Daily Mail Officer")}</td>
                     <td>
                       <span className={item.status === "Active" ? "status-badge-active" : "status-badge-inactive"}>
                         {item.status === "Active" ? t("active", "Active") : t("inactive", "Inactive")}
@@ -327,13 +375,13 @@ export default function DailyMailOfficersPage() {
                     </td>
                     <td className="admin-table-cell-center">
                       <div className="action-btn-row">
-                        <button className="btn-table-edit" onClick={() => openEditModal(item)} title={t("view", "Edit")}>
+                        <button className="btn-table-edit" onClick={() => openEditModal(item)} title={t("edit", "Edit")}>
                           <Edit size={16} />
                         </button>
                         <button className="btn-table-toggle" onClick={() => handleToggleStatus(item)} title="Toggle Status">
                           <Check size={16} />
                         </button>
-                        <button className="btn-table-delete" onClick={() => handleDelete(item.id)} title="Delete">
+                        <button className="btn-table-delete" onClick={() => handleDelete(item)} title="Delete">
                           <Trash2 size={16} />
                         </button>
                       </div>
@@ -342,8 +390,10 @@ export default function DailyMailOfficersPage() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={5} className="admin-table-no-data table-no-data-padding">
-                    {t("noLettersFound", "No entries found matching search")}
+                  <td colSpan={6} className="admin-table-no-data table-no-data-padding">
+                    {officers.length === 0
+                      ? t("noOfficersInDatabase", "No daily mail officers found in register_officer_table.")
+                      : t("noLettersFound", "No entries found matching search.")}
                   </td>
                 </tr>
               )}
@@ -368,13 +418,28 @@ export default function DailyMailOfficersPage() {
             <form onSubmit={handleSave}>
               <div className="modal-body">
                 <div className="form-field-group">
+                  <label htmlFor="employeeNo" className="field-label">
+                    Employee No / Staff ID <span className="required-star">*</span>
+                  </label>
+                  <input
+                    id="employeeNo"
+                    type="text"
+                    placeholder="e.g. 200399100222"
+                    value={formEmployeeNo}
+                    onChange={(e) => setFormEmployeeNo(e.target.value)}
+                    className={`field-input ${errors.employeeNo ? "field-input-invalid" : ""}`}
+                  />
+                  {errors.employeeNo && <span className="field-error-text">{errors.employeeNo}</span>}
+                </div>
+
+                <div className="form-field-group">
                   <label htmlFor="fullName" className="field-label">
                     {t("officerFullName", "Officer Full Name")} <span className="required-star">*</span>
                   </label>
                   <input
                     id="fullName"
                     type="text"
-                    placeholder={t("placeholderOfficerNameExample", "e.g. Ranjith Bandara")}
+                    placeholder={t("placeholderOfficerNameExample", "e.g. Nimal Silva")}
                     value={formName}
                     onChange={(e) => setFormName(e.target.value)}
                     className={`field-input ${errors.name ? "field-input-invalid" : ""}`}
@@ -388,8 +453,8 @@ export default function DailyMailOfficersPage() {
                   </label>
                   <input
                     id="email"
-                    type="text"
-                    placeholder={t("placeholderEmailExample", "e.g. ranjithbandara@gmail.com")}
+                    type="email"
+                    placeholder={t("placeholderEmailExample", "e.g. nimalsilva@gmail.com")}
                     value={formEmail}
                     onChange={(e) => setFormEmail(e.target.value)}
                     className={`field-input ${errors.email ? "field-input-invalid" : ""}`}
@@ -403,7 +468,7 @@ export default function DailyMailOfficersPage() {
                     id="assignedRole"
                     type="text"
                     disabled
-                    value={t("roleDailyMail", "Daily mail officer")}
+                    value={t("roleDailyMail", "Daily Mail Officer")}
                     className="field-input disabled-input-custom"
                   />
                 </div>
@@ -435,7 +500,7 @@ export default function DailyMailOfficersPage() {
         </div>
       )}
 
-      {/* Toast Notification */}
+      {/* Toast */}
       {toastMessage && (
         <div className="toast-notification">
           <div className="toast-success-icon-container">

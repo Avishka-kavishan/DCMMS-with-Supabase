@@ -9,9 +9,9 @@ import { useTranslation } from "react-i18next";
 import { TextInput } from "@/components/TextInput";
 import { Button } from "@/components/Button";
 import { SiteFooter } from "@/components/SiteFooter";
-import { supabase } from "@/lib/supabase";
-import { dashboardPath, UserRole, getCurrentProfile } from "@/lib/auth";
+import { dashboardPath, UserRole, getCurrentProfile, normalizeRole } from "@/lib/auth";
 import { logLogin, logFailedLogin } from "@/lib/security";
+import { loginOfficerServer } from "@/lib/db-actions";
 
 /* Font scale map — LGWS 4.0 mandates at least 3 sizes */
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
@@ -64,17 +64,20 @@ export default function Home() {
 
     const getSimulatedUser = () => {
       const emailLower = email.toLowerCase().trim();
-      if (emailLower === "avishkakavishan13@gmail.com" && password === "rath123456") {
-        return { id: "sim-subject", full_name: "Rathnaweera", role: "subject_officer" as UserRole };
+      if (emailLower === "nathashasathsarani209@gmail.com" && (password === "123456" || password === "sysadmin123456")) {
+        return { id: "officer-200280401310", full_name: "Nathasha Sathsarani", role: "system_admin" as UserRole, email };
+      }
+      if (emailLower === "avishkakavishan13@gmail.com" && (password === "123456" || password === "admin123")) {
+        return { id: "officer-200133702441", full_name: "Avishka Kavishan", role: "admin" as UserRole, email };
       }
       if (emailLower === "avishakavishan3@gmail.com" && password === "kavi123456") {
-        return { id: "sim-daily-mail", full_name: "Avishka", role: "daily_mail" as UserRole };
+        return { id: "sim-daily-mail", full_name: "Avishka", role: "daily_mail" as UserRole, email };
       }
       if (emailLower === "admin@dcmms.gov.lk" && password === "sysadmin123456") {
-        return { id: "sim-sysadmin", full_name: "System Admin", role: "system_admin" as UserRole };
+        return { id: "sim-sysadmin", full_name: "System Admin", role: "system_admin" as UserRole, email };
       }
       if (emailLower === "admin@admin.com" && password === "admin123") {
-        return { id: "sim-admin", full_name: "Administrator", role: "admin" as UserRole };
+        return { id: "sim-admin", full_name: "Administrator", role: "admin" as UserRole, email };
       }
       // Check localStorage custom profiles if any match
       if (typeof window !== "undefined") {
@@ -90,6 +93,7 @@ export default function Home() {
                 id: match.id || `sim-${match.role}`,
                 full_name: match.fullName || "User",
                 role: match.role as UserRole,
+                email: match.email || email,
               };
             }
           } catch (e) {
@@ -102,28 +106,56 @@ export default function Home() {
 
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-      if (!data.user) throw new Error("Login failed.");
+      // 1. Primary: Login via PostgreSQL Server Action
+      const res = await loginOfficerServer(email, password);
 
-      // Fetch role using the profile/auto-heal helper
-      const profile = await getCurrentProfile();
+      if (res.success && res.data) {
+        const userRole = normalizeRole(res.data.role);
+        const sessionUser = {
+          id: res.data.id,
+          employee_no: res.data.employee_no,
+          full_name: res.data.full_name,
+          email: res.data.email,
+          role: userRole,
+        };
 
-      if (!profile || !profile.role) {
-        throw new Error("Your account has no role assigned. Please contact an administrator.");
+        if (typeof window !== "undefined") {
+          localStorage.setItem("dcmms_simulated_session", JSON.stringify(sessionUser));
+          localStorage.setItem("dcmms_current_session_id", res.data.id);
+        }
+
+        // Log successful login
+        await logLogin(res.data.id, res.data.full_name, res.data.email);
+
+        router.push(dashboardPath(userRole));
+        return;
       }
 
-      // Log successful login
-      await logLogin(data.user.id, profile.full_name, email);
-
-      router.push(dashboardPath(profile.role as UserRole));
-    } catch (err: any) {
-      // Offline/connection failure or invalid auth: attempt simulated login
+      // 2. Fallback check for simulated/hardcoded users if PostgreSQL returned error
       const simUser = getSimulatedUser();
       if (simUser) {
         if (typeof window !== "undefined") {
           localStorage.setItem("dcmms_simulated_session", JSON.stringify(simUser));
-          localStorage.setItem("dcmms_current_session_id", "simulated-session");
+          localStorage.setItem("dcmms_current_session_id", simUser.id);
+        }
+        await logLogin(simUser.id, simUser.full_name, email);
+        router.push(dashboardPath(simUser.role as UserRole));
+        return;
+      }
+
+      const errMsg = res.error || "Invalid email or password.";
+      setLoginError(errMsg);
+      try {
+        await logFailedLogin(email, errMsg);
+      } catch (logErr) {
+        console.error("Failed to log failed login attempt:", logErr);
+      }
+    } catch (err: any) {
+      const simUser = getSimulatedUser();
+      if (simUser) {
+        if (typeof window !== "undefined") {
+          localStorage.setItem("dcmms_simulated_session", JSON.stringify(simUser));
+          localStorage.setItem("dcmms_current_session_id", simUser.id);
         }
         router.push(dashboardPath(simUser.role as UserRole));
         return;
@@ -131,7 +163,6 @@ export default function Home() {
 
       const errMsg = err.message || "Invalid email or password.";
       setLoginError(errMsg);
-      // Log failed login
       try {
         await logFailedLogin(email, errMsg);
       } catch (logErr) {

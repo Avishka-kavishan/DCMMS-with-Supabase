@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { Sidebar } from "@/components/Sidebar";
-import { getCurrentProfile } from "@/lib/auth";
+import { getCurrentProfile, signOut } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { 
   getActiveSessions, 
@@ -123,14 +123,13 @@ export default function SystemAdminDashboard() {
   }, []);
 
 
-  const handleLogout = (e: React.MouseEvent) => {
+  const handleLogout = async (e: React.MouseEvent) => {
     e.preventDefault();
-    supabase.auth.signOut().then(() => {
-      if (typeof window !== "undefined") {
-        localStorage.removeItem("dcmms_current_session_id");
-      }
-      router.push("/");
-    });
+    await signOut();
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("dcmms_current_session_id");
+    }
+    router.push("/");
   };
 
   const handleForceLogout = async (sessionId: string) => {

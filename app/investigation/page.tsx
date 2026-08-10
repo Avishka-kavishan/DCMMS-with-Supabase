@@ -10,6 +10,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 import { signOut, getCurrentProfile } from "@/lib/auth";
+import { getInvestigationOfficersServer, assignOfficerToInvestigationServer, logAuditEventServer } from "@/lib/db-actions";
 import { 
   UserPlus, X, Edit, Trash2, Check, Eye, ClipboardList, 
   UserCheck, Shield, ChevronRight, Calendar as CalendarIcon, 
@@ -375,15 +376,14 @@ export default function InvestigationPage() {
     }
 
     const loadGreeting = async () => {
-      let displayName = t("investigationName", "Suresh");
-      if (isSupabaseConfigured) {
-        const prof = await getCurrentProfile();
-        if (prof) {
-          displayName = prof.full_name;
-        }
+      let displayName = t("investigationName", "Investigation Officer");
+      const prof = await getCurrentProfile();
+      if (prof && prof.full_name) {
+        displayName = prof.full_name;
       }
-      const firstName = displayName.split(" ")[0];
-      setGreeting(`${t(greetingKey)}, ${firstName}!`);
+      const defaultText = hour >= 12 && hour < 17 ? "Good Afternoon" : hour >= 17 || hour < 5 ? "Good Evening" : "Good Morning";
+      const timeGreeting = t(greetingKey, defaultText);
+      setGreeting(`${timeGreeting}, ${displayName}!`);
     };
     loadGreeting();
   }, [t]);
@@ -1147,8 +1147,8 @@ export default function InvestigationPage() {
 
   // ── Session guard ──────────────────────────────────────────────────────────
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session?.user) router.replace("/");
+    getCurrentProfile().then((profile) => {
+      if (!profile || profile.role !== "investigation_officer") router.replace("/");
     });
   }, [router]);
 

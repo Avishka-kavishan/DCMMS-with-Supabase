@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { getCurrentProfile, signOut } from "@/lib/auth";
 import { checkSessionStatus, logLogout } from "@/lib/security";
 
 export function SessionMonitor() {
@@ -37,12 +37,12 @@ export function SessionMonitor() {
     });
 
     const checkStatus = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user?.id) {
+      const profile = await getCurrentProfile();
+      if (profile?.id) {
         // 1. Check if session was forced logout by admin
-        const isForced = await checkSessionStatus(session.user.id);
+        const isForced = await checkSessionStatus(profile.id);
         if (isForced) {
-          await supabase.auth.signOut();
+          await signOut();
           if (typeof window !== "undefined") {
             localStorage.removeItem("dcmms_current_session_id");
             localStorage.removeItem("dcmms_last_activity");
@@ -60,8 +60,8 @@ export function SessionMonitor() {
             const tenMinutes = 10 * 60 * 1000; // 10 minutes in milliseconds
             if (timeDiff > tenMinutes) {
               // Log the user out cleanly (ends session in security logs)
-              await logLogout(session.user.id);
-              await supabase.auth.signOut();
+              await logLogout(profile.id);
+              await signOut();
               localStorage.removeItem("dcmms_current_session_id");
               localStorage.removeItem("dcmms_last_activity");
               router.replace("/?reason=inactivity_timeout");

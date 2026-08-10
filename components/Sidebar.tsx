@@ -51,9 +51,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             ? "investigation"
             : "dailymail");
 
-  // Dynamic profile state
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [userEmailState, setUserEmailState] = useState("");
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -61,18 +59,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       if (prof) {
         setProfile(prof);
       }
-      
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user?.email) {
-        setUserEmailState(session.user.email);
-      }
     };
     loadProfile();
   }, []);
 
   // Determine user information based on active role & live profile session
   let userName = profile?.full_name || t("welcomeUser");
-  let userEmail = userEmailState || t("profileEmail");
+  let userEmail = profile?.email || t("profileEmail");
   let userInitials = "U";
 
   // If live profile session is not available, default back to localized role fallbacks
@@ -371,13 +364,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
             if (profile?.id) {
               const { logLogout } = await import("@/lib/security");
               await logLogout(profile.id);
-            } else {
-              const { supabase } = await import("@/lib/supabase");
-              const { data: { session } } = await supabase.auth.getSession();
-              if (session?.user?.id) {
-                const { logLogout } = await import("@/lib/security");
-                await logLogout(session.user.id);
-              }
             }
             handleLogout(e);
           }}>

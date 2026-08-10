@@ -154,8 +154,8 @@ export default function AdminDashboard() {
 
   // ── Session guard ──────────────────────────────────────────────────────────
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session?.user) router.replace("/");
+    getCurrentProfile().then((profile) => {
+      if (!profile || profile.role !== "admin") router.replace("/");
     });
   }, [router]);
 
@@ -167,15 +167,14 @@ export default function AdminDashboard() {
     else if (hour >= 17 || hour < 5) greetingKey = "greetingEvening";
 
     const loadGreeting = async () => {
-      let displayName = t("adminName", "Aruni");
-      if (isSupabaseConfigured) {
-        const prof = await getCurrentProfile();
-        if (prof) {
-          displayName = prof.full_name;
-        }
+      let displayName = t("adminName", "Administrator");
+      const prof = await getCurrentProfile();
+      if (prof && prof.full_name) {
+        displayName = prof.full_name;
       }
-      const firstName = displayName.split(" ")[0];
-      setGreeting(`${t(greetingKey, "Good Morning")}, ${firstName}!`);
+      const defaultText = hour >= 12 && hour < 17 ? "Good Afternoon" : hour >= 17 || hour < 5 ? "Good Evening" : "Good Morning";
+      const timeGreeting = t(greetingKey, defaultText);
+      setGreeting(`${timeGreeting}, ${displayName}!`);
     };
     loadGreeting();
   }, [t]);

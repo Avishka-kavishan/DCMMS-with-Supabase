@@ -5,9 +5,9 @@ import "./register.css";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
-import { dashboardPath, UserRole } from "@/lib/auth";
+import { dashboardPath, UserRole, getCurrentProfile } from "@/lib/auth";
 import { SiteFooter } from "@/components/SiteFooter";
+import { saveRegisterOfficerServer } from "@/lib/db-actions";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -31,18 +31,13 @@ export default function RegisterPage() {
 
   // If already logged in, redirect to correct dashboard
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        supabase
-          .from("dcmms_profiles")
-          .select("role")
-          .eq("id", session.user.id)
-          .single()
-          .then(({ data }) => {
-            if (data?.role) router.replace(dashboardPath(data.role as UserRole));
-          });
+    const checkRedirect = async () => {
+      const profile = await getCurrentProfile();
+      if (profile?.role) {
+        router.replace(dashboardPath(profile.role));
       }
-    });
+    };
+    checkRedirect();
   }, [router]);
 
   const validate = () => {
@@ -64,46 +59,58 @@ export default function RegisterPage() {
 
     setIsLoading(true);
     try {
-      if (!isSupabaseConfigured) {
-        throw new Error("Failed to fetch"); // Force offline fallback
+      // Map role to standard DB role label
+      const dbRoleMap: Record<string, string> = {
+        daily_mail: "Daily mail officer",
+        subject_officer: "Subject officer",
+        investigation_officer: "Investigation officer",
+        admin: "Branch admin",
+        system_admin: "System admin",
+      };
+      const dbRole = dbRoleMap[role] || role;
+      const empNo = `200399${Math.floor(100000 + Math.random() * 900000)}`;
+
+      // 1. Primary: Save to PostgreSQL register_officer_table via Server Action
+      let pgSuccess = false;
+      let pgError = "";
+      let createdId = `user-${Date.now()}`;
+
+      try {
+        const pgRes = await saveRegisterOfficerServer({
+          employee_no: empNo,
+          full_name: fullName.trim(),
+          email: email.trim().toLowerCase(),
+          password: password,
+          role: dbRole,
+          is_active: true,
+        });
+
+        if (pgRes.success && pgRes.data) {
+          pgSuccess = true;
+          if (pgRes.data.id) createdId = pgRes.data.id;
+        } else {
+          pgError = pgRes.error || "Failed to save officer in PostgreSQL";
+          console.warn("PostgreSQL save warning:", pgError);
+        }
+      } catch (err: any) {
+        console.error("PostgreSQL saveRegisterOfficerServer error:", err);
+        pgError = err?.message || "Server error";
       }
 
-      // 1. Create Supabase Auth account
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email: email.trim(),
-        password,
-        options: {
-          data: { full_name: fullName.trim(), role },
-        },
-      });
+      // 2. Save session locally
+      if (typeof window !== "undefined") {
+        const newUser = {
+          id: createdId,
+          employee_no: empNo,
+          email: email.trim(),
+          password,
+          full_name: fullName.trim(),
+          fullName: fullName.trim(),
+          role,
+        };
 
-      if (signUpError) throw signUpError;
-      if (!data.user) throw new Error("Registration failed. Please try again.");
-
-      // 2. Insert profile row with role (skip for system_admin to avoid db constraint error)
-      if (role !== "system_admin") {
-        const { error: profileError } = await supabase
-          .from("dcmms_profiles")
-          .upsert({
-            id: data.user.id,
-            full_name: fullName.trim(),
-            role,
-          });
-
-        if (profileError) throw profileError;
-      }
-
-      setSuccess(true);
-
-      // If email confirmation is disabled, redirect straight to dashboard
-      if (data.session) {
-        setTimeout(() => router.replace(dashboardPath(role as UserRole)), 1500);
-      }
-    } catch (err: any) {
-      // Offline fallback: save user to localStorage so they can log in
-      if (err.message?.includes("fetch") || !isSupabaseConfigured) {
         const stored = localStorage.getItem("dcmms_custom_profiles");
-        let list = [];
+        let list: any[] = [];
         if (stored) {
           try {
             list = JSON.parse(stored);
@@ -111,29 +118,17 @@ export default function RegisterPage() {
             console.error(e);
           }
         }
-        const newUser = {
-          id: `sim-user-${Date.now()}`,
-          email: email.trim(),
-          password,
-          fullName: fullName.trim(),
-          role,
-        };
         list.push(newUser);
         localStorage.setItem("dcmms_custom_profiles", JSON.stringify(list));
 
-        setSuccess(true);
-        // Simulate local session login
-        localStorage.setItem("dcmms_simulated_session", JSON.stringify({
-          id: newUser.id,
-          full_name: newUser.fullName,
-          role: newUser.role
-        }));
-        localStorage.setItem("dcmms_current_session_id", "simulated-session");
-
-        setTimeout(() => router.replace(dashboardPath(role as UserRole)), 1500);
-        return;
+        // Set local session
+        localStorage.setItem("dcmms_simulated_session", JSON.stringify(newUser));
+        localStorage.setItem("dcmms_current_session_id", createdId);
       }
 
+      setSuccess(true);
+      setTimeout(() => router.replace(dashboardPath(role as UserRole)), 1500);
+    } catch (err: any) {
       setError(err.message || "Registration failed. Please try again.");
     } finally {
       setIsLoading(false);
