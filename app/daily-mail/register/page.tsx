@@ -11,7 +11,7 @@ import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 import { getCurrentProfile } from "@/lib/auth";
-import { saveDailyMailRecordServer, logAuditEventServer, getSubjectOfficersServer } from "@/lib/db-actions";
+import { saveDailyMailRecordServer, saveDailyMailToNewTableServer, logAuditEventServer, getSubjectOfficersServer } from "@/lib/db-actions";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
@@ -822,6 +822,21 @@ function RegisterComplaintForm() {
           action_officer: newLetter.officerName,
           status: newLetter.status || "Pending",
         }).catch((e) => console.error("PostgreSQL Prisma save error:", e));
+
+        // Direct insert into daily_mail table
+        saveDailyMailToNewTableServer({
+          letter_number: newLetter.letterNo || newLetter.refNo,
+          received_letter_number: newLetter.refNo,
+          mode_of_receipt: newLetter.letterType || "Post",
+          sender_party: newLetter.senderName,
+          nature_of_letter: formState.regionProvince || "Complaint",
+          subject_category: newLetter.subjectCategory,
+          subject_of_letter: newLetter.subject || "N/A",
+          date_received_by_additional_secretary: newLetter.receivedDate || undefined,
+          date_letter_handed_over_to_dicipline_branch: newLetter.letterDate || undefined,
+          subject_officer_id: null,
+          priority: newLetter.priority,
+        }).catch((e) => console.error("PostgreSQL daily_mail write error:", e));
 
         localStorage.setItem("show_register_success", "true");
         if (typeof window !== "undefined") window.dispatchEvent(new Event("dcmms_data_updated"));

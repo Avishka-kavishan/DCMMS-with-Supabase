@@ -8,11 +8,67 @@ import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 interface Institute {
   id: string;
   name: string;
-  code: string;
-  regionProvince: string;
+  code?: string;
+  address: string;
+  province: string;
+  regionProvince?: string;
+  district: string;
+  zone: string;
   status: "Active" | "Inactive";
   createdAt: string;
 }
+
+interface LocationStructure {
+  [province: string]: {
+    [district: string]: string[];
+  };
+}
+
+const LOCATION_DATA: LocationStructure = {
+  Western: {
+    Colombo: ["Colombo", "Homagama", "Piliyandala", "Sri Jayewardenepura"],
+    Gampaha: ["Gampaha", "Minuwangoda", "Negombo", "Kelaniya"],
+    Kalutara: ["Kalutara", "Horana", "Mathugama"],
+  },
+  Central: {
+    Kandy: ["Kandy", "Katugastota", "Denuwara", "Teldeniya", "Wattegama", "Gampola"],
+    Matale: ["Matale", "Galewela", "Naula", "Wilgamuwa"],
+    "Nuwara Eliya": ["Nuwara Eliya", "Hatton", "Walapane", "Hanguranketha"],
+  },
+  Southern: {
+    Galle: ["Galle", "Elpitiya", "Udugama"],
+    Matara: ["Matara", "Akuressa", "Mulatiyana"],
+    Hambantota: ["Hambantota", "Tangalle", "Walasmulla"],
+  },
+  Northern: {
+    Jaffna: ["Jaffna", "Islands", "Thenmaradchy", "Vadamaradchy"],
+    Kilinochchi: ["Kilinochchi"],
+    Mannar: ["Mannar", "Madhu"],
+    Mullaitivu: ["Mullaitivu", "Thunukkai"],
+    Vavuniya: ["Vavuniya South", "Vavuniya North"],
+  },
+  Eastern: {
+    Batticaloa: ["Batticaloa", "Batticaloa Central", "Batticaloa West", "Kalkudah", "Paddiruppu"],
+    Ampara: ["Ampara", "Kalmunai", "Sammanthurai", "Mahaoya", "Dehiattakandiya"],
+    Trincomalee: ["Trincomalee", "Trincomalee Town", "Kantale", "Kinniya", "Muttur"],
+  },
+  "North Western": {
+    Kurunegala: ["Kurunegala", "Ibbagamuwa", "Kuliyapitiya", "Giriulla", "Maho", "Nikaweratiya"],
+    Puttalam: ["Puttalam", "Chilaw"],
+  },
+  "North Central": {
+    Anuradhapura: ["Anuradhapura", "Kekirawa", "Galenbindunuwewa", "Tambuttegama", "Kebithigollewa"],
+    Polonnaruwa: ["Polonnaruwa", "Dimbulagala", "Hingurakgoda"],
+  },
+  Uva: {
+    Badulla: ["Badulla", "Bandarawela", "Mahiyanganaya", "Welimada", "Passara"],
+    Monaragala: ["Monaragala", "Wellawaya", "Bibile"],
+  },
+  Sabaragamuwa: {
+    Ratnapura: ["Ratnapura", "Balangoda", "Nivithigala", "Embilipitiya"],
+    Kegalle: ["Kegalle", "Mawanella", "Dehiowita"],
+  },
+};
 
 export default function EducationalInstitutesPage() {
   const { t, i18n } = useTranslation();
@@ -30,12 +86,43 @@ export default function EducationalInstitutesPage() {
 
   // Form states
   const [formName, setFormName] = useState("");
-  const [formCode, setFormCode] = useState("");
-  const [formRegion, setFormRegion] = useState("Western");
+  const [formAddress, setFormAddress] = useState("");
+  const [formProvince, setFormProvince] = useState("Western");
+  const [formDistrict, setFormDistrict] = useState("Colombo");
+  const [formZone, setFormZone] = useState("Colombo");
   const [formStatus, setFormStatus] = useState<"Active" | "Inactive">("Active");
 
   // Error states
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Dynamic dropdown options
+  const districtsForSelectedProvince = formProvince && LOCATION_DATA[formProvince]
+    ? Object.keys(LOCATION_DATA[formProvince])
+    : [];
+
+  const zonesForSelectedDistrict = formProvince && formDistrict && LOCATION_DATA[formProvince]?.[formDistrict]
+    ? LOCATION_DATA[formProvince][formDistrict]
+    : [];
+
+  // Dropdown change handlers
+  const handleProvinceChange = (newProvince: string) => {
+    setFormProvince(newProvince);
+    const districts = LOCATION_DATA[newProvince] ? Object.keys(LOCATION_DATA[newProvince]) : [];
+    const defaultDistrict = districts[0] || "";
+    setFormDistrict(defaultDistrict);
+    const zones = defaultDistrict && LOCATION_DATA[newProvince]?.[defaultDistrict]
+      ? LOCATION_DATA[newProvince][defaultDistrict]
+      : [];
+    setFormZone(zones[0] || "");
+  };
+
+  const handleDistrictChange = (newDistrict: string) => {
+    setFormDistrict(newDistrict);
+    const zones = formProvince && LOCATION_DATA[formProvince]?.[newDistrict]
+      ? LOCATION_DATA[formProvince][newDistrict]
+      : [];
+    setFormZone(zones[0] || "");
+  };
 
   // Show Toast Helper
   const showToast = (msg: string) => {
@@ -57,8 +144,12 @@ export default function EducationalInstitutesPage() {
           dbInstitutes = data.map((item: any) => ({
             id: item.id,
             name: item.name,
-            code: item.code,
-            regionProvince: item.region_province || item.regionProvince || "Western",
+            code: item.code || "",
+            address: item.address || "",
+            province: item.province || item.region_province || item.regionProvince || "Western",
+            regionProvince: item.province || item.region_province || item.regionProvince || "Western",
+            district: item.district || "Colombo",
+            zone: item.zone || "Colombo",
             status: item.status === "inactive" ? "Inactive" : "Active",
             createdAt: item.created_at || new Date().toISOString().split("T")[0],
           }));
@@ -88,17 +179,25 @@ export default function EducationalInstitutesPage() {
     const defaults: Institute[] = [
       {
         id: "default-inst-1",
-        name: "Zonal Office - Kandy",
+        name: "Zonal Education Office - Kandy",
         code: "ZONE-KD",
+        address: "William Gopallawa Mawatha, Kandy",
+        province: "Central",
         regionProvince: "Central",
+        district: "Kandy",
+        zone: "Kandy",
         status: "Active",
         createdAt: "2026-01-01"
       },
       {
         id: "default-inst-2",
-        name: "Royal College, Colombo 07",
+        name: "Royal College",
         code: "RC-COL",
+        address: "Rajakeeya Mawatha, Colombo 07",
+        province: "Western",
         regionProvince: "Western",
+        district: "Colombo",
+        zone: "Colombo",
         status: "Active",
         createdAt: "2026-01-10"
       },
@@ -106,7 +205,11 @@ export default function EducationalInstitutesPage() {
         id: "default-inst-3",
         name: "Zonal Education Office, Jaffna",
         code: "ZONE-JA",
+        address: "Main Street, Jaffna",
+        province: "Northern",
         regionProvince: "Northern",
+        district: "Jaffna",
+        zone: "Jaffna",
         status: "Active",
         createdAt: "2026-01-20"
       }
@@ -148,21 +251,14 @@ export default function EducationalInstitutesPage() {
     };
   }, []);
 
-
   // Validation
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
     if (!formName.trim()) {
       newErrors.name = t("pleaseFillAllFields", "Please fill out all fields.");
     }
-    if (!formCode.trim()) {
-      newErrors.code = t("pleaseFillAllFields", "Please fill out all fields.");
-    } else if (
-      institutes.some(
-        inst => inst.code.toUpperCase() === formCode.trim().toUpperCase() && inst.id !== editingId
-      )
-    ) {
-      newErrors.code = "Institute code must be unique.";
+    if (!formAddress.trim()) {
+      newErrors.address = t("pleaseFillAllFields", "Please fill out all fields.");
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -173,8 +269,10 @@ export default function EducationalInstitutesPage() {
     setIsEditMode(false);
     setEditingId(null);
     setFormName("");
-    setFormCode("");
-    setFormRegion("Western");
+    setFormAddress("");
+    setFormProvince("Western");
+    setFormDistrict("Colombo");
+    setFormZone("Colombo");
     setFormStatus("Active");
     setErrors({});
     setIsModalOpen(true);
@@ -183,10 +281,17 @@ export default function EducationalInstitutesPage() {
   const openEditModal = (inst: Institute) => {
     setIsEditMode(true);
     setEditingId(inst.id);
-    setFormName(inst.name);
-    setFormCode(inst.code);
-    setFormRegion(inst.regionProvince);
-    setFormStatus(inst.status);
+    setFormName(inst.name || "");
+    setFormAddress(inst.address || "");
+    const prov = inst.province || inst.regionProvince || "Western";
+    setFormProvince(prov);
+    const validDistricts = LOCATION_DATA[prov] ? Object.keys(LOCATION_DATA[prov]) : [];
+    const dist = inst.district && validDistricts.includes(inst.district) ? inst.district : (validDistricts[0] || "");
+    setFormDistrict(dist);
+    const validZones = dist && LOCATION_DATA[prov]?.[dist] ? LOCATION_DATA[prov][dist] : [];
+    const z = inst.zone && validZones.includes(inst.zone) ? inst.zone : (validZones[0] || "");
+    setFormZone(z);
+    setFormStatus(inst.status || "Active");
     setErrors({});
     setIsModalOpen(true);
   };
@@ -199,8 +304,11 @@ export default function EducationalInstitutesPage() {
     const savedInst: Institute = {
       id: isEditMode && editingId ? editingId : `inst-${Date.now()}`,
       name: formName.trim(),
-      code: formCode.trim().toUpperCase(),
-      regionProvince: formRegion,
+      address: formAddress.trim(),
+      province: formProvince,
+      regionProvince: formProvince,
+      district: formDistrict,
+      zone: formZone,
       status: formStatus,
       createdAt: isEditMode && editingId
         ? institutes.find(o => o.id === editingId)?.createdAt || new Date().toISOString().split("T")[0]
@@ -222,16 +330,19 @@ export default function EducationalInstitutesPage() {
         await supabase.from("dcmms_institutes").upsert({
           id: savedInst.id.startsWith("inst-") || savedInst.id.startsWith("default-") ? undefined : savedInst.id,
           name: savedInst.name,
-          code: savedInst.code,
-          region_province: savedInst.regionProvince,
+          address: savedInst.address,
+          province: savedInst.province,
+          region_province: savedInst.province,
+          district: savedInst.district,
+          zone: savedInst.zone,
           status: savedInst.status.toLowerCase(),
         });
 
         await logAuditEvent(
           isEditMode ? "UPDATE_INSTITUTE" : "ADD_INSTITUTE",
           "dcmms_institutes",
-          savedInst.code,
-          { name: savedInst.name, region: savedInst.regionProvince }
+          savedInst.id,
+          { name: savedInst.name, province: savedInst.province, district: savedInst.district, zone: savedInst.zone }
         );
       } catch (err) {
         console.warn("Could not upsert to Supabase. Falling back fully to localStorage.", err);
@@ -283,22 +394,12 @@ export default function EducationalInstitutesPage() {
 
   // Filter list by search query
   const filteredInstitutes = institutes.filter(o =>
-    o.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    o.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    o.regionProvince.toLowerCase().includes(searchQuery.toLowerCase())
+    (o.name && o.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (o.address && o.address.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (o.province && o.province.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (o.district && o.district.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (o.zone && o.zone.toLowerCase().includes(searchQuery.toLowerCase()))
   );
-
-  const regionOptions = [
-    { value: "Western", labelKey: "provinceWestern" },
-    { value: "Central", labelKey: "provinceCentral" },
-    { value: "Southern", labelKey: "provinceSouthern" },
-    { value: "Northern", labelKey: "provinceNorthern" },
-    { value: "Eastern", labelKey: "provinceEastern" },
-    { value: "North Western", labelKey: "provinceNorthWestern" },
-    { value: "North Central", labelKey: "provinceNorthCentral" },
-    { value: "Uva", labelKey: "provinceUva" },
-    { value: "Sabaragamuwa", labelKey: "provinceSabaragamuwa" },
-  ];
 
   return (
     <div className="admin-dashboard-container">
@@ -328,9 +429,11 @@ export default function EducationalInstitutesPage() {
           <table className="letters-data-table">
             <thead>
               <tr>
-                <th scope="col">{t("nameOfInstitute", "Name of Institute")}</th>
-                <th scope="col">{t("instituteCode", "Institute Code")}</th>
-                <th scope="col">{t("provinceRegion", "Province/Region")}</th>
+                <th scope="col">{t("instituteName", "Institute Name")}</th>
+                <th scope="col">{t("address", "Address")}</th>
+                <th scope="col">{t("province", "Province")}</th>
+                <th scope="col">{t("district", "District")}</th>
+                <th scope="col">{t("zone", "Zone")}</th>
                 <th scope="col">{t("accountStatus", "Account Status")}</th>
                 <th scope="col" className="admin-table-header-center">{t("actions", "Actions")}</th>
               </tr>
@@ -340,13 +443,10 @@ export default function EducationalInstitutesPage() {
                 filteredInstitutes.map((item) => (
                   <tr key={item.id} className="letter-table-row">
                     <td className="admin-table-case-no font-semibold">{item.name}</td>
-                    <td>{item.code}</td>
-                    <td>
-                      {t(
-                        regionOptions.find(r => r.value === item.regionProvince)?.labelKey || "",
-                        item.regionProvince
-                      )}
-                    </td>
+                    <td>{item.address || "N/A"}</td>
+                    <td>{item.province || item.regionProvince || "N/A"}</td>
+                    <td>{item.district || "N/A"}</td>
+                    <td>{item.zone || "N/A"}</td>
                     <td>
                       <span className={item.status === "Active" ? "status-badge-active" : "status-badge-inactive"}>
                         {item.status === "Active" ? t("active", "Active") : t("inactive", "Inactive")}
@@ -369,7 +469,7 @@ export default function EducationalInstitutesPage() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={5} className="admin-table-no-data table-no-data-padding">
+                  <td colSpan={7} className="admin-table-no-data table-no-data-padding">
                     {t("noLettersFound", "No entries found matching search")}
                   </td>
                 </tr>
@@ -394,14 +494,15 @@ export default function EducationalInstitutesPage() {
 
             <form onSubmit={handleSave}>
               <div className="modal-body">
+                {/* 1. Institute name - text */}
                 <div className="form-field-group">
                   <label htmlFor="instituteName" className="field-label">
-                    {t("nameOfInstitute", "Name of Institute")} <span className="required-star">*</span>
+                    {t("instituteName", "Institute Name")} <span className="required-star">*</span>
                   </label>
                   <input
                     id="instituteName"
                     type="text"
-                    placeholder={t("placeholderInstNameExample", "e.g. Zonal Office - Kandy")}
+                    placeholder={t("placeholderInstNameExample", "e.g. Royal College, Colombo 07")}
                     value={formName}
                     onChange={(e) => setFormName(e.target.value)}
                     className={`field-input ${errors.name ? "field-input-invalid" : ""}`}
@@ -409,39 +510,80 @@ export default function EducationalInstitutesPage() {
                   {errors.name && <span className="field-error-text">{errors.name}</span>}
                 </div>
 
+                {/* 2. Address - text */}
                 <div className="form-field-group">
-                  <label htmlFor="instituteCode" className="field-label">
-                    {t("instituteCode", "Institute Code")} <span className="required-star">*</span>
+                  <label htmlFor="instituteAddress" className="field-label">
+                    {t("address", "Address")} <span className="required-star">*</span>
                   </label>
                   <input
-                    id="instituteCode"
+                    id="instituteAddress"
                     type="text"
-                    placeholder={t("placeholderInstCodeExample", "e.g. ZONE-KD")}
-                    value={formCode}
-                    onChange={(e) => setFormCode(e.target.value)}
-                    className={`field-input ${errors.code ? "field-input-invalid" : ""}`}
+                    placeholder={t("placeholderAddressExample", "e.g. Rajakeeya Mawatha, Colombo 07")}
+                    value={formAddress}
+                    onChange={(e) => setFormAddress(e.target.value)}
+                    className={`field-input ${errors.address ? "field-input-invalid" : ""}`}
                   />
-                  {errors.code && <span className="field-error-text">{errors.code}</span>}
+                  {errors.address && <span className="field-error-text">{errors.address}</span>}
                 </div>
 
+                {/* 3. Province - dropdown */}
                 <div className="form-field-group">
-                  <label htmlFor="regionProvince" className="field-label">
-                    {t("provinceRegion", "Province/Region")}
+                  <label htmlFor="instituteProvince" className="field-label">
+                    {t("province", "Province")} <span className="required-star">*</span>
                   </label>
                   <select
-                    id="regionProvince"
-                    value={formRegion}
-                    onChange={(e) => setFormRegion(e.target.value)}
+                    id="instituteProvince"
+                    value={formProvince}
+                    onChange={(e) => handleProvinceChange(e.target.value)}
                     className="field-select"
                   >
-                    {regionOptions.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {t(opt.labelKey, opt.value)}
+                    {Object.keys(LOCATION_DATA).map((prov) => (
+                      <option key={prov} value={prov}>
+                        {prov}
                       </option>
                     ))}
                   </select>
                 </div>
 
+                {/* 4. District - dropdown */}
+                <div className="form-field-group">
+                  <label htmlFor="instituteDistrict" className="field-label">
+                    {t("district", "District")} <span className="required-star">*</span>
+                  </label>
+                  <select
+                    id="instituteDistrict"
+                    value={formDistrict}
+                    onChange={(e) => handleDistrictChange(e.target.value)}
+                    className="field-select"
+                  >
+                    {districtsForSelectedProvince.map((dist) => (
+                      <option key={dist} value={dist}>
+                        {dist}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 5. Zone - dropdown */}
+                <div className="form-field-group">
+                  <label htmlFor="instituteZone" className="field-label">
+                    {t("zone", "Zone")} <span className="required-star">*</span>
+                  </label>
+                  <select
+                    id="instituteZone"
+                    value={formZone}
+                    onChange={(e) => setFormZone(e.target.value)}
+                    className="field-select"
+                  >
+                    {zonesForSelectedDistrict.map((z) => (
+                      <option key={z} value={z}>
+                        {z}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Status - dropdown */}
                 <div className="form-field-group">
                   <label htmlFor="status" className="field-label">{t("status", "Status")}</label>
                   <select

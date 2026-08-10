@@ -90,6 +90,77 @@ export async function saveDailyMailRecordServer(mailData: any) {
   }
 }
 
+export async function saveDailyMailToNewTableServer(data: {
+  letter_number: string;
+  received_letter_number?: string;
+  mode_of_receipt: string;
+  sender_party?: string;
+  nature_of_letter?: string;
+  subject_category?: string;
+  subject_of_letter: string;
+  date_received_by_additional_secretary?: string;
+  date_letter_handed_over_to_dicipline_branch?: string;
+  subject_officer_id?: number | null;
+  priority?: string;
+}) {
+  try {
+    const pInput = (data.priority || 'Normal').trim();
+    let validPriority = 'Normal';
+    if (pInput.toLowerCase().includes('high') || pInput.toLowerCase().includes('urgent')) validPriority = 'High';
+    else if (pInput.toLowerCase().includes('low')) validPriority = 'Low';
+    else if (pInput.toLowerCase().includes('urgent')) validPriority = 'Urgent';
+    else if (['Low', 'Normal', 'High', 'Urgent'].includes(pInput)) validPriority = pInput;
+
+    const result = await prisma.$executeRawUnsafe(
+      `INSERT INTO daily_mail (
+        letter_number,
+        received_letter_number,
+        mode_of_receipt,
+        sender_party,
+        nature_of_letter,
+        subject_category,
+        subject_of_letter,
+        date_received_by_additional_secretary,
+        date_letter_handed_over_to_dicipline_branch,
+        subject_officer_id,
+        priority
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7,
+        $8::date, $9::date,
+        $10, $11
+      )
+      ON CONFLICT (letter_number) DO UPDATE SET
+        received_letter_number = EXCLUDED.received_letter_number,
+        mode_of_receipt = EXCLUDED.mode_of_receipt,
+        sender_party = EXCLUDED.sender_party,
+        nature_of_letter = EXCLUDED.nature_of_letter,
+        subject_category = EXCLUDED.subject_category,
+        subject_of_letter = EXCLUDED.subject_of_letter,
+        date_received_by_additional_secretary = EXCLUDED.date_received_by_additional_secretary,
+        date_letter_handed_over_to_dicipline_branch = EXCLUDED.date_letter_handed_over_to_dicipline_branch,
+        subject_officer_id = EXCLUDED.subject_officer_id,
+        priority = EXCLUDED.priority,
+        updated_at = CURRENT_TIMESTAMP`,
+      data.letter_number,
+      data.received_letter_number || null,
+      data.mode_of_receipt || 'Post',
+      data.sender_party || null,
+      data.nature_of_letter || null,
+      data.subject_category || null,
+      data.subject_of_letter,
+      data.date_received_by_additional_secretary || null,
+      data.date_letter_handed_over_to_dicipline_branch || null,
+      data.subject_officer_id ? Number(data.subject_officer_id) : null,
+      validPriority
+    );
+    return { success: true, count: result };
+  } catch (error: any) {
+    console.error("Error inserting into daily_mail table:", error);
+    return { success: false, error: error.message };
+  }
+}
+
+
 // -------------------------------------------------------------
 // 2. Cases & Persons Operations
 // -------------------------------------------------------------
