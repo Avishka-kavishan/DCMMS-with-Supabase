@@ -590,3 +590,20 @@ model RegisterOfficerTable {
   @@map("register_officer_table")
 }
 
+model DailyMailLetterTable {
+  id                               BigInt    @id @default(autoincrement())
+  letter_number                    String?   @db.VarChar(100)
+  ref_number                       String?   @db.VarChar(100)
+  mode_of_receipt                  String?   @db.VarChar(100)
+  senders_party                    String?   @db.VarChar(255)
+  nature_of_letter                 String?   @db.VarChar(1000)
+  subject_category                 String?   @db.VarChar(500)
+  subject_of_letter                String?   @db.Text
+  date_received_by_add_secretary   DateTime? @db.Date
+  date_letter_handover_discipline DateTime? @db.Date
+  created_at                       DateTime? @default(now())
+  updated_at                       DateTime? @default(now()) @updatedAt
+
+  @@map("daily_mail_letter_table")
+}
+

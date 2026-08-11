@@ -35,7 +35,54 @@ export async function getDailyMailRecordsServer() {
     let combinedData: any[] = [];
     const idsSeen = new Set<string>();
 
-    // 1. Fetch from daily_mail table
+    // 1. Fetch from daily_mail_letter_table (User's PostgreSQL table)
+    try {
+      const rawLetterTable: any[] = await prisma.$queryRaw`
+        SELECT 
+          id::text as id,
+          letter_number as letter_no,
+          ref_number as serial_no,
+          mode_of_receipt as method,
+          senders_party as sender,
+          nature_of_letter as type,
+          subject_category as classification,
+          subject_of_letter as subject,
+          date_received_by_add_secretary as received_date,
+          date_letter_handover_discipline as submitted_date,
+          created_at,
+          updated_at
+        FROM public.daily_mail_letter_table
+        ORDER BY created_at DESC;
+      `;
+      if (rawLetterTable && rawLetterTable.length > 0) {
+        rawLetterTable.forEach((row) => {
+          const key = row.serial_no || row.letter_no || row.id;
+          combinedData.push({
+            id: row.id,
+            serial_no: row.serial_no || row.letter_no,
+            letter_no: row.letter_no,
+            received_date: row.received_date ? new Date(row.received_date).toISOString().split("T")[0] : "",
+            submitted_date: row.submitted_date ? new Date(row.submitted_date).toISOString().split("T")[0] : "",
+            subject: row.subject,
+            sender: row.sender || "N/A",
+            method: row.method || "Post",
+            type: row.type || "Complaint",
+            classification: row.classification || "",
+            action_officer: "",
+            priority: "normal",
+            status: "registered",
+            created_at: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+            updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString(),
+          });
+          if (row.serial_no) idsSeen.add(row.serial_no);
+          if (row.letter_no) idsSeen.add(row.letter_no);
+        });
+      }
+    } catch (e) {
+      console.warn("Could not query daily_mail_letter_table:", e);
+    }
+
+    // 2. Fetch from daily_mail table
     try {
       const rawDailyMail: any[] = await prisma.$queryRaw`
         SELECT 
@@ -57,32 +104,35 @@ export async function getDailyMailRecordsServer() {
       `;
       if (rawDailyMail && rawDailyMail.length > 0) {
         rawDailyMail.forEach((row) => {
-          combinedData.push({
-            id: row.id,
-            serial_no: row.serial_no || row.letter_no,
-            letter_no: row.letter_no,
-            received_date: row.received_date ? new Date(row.received_date).toISOString().split("T")[0] : "",
-            submitted_date: row.submitted_date ? new Date(row.submitted_date).toISOString().split("T")[0] : "",
-            subject: row.subject,
-            sender: row.sender || "N/A",
-            method: row.method || "Post",
-            type: row.type || "Complaint",
-            classification: row.classification || "",
-            action_officer: "",
-            priority: row.priority ? row.priority.toLowerCase() : "normal",
-            status: "registered",
-            created_at: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
-            updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString(),
-          });
-          if (row.serial_no) idsSeen.add(row.serial_no);
-          if (row.letter_no) idsSeen.add(row.letter_no);
+          const key = row.serial_no || row.letter_no || row.id;
+          if (!idsSeen.has(key)) {
+            combinedData.push({
+              id: row.id,
+              serial_no: row.serial_no || row.letter_no,
+              letter_no: row.letter_no,
+              received_date: row.received_date ? new Date(row.received_date).toISOString().split("T")[0] : "",
+              submitted_date: row.submitted_date ? new Date(row.submitted_date).toISOString().split("T")[0] : "",
+              subject: row.subject,
+              sender: row.sender || "N/A",
+              method: row.method || "Post",
+              type: row.type || "Complaint",
+              classification: row.classification || "",
+              action_officer: "",
+              priority: row.priority ? row.priority.toLowerCase() : "normal",
+              status: "registered",
+              created_at: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+              updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString(),
+            });
+            if (row.serial_no) idsSeen.add(row.serial_no);
+            if (row.letter_no) idsSeen.add(row.letter_no);
+          }
         });
       }
     } catch (e) {
       console.warn("Could not query daily_mail table:", e);
     }
 
-    // 2. Fetch from dcmms_daily_mail as fallback/legacy merge
+    // 3. Fetch from dcmms_daily_mail as fallback/legacy merge
     try {
       const legacyRecords = await prisma.dcmmsDailyMail.findMany({
         orderBy: { created_at: "desc" },
@@ -112,25 +162,39 @@ export async function saveDailyMailRecordServer(mailData: any) {
     let result;
     const actionOfficer = mailData.action_officer || mailData.officer_name || mailData.officerName || null;
 
-    // Dual save to daily_mail table
+    // Dual save to daily_mail & daily_mail_letter_table tables
     try {
       await saveDailyMailToNewTableServer({
         letter_number: mailData.letter_no || mailData.letterNo || mailData.serial_no || mailData.refNo || `LT-${Date.now()}`,
         received_letter_number: mailData.serial_no || mailData.refNo,
+        ref_number: mailData.serial_no || mailData.refNo,
         mode_of_receipt: mailData.method || mailData.letterType || "Post",
         sender_party: mailData.sender || mailData.senderName,
+        senders_party: mailData.sender || mailData.senderName,
         nature_of_letter: mailData.type || mailData.letterType || mailData.regionProvince || "Complaint",
         subject_category: mailData.classification || mailData.subjectCategory,
         subject_of_letter: mailData.subject || "N/A",
         date_received_by_additional_secretary: mailData.received_date || mailData.receivedDate,
+        date_received_by_add_secretary: mailData.received_date || mailData.receivedDate,
         date_letter_handed_over_to_dicipline_branch: mailData.submitted_date || mailData.letterDate,
+        date_letter_handover_discipline: mailData.submitted_date || mailData.letterDate,
         priority: mailData.priority || "Normal",
       });
     } catch (dmErr) {
-      console.warn("Save to daily_mail table failed in saveDailyMailRecordServer:", dmErr);
+      console.warn("Save to daily mail tables failed in saveDailyMailRecordServer:", dmErr);
     }
 
-    if (mailData.id) {
+    let existingRecord = null;
+    const isUuid = typeof mailData.id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(mailData.id);
+    if (isUuid) {
+      try {
+        existingRecord = await prisma.dcmmsDailyMail.findUnique({
+          where: { id: mailData.id },
+        });
+      } catch (e) {}
+    }
+
+    if (existingRecord) {
       result = await prisma.dcmmsDailyMail.update({
         where: { id: mailData.id },
         data: {
@@ -151,6 +215,7 @@ export async function saveDailyMailRecordServer(mailData: any) {
     } else {
       result = await prisma.dcmmsDailyMail.create({
         data: {
+          ...(isUuid ? { id: mailData.id } : {}),
           serial_no: mailData.serial_no || mailData.refNo,
           received_date: mailData.received_date ? new Date(mailData.received_date) : mailData.receivedDate ? new Date(mailData.receivedDate) : undefined,
           letter_no: mailData.letter_no || mailData.letterNo,
@@ -193,14 +258,19 @@ export async function saveDailyMailRecordServer(mailData: any) {
 export async function saveDailyMailToNewTableServer(data: {
   letter_number: string;
   received_letter_number?: string;
+  ref_number?: string;
   mode_of_receipt: string;
   sender_party?: string;
+  senders_party?: string;
   nature_of_letter?: string;
   subject_category?: string;
   subject_of_letter: string;
   date_received_by_additional_secretary?: string;
+  date_received_by_add_secretary?: string;
   date_letter_handed_over_to_dicipline_branch?: string;
+  date_letter_handover_discipline?: string;
   subject_officer_id?: number | null;
+  officer_name?: string | null;
   priority?: string;
 }) {
   try {
@@ -211,55 +281,137 @@ export async function saveDailyMailToNewTableServer(data: {
     else if (['Low', 'Normal', 'High', 'Urgent'].includes(pInput)) validPriority = pInput;
 
     const letterNumber = data.letter_number?.trim() || `LT-${Date.now()}`;
+    const refNumber = data.ref_number || data.received_letter_number || null;
     const modeOfReceipt = data.mode_of_receipt?.trim() || 'Post';
+    const sendersParty = data.senders_party || data.sender_party || null;
+    const natureOfLetter = data.nature_of_letter?.trim() || 'Complaint';
+    const subjectCategory = data.subject_category?.trim() || null;
     const subjectOfLetter = data.subject_of_letter?.trim() || 'N/A';
+    const rawDateReceived = data.date_received_by_add_secretary || data.date_received_by_additional_secretary || null;
+    const rawDateHandover = data.date_letter_handover_discipline || data.date_letter_handed_over_to_dicipline_branch || null;
 
-    const result = await prisma.$executeRawUnsafe(
-      `INSERT INTO daily_mail (
-        letter_number,
-        received_letter_number,
-        mode_of_receipt,
-        sender_party,
-        nature_of_letter,
-        subject_category,
-        subject_of_letter,
-        date_received_by_additional_secretary,
-        date_letter_handed_over_to_dicipline_branch,
-        subject_officer_id,
-        priority
-      ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7,
-        $8::date, $9::date,
-        $10, $11
-      )
-      ON CONFLICT (letter_number) DO UPDATE SET
-        received_letter_number = EXCLUDED.received_letter_number,
-        mode_of_receipt = EXCLUDED.mode_of_receipt,
-        sender_party = EXCLUDED.sender_party,
-        nature_of_letter = EXCLUDED.nature_of_letter,
-        subject_category = EXCLUDED.subject_category,
-        subject_of_letter = EXCLUDED.subject_of_letter,
-        date_received_by_additional_secretary = EXCLUDED.date_received_by_additional_secretary,
-        date_letter_handed_over_to_dicipline_branch = EXCLUDED.date_letter_handed_over_to_dicipline_branch,
-        subject_officer_id = EXCLUDED.subject_officer_id,
-        priority = EXCLUDED.priority,
-        updated_at = CURRENT_TIMESTAMP`,
-      letterNumber,
-      data.received_letter_number || null,
-      modeOfReceipt,
-      data.sender_party || null,
-      data.nature_of_letter || null,
-      data.subject_category || null,
-      subjectOfLetter,
-      data.date_received_by_additional_secretary || null,
-      data.date_letter_handed_over_to_dicipline_branch || null,
-      data.subject_officer_id ? Number(data.subject_officer_id) : null,
-      validPriority
-    );
-    return serializeForServerAction({ success: true, count: Number(result) });
+    const formatDateForSql = (val: any) => {
+      if (!val || val === "" || val === "N/A") return null;
+      try {
+        const d = new Date(val);
+        if (isNaN(d.getTime())) return null;
+        return d.toISOString().split("T")[0];
+      } catch (e) {
+        return null;
+      }
+    };
+
+    const dateReceived = formatDateForSql(rawDateReceived);
+    const dateHandover = formatDateForSql(rawDateHandover);
+
+    // Ensure daily_mail_letter_table exists in PostgreSQL
+    try {
+      await prisma.$executeRawUnsafe(
+        `CREATE TABLE IF NOT EXISTS public.daily_mail_letter_table (
+          id BIGSERIAL PRIMARY KEY,
+          letter_number VARCHAR(100),
+          ref_number VARCHAR(100),
+          mode_of_receipt VARCHAR(100),
+          senders_party VARCHAR(255),
+          nature_of_letter VARCHAR(1000),
+          subject_category VARCHAR(500),
+          subject_of_letter TEXT,
+          date_received_by_add_secretary DATE,
+          date_letter_handover_discipline DATE,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );`
+      );
+    } catch (tblErr) {
+      console.warn("daily_mail_letter_table creation warning:", tblErr);
+    }
+
+    // 1. Insert/Update daily_mail_letter_table (PostgreSQL table requested by user)
+    try {
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO public.daily_mail_letter_table (
+          letter_number,
+          ref_number,
+          mode_of_receipt,
+          senders_party,
+          nature_of_letter,
+          subject_category,
+          subject_of_letter,
+          date_received_by_add_secretary,
+          date_letter_handover_discipline,
+          created_at,
+          updated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7,
+          $8::date, $9::date,
+          CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        )`,
+        letterNumber,
+        refNumber,
+        modeOfReceipt,
+        sendersParty,
+        natureOfLetter,
+        subjectCategory,
+        subjectOfLetter,
+        dateReceived,
+        dateHandover
+      );
+    } catch (lTableErr) {
+      console.warn("Insert into daily_mail_letter_table warning:", lTableErr);
+    }
+
+    // 2. Insert/Update daily_mail table
+    try {
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO daily_mail (
+          letter_number,
+          received_letter_number,
+          mode_of_receipt,
+          sender_party,
+          nature_of_letter,
+          subject_category,
+          subject_of_letter,
+          date_received_by_additional_secretary,
+          date_letter_handed_over_to_dicipline_branch,
+          subject_officer_id,
+          priority
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7,
+          $8::date, $9::date,
+          $10, $11
+        )
+        ON CONFLICT (letter_number) DO UPDATE SET
+          received_letter_number = EXCLUDED.received_letter_number,
+          mode_of_receipt = EXCLUDED.mode_of_receipt,
+          sender_party = EXCLUDED.sender_party,
+          nature_of_letter = EXCLUDED.nature_of_letter,
+          subject_category = EXCLUDED.subject_category,
+          subject_of_letter = EXCLUDED.subject_of_letter,
+          date_received_by_additional_secretary = EXCLUDED.date_received_by_additional_secretary,
+          date_letter_handed_over_to_dicipline_branch = EXCLUDED.date_letter_handed_over_to_dicipline_branch,
+          subject_officer_id = EXCLUDED.subject_officer_id,
+          priority = EXCLUDED.priority,
+          updated_at = CURRENT_TIMESTAMP`,
+        letterNumber,
+        refNumber,
+        modeOfReceipt,
+        sendersParty,
+        natureOfLetter,
+        subjectCategory,
+        subjectOfLetter,
+        dateReceived,
+        dateHandover,
+        data.subject_officer_id ? Number(data.subject_officer_id) : null,
+        validPriority
+      );
+    } catch (err1) {
+      console.warn("Insert into daily_mail warning:", err1);
+    }
+
+    return serializeForServerAction({ success: true });
   } catch (error: any) {
-    console.error("Error inserting into daily_mail table:", error);
-    return serializeForServerAction({ success: false, error: error?.message || "Failed to insert into daily_mail table" });
+    console.error("Error inserting into daily mail tables:", error);
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to insert into daily mail tables" });
   }
 }
 
@@ -660,50 +812,6 @@ export async function saveRegisterOfficerServer(officerData: {
         RETURNING *;
       `;
       resultRecord = inserted[0];
-    }
-
-    // Dual-server sync to Port 5433 if pgAdmin is connected to Port 5433
-    try {
-      if (typeof require !== "undefined") {
-        const altUrl5433 = (process.env.DATABASE_URL || "postgresql://postgres:YourPassword123@localhost:5432/DCMMS?schema=public").replace(":5432", ":5433");
-        const { PrismaClient } = require("@prisma/client");
-        const altPrisma5433 = new PrismaClient({ datasources: { db: { url: altUrl5433 } } });
-        await altPrisma5433.$queryRaw`
-          INSERT INTO register_officer_table (employee_no, full_name, email, password, role, is_active)
-          VALUES (${employeeNo}, ${fullName}, ${email}, ${password}, ${officerData.role}, ${isActive})
-          ON CONFLICT (email) DO UPDATE SET
-            employee_no = EXCLUDED.employee_no,
-            full_name = EXCLUDED.full_name,
-            role = EXCLUDED.role,
-            is_active = EXCLUDED.is_active,
-            updated_at = NOW();
-        `;
-        await altPrisma5433.$disconnect();
-      }
-    } catch (e) {
-      // Secondary port sync warning (ignored if 5433 not running)
-    }
-
-    // Secondary sync to 'postgres' database if main is 'DCMMS' (to ensure pgAdmin shows it regardless of DB selected)
-    try {
-      if (typeof require !== "undefined" && process.env.DATABASE_URL && process.env.DATABASE_URL.includes("/DCMMS")) {
-        const altUrl = process.env.DATABASE_URL.replace("/DCMMS", "/postgres");
-        const { PrismaClient } = require("@prisma/client");
-        const altPrisma = new PrismaClient({ datasources: { db: { url: altUrl } } });
-        await altPrisma.$queryRaw`
-          INSERT INTO register_officer_table (employee_no, full_name, email, password, role, is_active)
-          VALUES (${employeeNo}, ${fullName}, ${email}, ${password}, ${officerData.role}, ${isActive})
-          ON CONFLICT (email) DO UPDATE SET
-            employee_no = EXCLUDED.employee_no,
-            full_name = EXCLUDED.full_name,
-            role = EXCLUDED.role,
-            is_active = EXCLUDED.is_active,
-            updated_at = NOW();
-        `;
-        await altPrisma.$disconnect();
-      }
-    } catch (e) {
-      // Secondary DB sync warning (ignored if second DB does not exist)
     }
 
     return serializeForServerAction({ success: true, data: resultRecord });
