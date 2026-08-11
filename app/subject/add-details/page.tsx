@@ -14,7 +14,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 import { getCurrentProfile, dashboardPath } from "@/lib/auth";
 import { CheckCircle, X } from "lucide-react";
-import { getInstitutesServer } from "@/lib/db-actions";
+import { getInstitutesServer, saveInstituteServer, saveAccusedOfficerServer, getAccusedOfficerByRefServer } from "@/lib/db-actions";
 const formatStepTaken = (step: string, t: any) => {
   if (!step) return "";
   if (step.startsWith("[EduSecApproval:")) {
@@ -581,52 +581,67 @@ function CaseDetailsForm() {
             } else {
               setIsConcerned("no");
             }
-
-            // Also load accused officer & school details from PostgreSQL accused_officer_table & accused_school_table
-            try {
-              const res = await fetch(`/api/accused-officer?ref_number=${encodeURIComponent(caseNoParam)}`);
-              const json = await res.json();
-              if (json.success && json.data && json.data.accused_officer) {
-                const ao = json.data.accused_officer;
-                const sch = json.data.accused_school;
-                if (ao && (ao.accused_officer_name || ao.position || ao.nic_no)) {
-                  const cleanVal = (val: string | null | undefined) => {
-                    if (!val) return "";
-                    const trimmed = String(val).trim();
-                    if (trimmed.toUpperCase() === "N/A" || trimmed === "—" || trimmed === "-") return "";
-                    return trimmed;
-                  };
-                  setConcernedPersons([{
-                    name: cleanVal(ao.accused_officer_name),
-                    position: cleanVal(ao.position),
-                    dob: ao.date_of_birth ? String(ao.date_of_birth).split("T")[0] : "",
-                    nic: cleanVal(ao.nic_no),
-                    appointmentDate: ao.appointment_date ? String(ao.appointment_date).split("T")[0] : "",
-                    address: cleanVal(ao.address),
-                  }]);
-                  setIsConcerned("yes");
-                }
-                if (!isUserEditingSchoolRef.current && sch && sch.accused_school_name) {
-                  const cleanVal = (val: string | null | undefined) => {
-                    if (!val) return "";
-                    const trimmed = String(val).trim();
-                    if (trimmed.toUpperCase() === "N/A" || trimmed === "—" || trimmed === "-") return "";
-                    return trimmed;
-                  };
-                  const valName = cleanVal(sch.accused_school_name);
-                  if (valName) setSchoolName(valName);
-                  if (sch.address) {
-                    const valAddr = cleanVal(sch.address);
-                    if (valAddr) setSchoolAddress(valAddr);
-                  }
-                }
-              }
-            } catch (pgErr) {
-              console.error("Failed to fetch accused officer details from PostgreSQL API", pgErr);
-            }
           } catch (e) {
             console.error("Failed to fetch case details from Supabase", e);
           }
+        }
+
+        // Always load PostgreSQL form, accused officer & school details directly via getAccusedOfficerByRefServer
+        try {
+          const pgRes = await getAccusedOfficerByRefServer(caseNoParam);
+          if (pgRes && pgRes.success && pgRes.data) {
+            const d = pgRes.data;
+            const cleanVal = (val: string | null | undefined) => {
+              if (!val) return "";
+              const trimmed = String(val).trim();
+              if (trimmed.toUpperCase() === "N/A" || trimmed === "—" || trimmed === "-") return "";
+              return trimmed;
+            };
+
+            if (d.classification_of_complaint_letter) {
+              setClassification(d.classification_of_complaint_letter === "anonymous" ? "anonymous" : "nominal");
+            }
+            if (d.name_of_the_presenting_the_complain) {
+              setComplainantName(cleanVal(d.name_of_the_presenting_the_complain));
+            }
+            if (d.address_of_the_person_presenting_the_complaint) {
+              setComplainantAddress(cleanVal(d.address_of_the_person_presenting_the_complaint));
+            }
+            if (d.subject_file_no) {
+              setSpecialNotes(cleanVal(d.subject_file_no));
+            }
+            if (d.future_action) {
+              setComplaintMatter(cleanVal(d.future_action));
+            }
+            if (d.date_prepared_and_submitted_for_signature) {
+              setReceivedDate(String(d.date_prepared_and_submitted_for_signature).split("T")[0]);
+            }
+
+            const ao = d.accused_officer;
+            if (ao && (ao.accused_officer_name || ao.position || ao.nic_no)) {
+              setConcernedPersons([{
+                name: cleanVal(ao.accused_officer_name),
+                position: cleanVal(ao.position),
+                dob: ao.date_of_birth ? String(ao.date_of_birth).split("T")[0] : "",
+                nic: cleanVal(ao.nic_no),
+                appointmentDate: ao.appointment_date ? String(ao.appointment_date).split("T")[0] : "",
+                address: cleanVal(ao.address),
+              }]);
+              setIsConcerned("yes");
+            }
+
+            const sch = d.accused_school;
+            if (!isUserEditingSchoolRef.current && sch && sch.accused_school_name) {
+              const valName = cleanVal(sch.accused_school_name);
+              if (valName) setSchoolName(valName);
+              if (sch.address) {
+                const valAddr = cleanVal(sch.address);
+                if (valAddr) setSchoolAddress(valAddr);
+              }
+            }
+          }
+        } catch (pgErr) {
+          console.error("Failed to fetch accused officer details from PostgreSQL:", pgErr);
         }
 
         // Local storage fallbacks
@@ -876,6 +891,40 @@ function CaseDetailsForm() {
     const actionId = `action-${refNo}-${Date.now()}`;
     const serializedStepTaken = `[EduSecApproval:${eduSecretaryApproval}${eduSecretaryApproval === "yes" && approvalDate ? `|Date:${approvalDate}` : ""}]`;
 
+    // 1. Save directly into PostgreSQL database tables (subject_officer_form_table, accused_officer_table, accused_school_table, institute_table)
+    try {
+      const firstPerson = isConcerned === "yes" && concernedPersons.length > 0 ? concernedPersons[0] : null;
+      const res = await saveAccusedOfficerServer({
+        ref_number: refNo,
+        accused_officer_name: isConcerned === "yes" ? (firstPerson?.name || "") : "",
+        address: isConcerned === "yes" ? (firstPerson?.address || "") : "",
+        position: isConcerned === "yes" ? (firstPerson?.position || "") : "",
+        date_of_birth: isConcerned === "yes" ? (firstPerson?.dob || null) : null,
+        nic_no: isConcerned === "yes" ? (firstPerson?.nic || null) : null,
+        appointment_date: isConcerned === "yes" ? (firstPerson?.appointmentDate || null) : null,
+        accused_school_name: schoolName || "",
+        school_address: schoolAddress || "",
+        province: schoolProvince || "",
+        district: schoolDistrict || "",
+        zone: schoolZone || "",
+        subject_file_no: specialNotes || fileRelated || null,
+        date_prepared_and_submitted_for_signature: receivedDate || null,
+        classification_of_complaint_letter: classification,
+        name_of_the_presenting_the_complain: classification === "nominal" ? complainantName : "Anonymous",
+        address_of_the_person_presenting_the_complaint: classification === "nominal" ? complainantAddress : "N/A",
+        future_action: complaintMatter || specialNotes || "",
+      });
+
+      if (schoolName && schoolName.trim()) {
+        await saveInstituteServer({
+          name: schoolName.trim(),
+          address: schoolAddress ? schoolAddress.trim() : "",
+        });
+      }
+    } catch (postErr) {
+      console.error("Failed to save data to PostgreSQL database tables:", postErr);
+    }
+
     if (isSupabaseConfigured) {
       try {
         // Ensure the case row exists (needed for FK constraint)
@@ -915,35 +964,6 @@ function CaseDetailsForm() {
           });
 
         if (actionError) throw actionError;
-
-        // Save to PostgreSQL accused_officer_table, accused_school_table and subject_officer_form_table via API
-        try {
-          const firstPerson = isConcerned === "yes" && concernedPersons.length > 0 ? concernedPersons[0] : null;
-          await fetch("/api/accused-officer", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              ref_number: refNo,
-              accused_officer_name: firstPerson?.name || "",
-              address: firstPerson?.address || "",
-              position: firstPerson?.position || "",
-              date_of_birth: firstPerson?.dob || null,
-              nic_no: firstPerson?.nic || null,
-              appointment_date: firstPerson?.appointmentDate || null,
-              accused_school_name: schoolName || "",
-              school_address: schoolAddress || "",
-              province: schoolProvince || "",
-              district: schoolDistrict || "",
-              zone: schoolZone || "",
-              classification_of_complaint_letter: classification,
-              name_of_the_presenting_the_complain: complainantName,
-              address_of_the_person_presenting_the_complaint: complainantAddress,
-              future_action: specialNotes,
-            }),
-          });
-        } catch (postErr) {
-          console.error("Failed to save accused officer to PostgreSQL database:", postErr);
-        }
 
         if (isConcerned === "yes") {
           try {

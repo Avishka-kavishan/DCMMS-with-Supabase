@@ -889,6 +889,30 @@ export async function loginOfficerServer(emailOrEmpNo: string, passwordInput: st
   }
 }
 
+function parseSafeDate(val: any): Date | null {
+  if (!val) return null;
+  const str = String(val).trim();
+  if (!str || str.toLowerCase() === "n/a" || str === "—" || str === "-") return null;
+
+  const parts = str.split(/[\/\.-]/);
+  if (parts.length === 3) {
+    if (parts[0].length === 4) {
+      const d = new Date(`${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`);
+      if (!isNaN(d.getTime())) return d;
+    }
+    if (parts[2].length === 4) {
+      const d1 = new Date(str);
+      if (!isNaN(d1.getTime())) return d1;
+
+      const d2 = new Date(`${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`);
+      if (!isNaN(d2.getTime())) return d2;
+    }
+  }
+
+  const d = new Date(str);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 export async function saveAccusedOfficerServer(officerData: any) {
   try {
     const {
@@ -911,6 +935,52 @@ export async function saveAccusedOfficerServer(officerData: any) {
       future_action,
       date_prepared_and_submitted_for_signature,
     } = officerData;
+
+    // 0. Ensure tables exist
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS accused_school_table (
+        id BIGSERIAL PRIMARY KEY,
+        accused_school_name VARCHAR(255) NOT NULL,
+        address TEXT,
+        province VARCHAR(100),
+        district VARCHAR(100),
+        zone VARCHAR(100),
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS accused_officer_table (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        accused_officer_name VARCHAR(255) NOT NULL,
+        address TEXT,
+        position VARCHAR(150),
+        date_of_birth DATE,
+        nic_no VARCHAR(12),
+        appointment_date DATE,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        accused_school_id BIGINT REFERENCES accused_school_table(id) ON DELETE SET NULL
+      );
+    `);
+
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS subject_officer_form_table (
+        id BIGSERIAL PRIMARY KEY,
+        daily_mail_letter_id BIGINT REFERENCES daily_mail_letter_table(id) ON DELETE SET NULL,
+        accused_officer_id UUID REFERENCES accused_officer_table(id) ON DELETE SET NULL,
+        ref_number VARCHAR(100) NOT NULL UNIQUE,
+        subject_file_no VARCHAR(100),
+        future_action TEXT,
+        date_prepared_and_submitted_for_signature DATE,
+        classification_of_complaint_letter VARCHAR(255),
+        name_of_the_presenting_the_complain VARCHAR(255),
+        address_of_the_person_presenting_the_complaint TEXT,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
 
     // 1. Create or update accused_school_table if school name is provided
     let schoolId: any = null;
@@ -960,8 +1030,8 @@ export async function saveAccusedOfficerServer(officerData: any) {
       `;
     }
 
-    const dobVal = date_of_birth ? new Date(date_of_birth) : null;
-    const apptVal = appointment_date ? new Date(appointment_date) : null;
+    const dobVal = parseSafeDate(date_of_birth);
+    const apptVal = parseSafeDate(appointment_date);
 
     if (existingOfficer && existingOfficer.length > 0) {
       officerId = existingOfficer[0].id;
@@ -998,14 +1068,16 @@ export async function saveAccusedOfficerServer(officerData: any) {
 
       // Find daily_mail_letter_id if exists
       let dailyMailId: any = null;
-      const dailyMails: any[] = await prisma.$queryRaw`
-        SELECT id FROM daily_mail_letter_table WHERE ref_number = ${refTrimmed} LIMIT 1;
-      `;
-      if (dailyMails && dailyMails.length > 0) {
-        dailyMailId = dailyMails[0].id;
-      }
+      try {
+        const dailyMails: any[] = await prisma.$queryRaw`
+          SELECT id FROM daily_mail_letter_table WHERE ref_number = ${refTrimmed} LIMIT 1;
+        `;
+        if (dailyMails && dailyMails.length > 0) {
+          dailyMailId = dailyMails[0].id;
+        }
+      } catch (e) {}
 
-      const prepDateVal = date_prepared_and_submitted_for_signature ? new Date(date_prepared_and_submitted_for_signature) : null;
+      const prepDateVal = parseSafeDate(date_prepared_and_submitted_for_signature);
 
       const existingForms: any[] = await prisma.$queryRaw`
         SELECT id FROM subject_officer_form_table WHERE ref_number = ${refTrimmed} LIMIT 1;
@@ -1042,7 +1114,7 @@ export async function saveAccusedOfficerServer(officerData: any) {
       }
     }
 
-    return { success: true, officer_id: officerId, school_id: schoolId ? String(schoolId) : null };
+    return { success: true, officer_id: officerId ? String(officerId) : null, school_id: schoolId ? String(schoolId) : null };
   } catch (error: any) {
     console.error("Error in saveAccusedOfficerServer:", error);
     return { success: false, error: error?.message || "Failed to save accused officer details" };
