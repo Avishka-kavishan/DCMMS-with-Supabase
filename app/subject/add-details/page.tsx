@@ -5,7 +5,7 @@ import "../../daily-mail/daily-mail.css";
 import "../../dashboard-common.css";
 import "../subject.css";
 import "./add-details.css";
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { Sidebar } from "@/components/Sidebar";
@@ -14,6 +14,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 import { getCurrentProfile, dashboardPath } from "@/lib/auth";
 import { CheckCircle, X } from "lucide-react";
+import { getInstitutesServer } from "@/lib/db-actions";
 const formatStepTaken = (step: string, t: any) => {
   if (!step) return "";
   if (step.startsWith("[EduSecApproval:")) {
@@ -171,7 +172,12 @@ function CaseDetailsForm() {
 
       setComplainantName(cleanVal(letterData.senderName));
       setComplainantAddress(cleanVal(letterData.senderAddress));
-      setSchoolName(cleanVal(letterData.instituteName));
+      if (!isUserEditingSchoolRef.current && letterData.instituteName) {
+        const instVal = cleanVal(letterData.instituteName);
+        if (instVal) {
+          setSchoolName(instVal);
+        }
+      }
       setComplaintMatter(cleanVal(letterData.subject));
       
       const isAnon = !letterData.senderName || 
@@ -229,6 +235,57 @@ function CaseDetailsForm() {
   const [schoolZone, setSchoolZone] = useState("");
   const [complaintMatter, setComplaintMatter] = useState("");
   const [complaintAge, setComplaintAge] = useState<"new" | "old">("new");
+
+  // Institute Autocomplete States (from institute_table)
+  const isUserEditingSchoolRef = useRef(false);
+  const [institutesList, setInstitutesList] = useState<{ name: string; address: string }[]>([]);
+  const [filteredInstitutes, setFilteredInstitutes] = useState<{ name: string; address: string }[]>([]);
+  const [showInstituteDropdown, setShowInstituteDropdown] = useState(false);
+
+  useEffect(() => {
+    const fetchInstitutesForAutocomplete = async () => {
+      try {
+        const res = await getInstitutesServer();
+        if (res && res.success && Array.isArray(res.data)) {
+          const list = res.data
+            .map((item: any) => ({
+              name: (item.name || item.institute_name || "").trim(),
+              address: (item.address || "").trim(),
+            }))
+            .filter((item: any) => item.name);
+          setInstitutesList(list);
+        }
+      } catch (e) {
+        console.error("Failed to load institutes for autocomplete", e);
+      }
+    };
+    fetchInstitutesForAutocomplete();
+  }, []);
+
+  const handleSchoolNameChange = (val: string) => {
+    isUserEditingSchoolRef.current = true;
+    setSchoolName(val);
+    const query = val.toLowerCase().trim();
+    if (query.length > 0) {
+      const matches = institutesList
+        .filter((inst) => inst.name.toLowerCase().includes(query))
+        .slice(0, 10);
+      setFilteredInstitutes(matches);
+      setShowInstituteDropdown(matches.length > 0);
+    } else {
+      setFilteredInstitutes([]);
+      setShowInstituteDropdown(false);
+    }
+  };
+
+  const handleSelectInstitute = (inst: { name: string; address: string }) => {
+    isUserEditingSchoolRef.current = true;
+    setSchoolName(inst.name);
+    if (inst.address) {
+      setSchoolAddress(inst.address);
+    }
+    setShowInstituteDropdown(false);
+  };
 
   // Form States - Right Card ("If officer concerned with the Complaint")
   interface ConcernedPerson {
@@ -498,11 +555,15 @@ function CaseDetailsForm() {
               }));
               setConcernedPersons(mappedPersons);
               setIsConcerned(mappedPersons.some(p => p.name) ? "yes" : "no");
-              if (concernedDataList[0]?.institute_name) {
-                setSchoolName(cleanVal(concernedDataList[0].institute_name));
-              }
-              if (concernedDataList[0]?.institute_address) {
-                setSchoolAddress(cleanVal(concernedDataList[0].institute_address));
+              if (!isUserEditingSchoolRef.current) {
+                if (concernedDataList[0]?.institute_name) {
+                  const val = cleanVal(concernedDataList[0].institute_name);
+                  if (val) setSchoolName(val);
+                }
+                if (concernedDataList[0]?.institute_address) {
+                  const val = cleanVal(concernedDataList[0].institute_address);
+                  if (val) setSchoolAddress(val);
+                }
               }
             } else {
               setIsConcerned("no");
@@ -532,18 +593,19 @@ function CaseDetailsForm() {
                   }]);
                   setIsConcerned("yes");
                 }
-                if (sch && sch.accused_school_name) {
+                if (!isUserEditingSchoolRef.current && sch && sch.accused_school_name) {
                   const cleanVal = (val: string | null | undefined) => {
                     if (!val) return "";
                     const trimmed = String(val).trim();
                     if (trimmed.toUpperCase() === "N/A" || trimmed === "—" || trimmed === "-") return "";
                     return trimmed;
                   };
-                  setSchoolName(cleanVal(sch.accused_school_name));
-                  if (sch.address) setSchoolAddress(cleanVal(sch.address));
-                  if (sch.province) setSchoolProvince(cleanVal(sch.province));
-                  if (sch.district) setSchoolDistrict(cleanVal(sch.district));
-                  if (sch.zone) setSchoolZone(cleanVal(sch.zone));
+                  const valName = cleanVal(sch.accused_school_name);
+                  if (valName) setSchoolName(valName);
+                  if (sch.address) {
+                    const valAddr = cleanVal(sch.address);
+                    if (valAddr) setSchoolAddress(valAddr);
+                  }
                 }
               }
             } catch (pgErr) {
@@ -646,11 +708,15 @@ function CaseDetailsForm() {
                   }]);
                   setIsConcerned("yes");
                 }
-                if (existingConcerned.instituteName) {
-                  setSchoolName(cleanVal(existingConcerned.instituteName));
-                }
-                if (existingConcerned.schoolAddress) {
-                  setSchoolAddress(cleanVal(existingConcerned.schoolAddress));
+                if (!isUserEditingSchoolRef.current) {
+                  if (existingConcerned.instituteName) {
+                    const valName = cleanVal(existingConcerned.instituteName);
+                    if (valName) setSchoolName(valName);
+                  }
+                  if (existingConcerned.schoolAddress) {
+                    const valAddr = cleanVal(existingConcerned.schoolAddress);
+                    if (valAddr) setSchoolAddress(valAddr);
+                  }
                 }
               }
             } catch (e) {
@@ -1798,12 +1864,12 @@ function CaseDetailsForm() {
                       </div>
 
                       {/* Step 5: School Details */}
-                      <div className="flowchart-step">
+                      <div className="flowchart-step" style={{ position: "relative", zIndex: 40 }}>
                         <div className="step-indicator">{classification === "nominal" ? "5" : "4"}</div>
-                        <div className="step-content">
+                        <div className="step-content" style={{ overflow: "visible" }}>
                           <h3 className="step-section-title">{t("schoolDetailsTitle", "School Details")}</h3>
-                          <div className="form-grid-2">
-                            <div className="form-field-group">
+                          <div className="form-grid-2" style={{ overflow: "visible" }}>
+                            <div className="form-field-group" style={{ position: "relative", zIndex: 100 }}>
                               <label htmlFor="schoolName" className="field-label">
                                 {t("schoolName", "School Name")} <span className="required-star">*</span>
                               </label>
@@ -1812,10 +1878,70 @@ function CaseDetailsForm() {
                                 type="text"
                                 required
                                 value={schoolName}
-                                onChange={(e) => setSchoolName(e.target.value)}
+                                onChange={(e) => handleSchoolNameChange(e.target.value)}
+                                onFocus={() => {
+                                  const query = schoolName.trim().toLowerCase();
+                                  if (query.length > 0 && institutesList.length > 0) {
+                                    const matches = institutesList
+                                      .filter((inst) => inst.name.toLowerCase().includes(query))
+                                      .slice(0, 10);
+                                    setFilteredInstitutes(matches);
+                                    setShowInstituteDropdown(matches.length > 0);
+                                  }
+                                }}
+                                onBlur={() => {
+                                  setTimeout(() => setShowInstituteDropdown(false), 300);
+                                }}
                                 className="field-input"
                                 placeholder="Enter school name..."
+                                autoComplete="off"
                               />
+
+                              {/* Autocomplete Dropdown List from institute_table */}
+                              {showInstituteDropdown && filteredInstitutes.length > 0 && (
+                                <ul
+                                  style={{
+                                    position: "absolute",
+                                    top: "100%",
+                                    left: 0,
+                                    right: 0,
+                                    zIndex: 9999,
+                                    backgroundColor: "#ffffff",
+                                    border: "1px solid #94a3b8",
+                                    borderRadius: "8px",
+                                    boxShadow: "0 14px 28px rgba(0, 0, 0, 0.18), 0 10px 10px rgba(0, 0, 0, 0.12)",
+                                    maxHeight: "220px",
+                                    overflowY: "auto",
+                                    margin: "4px 0 0 0",
+                                    padding: "6px 0",
+                                    listStyle: "none",
+                                  }}
+                                >
+                                  {filteredInstitutes.map((inst, index) => (
+                                    <li
+                                      key={index}
+                                      onMouseDown={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        handleSelectInstitute(inst);
+                                      }}
+                                      style={{
+                                        padding: "10px 14px",
+                                        cursor: "pointer",
+                                        borderBottom: index === filteredInstitutes.length - 1 ? "none" : "1px solid #f1f5f9",
+                                        transition: "background-color 0.15s ease",
+                                      }}
+                                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#eff6ff")}
+                                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#ffffff")}
+                                    >
+                                      <div style={{ fontWeight: 600, fontSize: "14px", color: "#0f172a" }}>{inst.name}</div>
+                                      {inst.address && (
+                                        <div style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}>{inst.address}</div>
+                                      )}
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
                             </div>
                             <div className="form-field-group">
                               <label htmlFor="schoolAddress" className="field-label">
@@ -1825,50 +1951,12 @@ function CaseDetailsForm() {
                                 id="schoolAddress"
                                 type="text"
                                 value={schoolAddress}
-                                onChange={(e) => setSchoolAddress(e.target.value)}
+                                onChange={(e) => {
+                                  isUserEditingSchoolRef.current = true;
+                                  setSchoolAddress(e.target.value);
+                                }}
                                 className="field-input"
                                 placeholder="Enter school address..."
-                              />
-                            </div>
-                          </div>
-                          <div className="form-grid-3 mt-3" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px", marginTop: "12px" }}>
-                            <div className="form-field-group">
-                              <label htmlFor="schoolProvince" className="field-label">
-                                {t("province", "Province")}
-                              </label>
-                              <input
-                                id="schoolProvince"
-                                type="text"
-                                value={schoolProvince}
-                                onChange={(e) => setSchoolProvince(e.target.value)}
-                                className="field-input"
-                                placeholder="Province..."
-                              />
-                            </div>
-                            <div className="form-field-group">
-                              <label htmlFor="schoolDistrict" className="field-label">
-                                {t("district", "District")}
-                              </label>
-                              <input
-                                id="schoolDistrict"
-                                type="text"
-                                value={schoolDistrict}
-                                onChange={(e) => setSchoolDistrict(e.target.value)}
-                                className="field-input"
-                                placeholder="District..."
-                              />
-                            </div>
-                            <div className="form-field-group">
-                              <label htmlFor="schoolZone" className="field-label">
-                                {t("zone", "Zone")}
-                              </label>
-                              <input
-                                id="schoolZone"
-                                type="text"
-                                value={schoolZone}
-                                onChange={(e) => setSchoolZone(e.target.value)}
-                                className="field-input"
-                                placeholder="Zone..."
                               />
                             </div>
                           </div>
@@ -1876,7 +1964,7 @@ function CaseDetailsForm() {
                       </div>
 
                       {/* Step 6: Subject Matter */}
-                      <div className="flowchart-step">
+                      <div className="flowchart-step" style={{ position: "relative", zIndex: 1 }}>
                         <div className="step-indicator">{classification === "nominal" ? "6" : "5"}</div>
                         <div className="step-content">
                           <div className="form-field-group">
