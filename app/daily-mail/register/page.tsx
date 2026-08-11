@@ -96,12 +96,7 @@ function RegisterComplaintForm() {
   const [subjectActions, setSubjectActions] = useState<any[]>([]);
   const [previousLetters, setPreviousLetters] = useState<any[]>([]);
 
-  const [officerOptions, setOfficerOptions] = useState<string[]>([
-    "Rathnaweera",
-    "Kamal Perera",
-    "Suresh Silva",
-    "Aruni Rajapaksha",
-  ]);
+  const [officerOptions, setOfficerOptions] = useState<string[]>([]);
   const [officerSearchQuery, setOfficerSearchQuery] = useState("");
   const [isOfficerDropdownOpen, setIsOfficerDropdownOpen] = useState(false);
   const officerDropdownRef = useRef<HTMLDivElement>(null);
@@ -154,19 +149,14 @@ function RegisterComplaintForm() {
   // Load subject officers and institutes on mount
   useEffect(() => {
     const loadOfficers = async () => {
-      const namesSet = new Set<string>([
-        "Rathnaweera",
-        "Kamal Perera",
-        "Suresh Silva",
-        "Aruni Rajapaksha",
-      ]);
+      const namesSet = new Set<string>();
 
-      // 1. Load from PostgreSQL via Prisma Server Action
+      // 1. Load from PostgreSQL via Prisma Server Action (register_officer_table filtered by subject officer role)
       try {
         const res = await getSubjectOfficersServer();
         if (res.success && res.data && res.data.length > 0) {
           res.data.forEach((name: string) => {
-            if (name) namesSet.add(name);
+            if (name && name.trim()) namesSet.add(name.trim());
           });
         }
       } catch (e) {

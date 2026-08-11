@@ -2,13 +2,20 @@
 
 import { prisma } from "@/lib/prisma";
 
-function serializeForServerAction<T>(obj: T): T {
+function serializeForServerAction<T>(obj: T): any {
   if (obj === null || obj === undefined) return obj;
-  return JSON.parse(
-    JSON.stringify(obj, (key, value) =>
-      typeof value === "bigint" ? value.toString() : value
-    )
-  );
+  try {
+    return JSON.parse(
+      JSON.stringify(obj, (key, value) => {
+        if (typeof value === "bigint") return value.toString();
+        if (value instanceof Error) return value.message;
+        return value;
+      })
+    );
+  } catch (err) {
+    console.error("Serialization error in server action:", err);
+    return obj;
+  }
 }
 
 export async function checkDatabaseConnection() {
@@ -96,7 +103,7 @@ export async function getDailyMailRecordsServer() {
     return serializeForServerAction({ success: true, data: combinedData });
   } catch (error: any) {
     console.error("Error fetching daily mail records:", error);
-    return serializeForServerAction({ success: false, error: error.message, data: [] });
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to fetch daily mail records", data: [] });
   }
 }
 
@@ -179,7 +186,7 @@ export async function saveDailyMailRecordServer(mailData: any) {
     return serializeForServerAction({ success: true, data: result });
   } catch (error: any) {
     console.error("Error saving daily mail record:", error);
-    return serializeForServerAction({ success: false, error: error.message });
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to save daily mail record" });
   }
 }
 
@@ -252,7 +259,7 @@ export async function saveDailyMailToNewTableServer(data: {
     return serializeForServerAction({ success: true, count: Number(result) });
   } catch (error: any) {
     console.error("Error inserting into daily_mail table:", error);
-    return serializeForServerAction({ success: false, error: error.message });
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to insert into daily_mail table" });
   }
 }
 
@@ -273,10 +280,10 @@ export async function getCasesServer() {
         },
       },
     });
-    return { success: true, data: cases };
+    return serializeForServerAction({ success: true, data: cases });
   } catch (error: any) {
     console.error("Error fetching cases:", error);
-    return { success: false, error: error.message, data: [] };
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to fetch cases", data: [] });
   }
 }
 
@@ -294,10 +301,10 @@ export async function createCaseServer(caseData: any) {
         complaint_summary: caseData.complaint_summary || caseData.complaint_description || undefined,
       },
     });
-    return { success: true, data: newCase };
+    return serializeForServerAction({ success: true, data: newCase });
   } catch (error: any) {
     console.error("Error creating case:", error);
-    return { success: false, error: error.message };
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to create case" });
   }
 }
 
@@ -326,10 +333,10 @@ export async function upsertPersonServer(personData: any) {
         },
       });
     }
-    return { success: true, data: person };
+    return serializeForServerAction({ success: true, data: person });
   } catch (error: any) {
     console.error("Error upserting person:", error);
-    return { success: false, error: error.message };
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to upsert person" });
   }
 }
 
@@ -340,7 +347,21 @@ export async function getSubjectOfficersServer() {
   try {
     const namesSet = new Set<string>();
 
-    // 1. From dcmms_profiles table
+    // 1. From register_officer_table in PostgreSQL (ONLY subject officer role)
+    try {
+      const regOfficers: any[] = await prisma.$queryRaw`
+        SELECT full_name FROM register_officer_table 
+        WHERE role ILIKE '%subject%' AND (is_active IS NULL OR is_active = true)
+        ORDER BY full_name ASC;
+      `;
+      regOfficers.forEach((o: any) => {
+        if (o.full_name && o.full_name.trim()) namesSet.add(o.full_name.trim());
+      });
+    } catch (e) {
+      console.error("Error fetching subject officers from register_officer_table:", e);
+    }
+
+    // 2. From dcmms_profiles table (fallback for profiles with role containing subject)
     try {
       const profiles = await prisma.dcmmsProfile.findMany({
         where: {
@@ -349,34 +370,14 @@ export async function getSubjectOfficersServer() {
         select: { full_name: true },
       });
       profiles.forEach((p: any) => {
-        if (p.full_name) namesSet.add(p.full_name);
-      });
-    } catch (e) {}
-
-    // 2. From users table with role Subject Officer
-    try {
-      const users = await prisma.user.findMany({
-        select: { full_name: true },
-      });
-      users.forEach((u: any) => {
-        if (u.full_name) namesSet.add(u.full_name);
-      });
-    } catch (e) {}
-
-    // 3. From persons table
-    try {
-      const persons = await prisma.person.findMany({
-        select: { full_name: true },
-      });
-      persons.forEach((p: any) => {
-        if (p.full_name) namesSet.add(p.full_name);
+        if (p.full_name && p.full_name.trim()) namesSet.add(p.full_name.trim());
       });
     } catch (e) {}
 
     return serializeForServerAction({ success: true, data: Array.from(namesSet) });
   } catch (error: any) {
     console.error("Error fetching subject officers from database:", error);
-    return serializeForServerAction({ success: false, error: error.message, data: [] });
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to fetch subject officers", data: [] });
   }
 }
 
@@ -385,9 +386,9 @@ export async function getInvestigationOfficersServer() {
     const officers = await prisma.investigationOfficer.findMany({
       where: { is_active: true },
     });
-    return { success: true, data: officers };
+    return serializeForServerAction({ success: true, data: officers });
   } catch (error: any) {
-    return { success: false, error: error.message, data: [] };
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to fetch investigation officers", data: [] });
   }
 }
 
@@ -429,10 +430,10 @@ export async function upsertInvestigationOfficerServer(officerData: any) {
       // Ignore legacy duplicate err
     }
 
-    return { success: true, data: officer };
+    return serializeForServerAction({ success: true, data: officer });
   } catch (error: any) {
     console.error("Error upserting officer:", error);
-    return { success: false, error: error.message };
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to upsert officer" });
   }
 }
 
@@ -448,9 +449,9 @@ export async function getInvestigationsServer() {
         formalDisciplinaryInvestigations: true,
       },
     });
-    return { success: true, data: list };
+    return serializeForServerAction({ success: true, data: list });
   } catch (error: any) {
-    return { success: false, error: error.message, data: [] };
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to fetch investigations", data: [] });
   }
 }
 
@@ -488,10 +489,10 @@ export async function saveProvincialInvestigationServer(invData: any) {
       },
     });
 
-    return { success: true, data: { invRecord, provInv } };
+    return serializeForServerAction({ success: true, data: { invRecord, provInv } });
   } catch (error: any) {
     console.error("Error saving provincial investigation:", error);
-    return { success: false, error: error.message };
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to save provincial investigation" });
   }
 }
 
@@ -504,10 +505,10 @@ export async function assignOfficerToInvestigationServer(investigationId: string
         assigned_by: assignedBy || undefined,
       },
     });
-    return { success: true, data: assignment };
+    return serializeForServerAction({ success: true, data: assignment });
   } catch (error: any) {
     console.error("Error assigning officer:", error);
-    return { success: false, error: error.message };
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to assign officer" });
   }
 }
 
@@ -545,10 +546,10 @@ export async function logAuditEventServer(
       // Legacy table failure non-blocking
     }
 
-    return { success: true };
+    return serializeForServerAction({ success: true });
   } catch (error: any) {
     console.error("Failed to log audit event to PostgreSQL:", error);
-    return { success: false, error: error.message };
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to log audit event" });
   }
 }
 
@@ -562,10 +563,10 @@ export async function recordSessionServer(userId: string, role?: string) {
         is_active: true,
       },
     });
-    return { success: true, data: session };
+    return serializeForServerAction({ success: true, data: session });
   } catch (error: any) {
     console.error("Failed to record session in PostgreSQL:", error);
-    return { success: false, error: error.message };
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to record session" });
   }
 }
 
@@ -586,7 +587,7 @@ export async function getRegisterOfficersServer(roleFilter?: string) {
     return serializeForServerAction({ success: true, data: records });
   } catch (error: any) {
     console.error("Error fetching register officer records:", error);
-    return serializeForServerAction({ success: false, error: error.message, data: [] });
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to fetch register officers", data: [] });
   }
 }
 
@@ -624,7 +625,7 @@ export async function saveRegisterOfficerServer(officerData: {
         RETURNING *;
       `;
       if (updated && updated.length > 0) {
-        return { success: true, data: updated[0] };
+        return serializeForServerAction({ success: true, data: updated[0] });
       }
     }
 
@@ -663,28 +664,32 @@ export async function saveRegisterOfficerServer(officerData: {
 
     // Dual-server sync to Port 5433 if pgAdmin is connected to Port 5433
     try {
-      const altUrl5433 = (process.env.DATABASE_URL || "postgresql://postgres:YourPassword123@localhost:5432/DCMMS?schema=public").replace(":5432", ":5433");
-      const altPrisma5433 = new (require("@prisma/client").PrismaClient)({ datasources: { db: { url: altUrl5433 } } });
-      await altPrisma5433.$queryRaw`
-        INSERT INTO register_officer_table (employee_no, full_name, email, password, role, is_active)
-        VALUES (${employeeNo}, ${fullName}, ${email}, ${password}, ${officerData.role}, ${isActive})
-        ON CONFLICT (email) DO UPDATE SET
-          employee_no = EXCLUDED.employee_no,
-          full_name = EXCLUDED.full_name,
-          role = EXCLUDED.role,
-          is_active = EXCLUDED.is_active,
-          updated_at = NOW();
-      `;
-      await altPrisma5433.$disconnect();
+      if (typeof require !== "undefined") {
+        const altUrl5433 = (process.env.DATABASE_URL || "postgresql://postgres:YourPassword123@localhost:5432/DCMMS?schema=public").replace(":5432", ":5433");
+        const { PrismaClient } = require("@prisma/client");
+        const altPrisma5433 = new PrismaClient({ datasources: { db: { url: altUrl5433 } } });
+        await altPrisma5433.$queryRaw`
+          INSERT INTO register_officer_table (employee_no, full_name, email, password, role, is_active)
+          VALUES (${employeeNo}, ${fullName}, ${email}, ${password}, ${officerData.role}, ${isActive})
+          ON CONFLICT (email) DO UPDATE SET
+            employee_no = EXCLUDED.employee_no,
+            full_name = EXCLUDED.full_name,
+            role = EXCLUDED.role,
+            is_active = EXCLUDED.is_active,
+            updated_at = NOW();
+        `;
+        await altPrisma5433.$disconnect();
+      }
     } catch (e) {
       // Secondary port sync warning (ignored if 5433 not running)
     }
 
     // Secondary sync to 'postgres' database if main is 'DCMMS' (to ensure pgAdmin shows it regardless of DB selected)
     try {
-      if (process.env.DATABASE_URL && process.env.DATABASE_URL.includes("/DCMMS")) {
+      if (typeof require !== "undefined" && process.env.DATABASE_URL && process.env.DATABASE_URL.includes("/DCMMS")) {
         const altUrl = process.env.DATABASE_URL.replace("/DCMMS", "/postgres");
-        const altPrisma = new (require("@prisma/client").PrismaClient)({ datasources: { db: { url: altUrl } } });
+        const { PrismaClient } = require("@prisma/client");
+        const altPrisma = new PrismaClient({ datasources: { db: { url: altUrl } } });
         await altPrisma.$queryRaw`
           INSERT INTO register_officer_table (employee_no, full_name, email, password, role, is_active)
           VALUES (${employeeNo}, ${fullName}, ${email}, ${password}, ${officerData.role}, ${isActive})
@@ -704,17 +709,17 @@ export async function saveRegisterOfficerServer(officerData: {
     return serializeForServerAction({ success: true, data: resultRecord });
   } catch (error: any) {
     console.error("Error saving register officer:", error);
-    return serializeForServerAction({ success: false, error: error.message || "Failed to save officer to database" });
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to save officer to database" });
   }
 }
 
 export async function deleteRegisterOfficerServer(id: string) {
   try {
     await prisma.$queryRaw`DELETE FROM register_officer_table WHERE id = ${id}::uuid`;
-    return { success: true };
+    return serializeForServerAction({ success: true });
   } catch (error: any) {
     console.error("Error deleting register officer:", error);
-    return { success: false, error: error.message };
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to delete register officer" });
   }
 }
 
@@ -726,10 +731,10 @@ export async function toggleRegisterOfficerStatusServer(id: string, is_active: b
       WHERE id = ${id}::uuid
       RETURNING *;
     `;
-    return { success: true, data: updated[0] };
+    return serializeForServerAction({ success: true, data: updated[0] });
   } catch (error: any) {
     console.error("Error toggling officer status:", error);
-    return { success: false, error: error.message };
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to toggle officer status" });
   }
 }
 
@@ -747,17 +752,17 @@ export async function loginOfficerServer(emailOrEmpNo: string, passwordInput: st
     `;
 
     if (!records || records.length === 0) {
-      return { success: false, error: "Invalid email/employee number or password." };
+      return serializeForServerAction({ success: false, error: "Invalid email/employee number or password." });
     }
 
     const officer = records[0];
 
     if (officer.is_active === false) {
-      return { success: false, error: "Your account is deactivated. Please contact an administrator." };
+      return serializeForServerAction({ success: false, error: "Your account is deactivated. Please contact an administrator." });
     }
 
     if (officer.password && officer.password !== passwordInput) {
-      return { success: false, error: "Invalid email/employee number or password." };
+      return serializeForServerAction({ success: false, error: "Invalid email/employee number or password." });
     }
 
     return serializeForServerAction({
@@ -772,8 +777,6 @@ export async function loginOfficerServer(emailOrEmpNo: string, passwordInput: st
     });
   } catch (error: any) {
     console.error("Login officer server error:", error);
-    return serializeForServerAction({ success: false, error: error.message || "Authentication failed" });
+    return serializeForServerAction({ success: false, error: error?.message || "Authentication failed" });
   }
 }
-
-
