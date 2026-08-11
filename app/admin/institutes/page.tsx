@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import "../../../i18n";
 import { Search, Plus, X, Edit, Trash2, Check } from "lucide-react";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
+import { getInstitutesServer, saveInstituteServer, deleteInstituteServer } from "@/lib/db-actions";
 
 interface Institute {
   id: string;
@@ -134,6 +135,28 @@ export default function EducationalInstitutesPage() {
   const fetchInstitutes = async () => {
     let dbInstitutes: Institute[] = [];
 
+    // 1. Load from PostgreSQL institute_table
+    try {
+      const res = await getInstitutesServer();
+      if (res && res.success && Array.isArray(res.data)) {
+        dbInstitutes = res.data.map((item: any) => ({
+          id: String(item.id),
+          name: item.name || item.institute_name || "",
+          code: "",
+          address: item.address || "",
+          province: item.province || "Western",
+          regionProvince: item.province || "Western",
+          district: item.district || "Colombo",
+          zone: item.zone || "Colombo",
+          status: "Active",
+          createdAt: item.created_at ? new Date(item.created_at).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
+        }));
+      }
+    } catch (err) {
+      console.error("Error loading institutes from PostgreSQL database:", err);
+    }
+
+    // 2. Load from Supabase if configured
     if (isSupabaseConfigured) {
       try {
         const { data, error } = await supabase
@@ -141,8 +164,8 @@ export default function EducationalInstitutesPage() {
           .select("*");
 
         if (!error && data) {
-          dbInstitutes = data.map((item: any) => ({
-            id: item.id,
+          const supabaseInsts = data.map((item: any) => ({
+            id: String(item.id),
             name: item.name,
             code: item.code || "",
             address: item.address || "",
@@ -150,16 +173,17 @@ export default function EducationalInstitutesPage() {
             regionProvince: item.province || item.region_province || item.regionProvince || "Western",
             district: item.district || "Colombo",
             zone: item.zone || "Colombo",
-            status: item.status === "inactive" ? "Inactive" : "Active",
+            status: item.status === "inactive" ? ("Inactive" as const) : ("Active" as const),
             createdAt: item.created_at || new Date().toISOString().split("T")[0],
           }));
+          dbInstitutes = [...dbInstitutes, ...supabaseInsts];
         }
       } catch (err) {
-        console.error("Error loading institutes from database:", err);
+        console.error("Error loading institutes from Supabase:", err);
       }
     }
 
-    // Load custom institutes from localStorage
+    // 3. Load custom institutes from localStorage
     let localInstitutes: Institute[] = [];
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("dcmms_institutes");
@@ -241,7 +265,7 @@ export default function EducationalInstitutesPage() {
     window.addEventListener("storage", handleLocalUpdate);
     window.addEventListener("dcmms_data_updated", handleLocalUpdate);
 
-    const interval = setInterval(fetchInstitutes, 2500);
+    const interval = setInterval(fetchInstitutes, 5000);
 
     return () => {
       if (channel) supabase.removeChannel(channel);
@@ -301,6 +325,26 @@ export default function EducationalInstitutesPage() {
     e.preventDefault();
     if (!validateForm()) return;
 
+    // 1. Save directly into PostgreSQL institute_table database
+    try {
+      const dbRes = await saveInstituteServer({
+        id: isEditMode && editingId ? editingId : undefined,
+        name: formName.trim(),
+        institute_name: formName.trim(),
+        address: formAddress.trim(),
+        province: formProvince,
+        district: formDistrict,
+        zone: formZone,
+        status: formStatus,
+      });
+
+      if (!dbRes.success) {
+        console.error("Database save failed:", dbRes.error);
+      }
+    } catch (dbErr) {
+      console.error("Error saving institute to PostgreSQL institute_table:", dbErr);
+    }
+
     const savedInst: Institute = {
       id: isEditMode && editingId ? editingId : `inst-${Date.now()}`,
       name: formName.trim(),
@@ -315,16 +359,15 @@ export default function EducationalInstitutesPage() {
         : new Date().toISOString().split("T")[0],
     };
 
-    // Save custom institutes in localStorage
+    // Save custom institutes in localStorage fallback
     if (typeof window !== "undefined") {
       let list = institutes.filter(o => o.id !== savedInst.id);
       list.push(savedInst);
-      // Filter out base templates so we only store custom ones in localStorage
       const onlyCustom = list.filter(o => o.id.startsWith("inst-"));
       localStorage.setItem("dcmms_institutes", JSON.stringify(onlyCustom));
     }
 
-    // Try DB upsert
+    // Try Supabase fallback upsert if configured
     if (isSupabaseConfigured) {
       try {
         await supabase.from("dcmms_institutes").upsert({
@@ -345,7 +388,7 @@ export default function EducationalInstitutesPage() {
           { name: savedInst.name, province: savedInst.province, district: savedInst.district, zone: savedInst.zone }
         );
       } catch (err) {
-        console.warn("Could not upsert to Supabase. Falling back fully to localStorage.", err);
+        console.warn("Could not upsert to Supabase.", err);
       }
     }
 
@@ -356,8 +399,15 @@ export default function EducationalInstitutesPage() {
   };
 
   // Delete Handler
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this institute?")) return;
+
+    // Delete from PostgreSQL institute_table database
+    try {
+      await deleteInstituteServer(id);
+    } catch (e) {
+      console.error("Error deleting from institute_table:", e);
+    }
 
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("dcmms_institutes");

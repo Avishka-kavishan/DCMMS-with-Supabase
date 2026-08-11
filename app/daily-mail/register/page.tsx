@@ -11,7 +11,7 @@ import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 import { getCurrentProfile } from "@/lib/auth";
-import { saveDailyMailRecordServer, saveDailyMailToNewTableServer, logAuditEventServer, getSubjectOfficersServer } from "@/lib/db-actions";
+import { saveDailyMailRecordServer, saveDailyMailToNewTableServer, logAuditEventServer, getSubjectOfficersServer, getInstitutesServer } from "@/lib/db-actions";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
@@ -232,7 +232,20 @@ function RegisterComplaintForm() {
         "Zonal Education Office, Jaffna",
       ]);
 
-      // 1. Load from Supabase
+      // 1. Load from PostgreSQL institute_table
+      try {
+        const res = await getInstitutesServer();
+        if (res && res.success && Array.isArray(res.data)) {
+          res.data.forEach((inst: any) => {
+            const name = inst.name || inst.institute_name;
+            if (name) namesSet.add(name);
+          });
+        }
+      } catch (e) {
+        console.error("Failed to load institutes from institute_table", e);
+      }
+
+      // 2. Load from Supabase
       if (isSupabaseConfigured) {
         try {
           const { data, error } = await supabase
@@ -248,7 +261,7 @@ function RegisterComplaintForm() {
         }
       }
 
-      // 2. Load from localStorage custom institutes
+      // 3. Load from localStorage custom institutes
       if (typeof window !== "undefined") {
         const stored = localStorage.getItem("dcmms_institutes");
         if (stored) {

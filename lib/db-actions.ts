@@ -888,3 +888,360 @@ export async function loginOfficerServer(emailOrEmpNo: string, passwordInput: st
     return serializeForServerAction({ success: false, error: error?.message || "Authentication failed" });
   }
 }
+
+export async function saveAccusedOfficerServer(officerData: any) {
+  try {
+    const {
+      ref_number,
+      accused_officer_name,
+      address,
+      position,
+      date_of_birth,
+      nic_no,
+      appointment_date,
+      accused_school_name,
+      school_address,
+      province,
+      district,
+      zone,
+      classification_of_complaint_letter,
+      name_of_the_presenting_the_complain,
+      address_of_the_person_presenting_the_complaint,
+      subject_file_no,
+      future_action,
+      date_prepared_and_submitted_for_signature,
+    } = officerData;
+
+    // 1. Create or update accused_school_table if school name is provided
+    let schoolId: any = null;
+    if (accused_school_name && String(accused_school_name).trim()) {
+      const schoolNameTrimmed = String(accused_school_name).trim();
+      const existingSchools: any[] = await prisma.$queryRaw`
+        SELECT id FROM accused_school_table WHERE LOWER(accused_school_name) = ${schoolNameTrimmed.toLowerCase()} LIMIT 1;
+      `;
+
+      if (existingSchools && existingSchools.length > 0) {
+        schoolId = existingSchools[0].id;
+        await prisma.$queryRaw`
+          UPDATE accused_school_table
+          SET address = ${school_address || null},
+              province = ${province || null},
+              district = ${district || null},
+              zone = ${zone || null},
+              updated_at = NOW()
+          WHERE id = ${schoolId}::bigint;
+        `;
+      } else {
+        const insertedSchool: any[] = await prisma.$queryRaw`
+          INSERT INTO accused_school_table (accused_school_name, address, province, district, zone)
+          VALUES (${schoolNameTrimmed}, ${school_address || null}, ${province || null}, ${district || null}, ${zone || null})
+          RETURNING id;
+        `;
+        if (insertedSchool && insertedSchool.length > 0) {
+          schoolId = insertedSchool[0].id;
+        }
+      }
+    }
+
+    // 2. Create or update accused_officer_table
+    let officerId: string | null = null;
+    const nameTrimmed = accused_officer_name ? String(accused_officer_name).trim() : "";
+    const nicTrimmed = nic_no ? String(nic_no).trim() : "";
+
+    let existingOfficer: any[] = [];
+    if (nicTrimmed) {
+      existingOfficer = await prisma.$queryRaw`
+        SELECT id FROM accused_officer_table WHERE nic_no = ${nicTrimmed} LIMIT 1;
+      `;
+    }
+    if ((!existingOfficer || existingOfficer.length === 0) && nameTrimmed) {
+      existingOfficer = await prisma.$queryRaw`
+        SELECT id FROM accused_officer_table WHERE LOWER(accused_officer_name) = ${nameTrimmed.toLowerCase()} LIMIT 1;
+      `;
+    }
+
+    const dobVal = date_of_birth ? new Date(date_of_birth) : null;
+    const apptVal = appointment_date ? new Date(appointment_date) : null;
+
+    if (existingOfficer && existingOfficer.length > 0) {
+      officerId = existingOfficer[0].id;
+      await prisma.$queryRaw`
+        UPDATE accused_officer_table
+        SET accused_officer_name = ${nameTrimmed || "Accused Officer"},
+            address = ${address || null},
+            position = ${position || null},
+            date_of_birth = ${dobVal},
+            nic_no = ${nicTrimmed || null},
+            appointment_date = ${apptVal},
+            accused_school_id = ${schoolId ? Number(schoolId) : null},
+            updated_at = NOW()
+        WHERE id = ${officerId}::uuid;
+      `;
+    } else {
+      const insertedOfficer: any[] = await prisma.$queryRaw`
+        INSERT INTO accused_officer_table (
+          accused_officer_name, address, position, date_of_birth, nic_no, appointment_date, accused_school_id
+        )
+        VALUES (
+          ${nameTrimmed || "Accused Officer"}, ${address || null}, ${position || null}, ${dobVal}, ${nicTrimmed || null}, ${apptVal}, ${schoolId ? Number(schoolId) : null}
+        )
+        RETURNING id;
+      `;
+      if (insertedOfficer && insertedOfficer.length > 0) {
+        officerId = insertedOfficer[0].id;
+      }
+    }
+
+    // 3. Connect with subject_officer_form_table if ref_number is provided
+    if (ref_number && String(ref_number).trim()) {
+      const refTrimmed = String(ref_number).trim();
+
+      // Find daily_mail_letter_id if exists
+      let dailyMailId: any = null;
+      const dailyMails: any[] = await prisma.$queryRaw`
+        SELECT id FROM daily_mail_letter_table WHERE ref_number = ${refTrimmed} LIMIT 1;
+      `;
+      if (dailyMails && dailyMails.length > 0) {
+        dailyMailId = dailyMails[0].id;
+      }
+
+      const prepDateVal = date_prepared_and_submitted_for_signature ? new Date(date_prepared_and_submitted_for_signature) : null;
+
+      const existingForms: any[] = await prisma.$queryRaw`
+        SELECT id FROM subject_officer_form_table WHERE ref_number = ${refTrimmed} LIMIT 1;
+      `;
+
+      if (existingForms && existingForms.length > 0) {
+        await prisma.$queryRaw`
+          UPDATE subject_officer_form_table
+          SET accused_officer_id = ${officerId ? officerId : null}::uuid,
+              daily_mail_letter_id = ${dailyMailId ? Number(dailyMailId) : null},
+              subject_file_no = ${subject_file_no || null},
+              future_action = ${future_action || null},
+              date_prepared_and_submitted_for_signature = ${prepDateVal},
+              classification_of_complaint_letter = ${classification_of_complaint_letter || null},
+              name_of_the_presenting_the_complain = ${name_of_the_presenting_the_complain || null},
+              address_of_the_person_presenting_the_complaint = ${address_of_the_person_presenting_the_complaint || null},
+              updated_at = NOW()
+          WHERE ref_number = ${refTrimmed};
+        `;
+      } else {
+        await prisma.$queryRaw`
+          INSERT INTO subject_officer_form_table (
+            ref_number, daily_mail_letter_id, accused_officer_id, subject_file_no, future_action,
+            date_prepared_and_submitted_for_signature, classification_of_complaint_letter,
+            name_of_the_presenting_the_complain, address_of_the_person_presenting_the_complaint
+          )
+          VALUES (
+            ${refTrimmed}, ${dailyMailId ? Number(dailyMailId) : null}, ${officerId ? officerId : null}::uuid,
+            ${subject_file_no || null}, ${future_action || null}, ${prepDateVal},
+            ${classification_of_complaint_letter || null}, ${name_of_the_presenting_the_complain || null},
+            ${address_of_the_person_presenting_the_complaint || null}
+          );
+        `;
+      }
+    }
+
+    return { success: true, officer_id: officerId, school_id: schoolId ? String(schoolId) : null };
+  } catch (error: any) {
+    console.error("Error in saveAccusedOfficerServer:", error);
+    return { success: false, error: error?.message || "Failed to save accused officer details" };
+  }
+}
+
+export async function getAccusedOfficerByRefServer(refNumber: string) {
+  try {
+    if (!refNumber || !String(refNumber).trim()) {
+      return { success: false, error: "Ref number is required" };
+    }
+    const refTrimmed = String(refNumber).trim();
+
+    // Query subject_officer_form_table joined with accused_officer_table & accused_school_table
+    const records: any[] = await prisma.$queryRaw`
+      SELECT 
+        sof.id as form_id,
+        sof.ref_number,
+        sof.subject_file_no,
+        sof.future_action,
+        sof.date_prepared_and_submitted_for_signature,
+        sof.classification_of_complaint_letter,
+        sof.name_of_the_presenting_the_complain,
+        sof.address_of_the_person_presenting_the_complaint,
+        ao.id as accused_officer_id,
+        ao.accused_officer_name,
+        ao.address as officer_address,
+        ao.position,
+        ao.date_of_birth,
+        ao.nic_no,
+        ao.appointment_date,
+        sch.id as school_id,
+        sch.accused_school_name,
+        sch.address as school_address,
+        sch.province,
+        sch.district,
+        sch.zone
+      FROM subject_officer_form_table sof
+      LEFT JOIN accused_officer_table ao ON sof.accused_officer_id = ao.id
+      LEFT JOIN accused_school_table sch ON ao.accused_school_id = sch.id
+      WHERE sof.ref_number = ${refTrimmed}
+      LIMIT 1;
+    `;
+
+    if (records && records.length > 0) {
+      const r = records[0];
+      return {
+        success: true,
+        data: {
+          form_id: r.form_id ? String(r.form_id) : null,
+          ref_number: r.ref_number,
+          subject_file_no: r.subject_file_no,
+          future_action: r.future_action,
+          date_prepared_and_submitted_for_signature: r.date_prepared_and_submitted_for_signature,
+          classification_of_complaint_letter: r.classification_of_complaint_letter,
+          name_of_the_presenting_the_complain: r.name_of_the_presenting_the_complain,
+          address_of_the_person_presenting_the_complaint: r.address_of_the_person_presenting_the_complaint,
+          accused_officer: {
+            id: r.accused_officer_id,
+            accused_officer_name: r.accused_officer_name,
+            address: r.officer_address,
+            position: r.position,
+            date_of_birth: r.date_of_birth,
+            nic_no: r.nic_no,
+            appointment_date: r.appointment_date,
+          },
+          accused_school: {
+            id: r.school_id ? String(r.school_id) : null,
+            accused_school_name: r.accused_school_name,
+            address: r.school_address,
+            province: r.province,
+            district: r.district,
+            zone: r.zone,
+          }
+        }
+      };
+    }
+
+    return { success: true, data: null };
+  } catch (error: any) {
+    console.error("Error in getAccusedOfficerByRefServer:", error);
+    return { success: false, error: error?.message || "Failed to fetch accused officer details" };
+  }
+}
+
+// -------------------------------------------------------------
+// Institute Table Operations (institute_table)
+// -------------------------------------------------------------
+export async function getInstitutesServer() {
+  try {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS institute_table (
+        id BIGSERIAL PRIMARY KEY,
+        institute_name VARCHAR(255) NOT NULL,
+        address TEXT,
+        province VARCHAR(100),
+        district VARCHAR(100),
+        zone VARCHAR(100),
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    const records: any[] = await prisma.$queryRaw`
+      SELECT 
+        id::text as id,
+        institute_name as name,
+        address,
+        province,
+        district,
+        zone,
+        created_at,
+        updated_at
+      FROM institute_table
+      ORDER BY id DESC;
+    `;
+
+    return serializeForServerAction({ success: true, data: records });
+  } catch (error: any) {
+    console.error("Error fetching institute records:", error);
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to fetch institute records", data: [] });
+  }
+}
+
+export async function saveInstituteServer(instData: any) {
+  try {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS institute_table (
+        id BIGSERIAL PRIMARY KEY,
+        institute_name VARCHAR(255) NOT NULL,
+        address TEXT,
+        province VARCHAR(100),
+        district VARCHAR(100),
+        zone VARCHAR(100),
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    const name = (instData.name || instData.institute_name || "").trim();
+    const address = (instData.address || "").trim();
+    const province = (instData.province || "").trim();
+    const district = (instData.district || "").trim();
+    const zone = (instData.zone || "").trim();
+
+    if (!name) {
+      return serializeForServerAction({ success: false, error: "Institute Name is required" });
+    }
+
+    let savedRecord: any = null;
+    const instId = instData.id;
+
+    if (instId && !isNaN(Number(instId)) && !String(instId).startsWith("inst-") && !String(instId).startsWith("default-")) {
+      const numId = BigInt(instId);
+      const updated: any[] = await prisma.$queryRaw`
+        UPDATE institute_table
+        SET institute_name = ${name},
+            address = ${address},
+            province = ${province},
+            district = ${district},
+            zone = ${zone},
+            updated_at = NOW()
+        WHERE id = ${numId}
+        RETURNING id::text as id, institute_name as name, address, province, district, zone, created_at, updated_at;
+      `;
+      if (updated && updated.length > 0) {
+        savedRecord = updated[0];
+      }
+    }
+
+    if (!savedRecord) {
+      const inserted: any[] = await prisma.$queryRaw`
+        INSERT INTO institute_table (institute_name, address, province, district, zone)
+        VALUES (${name}, ${address}, ${province}, ${district}, ${zone})
+        RETURNING id::text as id, institute_name as name, address, province, district, zone, created_at, updated_at;
+      `;
+      if (inserted && inserted.length > 0) {
+        savedRecord = inserted[0];
+      }
+    }
+
+    return serializeForServerAction({ success: true, data: savedRecord });
+  } catch (error: any) {
+    console.error("Error saving institute record:", error);
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to save institute to database" });
+  }
+}
+
+export async function deleteInstituteServer(id: string) {
+  try {
+    if (id && !isNaN(Number(id)) && !String(id).startsWith("inst-") && !String(id).startsWith("default-")) {
+      const numId = BigInt(id);
+      await prisma.$queryRaw`DELETE FROM institute_table WHERE id = ${numId}`;
+    }
+    return serializeForServerAction({ success: true });
+  } catch (error: any) {
+    console.error("Error deleting institute record:", error);
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to delete institute record" });
+  }
+}
+
+

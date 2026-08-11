@@ -224,6 +224,9 @@ function CaseDetailsForm() {
   const [complainantAddress, setComplainantAddress] = useState("");
   const [schoolName, setSchoolName] = useState("");
   const [schoolAddress, setSchoolAddress] = useState("");
+  const [schoolProvince, setSchoolProvince] = useState("");
+  const [schoolDistrict, setSchoolDistrict] = useState("");
+  const [schoolZone, setSchoolZone] = useState("");
   const [complaintMatter, setComplaintMatter] = useState("");
   const [complaintAge, setComplaintAge] = useState<"new" | "old">("new");
 
@@ -503,6 +506,48 @@ function CaseDetailsForm() {
               }
             } else {
               setIsConcerned("no");
+            }
+
+            // Also load accused officer & school details from PostgreSQL accused_officer_table & accused_school_table
+            try {
+              const res = await fetch(`/api/accused-officer?ref_number=${encodeURIComponent(caseNoParam)}`);
+              const json = await res.json();
+              if (json.success && json.data && json.data.accused_officer) {
+                const ao = json.data.accused_officer;
+                const sch = json.data.accused_school;
+                if (ao && (ao.accused_officer_name || ao.position || ao.nic_no)) {
+                  const cleanVal = (val: string | null | undefined) => {
+                    if (!val) return "";
+                    const trimmed = String(val).trim();
+                    if (trimmed.toUpperCase() === "N/A" || trimmed === "—" || trimmed === "-") return "";
+                    return trimmed;
+                  };
+                  setConcernedPersons([{
+                    name: cleanVal(ao.accused_officer_name),
+                    position: cleanVal(ao.position),
+                    dob: ao.date_of_birth ? String(ao.date_of_birth).split("T")[0] : "",
+                    nic: cleanVal(ao.nic_no),
+                    appointmentDate: ao.appointment_date ? String(ao.appointment_date).split("T")[0] : "",
+                    address: cleanVal(ao.address),
+                  }]);
+                  setIsConcerned("yes");
+                }
+                if (sch && sch.accused_school_name) {
+                  const cleanVal = (val: string | null | undefined) => {
+                    if (!val) return "";
+                    const trimmed = String(val).trim();
+                    if (trimmed.toUpperCase() === "N/A" || trimmed === "—" || trimmed === "-") return "";
+                    return trimmed;
+                  };
+                  setSchoolName(cleanVal(sch.accused_school_name));
+                  if (sch.address) setSchoolAddress(cleanVal(sch.address));
+                  if (sch.province) setSchoolProvince(cleanVal(sch.province));
+                  if (sch.district) setSchoolDistrict(cleanVal(sch.district));
+                  if (sch.zone) setSchoolZone(cleanVal(sch.zone));
+                }
+              }
+            } catch (pgErr) {
+              console.error("Failed to fetch accused officer details from PostgreSQL API", pgErr);
             }
           } catch (e) {
             console.error("Failed to fetch case details from Supabase", e);
@@ -792,7 +837,35 @@ function CaseDetailsForm() {
 
         if (actionError) throw actionError;
 
-        // Save concerned officer details and school details to dcmms_concerned_officers
+        // Save to PostgreSQL accused_officer_table, accused_school_table and subject_officer_form_table via API
+        try {
+          const firstPerson = isConcerned === "yes" && concernedPersons.length > 0 ? concernedPersons[0] : null;
+          await fetch("/api/accused-officer", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              ref_number: refNo,
+              accused_officer_name: firstPerson?.name || "",
+              address: firstPerson?.address || "",
+              position: firstPerson?.position || "",
+              date_of_birth: firstPerson?.dob || null,
+              nic_no: firstPerson?.nic || null,
+              appointment_date: firstPerson?.appointmentDate || null,
+              accused_school_name: schoolName || "",
+              school_address: schoolAddress || "",
+              province: schoolProvince || "",
+              district: schoolDistrict || "",
+              zone: schoolZone || "",
+              classification_of_complaint_letter: classification,
+              name_of_the_presenting_the_complain: complainantName,
+              address_of_the_person_presenting_the_complaint: complainantAddress,
+              future_action: specialNotes,
+            }),
+          });
+        } catch (postErr) {
+          console.error("Failed to save accused officer to PostgreSQL database:", postErr);
+        }
+
         if (isConcerned === "yes") {
           try {
             await supabase.from("dcmms_concerned_officers").delete().eq("case_no", refNo);
@@ -1755,6 +1828,47 @@ function CaseDetailsForm() {
                                 onChange={(e) => setSchoolAddress(e.target.value)}
                                 className="field-input"
                                 placeholder="Enter school address..."
+                              />
+                            </div>
+                          </div>
+                          <div className="form-grid-3 mt-3" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px", marginTop: "12px" }}>
+                            <div className="form-field-group">
+                              <label htmlFor="schoolProvince" className="field-label">
+                                {t("province", "Province")}
+                              </label>
+                              <input
+                                id="schoolProvince"
+                                type="text"
+                                value={schoolProvince}
+                                onChange={(e) => setSchoolProvince(e.target.value)}
+                                className="field-input"
+                                placeholder="Province..."
+                              />
+                            </div>
+                            <div className="form-field-group">
+                              <label htmlFor="schoolDistrict" className="field-label">
+                                {t("district", "District")}
+                              </label>
+                              <input
+                                id="schoolDistrict"
+                                type="text"
+                                value={schoolDistrict}
+                                onChange={(e) => setSchoolDistrict(e.target.value)}
+                                className="field-input"
+                                placeholder="District..."
+                              />
+                            </div>
+                            <div className="form-field-group">
+                              <label htmlFor="schoolZone" className="field-label">
+                                {t("zone", "Zone")}
+                              </label>
+                              <input
+                                id="schoolZone"
+                                type="text"
+                                value={schoolZone}
+                                onChange={(e) => setSchoolZone(e.target.value)}
+                                className="field-input"
+                                placeholder="Zone..."
                               />
                             </div>
                           </div>
