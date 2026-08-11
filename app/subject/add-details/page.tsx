@@ -248,10 +248,23 @@ function CaseDetailsForm() {
         const res = await getInstitutesServer();
         if (res && res.success && Array.isArray(res.data)) {
           const list = res.data
-            .map((item: any) => ({
-              name: (item.name || item.institute_name || "").trim(),
-              address: (item.address || "").trim(),
-            }))
+            .map((item: any) => {
+              const name = (item.name || item.institute_name || "").trim();
+              const addrRaw = (item.address || "").trim();
+              const distRaw = (item.district || "").trim();
+              const provRaw = (item.province || "").trim();
+
+              // Build full address using address column + district/province if address is short
+              let fullAddr = addrRaw;
+              if (addrRaw && distRaw && !addrRaw.toLowerCase().includes(distRaw.toLowerCase())) {
+                fullAddr = `${addrRaw}, ${distRaw}`;
+              }
+
+              return {
+                name,
+                address: fullAddr || addrRaw || "",
+              };
+            })
             .filter((item: any) => item.name);
           setInstitutesList(list);
         }
