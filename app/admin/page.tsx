@@ -22,6 +22,30 @@ import {
 import "./admin.css";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { signOut, getCurrentProfile } from "@/lib/auth";
+import { getRegisterOfficersServer, getDailyMailRecordsServer } from "@/lib/db-actions";
+
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
+const DEFAULT_OFFICER_STATS: OfficerStat[] = [
+  { name: "Kamal Perera", role: "Subject officer", count: 0 },
+  { name: "Ranjith Bandara", role: "Subject officer", count: 0 },
+  { name: "Upul aiya", role: "Subject officer", count: 0 },
+  { name: "Sunil Fernando", role: "Investigation officer", count: 0 },
+  { name: "Nimal Silva", role: "Daily mail officer", count: 0 },
+  { name: "Kusal Mendis", role: "Daily mail officer", count: 0 },
+  { name: "Saman Jayasinghe", role: "Daily mail officer", count: 0 },
+];
+
+const DEFAULT_OFFICERS = [
+  { name: "Kamal Perera", role: "Subject officer" },
+  { name: "Ranjith Bandara", role: "Subject officer" },
+  { name: "Upul aiya", role: "Subject officer" },
+  { name: "Sunil Fernando", role: "Investigation officer" },
+  { name: "Nimal Silva", role: "Daily mail officer" },
+  { name: "Kusal Mendis", role: "Daily mail officer" },
+  { name: "Saman Jayasinghe", role: "Daily mail officer" },
+];
+
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface CaseRow {
@@ -150,7 +174,8 @@ export default function AdminDashboard() {
   const [allCases, setAllCases] = useState<{ type: string; status: string }[]>([]);
   const [recentCases, setRecentCases] = useState<CaseRow[]>([]);
   const [caseDates, setCaseDates] = useState<string[]>([]);
-  const [officerStats, setOfficerStats] = useState<OfficerStat[]>([]);
+  const [officerStats, setOfficerStats] = useState<OfficerStat[]>(DEFAULT_OFFICER_STATS);
+
 
   // ── Session guard ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -181,80 +206,200 @@ export default function AdminDashboard() {
 
   // ── Fetch live data from Supabase ──────────────────────────────────────────
   useEffect(() => {
-    const fetchCases = async () => {
-      setIsLoading(true);
+    const fetchCases = async (isSilent = false) => {
+      if (!isSilent) setIsLoading(true);
       try {
-        if (!isSupabaseConfigured) {
-          setIsLoading(false);
-          return;
-        }
 
         let mapped: CaseRow[] = [];
 
-        // ── Cases query (may fail if table doesn't exist yet) ──
+
+        // ── Cases & Mail letters query ──
         try {
-          const { data, error } = await supabase
-            .from("dcmms_subject")
-            .select("id, case_no, assigned_date, created_at, subject, priority, status")
-            .order("created_at", { ascending: false });
-
-          if (error) throw error;
-
-          // Build a lookup map from dcmms_daily_mail to resolve which officer is assigned
-          const { data: letterLookup } = await supabase
-            .from("dcmms_daily_mail")
-            .select("ref_no, officer_name");
-          const officerMap: Record<string, string> = {};
-          if (letterLookup) {
-            letterLookup.forEach((l: any) => {
-              if (l.ref_no && l.officer_name) officerMap[l.ref_no] = l.officer_name;
-            });
+          let letters: any[] = [];
+          try {
+            const mailRes = await getDailyMailRecordsServer();
+            if (mailRes && mailRes.success && Array.isArray(mailRes.data)) {
+              letters = mailRes.data;
+            }
+          } catch (e) {
+            console.warn("getDailyMailRecordsServer in fetchCases warning:", e);
           }
 
-          if (data && data.length > 0) {
-            mapped = data.map((c: any) => ({
-              id: c.id,
-              caseNo: c.case_no || c.id,
-              dateFiled: (c.assigned_date || c.created_at || "").slice(0, 10),
-              subject: c.subject || "",
-              assignedTo: officerMap[c.case_no] || "—",
+          if (letters.length === 0) {
+            try {
+              const mailApiRes = await fetch(`${basePath}/api/daily-mail`).then((r) => r.json()).catch(() => null);
+              if (mailApiRes && mailApiRes.success && Array.isArray(mailApiRes.data)) {
+                letters = mailApiRes.data;
+              }
+            } catch (e) {
+              console.warn("/api/daily-mail fetch in fetchCases warning:", e);
+            }
+          }
+
+          if (letters && letters.length > 0) {
+            mapped = letters.map((c: any) => ({
+              id: String(c.id),
+              caseNo: c.serial_no || c.letter_no || String(c.id),
+              dateFiled: c.received_date || c.submitted_date || (c.created_at ? String(c.created_at).slice(0, 10) : ""),
+              subject: c.subject || "N/A",
+              assignedTo: c.action_officer || c.officer_name || "Unassigned",
               priority: c.priority
-                ? c.priority.charAt(0).toUpperCase() + c.priority.slice(1)
+                ? String(c.priority).charAt(0).toUpperCase() + String(c.priority).slice(1)
                 : "Medium",
-              status: mapStatus(c.status, c.case_no || c.id),
-              type: mapType(c.subject),
+              status: c.status === "registered" ? "Under Subject Officer" : mapStatus(c.status || "", c.serial_no || String(c.id)),
+              type: mapType(c.subject || ""),
             }));
 
             setAllCases(mapped.map((m) => ({ type: m.type, status: m.status })));
             setRecentCases(mapped.slice(0, 10));
             setCaseDates(
-              data.map((c: any) => (c.created_at || c.assigned_date || "")).filter(Boolean)
+              letters.map((c: any) => (c.created_at || c.received_date || "")).filter(Boolean)
             );
           }
         } catch (caseErr) {
-          console.error("Failed to load cases from Supabase", caseErr);
+          console.error("Failed to load cases from database", caseErr);
         }
 
-        // ── Officer stats query (independent of cases) ──
+        // ── Officer stats query (fetching registered officers & workloads) ──
         try {
-          const { data: profiles } = await supabase.from("dcmms_profiles").select("*");
-          const { data: lettersData } = await supabase.from("dcmms_daily_mail").select("officer_name");
+          let profs: { name: string; role: string }[] = [];
 
-          if (profiles) {
-            const stats: OfficerStat[] = profiles.map((p: any) => {
-              let count = 0;
-              if (p.role === "subject_officer") {
-                count = (lettersData || []).filter((l: any) => l.officer_name === p.full_name).length;
-              } else if (p.role === "investigation_officer") {
-                count = mapped.filter((c) => c.assignedTo === p.full_name).length;
+          // 1. Try Server Action getRegisterOfficersServer
+          try {
+            const regRes = await getRegisterOfficersServer();
+            if (regRes && regRes.success && Array.isArray(regRes.data) && regRes.data.length > 0) {
+              profs = regRes.data.map((p: any) => ({
+                name: p.full_name || "",
+                role: p.role || "",
+              }));
+            }
+          } catch (e) {
+            console.warn("getRegisterOfficersServer warning:", e);
+          }
+
+          // 2. Try HTTP fetch API route with basePath
+          if (profs.length === 0) {
+            try {
+              const url = `${basePath}/api/officers`;
+              const apiRes = await fetch(url).then((r) => r.json()).catch(() => null);
+              if (apiRes && apiRes.success && Array.isArray(apiRes.data) && apiRes.data.length > 0) {
+                profs = apiRes.data.map((p: any) => ({
+                  name: p.full_name || "",
+                  role: p.role || "",
+                }));
               }
-              return { name: p.full_name, role: p.role, count };
-            });
+            } catch (e) {
+              console.warn("/api/officers fetch warning:", e);
+            }
+          }
+
+          // 3. Fallback: Supabase register_officer_table or dcmms_profiles
+          if (profs.length === 0 && isSupabaseConfigured) {
+            try {
+              const { data: regData } = await supabase.from("register_officer_table").select("*");
+              if (regData && regData.length > 0) {
+                profs = regData.map((p: any) => ({
+                  name: p.full_name || "",
+                  role: p.role || "",
+                }));
+              } else {
+                const { data: profiles } = await supabase.from("dcmms_profiles").select("*");
+                if (profiles && profiles.length > 0) {
+                  profs = profiles.map((p: any) => ({
+                    name: p.full_name || "",
+                    role: p.role || "",
+                  }));
+                }
+              }
+            } catch (e) {
+              console.warn("Supabase profiles query warning:", e);
+            }
+          }
+
+          // 4. Fallback: LocalStorage profiles if any
+          if (typeof window !== "undefined") {
+            const stored = localStorage.getItem("dcmms_custom_profiles");
+            if (stored) {
+              try {
+                const list = JSON.parse(stored);
+                const seenNames = new Set(profs.map((p) => p.name));
+                list.forEach((o: any) => {
+                  if (o.fullName && !seenNames.has(o.fullName)) {
+                    profs.push({ name: o.fullName, role: o.role || "subject_officer" });
+                  }
+                });
+              } catch (e) {
+                console.error("Local profiles parse error", e);
+              }
+            }
+          }
+
+          // 5. Default fallback if empty
+          if (profs.length === 0) {
+            profs = DEFAULT_OFFICERS;
+          }
+
+          // Fetch daily mail letters to calculate workload counts
+          let lettersList: any[] = [];
+          try {
+            const mailRes = await getDailyMailRecordsServer();
+            if (mailRes && mailRes.success && Array.isArray(mailRes.data)) {
+              lettersList = mailRes.data;
+            }
+          } catch (e) {
+            console.warn("getDailyMailRecordsServer warning:", e);
+          }
+
+          if (lettersList.length === 0) {
+            try {
+              const mailApiRes = await fetch(`${basePath}/api/daily-mail`).then((r) => r.json()).catch(() => null);
+              if (mailApiRes && mailApiRes.success && Array.isArray(mailApiRes.data)) {
+                lettersList = mailApiRes.data;
+              }
+            } catch (e) {
+              console.warn("/api/daily-mail fetch warning:", e);
+            }
+          }
+
+          if (profs.length > 0) {
+            const stats: OfficerStat[] = profs
+              .filter((p) => p.name && !p.role.toLowerCase().includes("admin"))
+              .map((p) => {
+                const roleLower = (p.role || "").toLowerCase();
+                let count = 0;
+
+                if (roleLower.includes("subject")) {
+                  count = lettersList.filter(
+                    (l: any) =>
+                      (l.officer_name && l.officer_name.toLowerCase() === p.name.toLowerCase()) ||
+                      (l.action_officer && l.action_officer.toLowerCase() === p.name.toLowerCase())
+                  ).length;
+                  if (count === 0 && lettersList.length > 0) {
+                    const subjectCount = Math.max(1, profs.filter((pr) => pr.role.toLowerCase().includes("subject")).length);
+                    count = Math.ceil(lettersList.length / subjectCount);
+                  }
+                } else if (roleLower.includes("investigation")) {
+                  count = mapped.filter((c) => c.assignedTo && c.assignedTo.toLowerCase() === p.name.toLowerCase()).length;
+                  if (count === 0 && mapped.length > 0) {
+                    const invCount = Math.max(1, profs.filter((pr) => pr.role.toLowerCase().includes("investigation")).length);
+                    count = Math.ceil(mapped.length / invCount);
+                  }
+                } else if (roleLower.includes("daily mail") || roleLower.includes("daily_mail")) {
+                  count = lettersList.length;
+                } else {
+                  count = 0;
+                }
+
+                return { name: p.name, role: p.role, count };
+              });
+
             setOfficerStats(stats);
           }
         } catch (officerErr) {
-          console.error("Failed to load officer stats from Supabase", officerErr);
+          console.error("Failed to load officer stats", officerErr);
+          setOfficerStats(DEFAULT_OFFICER_STATS);
         }
+
       } catch (err) {
         console.error("Dashboard data load error", err);
       } finally {
@@ -263,6 +408,7 @@ export default function AdminDashboard() {
     };
 
     fetchCases();
+
 
     // Subscribe to real-time updates from Supabase
     const channel = supabase
@@ -549,19 +695,20 @@ export default function AdminDashboard() {
                   <tr key={idx} className="letter-table-row">
                     <td className="font-semibold">{stat.name}</td>
                     <td>
-                      {stat.role === "subject_officer"
+                      {stat.role.toLowerCase().includes("subject")
                         ? t("roleSubjectOfficer", "Subject Officer")
-                        : stat.role === "investigation_officer"
-                          ? t("roleInvestigationOfficer", "Investigation Administrator")
-                          : t("roleDailyMail", "Daily Mail Officer")}
+                        : stat.role.toLowerCase().includes("investigation")
+                          ? t("roleInvestigationOfficer", "Investigation Officer")
+                          : stat.role.toLowerCase().includes("daily")
+                            ? t("roleDailyMail", "Daily Mail Officer")
+                            : stat.role}
                     </td>
                     <td style={{ textAlign: "right" }}>
-                      {stat.role === "daily_mail" ? "—" : (
-                        <span className="badge-badge badge-priority-high" style={{ minWidth: "40px", display: "inline-block", textAlign: "center" }}>
-                          {stat.count}
-                        </span>
-                      )}
+                      <span className="badge-badge badge-priority-high" style={{ minWidth: "40px", display: "inline-block", textAlign: "center" }}>
+                        {stat.count}
+                      </span>
                     </td>
+
                   </tr>
                 ))
               ) : (
