@@ -238,8 +238,8 @@ function CaseDetailsForm() {
 
   // Institute Autocomplete States (from institute_table)
   const isUserEditingSchoolRef = useRef(false);
-  const [institutesList, setInstitutesList] = useState<{ name: string; address: string }[]>([]);
-  const [filteredInstitutes, setFilteredInstitutes] = useState<{ name: string; address: string }[]>([]);
+  const [institutesList, setInstitutesList] = useState<{ name: string; address: string; province: string; district: string; zone: string }[]>([]);
+  const [filteredInstitutes, setFilteredInstitutes] = useState<{ name: string; address: string; province: string; district: string; zone: string }[]>([]);
   const [showInstituteDropdown, setShowInstituteDropdown] = useState(false);
 
   useEffect(() => {
@@ -253,6 +253,7 @@ function CaseDetailsForm() {
               const addrRaw = (item.address || "").trim();
               const distRaw = (item.district || "").trim();
               const provRaw = (item.province || "").trim();
+              const zoneRaw = (item.zone || "").trim();
 
               // Build full address using address column + district/province if address is short
               let fullAddr = addrRaw;
@@ -263,6 +264,9 @@ function CaseDetailsForm() {
               return {
                 name,
                 address: fullAddr || addrRaw || "",
+                province: provRaw,
+                district: distRaw,
+                zone: zoneRaw,
               };
             })
             .filter((item: any) => item.name);
@@ -285,18 +289,28 @@ function CaseDetailsForm() {
         .slice(0, 10);
       setFilteredInstitutes(matches);
       setShowInstituteDropdown(matches.length > 0);
+
+      // If exact match found, auto-populate province/district/zone
+      const exactMatch = institutesList.find((inst) => inst.name.toLowerCase() === query);
+      if (exactMatch) {
+        if (exactMatch.province) setSchoolProvince(exactMatch.province);
+        if (exactMatch.district) setSchoolDistrict(exactMatch.district);
+        if (exactMatch.zone) setSchoolZone(exactMatch.zone);
+        if (exactMatch.address && !schoolAddress) setSchoolAddress(exactMatch.address);
+      }
     } else {
       setFilteredInstitutes([]);
       setShowInstituteDropdown(false);
     }
   };
 
-  const handleSelectInstitute = (inst: { name: string; address: string }) => {
+  const handleSelectInstitute = (inst: { name: string; address: string; province: string; district: string; zone: string }) => {
     isUserEditingSchoolRef.current = true;
     setSchoolName(inst.name);
-    if (inst.address) {
-      setSchoolAddress(inst.address);
-    }
+    if (inst.address) setSchoolAddress(inst.address);
+    if (inst.province) setSchoolProvince(inst.province);
+    if (inst.district) setSchoolDistrict(inst.district);
+    if (inst.zone) setSchoolZone(inst.zone);
     setShowInstituteDropdown(false);
   };
 
@@ -646,6 +660,9 @@ function CaseDetailsForm() {
                 const valAddr = cleanVal(sch.address);
                 if (valAddr) setSchoolAddress(valAddr);
               }
+              if (sch.province) setSchoolProvince(cleanVal(sch.province));
+              if (sch.district) setSchoolDistrict(cleanVal(sch.district));
+              if (sch.zone) setSchoolZone(cleanVal(sch.zone));
             }
           }
         } catch (pgErr) {

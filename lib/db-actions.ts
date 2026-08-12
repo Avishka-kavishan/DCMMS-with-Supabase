@@ -917,6 +917,7 @@ export async function saveAccusedOfficerServer(officerData: any) {
   try {
     const {
       ref_number,
+      accused_officers,
       accused_officer_name,
       address,
       position,
@@ -990,10 +991,91 @@ export async function saveAccusedOfficerServer(officerData: any) {
       );
     `);
 
+    // Ensure auto-fill database trigger exists on accused_school_table
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE OR REPLACE FUNCTION auto_fill_accused_school_details()
+        RETURNS TRIGGER AS $$
+        DECLARE
+          inst_rec RECORD;
+        BEGIN
+          IF NEW.province IS NULL OR NEW.province = '' OR
+             NEW.district IS NULL OR NEW.district = '' OR
+             NEW.zone IS NULL OR NEW.zone = '' THEN
+             
+            SELECT province, district, zone, address
+            INTO inst_rec
+            FROM institute_table
+            WHERE LOWER(TRIM(institute_name)) = LOWER(TRIM(NEW.accused_school_name))
+              AND province IS NOT NULL AND province != ''
+            ORDER BY id ASC
+            LIMIT 1;
+
+            IF FOUND THEN
+              IF NEW.province IS NULL OR NEW.province = '' THEN
+                NEW.province := inst_rec.province;
+              END IF;
+              IF NEW.district IS NULL OR NEW.district = '' THEN
+                NEW.district := inst_rec.district;
+              END IF;
+              IF NEW.zone IS NULL OR NEW.zone = '' THEN
+                NEW.zone := inst_rec.zone;
+              END IF;
+              IF (NEW.address IS NULL OR NEW.address = '') AND inst_rec.address IS NOT NULL THEN
+                NEW.address := inst_rec.address;
+              END IF;
+            END IF;
+          END IF;
+          
+          RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+      `);
+      await prisma.$executeRawUnsafe(`
+        DROP TRIGGER IF EXISTS trg_auto_fill_accused_school ON accused_school_table;
+      `);
+      await prisma.$executeRawUnsafe(`
+        CREATE TRIGGER trg_auto_fill_accused_school
+        BEFORE INSERT OR UPDATE ON accused_school_table
+        FOR EACH ROW
+        EXECUTE FUNCTION auto_fill_accused_school_details();
+      `);
+    } catch (trgErr) {
+      console.warn("Could not set up trg_auto_fill_accused_school trigger:", trgErr);
+    }
+
     // 1. Create or update accused_school_table if school name is provided
     let schoolId: any = null;
     if (accused_school_name && String(accused_school_name).trim()) {
       const schoolNameTrimmed = String(accused_school_name).trim();
+
+      // Resolve missing province/district/zone/address from institute_table
+      let fillProvince = province && String(province).trim() ? String(province).trim() : null;
+      let fillDistrict = district && String(district).trim() ? String(district).trim() : null;
+      let fillZone = zone && String(zone).trim() ? String(zone).trim() : null;
+      let fillAddress = school_address && String(school_address).trim() ? String(school_address).trim() : null;
+
+      if (!fillProvince || !fillDistrict || !fillZone || !fillAddress) {
+        try {
+          const instMatches: any[] = await prisma.$queryRaw`
+            SELECT province, district, zone, address 
+            FROM institute_table 
+            WHERE LOWER(TRIM(institute_name)) = ${schoolNameTrimmed.toLowerCase()} 
+              AND (province IS NOT NULL AND province != '')
+            LIMIT 1;
+          `;
+          if (instMatches && instMatches.length > 0) {
+            const match = instMatches[0];
+            if (!fillProvince) fillProvince = match.province || null;
+            if (!fillDistrict) fillDistrict = match.district || null;
+            if (!fillZone) fillZone = match.zone || null;
+            if (!fillAddress) fillAddress = match.address || null;
+          }
+        } catch (e) {
+          console.warn("Lookup in institute_table failed:", e);
+        }
+      }
+
       const existingSchools: any[] = await prisma.$queryRaw`
         SELECT id FROM accused_school_table WHERE LOWER(accused_school_name) = ${schoolNameTrimmed.toLowerCase()} LIMIT 1;
       `;
@@ -1002,17 +1084,17 @@ export async function saveAccusedOfficerServer(officerData: any) {
         schoolId = existingSchools[0].id;
         await prisma.$queryRaw`
           UPDATE accused_school_table
-          SET address = ${school_address || null},
-              province = ${province || null},
-              district = ${district || null},
-              zone = ${zone || null},
+          SET address = COALESCE(${fillAddress}, address),
+              province = COALESCE(${fillProvince}, province),
+              district = COALESCE(${fillDistrict}, district),
+              zone = COALESCE(${fillZone}, zone),
               updated_at = NOW()
           WHERE id = ${schoolId}::bigint;
         `;
       } else {
         const insertedSchool: any[] = await prisma.$queryRaw`
           INSERT INTO accused_school_table (accused_school_name, address, province, district, zone)
-          VALUES (${schoolNameTrimmed}, ${school_address || null}, ${province || null}, ${district || null}, ${zone || null})
+          VALUES (${schoolNameTrimmed}, ${fillAddress}, ${fillProvince}, ${fillDistrict}, ${fillZone})
           RETURNING id;
         `;
         if (insertedSchool && insertedSchool.length > 0) {
@@ -1023,8 +1105,8 @@ export async function saveAccusedOfficerServer(officerData: any) {
 
     // 2. Prepare array of officer details to save
     let officersToSave: any[] = [];
-    if (Array.isArray(data.accused_officers) && data.accused_officers.length > 0) {
-      officersToSave = data.accused_officers.filter((o: any) => o && (o.accused_officer_name || o.name || o.nic_no || o.nic));
+    if (Array.isArray(accused_officers) && accused_officers.length > 0) {
+      officersToSave = accused_officers.filter((o: any) => o && (o.accused_officer_name || o.name || o.nic_no || o.nic));
     } else if (accused_officer_name && String(accused_officer_name).trim()) {
       officersToSave = [{
         accused_officer_name,
@@ -1268,7 +1350,7 @@ export async function getAccusedOfficerByRefServer(refNumber: string) {
 
     const primaryOfficer = officerList.length > 0 ? officerList[0] : null;
 
-    const schoolInfo = assignedOfficers && assignedOfficers.length > 0 && assignedOfficers[0].school_id ? {
+    const schoolInfo: any = assignedOfficers && assignedOfficers.length > 0 && assignedOfficers[0].school_id ? {
       id: String(assignedOfficers[0].school_id),
       accused_school_name: assignedOfficers[0].accused_school_name,
       address: assignedOfficers[0].school_address,
@@ -1276,6 +1358,26 @@ export async function getAccusedOfficerByRefServer(refNumber: string) {
       district: assignedOfficers[0].district,
       zone: assignedOfficers[0].zone,
     } : null;
+
+    if (schoolInfo && schoolInfo.accused_school_name && (!schoolInfo.province || !schoolInfo.district || !schoolInfo.zone)) {
+      try {
+        const instMatch: any[] = await prisma.$queryRaw`
+          SELECT province, district, zone, address
+          FROM institute_table
+          WHERE LOWER(TRIM(institute_name)) = LOWER(TRIM(${schoolInfo.accused_school_name}))
+            AND (province IS NOT NULL AND province != '')
+          LIMIT 1;
+        `;
+        if (instMatch && instMatch.length > 0) {
+          if (!schoolInfo.province) schoolInfo.province = instMatch[0].province;
+          if (!schoolInfo.district) schoolInfo.district = instMatch[0].district;
+          if (!schoolInfo.zone) schoolInfo.zone = instMatch[0].zone;
+          if (!schoolInfo.address && instMatch[0].address) schoolInfo.address = instMatch[0].address;
+        }
+      } catch (e) {
+        console.warn("Fallback lookup in institute_table failed:", e);
+      }
+    }
 
     return {
       success: true,
