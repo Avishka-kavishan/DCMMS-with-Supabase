@@ -62,6 +62,74 @@ function InvestigationCaseDetailsContent() {
   const [memberSelectId, setMemberSelectId] = useState("");
   const [customMemberInput, setCustomMemberInput] = useState("");
 
+  const parseSchoolList = (val: any): string[] => {
+    if (!val) return [];
+    if (Array.isArray(val)) return val.map((s) => String(s).trim()).filter(Boolean);
+    if (typeof val === "string") {
+      const trimmed = val.trim();
+      if (!trimmed) return [];
+      if (trimmed.startsWith("[")) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (Array.isArray(parsed)) return parsed.map((s) => String(s).trim()).filter(Boolean);
+        } catch (e) {}
+      }
+      return trimmed.split(",").map((s) => s.trim()).filter(Boolean);
+    }
+    return [];
+  };
+
+  const getCaseInstitutes = (): string[] => {
+    const institutes = new Set<string>();
+    if (Array.isArray(concernedOfficersList)) {
+      concernedOfficersList.forEach((co: any) => {
+        const inst = co.institute_name || co.instituteName || co.school_name || co.schoolName || co.school || co.institute || "";
+        if (typeof inst === "string" && inst.trim()) {
+          institutes.add(inst.trim());
+        }
+      });
+    }
+    if (selectedCase) {
+      const inst = selectedCase.institute_name || selectedCase.instituteName || selectedCase.school || selectedCase.schoolName || selectedCase.accused_school_name || selectedCase.accusedSchool || "";
+      if (typeof inst === "string" && inst.trim()) {
+        institutes.add(inst.trim());
+      }
+    }
+    return Array.from(institutes);
+  };
+
+  const isOfficerConnectedToCaseInstitute = (off: any, caseInsts: string[]): boolean => {
+    if (!caseInsts || caseInsts.length === 0) return false;
+
+    const officerSchools: string[] = [
+      ...parseSchoolList(off.studiedSchools),
+      ...parseSchoolList(off.studied_schools),
+      ...parseSchoolList(off.childrenSchools),
+      ...parseSchoolList(off.children_schools),
+      ...parseSchoolList(off.member_school_name),
+      ...parseSchoolList(off.member_children_schools_name),
+    ];
+
+    if (off.institute_name) officerSchools.push(off.institute_name);
+    if (off.instituteName) officerSchools.push(off.instituteName);
+    if (off.school) officerSchools.push(off.school);
+    if (off.schoolName) officerSchools.push(off.schoolName);
+
+    const cleanOfficerSchools = officerSchools
+      .map((s) => (typeof s === "string" ? s.trim().toLowerCase() : ""))
+      .filter(Boolean);
+
+    if (cleanOfficerSchools.length === 0) return false;
+
+    return caseInsts.some((caseInst) => {
+      const cleanCaseInst = caseInst.trim().toLowerCase();
+      if (!cleanCaseInst) return false;
+      return cleanOfficerSchools.some(
+        (offSch) => offSch === cleanCaseInst || offSch.includes(cleanCaseInst) || cleanCaseInst.includes(offSch)
+      );
+    });
+  };
+
   const handleSelectChairman = (officerId: string) => {
     if (!officerId) {
       setSelectedChairman(null);
@@ -1975,6 +2043,16 @@ function InvestigationCaseDetailsContent() {
                   </div>
 
                   <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                    {getCaseInstitutes().length > 0 && (
+                      <div style={{ fontSize: "11px", color: "#b45309", backgroundColor: "#fffbe6", border: "1px solid #fde047", padding: "8px 12px", borderRadius: "8px", display: "flex", alignItems: "center", gap: "6px" }}>
+                        <Shield size={14} style={{ color: "#d97706" }} />
+                        <span>
+                          {lang === "si"
+                            ? `'${getCaseInstitutes().join(", ")}' පාසලට/ආයතනයට සම්බන්ධ (ඉගෙනගත්/දරුවන් සිටින) නිලධාරීන් ගැටුම් වැළැක්වීමට තේරීම් වලින් ඉවත් කර ඇත.`
+                            : `Officers associated with '${getCaseInstitutes().join(", ")}' (studied/children school) are filtered out to prevent conflict of interest.`}
+                        </span>
+                      </div>
+                    )}
                     
                     {/* 1. CHOOSE CHAIRMAN (1 Chairman) */}
                     <div style={{ backgroundColor: "#fffbe6", padding: "14px", borderRadius: "10px", border: "1px solid #fef08a" }}>
@@ -2026,6 +2104,7 @@ function InvestigationCaseDetailsContent() {
                               const pos = (off.position || off.officerRole || "").toLowerCase();
                               return pos === "chairman";
                             })
+                            .filter((off) => !isOfficerConnectedToCaseInstitute(off, getCaseInstitutes()))
                             .map((off) => (
                               <option key={off.id} value={off.id}>
                                 {off.fullName} {off.employeeNo ? `[${off.employeeNo}]` : ""} {off.nicNo ? `- NIC: ${off.nicNo}` : ""}
@@ -2059,6 +2138,7 @@ function InvestigationCaseDetailsContent() {
                               const pos = (off.position || off.officerRole || "").toLowerCase();
                               return pos === "member";
                             })
+                            .filter((off) => !isOfficerConnectedToCaseInstitute(off, getCaseInstitutes()))
                             .filter((o) => !selectedChairman || (selectedChairman.id !== o.id && selectedChairman.fullName !== o.fullName))
                             .filter((o) => !selectedMembers.some((m) => m.id === o.id || m.fullName === o.fullName))
                             .map((off) => (
