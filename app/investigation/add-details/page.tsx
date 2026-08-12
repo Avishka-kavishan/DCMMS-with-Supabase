@@ -13,6 +13,7 @@ import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 import { getCurrentProfile, signOut } from "@/lib/auth";
+import { getAccusedOfficerByRefServer } from "@/lib/db-actions";
 import { 
   Shield, User, Calendar as CalendarIcon, FileCheck, Send, Clock, 
   CheckCircle, ArrowLeft, RefreshCw, AlertCircle, Award, Building, 
@@ -594,7 +595,34 @@ function InvestigationCaseDetailsContent() {
 
       // Fetch Accused / Concerned Officers Information
       let fetchedConcerned: any[] = [];
-      if (isSupabaseConfigured && caseNoParam) {
+      if (caseNoParam) {
+        try {
+          const pgRes = await getAccusedOfficerByRefServer(caseNoParam);
+          if (pgRes && pgRes.success && pgRes.data) {
+            const d = pgRes.data;
+            const officersList = Array.isArray(d.accused_officers) && d.accused_officers.length > 0
+              ? d.accused_officers
+              : (d.accused_officer ? [d.accused_officer] : []);
+
+            if (officersList.length > 0) {
+              fetchedConcerned = officersList.map((ao: any) => ({
+                officer_name: ao.accused_officer_name || ao.officer_name || "",
+                position: ao.position || "",
+                dob: ao.date_of_birth ? String(ao.date_of_birth).split("T")[0] : "",
+                nic: ao.nic_no || ao.nic || "",
+                appointment_date: ao.appointment_date ? String(ao.appointment_date).split("T")[0] : "",
+                address: ao.address || ao.officer_address || "",
+                institute_name: ao.accused_school_name || ao.institute_name || d.accused_school?.accused_school_name || "",
+                institute_address: ao.school_address || d.accused_school?.address || "",
+              }));
+            }
+          }
+        } catch (e) {
+          console.warn("Failed to load accused officer details from PostgreSQL:", e);
+        }
+      }
+
+      if (fetchedConcerned.length === 0 && isSupabaseConfigured && caseNoParam) {
         try {
           const { data: cData } = await supabase
             .from("dcmms_concerned_officers")

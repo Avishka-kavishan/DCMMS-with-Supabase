@@ -10,7 +10,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 import { signOut, getCurrentProfile } from "@/lib/auth";
-import { getInvestigationOfficersServer, assignOfficerToInvestigationServer, logAuditEventServer, getCommitteeOfficersWithSchoolsServer } from "@/lib/db-actions";
+import { getInvestigationOfficersServer, assignOfficerToInvestigationServer, logAuditEventServer, getCommitteeOfficersWithSchoolsServer, getAccusedOfficerByRefServer } from "@/lib/db-actions";
 import { 
   UserPlus, X, Edit, Trash2, Check, Eye, ClipboardList, 
   UserCheck, Shield, ChevronRight, Calendar as CalendarIcon, 
@@ -1324,13 +1324,41 @@ export default function InvestigationPage() {
             if (found.members && Array.isArray(found.members)) setSelectedMembers(found.members);
           }
 
-          const { data: cData } = await supabase
-            .from("dcmms_concerned_officers")
-            .select("*")
-            .ilike("case_no", searchCaseNo);
-          if (cData && cData.length > 0) {
-            concernedList = cData;
-            concernedData = cData[0];
+          // First attempt to load accused officers from PostgreSQL accused_officer_table & accused_school_table
+          try {
+            const pgRes = await getAccusedOfficerByRefServer(searchCaseNo);
+            if (pgRes && pgRes.success && pgRes.data) {
+              const d = pgRes.data;
+              const officersList = Array.isArray(d.accused_officers) && d.accused_officers.length > 0
+                ? d.accused_officers
+                : (d.accused_officer ? [d.accused_officer] : []);
+              if (officersList.length > 0) {
+                concernedList = officersList.map((ao: any) => ({
+                  officer_name: ao.accused_officer_name || ao.officer_name || "",
+                  position: ao.position || "",
+                  dob: ao.date_of_birth ? String(ao.date_of_birth).split("T")[0] : "",
+                  nic: ao.nic_no || ao.nic || "",
+                  appointment_date: ao.appointment_date ? String(ao.appointment_date).split("T")[0] : "",
+                  address: ao.address || ao.officer_address || "",
+                  institute_name: ao.accused_school_name || ao.institute_name || d.accused_school?.accused_school_name || "",
+                  institute_address: ao.school_address || d.accused_school?.address || "",
+                }));
+                concernedData = d;
+              }
+            }
+          } catch (pgErr) {
+            console.warn("Failed to load accused officer details from PostgreSQL:", pgErr);
+          }
+
+          if (concernedList.length === 0) {
+            const { data: cData } = await supabase
+              .from("dcmms_concerned_officers")
+              .select("*")
+              .ilike("case_no", searchCaseNo);
+            if (cData && cData.length > 0) {
+              concernedList = cData;
+              concernedData = cData[0];
+            }
           }
         }
 

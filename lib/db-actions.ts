@@ -1269,7 +1269,7 @@ export async function getAccusedOfficerByRefServer(refNumber: string) {
     }
     const refTrimmed = String(refNumber).trim();
 
-    // 1. Query subject_officer_form_table
+    // 1. Query subject_officer_form_table by ref_number or subject_file_no
     const forms: any[] = await prisma.$queryRaw`
       SELECT 
         sof.id as form_id,
@@ -1282,11 +1282,56 @@ export async function getAccusedOfficerByRefServer(refNumber: string) {
         sof.address_of_the_person_presenting_the_complaint,
         sof.accused_officer_id
       FROM subject_officer_form_table sof
-      WHERE sof.ref_number = ${refTrimmed}
+      WHERE LOWER(sof.ref_number) = LOWER(${refTrimmed})
+         OR LOWER(sof.subject_file_no) = LOWER(${refTrimmed})
       LIMIT 1;
     `;
 
     if (!forms || forms.length === 0) {
+      // Fallback: Query dcmms_concerned_officers table if present
+      try {
+        const concerned: any[] = await prisma.$queryRaw`
+          SELECT 
+            id,
+            name as accused_officer_name,
+            nic as nic_no,
+            position,
+            address,
+            date_of_birth,
+            date_of_appointment as appointment_date
+          FROM dcmms_concerned_officers
+          WHERE LOWER(subject_file_number) = LOWER(${refTrimmed});
+        `;
+        if (concerned && concerned.length > 0) {
+          const officerList = concerned.map((c: any) => ({
+            id: c.id,
+            accused_officer_name: c.accused_officer_name,
+            officer_name: c.accused_officer_name,
+            address: c.address,
+            officer_address: c.address,
+            position: c.position,
+            date_of_birth: c.date_of_birth,
+            nic_no: c.nic_no,
+            nic: c.nic_no,
+            appointment_date: c.appointment_date,
+            accused_school_name: null,
+            institute_name: null,
+            school_address: null,
+          }));
+          return {
+            success: true,
+            data: {
+              form_id: null,
+              ref_number: refTrimmed,
+              subject_file_no: refTrimmed,
+              accused_officer: officerList[0],
+              accused_officers: officerList,
+              accused_school: null,
+            }
+          };
+        }
+      } catch (e) {}
+
       return { success: true, data: null };
     }
 
@@ -1338,18 +1383,6 @@ export async function getAccusedOfficerByRefServer(refNumber: string) {
       `;
     }
 
-    const officerList = (assignedOfficers || []).map((ao: any) => ({
-      id: ao.accused_officer_id,
-      accused_officer_name: ao.accused_officer_name,
-      address: ao.officer_address,
-      position: ao.position,
-      date_of_birth: ao.date_of_birth,
-      nic_no: ao.nic_no,
-      appointment_date: ao.appointment_date,
-    }));
-
-    const primaryOfficer = officerList.length > 0 ? officerList[0] : null;
-
     const schoolInfo: any = assignedOfficers && assignedOfficers.length > 0 && assignedOfficers[0].school_id ? {
       id: String(assignedOfficers[0].school_id),
       accused_school_name: assignedOfficers[0].accused_school_name,
@@ -1378,6 +1411,27 @@ export async function getAccusedOfficerByRefServer(refNumber: string) {
         console.warn("Fallback lookup in institute_table failed:", e);
       }
     }
+
+    const officerList = (assignedOfficers || []).map((ao: any) => ({
+      id: ao.accused_officer_id,
+      accused_officer_name: ao.accused_officer_name,
+      officer_name: ao.accused_officer_name,
+      address: ao.officer_address,
+      officer_address: ao.officer_address,
+      position: ao.position,
+      date_of_birth: ao.date_of_birth,
+      nic_no: ao.nic_no,
+      nic: ao.nic_no,
+      appointment_date: ao.appointment_date,
+      accused_school_name: ao.accused_school_name || schoolInfo?.accused_school_name || null,
+      institute_name: ao.accused_school_name || schoolInfo?.accused_school_name || null,
+      school_address: ao.school_address || schoolInfo?.address || null,
+      province: ao.province || schoolInfo?.province || null,
+      district: ao.district || schoolInfo?.district || null,
+      zone: ao.zone || schoolInfo?.zone || null,
+    }));
+
+    const primaryOfficer = officerList.length > 0 ? officerList[0] : null;
 
     return {
       success: true,
