@@ -40,6 +40,7 @@ interface Officer {
   fullName: string;
   nicNo?: string;
   officerRole?: "Chairman" | "Member";
+  position?: string;
   studiedSchools?: string[];
   childrenSchools?: string[];
   email: string;
@@ -167,6 +168,7 @@ export default function InvestigationPage() {
   const [urgencyFilter, setUrgencyFilter] = useState<string>("All");
   const [officerFilter, setOfficerFilter] = useState<string>("All");
   const [officerSearchQuery, setOfficerSearchQuery] = useState("");
+  const [officerPositionFilter, setOfficerPositionFilter] = useState<string>("All");
 
   // Case details modal state
   const [isCaseModalOpen, setIsCaseModalOpen] = useState(false);
@@ -691,7 +693,9 @@ export default function InvestigationPage() {
         try { children = JSON.parse(raw.children_schools); } catch (e) {}
       }
 
-      const roleType = (raw.officerRole || raw.officer_role) === "Chairman" ? "Chairman" : "Member";
+      const rolePos = (raw.position || raw.officerRole || raw.officer_role || "").trim();
+      const isChairman = rolePos.toLowerCase() === "chairman" || rolePos.toLowerCase().includes("chairman");
+      const roleType = isChairman ? "Chairman" : "Member";
 
       result.push({
         id,
@@ -699,16 +703,36 @@ export default function InvestigationPage() {
         fullName,
         nicNo: raw.nicNo || raw.nic_no || "",
         officerRole: roleType,
+        position: rolePos || roleType,
         studiedSchools: studied,
         childrenSchools: children,
         email: raw.email || "",
         role: "investigation_officer",
-        status: (raw.status === "Inactive" ? "Inactive" : "Active") as "Active" | "Inactive",
+        status: (raw.status === "Inactive" || raw.state === "Inactive" ? "Inactive" : "Active") as "Active" | "Inactive",
         createdAt: (raw.createdAt || raw.created_at || new Date().toISOString()).slice(0, 10),
       });
     };
 
+    // 1. Fetch from PostgreSQL commitee_table & school_table
+    try {
+      const commRes = await getCommitteeOfficersWithSchoolsServer();
+      if (commRes && commRes.success && Array.isArray(commRes.data)) {
+        commRes.data.forEach(addOfficer);
+      }
+    } catch (e) {}
+
+    // 2. Fetch from Supabase commitee_table & dcmms_investigation_officers
     if (isSupabaseConfigured) {
+      try {
+        const { data: dbComm } = await supabase
+          .from("commitee_table")
+          .select("*")
+          .order("created_at", { ascending: false });
+        if (dbComm && dbComm.length > 0) {
+          dbComm.forEach(addOfficer);
+        }
+      } catch (err) {}
+
       try {
         const { data: dbInv } = await supabase
           .from("dcmms_investigation_officers")
@@ -749,13 +773,6 @@ export default function InvestigationPage() {
         } catch (e) {}
       });
     }
-
-    try {
-      const commRes = await getCommitteeOfficersWithSchoolsServer();
-      if (commRes && commRes.success && Array.isArray(commRes.data)) {
-        commRes.data.forEach(addOfficer);
-      }
-    } catch (e) {}
 
     setOfficers(result);
 
@@ -2521,10 +2538,19 @@ export default function InvestigationPage() {
 
   const filteredOfficers = officers.filter((item) => {
     const query = officerSearchQuery.toLowerCase().trim();
-    return (
+    const matchesSearch =
       item.fullName.toLowerCase().includes(query) ||
-      item.email.toLowerCase().includes(query)
-    );
+      item.email.toLowerCase().includes(query) ||
+      (item.employeeNo && item.employeeNo.toLowerCase().includes(query)) ||
+      (item.nicNo && item.nicNo.toLowerCase().includes(query));
+    
+    const pos = (item.position || item.officerRole || "").toLowerCase();
+    const matchesPosition =
+      officerPositionFilter === "All" ||
+      (officerPositionFilter === "Chairman" && pos === "chairman") ||
+      (officerPositionFilter === "Member" && pos === "member");
+
+    return matchesSearch && matchesPosition;
   });
 
   // Count calculations
@@ -3201,10 +3227,19 @@ export default function InvestigationPage() {
                       type="text"
                       value={officerSearchQuery}
                       onChange={(e) => setOfficerSearchQuery(e.target.value)}
-                      placeholder={lang === "si" ? "නිලධාරීන් සොයන්න..." : "Search officers by name or email..."}
+                      placeholder={lang === "si" ? "නිලධාරීන් සොයන්න..." : "Search officers by name, emp no, email..."}
                       className="search-input"
                     />
                   </div>
+                  <select
+                    value={officerPositionFilter}
+                    onChange={(e) => setOfficerPositionFilter(e.target.value)}
+                    style={{ padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13px", backgroundColor: "#ffffff" }}
+                  >
+                    <option value="All">{lang === "si" ? "සියලුම තනතුරු" : "All Positions"}</option>
+                    <option value="Chairman">{lang === "si" ? "සභාපති (Chairman)" : "Chairman"}</option>
+                    <option value="Member">{lang === "si" ? "සාමාජික (Member)" : "Member"}</option>
+                  </select>
                   <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                     <button
                       type="button"
@@ -3577,10 +3612,13 @@ export default function InvestigationPage() {
                           >
                             <option value="">{lang === "si" ? "-- ලියාපදිංචි සභාපතිවරුන්ගෙන් තෝරන්න --" : "-- Select Chairman from Registered Chairmen --"}</option>
                             {officers
-                              .filter((off) => off.officerRole === "Chairman" || off.officerRole?.toLowerCase() === "chairman")
+                              .filter((off) => {
+                                const pos = (off.position || off.officerRole || "").toLowerCase();
+                                return pos === "chairman";
+                              })
                               .map((off) => (
                                 <option key={off.id} value={off.id}>
-                                  {off.fullName} {off.nicNo ? `- NIC: ${off.nicNo}` : ""}
+                                  {off.fullName} {off.employeeNo ? `[${off.employeeNo}]` : ""} {off.nicNo ? `- NIC: ${off.nicNo}` : ""}
                                 </option>
                               ))}
                           </select>
@@ -3607,12 +3645,15 @@ export default function InvestigationPage() {
                           >
                             <option value="">{lang === "si" ? "-- ලියාපදිංචි සාමාජිකයින්ගෙන් තෝරා එක් කරන්න --" : "-- Select Registered Member to Add --"}</option>
                             {officers
-                              .filter((o) => o.officerRole !== "Chairman" && o.officerRole?.toLowerCase() !== "chairman")
+                              .filter((off) => {
+                                const pos = (off.position || off.officerRole || "").toLowerCase();
+                                return pos === "member";
+                              })
                               .filter((o) => !selectedChairman || (selectedChairman.id !== o.id && selectedChairman.fullName !== o.fullName))
                               .filter((o) => !selectedMembers.some((m) => m.id === o.id || m.fullName === o.fullName))
                               .map((off) => (
                                 <option key={off.id} value={off.id}>
-                                  + {off.fullName} {off.nicNo ? `- NIC: ${off.nicNo}` : ""}
+                                  + {off.fullName} {off.employeeNo ? `[${off.employeeNo}]` : ""} {off.nicNo ? `- NIC: ${off.nicNo}` : ""}
                                 </option>
                               ))}
                           </select>

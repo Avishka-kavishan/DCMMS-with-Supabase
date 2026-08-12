@@ -1717,7 +1717,7 @@ export async function saveCommitteeOfficerAndSchoolsServer(data: {
   }
 }
 
-export async function getCommitteeOfficersWithSchoolsServer() {
+export async function getCommitteeOfficersWithSchoolsServer(positionFilter?: string) {
   try {
     await prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS commitee_table (
@@ -1744,23 +1744,86 @@ export async function getCommitteeOfficersWithSchoolsServer() {
       );
     `);
 
-    const records: any[] = await prisma.$queryRaw`
-      SELECT 
-        c.id::text as id,
-        c.employee_no,
-        c.full_name,
-        c.email,
-        c.position,
-        c.nic_no,
-        c.state,
-        c.created_at,
-        c.updated_at,
-        s.member_school_name as studied_schools,
-        s.member_children_schools_name as children_schools
-      FROM commitee_table c
-      LEFT JOIN school_table s ON c.employee_no = s.employee_no
-      ORDER BY c.created_at DESC;
-    `;
+    let records: any[] = [];
+    if (positionFilter && positionFilter.trim()) {
+      const filterLower = positionFilter.trim().toLowerCase();
+      if (filterLower === "chairman") {
+        records = await prisma.$queryRaw`
+          SELECT 
+            c.id::text as id,
+            c.employee_no,
+            c.full_name,
+            c.email,
+            c.position,
+            c.nic_no,
+            c.state,
+            c.created_at,
+            c.updated_at,
+            s.member_school_name as studied_schools,
+            s.member_children_schools_name as children_schools
+          FROM commitee_table c
+          LEFT JOIN school_table s ON c.employee_no = s.employee_no
+          WHERE LOWER(c.position) = 'chairman'
+          ORDER BY c.created_at DESC;
+        `;
+      } else if (filterLower === "member") {
+        records = await prisma.$queryRaw`
+          SELECT 
+            c.id::text as id,
+            c.employee_no,
+            c.full_name,
+            c.email,
+            c.position,
+            c.nic_no,
+            c.state,
+            c.created_at,
+            c.updated_at,
+            s.member_school_name as studied_schools,
+            s.member_children_schools_name as children_schools
+          FROM commitee_table c
+          LEFT JOIN school_table s ON c.employee_no = s.employee_no
+          WHERE LOWER(c.position) = 'member' OR LOWER(c.position) != 'chairman' OR c.position IS NULL
+          ORDER BY c.created_at DESC;
+        `;
+      } else {
+        records = await prisma.$queryRaw`
+          SELECT 
+            c.id::text as id,
+            c.employee_no,
+            c.full_name,
+            c.email,
+            c.position,
+            c.nic_no,
+            c.state,
+            c.created_at,
+            c.updated_at,
+            s.member_school_name as studied_schools,
+            s.member_children_schools_name as children_schools
+          FROM commitee_table c
+          LEFT JOIN school_table s ON c.employee_no = s.employee_no
+          WHERE LOWER(c.position) = LOWER(${positionFilter})
+          ORDER BY c.created_at DESC;
+        `;
+      }
+    } else {
+      records = await prisma.$queryRaw`
+        SELECT 
+          c.id::text as id,
+          c.employee_no,
+          c.full_name,
+          c.email,
+          c.position,
+          c.nic_no,
+          c.state,
+          c.created_at,
+          c.updated_at,
+          s.member_school_name as studied_schools,
+          s.member_children_schools_name as children_schools
+        FROM commitee_table c
+        LEFT JOIN school_table s ON c.employee_no = s.employee_no
+        ORDER BY c.created_at DESC;
+      `;
+    }
 
     return serializeForServerAction({ success: true, data: records });
   } catch (error: any) {

@@ -13,7 +13,7 @@ import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 import { getCurrentProfile, signOut } from "@/lib/auth";
-import { getAccusedOfficerByRefServer } from "@/lib/db-actions";
+import { getAccusedOfficerByRefServer, getCommitteeOfficersWithSchoolsServer } from "@/lib/db-actions";
 import { 
   Shield, User, Calendar as CalendarIcon, FileCheck, Send, Clock, 
   CheckCircle, ArrowLeft, RefreshCw, AlertCircle, Award, Building, 
@@ -193,14 +193,53 @@ function InvestigationCaseDetailsContent() {
     const loadDetails = async () => {
       setIsLoading(true);
 
-      // Load registered officers strictly from the Investigation Officer Registration Form storage
+      // Load registered officers strictly from commitee_table (PostgreSQL & Supabase) + local storage
       let fetchedOfficers: any[] = [];
+
+      try {
+        const commRes = await getCommitteeOfficersWithSchoolsServer();
+        if (commRes && commRes.success && Array.isArray(commRes.data)) {
+          commRes.data.forEach((p: any) => {
+            const pos = (p.position || p.officer_role || p.officerRole || "Member").trim();
+            const isChairman = pos.toLowerCase() === "chairman";
+            const mapped = {
+              id: p.id,
+              employeeNo: p.employee_no || p.employeeNo || "",
+              fullName: p.full_name || p.fullName,
+              nicNo: p.nic_no || p.nicNo,
+              position: pos,
+              officerRole: isChairman ? "Chairman" : "Member",
+              studiedSchools: Array.isArray(p.studied_schools) ? p.studied_schools : typeof p.studied_schools === "string" ? p.studied_schools.split(",").map((s: string) => s.trim()).filter(Boolean) : [],
+              childrenSchools: Array.isArray(p.children_schools) ? p.children_schools : typeof p.children_schools === "string" ? p.children_schools.split(",").map((s: string) => s.trim()).filter(Boolean) : [],
+              email: p.email,
+              role: "investigation_officer",
+              status: p.state || p.status || "Active",
+            };
+            if (!fetchedOfficers.some((o) => o.id === mapped.id || o.fullName === mapped.fullName)) {
+              fetchedOfficers.push(mapped);
+            }
+          });
+        }
+      } catch (e) {
+        console.warn("Server action committee officers load warning:", e);
+      }
+
       if (typeof window !== "undefined") {
         const storedInv = localStorage.getItem("dcmms_investigation_officers");
         if (storedInv) {
           try {
             const list = JSON.parse(storedInv);
-            if (Array.isArray(list)) fetchedOfficers.push(...list);
+            if (Array.isArray(list)) {
+              list.forEach((item: any) => {
+                if (!fetchedOfficers.some((o) => o.id === item.id || o.fullName === item.fullName)) {
+                  fetchedOfficers.push({
+                    ...item,
+                    employeeNo: item.employeeNo || item.employee_no || "",
+                    position: item.position || item.officerRole || "Member",
+                  });
+                }
+              });
+            }
           } catch (e) {}
         }
 
@@ -213,8 +252,10 @@ function InvestigationCaseDetailsContent() {
                 if (!fetchedOfficers.some((o) => o.id === item.id || o.fullName === item.fullName)) {
                   fetchedOfficers.push({
                     id: item.id,
+                    employeeNo: item.employeeNo || item.employee_no || "",
                     fullName: item.fullName,
                     nicNo: item.nicNo,
+                    position: item.position || item.officerRole || "Member",
                     officerRole: item.officerRole || "Member",
                     studiedSchools: item.studiedSchools || [],
                     childrenSchools: item.childrenSchools || [],
@@ -231,13 +272,42 @@ function InvestigationCaseDetailsContent() {
 
       if (isSupabaseConfigured) {
         try {
+          const { data: dbComm } = await supabase.from("commitee_table").select("*");
+          if (dbComm && dbComm.length > 0) {
+            dbComm.forEach((p: any) => {
+              const pos = (p.position || p.officer_role || p.officerRole || "Member").trim();
+              const isChairman = pos.toLowerCase() === "chairman";
+              const mapped = {
+                id: p.id,
+                employeeNo: p.employee_no || p.employeeNo || "",
+                fullName: p.full_name || p.fullName,
+                nicNo: p.nic_no || p.nicNo,
+                position: pos,
+                officerRole: isChairman ? "Chairman" : "Member",
+                studiedSchools: [],
+                childrenSchools: [],
+                email: p.email,
+                role: "investigation_officer",
+                status: p.state || p.status || "Active",
+              };
+              if (!fetchedOfficers.some((o) => o.id === mapped.id || o.fullName === mapped.fullName)) {
+                fetchedOfficers.push(mapped);
+              }
+            });
+          }
+        } catch (e) {}
+
+        try {
           const { data: dbInv } = await supabase.from("dcmms_investigation_officers").select("*");
           if (dbInv && dbInv.length > 0) {
             dbInv.forEach((p: any) => {
+              const pos = (p.position || p.officer_role || p.officerRole || "Member").trim();
               const mapped = {
                 id: p.id,
+                employeeNo: p.employee_no || p.employeeNo || "",
                 fullName: p.full_name || p.fullName,
                 nicNo: p.nic_no || p.nicNo,
+                position: pos,
                 officerRole: p.officer_role || p.officerRole || "Member",
                 studiedSchools: p.studied_schools || p.studiedSchools || [],
                 childrenSchools: p.children_schools || p.childrenSchools || [],
@@ -1952,10 +2022,13 @@ function InvestigationCaseDetailsContent() {
                         >
                           <option value="">{lang === "si" ? "-- ලියාපදිංචි සභාපතිවරුන්ගෙන් තෝරන්න --" : "-- Select Chairman from Registered Chairmen --"}</option>
                           {officers
-                            .filter((off) => off.officerRole === "Chairman" || off.officerRole?.toLowerCase() === "chairman")
+                            .filter((off) => {
+                              const pos = (off.position || off.officerRole || "").toLowerCase();
+                              return pos === "chairman";
+                            })
                             .map((off) => (
                               <option key={off.id} value={off.id}>
-                                {off.fullName} {off.nicNo ? `- NIC: ${off.nicNo}` : ""}
+                                {off.fullName} {off.employeeNo ? `[${off.employeeNo}]` : ""} {off.nicNo ? `- NIC: ${off.nicNo}` : ""}
                               </option>
                             ))}
                         </select>
@@ -1982,12 +2055,15 @@ function InvestigationCaseDetailsContent() {
                         >
                           <option value="">{lang === "si" ? "-- ලියාපදිංචි සාමාජිකයින්ගෙන් තෝරා එක් කරන්න --" : "-- Select Registered Member to Add --"}</option>
                           {officers
-                            .filter((o) => o.officerRole !== "Chairman" && o.officerRole?.toLowerCase() !== "chairman")
+                            .filter((off) => {
+                              const pos = (off.position || off.officerRole || "").toLowerCase();
+                              return pos === "member";
+                            })
                             .filter((o) => !selectedChairman || (selectedChairman.id !== o.id && selectedChairman.fullName !== o.fullName))
                             .filter((o) => !selectedMembers.some((m) => m.id === o.id || m.fullName === o.fullName))
                             .map((off) => (
                               <option key={off.id} value={off.id}>
-                                + {off.fullName} {off.nicNo ? `- NIC: ${off.nicNo}` : ""}
+                                + {off.fullName} {off.employeeNo ? `[${off.employeeNo}]` : ""} {off.nicNo ? `- NIC: ${off.nicNo}` : ""}
                               </option>
                             ))}
                         </select>
