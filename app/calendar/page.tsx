@@ -162,7 +162,8 @@ export default function CalendarPage() {
       window.addEventListener("dcmms_data_updated", handleLocalUpdate);
       window.addEventListener("dcmms_assignment_updated", handleLocalUpdate);
 
-      const interval = setInterval(fetchEvents, 2500);
+      const interval = setInterval(fetchEvents, 15000);
+
 
       return () => {
         if (channel) supabase.removeChannel(channel);

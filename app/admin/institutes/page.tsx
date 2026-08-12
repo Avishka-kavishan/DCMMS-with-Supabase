@@ -265,7 +265,8 @@ export default function EducationalInstitutesPage() {
     window.addEventListener("storage", handleLocalUpdate);
     window.addEventListener("dcmms_data_updated", handleLocalUpdate);
 
-    const interval = setInterval(fetchInstitutes, 5000);
+    const interval = setInterval(fetchInstitutes, 15000);
+
 
     return () => {
       if (channel) supabase.removeChannel(channel);

@@ -788,7 +788,8 @@ function InvestigationCaseDetailsContent() {
       )
       .subscribe();
 
-    const interval = setInterval(reloadAssignmentData, 2500);
+    const interval = setInterval(reloadAssignmentData, 15000);
+
 
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === "dcmms_subject_assignments" || e.key === "dcmms_cases") {

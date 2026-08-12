@@ -420,13 +420,14 @@ export default function AdminDashboard() {
       .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subject_details" }, fetchCases)
       .subscribe();
 
-    const handleLocalUpdate = () => fetchCases();
+    const handleLocalUpdate = () => fetchCases(true);
     window.addEventListener("storage", handleLocalUpdate);
     window.addEventListener("dcmms_data_updated", handleLocalUpdate);
     window.addEventListener("dcmms_assignment_updated", handleLocalUpdate);
 
-    // Fallback: auto-refresh every 2.5 seconds in case Realtime is delayed or blocked
-    const interval = setInterval(fetchCases, 2500);
+    // Background auto-refresh every 15 seconds silently (no UI flickering)
+    const interval = setInterval(() => fetchCases(true), 15000);
+
 
     return () => {
       supabase.removeChannel(channel);

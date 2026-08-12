@@ -132,7 +132,8 @@ export default function SubjectOfficersPage() {
     window.addEventListener("storage", handleLocalUpdate);
     window.addEventListener("dcmms_data_updated", handleLocalUpdate);
 
-    const interval = setInterval(fetchOfficers, 3000);
+    const interval = setInterval(fetchOfficers, 15000);
+
 
     return () => {
       if (channel) supabase.removeChannel(channel);

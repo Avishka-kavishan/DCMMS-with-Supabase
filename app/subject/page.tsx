@@ -774,7 +774,8 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
       .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subsequent_mails" }, handleSyncAll)
       .subscribe();
 
-    const interval = setInterval(handleSyncAll, 2_500);
+    const interval = setInterval(handleSyncAll, 15_000);
+
 
     const handleStorageEvent = (e: StorageEvent) => {
       if (
@@ -1322,7 +1323,8 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
       .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subject" }, fetchAssignments)
       .subscribe();
 
-    const interval = setInterval(fetchAssignments, 2500);
+    const interval = setInterval(fetchAssignments, 15000);
+
 
     const handleStorageEvent = (e: StorageEvent) => {
       if (e.key === "dcmms_subject_assignments" || e.key === "dcmms_cases" || e.key === "dcmms_letters") {

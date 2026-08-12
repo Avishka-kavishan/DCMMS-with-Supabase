@@ -308,7 +308,8 @@ function AdminViewCaseInner() {
     window.addEventListener("dcmms_data_updated", handleLocalUpdate);
     window.addEventListener("dcmms_assignment_updated", handleLocalUpdate);
 
-    const interval = setInterval(handleLocalUpdate, 2500);
+    const interval = setInterval(handleLocalUpdate, 15000);
+
 
     return () => {
       if (channel) supabase.removeChannel(channel);

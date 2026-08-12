@@ -214,8 +214,9 @@ export default function DailyMailPage() {
     window.addEventListener("dcmms_data_updated", handleLocalUpdate);
     window.addEventListener("dcmms_assignment_updated", handleLocalUpdate);
 
-    // Fallback: auto-refresh every 2.5 seconds
-    const interval = setInterval(fetchLetters, 2500);
+    // Fallback: background refresh every 15 seconds
+    const interval = setInterval(fetchLetters, 15000);
+
 
     return () => {
       supabase.removeChannel(channel);

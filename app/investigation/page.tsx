@@ -1134,7 +1134,8 @@ export default function InvestigationPage() {
       fetchInquiries();
       fetchInvestigationOfficers();
       fetchSubjectOfficerNotifications();
-    }, 2500);
+    }, 15000);
+
 
     return () => {
       supabase.removeChannel(channel1);

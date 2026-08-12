@@ -112,7 +112,8 @@ export default function SystemAdminDashboard() {
     window.addEventListener("storage", handleLocalUpdate);
     window.addEventListener("dcmms_data_updated", handleLocalUpdate);
 
-    const interval = setInterval(loadData, 2500);
+    const interval = setInterval(loadData, 15000);
+
 
     return () => {
       supabase.removeChannel(channel);

@@ -801,7 +801,8 @@ function CaseDetailsForm() {
     window.addEventListener("dcmms_data_updated", handleLocalUpdate);
     window.addEventListener("dcmms_assignment_updated", handleLocalUpdate);
 
-    const interval = setInterval(verifyAndFetch, 2500);
+    const interval = setInterval(verifyAndFetch, 15000);
+
 
     return () => {
       if (channel) supabase.removeChannel(channel);
