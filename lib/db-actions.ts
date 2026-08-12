@@ -1517,4 +1517,250 @@ export async function deleteInstituteServer(id: string) {
   }
 }
 
+// -------------------------------------------------------------
+// Committee & School Operations (commitee_table & school_table)
+// -------------------------------------------------------------
+export async function saveCommitteeOfficerAndSchoolsServer(data: {
+  employee_no?: string;
+  full_name: string;
+  email?: string;
+  position?: string;
+  nic_no?: string;
+  state?: string;
+  studied_schools?: string[] | string;
+  children_schools?: string[] | string;
+}) {
+  try {
+    // 0. Ensure commitee_table and school_table exist
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS commitee_table (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        employee_no VARCHAR(255) NOT NULL UNIQUE,
+        full_name VARCHAR(255) NOT NULL,
+        email VARCHAR(255) UNIQUE,
+        position VARCHAR(255),
+        nic_no VARCHAR(255) UNIQUE,
+        state VARCHAR(255) DEFAULT 'Active',
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS school_table (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        employee_no VARCHAR(255) REFERENCES commitee_table(employee_no) ON DELETE CASCADE ON UPDATE CASCADE,
+        member_school_name VARCHAR(255),
+        member_children_schools_name TEXT,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    const fullName = (data.full_name || "").trim();
+    const nicNo = (data.nic_no || "").trim();
+    const email = (data.email || "").trim().toLowerCase();
+    const position = data.position || "Member";
+    const state = data.state || "Active";
+
+    let empNo = (data.employee_no || nicNo || "").trim();
+    if (!empNo) {
+      empNo = `EMP-${Date.now().toString().slice(-6)}`;
+    }
+
+    if (!fullName) {
+      return serializeForServerAction({ success: false, error: "Full name is required" });
+    }
+
+    // 1. Check if record exists in commitee_table by employee_no, nic_no, or email
+    let existing: any[] = [];
+    if (empNo) {
+      existing = await prisma.$queryRaw`SELECT id, employee_no FROM commitee_table WHERE employee_no = ${empNo} LIMIT 1;`;
+    }
+    if ((!existing || existing.length === 0) && nicNo) {
+      existing = await prisma.$queryRaw`SELECT id, employee_no FROM commitee_table WHERE nic_no = ${nicNo} LIMIT 1;`;
+    }
+    if ((!existing || existing.length === 0) && email) {
+      existing = await prisma.$queryRaw`SELECT id, employee_no FROM commitee_table WHERE LOWER(email) = ${email} LIMIT 1;`;
+    }
+
+    let savedCommitteeId: string = "";
+    let finalEmpNo: string = empNo;
+
+    if (existing && existing.length > 0) {
+      savedCommitteeId = existing[0].id;
+      finalEmpNo = existing[0].employee_no || empNo;
+      await prisma.$queryRaw`
+        UPDATE commitee_table
+        SET full_name = ${fullName},
+            email = ${email || null},
+            position = ${position},
+            nic_no = ${nicNo || null},
+            state = ${state},
+            updated_at = NOW()
+        WHERE id = ${savedCommitteeId}::uuid;
+      `;
+    } else {
+      const inserted: any[] = await prisma.$queryRaw`
+        INSERT INTO commitee_table (employee_no, full_name, email, position, nic_no, state)
+        VALUES (${empNo}, ${fullName}, ${email || null}, ${position}, ${nicNo || null}, ${state})
+        RETURNING id::text as id, employee_no;
+      `;
+      if (inserted && inserted.length > 0) {
+        savedCommitteeId = inserted[0].id;
+        finalEmpNo = inserted[0].employee_no;
+      }
+    }
+
+    // 2. Format studied and children schools
+    const studiedStr = Array.isArray(data.studied_schools)
+      ? data.studied_schools.filter(Boolean).join(", ")
+      : (data.studied_schools || "").trim();
+
+    const childrenStr = Array.isArray(data.children_schools)
+      ? data.children_schools.filter(Boolean).join(", ")
+      : (data.children_schools || "").trim();
+
+    // 3. Upsert into school_table linking to employee_no
+    if (finalEmpNo) {
+      const existingSchool: any[] = await prisma.$queryRaw`
+        SELECT id FROM school_table WHERE employee_no = ${finalEmpNo} LIMIT 1;
+      `;
+
+      if (existingSchool && existingSchool.length > 0) {
+        await prisma.$queryRaw`
+          UPDATE school_table
+          SET member_school_name = ${studiedStr || null},
+              member_children_schools_name = ${childrenStr || null},
+              updated_at = NOW()
+          WHERE id = ${existingSchool[0].id}::uuid;
+        `;
+      } else {
+        await prisma.$queryRaw`
+          INSERT INTO school_table (employee_no, member_school_name, member_children_schools_name)
+          VALUES (${finalEmpNo}, ${studiedStr || null}, ${childrenStr || null});
+        `;
+      }
+    }
+
+    return serializeForServerAction({
+      success: true,
+      data: {
+        id: savedCommitteeId,
+        employee_no: finalEmpNo,
+        full_name: fullName,
+        email,
+        position,
+        nic_no: nicNo,
+        state,
+        studied_schools: studiedStr,
+        children_schools: childrenStr,
+      },
+    });
+  } catch (error: any) {
+    console.error("Error saving committee officer & schools:", error);
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to save committee officer" });
+  }
+}
+
+export async function getCommitteeOfficersWithSchoolsServer() {
+  try {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS commitee_table (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        employee_no VARCHAR(255) NOT NULL UNIQUE,
+        full_name VARCHAR(255) NOT NULL,
+        email VARCHAR(255) UNIQUE,
+        position VARCHAR(255),
+        nic_no VARCHAR(255) UNIQUE,
+        state VARCHAR(255) DEFAULT 'Active',
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS school_table (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        employee_no VARCHAR(255) REFERENCES commitee_table(employee_no) ON DELETE CASCADE ON UPDATE CASCADE,
+        member_school_name VARCHAR(255),
+        member_children_schools_name TEXT,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    const records: any[] = await prisma.$queryRaw`
+      SELECT 
+        c.id::text as id,
+        c.employee_no,
+        c.full_name,
+        c.email,
+        c.position,
+        c.nic_no,
+        c.state,
+        c.created_at,
+        c.updated_at,
+        s.member_school_name as studied_schools,
+        s.member_children_schools_name as children_schools
+      FROM commitee_table c
+      LEFT JOIN school_table s ON c.employee_no = s.employee_no
+      ORDER BY c.created_at DESC;
+    `;
+
+    return serializeForServerAction({ success: true, data: records });
+  } catch (error: any) {
+    console.error("Error fetching committee officers with schools:", error);
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to fetch committee officers", data: [] });
+  }
+}
+
+export async function getSchoolSuggestionsServer() {
+  try {
+    const schoolSet = new Set<string>();
+
+    // 1. From institute_table
+    try {
+      const institutes: any[] = await prisma.$queryRaw`
+        SELECT institute_name FROM institute_table WHERE institute_name IS NOT NULL AND TRIM(institute_name) != '';
+      `;
+      institutes.forEach((i: any) => schoolSet.add(i.institute_name.trim()));
+    } catch (e) {}
+
+    // 2. From accused_school_table
+    try {
+      const accusedSchools: any[] = await prisma.$queryRaw`
+        SELECT accused_school_name FROM accused_school_table WHERE accused_school_name IS NOT NULL AND TRIM(accused_school_name) != '';
+      `;
+      accusedSchools.forEach((s: any) => schoolSet.add(s.accused_school_name.trim()));
+    } catch (e) {}
+
+    // 3. From school_table
+    try {
+      const schoolRows: any[] = await prisma.$queryRaw`
+        SELECT member_school_name, member_children_schools_name FROM school_table;
+      `;
+      schoolRows.forEach((r: any) => {
+        if (r.member_school_name) {
+          r.member_school_name.split(",").forEach((name: string) => {
+            if (name.trim()) schoolSet.add(name.trim());
+          });
+        }
+        if (r.member_children_schools_name) {
+          r.member_children_schools_name.split(",").forEach((name: string) => {
+            if (name.trim()) schoolSet.add(name.trim());
+          });
+        }
+      });
+    } catch (e) {}
+
+    const sortedSchools = Array.from(schoolSet).sort((a, b) => a.localeCompare(b));
+    return serializeForServerAction({ success: true, data: sortedSchools });
+  } catch (error: any) {
+    console.error("Error fetching school suggestions:", error);
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to fetch school suggestions", data: [] });
+  }
+}
+
+
 

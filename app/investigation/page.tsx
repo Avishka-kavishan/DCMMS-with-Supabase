@@ -10,7 +10,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 import { signOut, getCurrentProfile } from "@/lib/auth";
-import { getInvestigationOfficersServer, assignOfficerToInvestigationServer, logAuditEventServer } from "@/lib/db-actions";
+import { getInvestigationOfficersServer, assignOfficerToInvestigationServer, logAuditEventServer, getCommitteeOfficersWithSchoolsServer } from "@/lib/db-actions";
 import { 
   UserPlus, X, Edit, Trash2, Check, Eye, ClipboardList, 
   UserCheck, Shield, ChevronRight, Calendar as CalendarIcon, 
@@ -747,6 +747,13 @@ export default function InvestigationPage() {
         } catch (e) {}
       });
     }
+
+    try {
+      const commRes = await getCommitteeOfficersWithSchoolsServer();
+      if (commRes && commRes.success && Array.isArray(commRes.data)) {
+        commRes.data.forEach(addOfficer);
+      }
+    } catch (e) {}
 
     setOfficers(result);
 

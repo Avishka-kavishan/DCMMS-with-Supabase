@@ -13,7 +13,14 @@ import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 import { getCurrentProfile, signOut, dashboardPath } from "@/lib/auth";
-import { upsertInvestigationOfficerServer, logAuditEventServer, saveRegisterOfficerServer } from "@/lib/db-actions";
+import { 
+  upsertInvestigationOfficerServer, 
+  logAuditEventServer, 
+  saveRegisterOfficerServer,
+  saveCommitteeOfficerAndSchoolsServer,
+  getCommitteeOfficersWithSchoolsServer,
+  getSchoolSuggestionsServer 
+} from "@/lib/db-actions";
 import { 
   UserPlus, ArrowLeft, Check, X, GraduationCap, ShieldCheck, User, 
   CreditCard, Mail, Building, Award, RefreshCw 
@@ -42,6 +49,17 @@ export default function InvestigationOfficerRegistrationPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
+  const [schoolSuggestions, setSchoolSuggestions] = useState<string[]>([]);
+
+  // Fetch school suggestions from school_table, accused_school_table, institute_table
+  useEffect(() => {
+    getSchoolSuggestionsServer().then((res) => {
+      if (res && res.success && Array.isArray(res.data)) {
+        setSchoolSuggestions(res.data);
+      }
+    });
+  }, []);
+
 
   // Sync document language and title
   useEffect(() => {
@@ -169,6 +187,22 @@ export default function InvestigationOfficerRegistrationPage() {
         };
         await supabase.from("dcmms_investigation_officers").upsert(invPayload);
 
+        // Sync to commitee_table & school_table in Supabase
+        await supabase.from("commitee_table").upsert({
+          employee_no: newOfficer.nicNo || `EMP-${Date.now().toString().slice(-6)}`,
+          full_name: newOfficer.fullName,
+          email: newOfficer.email,
+          position: newOfficer.officerRole,
+          nic_no: newOfficer.nicNo,
+          state: newOfficer.status,
+        }).catch(() => {});
+
+        await supabase.from("school_table").upsert({
+          employee_no: newOfficer.nicNo || `EMP-${Date.now().toString().slice(-6)}`,
+          member_school_name: newOfficer.studiedSchools.join(", "),
+          member_children_schools_name: newOfficer.childrenSchools.join(", "),
+        }).catch(() => {});
+
         // Sync schools to dcmms_schools table
         const allSchools = Array.from(new Set([...(newOfficer.studiedSchools || []), ...(newOfficer.childrenSchools || [])]));
         for (const schoolName of allSchools) {
@@ -196,7 +230,18 @@ export default function InvestigationOfficerRegistrationPage() {
       }
     }
 
-    // Always dual-persist to local PostgreSQL via Prisma Server Action
+    // Always dual-persist to local PostgreSQL commitee_table & school_table via Prisma Server Action
+    saveCommitteeOfficerAndSchoolsServer({
+      employee_no: newOfficer.nicNo || `EMP-${Date.now().toString().slice(-6)}`,
+      full_name: newOfficer.fullName,
+      email: newOfficer.email,
+      position: newOfficer.officerRole,
+      nic_no: newOfficer.nicNo,
+      state: newOfficer.status,
+      studied_schools: newOfficer.studiedSchools,
+      children_schools: newOfficer.childrenSchools,
+    }).catch((e) => console.error("PostgreSQL saveCommitteeOfficerAndSchoolsServer error:", e));
+
     saveRegisterOfficerServer({
       employee_no: newOfficer.nicNo || `EMP-${Date.now().toString().slice(-6)}`,
       full_name: newOfficer.fullName,
@@ -215,14 +260,15 @@ export default function InvestigationOfficerRegistrationPage() {
 
     logAuditEventServer(
       "REGISTER_OFFICER",
-      "investigation_officers",
+      "commitee_table",
       newOfficer.id,
       { fullName: newOfficer.fullName, role: newOfficer.officerRole, nicNo: newOfficer.nicNo }
     ).catch((e) => console.error("PostgreSQL audit error:", e));
 
     setIsSaving(false);
-    showToast(lang === "si" ? "පරීක්ෂණ නිලධාරියා සාර්ථකව ලියාපදිංචි කරන ලදී!" : "Investigation Officer Registered Successfully!");
+    showToast(lang === "si" ? "පරීක්ෂණ නිලධාරියා commitee_table සහ school_table වෙත සාර්ථකව සම්බන්ධ කර ලියාපදිංචි කරන ලදී!" : "Investigation Officer Registered & Linked to commitee_table and school_table Successfully!");
     if (typeof window !== "undefined") window.dispatchEvent(new Event("dcmms_data_updated"));
+
 
     setTimeout(() => {
       router.push("/investigation");
@@ -540,6 +586,7 @@ export default function InvestigationOfficerRegistrationPage() {
                       <div style={{ display: "flex", gap: "8px" }}>
                         <input
                           type="text"
+                          list="school-suggestions-list"
                           placeholder={lang === "si" ? "පාසලේ නම ඇතුළත් කර Enter ඔබන්න..." : "Type school name & press Enter..."}
                           value={newStudiedInput}
                           onChange={(e) => setNewStudiedInput(e.target.value)}
@@ -590,6 +637,7 @@ export default function InvestigationOfficerRegistrationPage() {
                       <div style={{ display: "flex", gap: "8px" }}>
                         <input
                           type="text"
+                          list="school-suggestions-list"
                           placeholder={lang === "si" ? "පාසලේ නම ඇතුළත් කර Enter ඔබන්න..." : "Type school name & press Enter..."}
                           value={newChildrenInput}
                           onChange={(e) => setNewChildrenInput(e.target.value)}
@@ -609,6 +657,14 @@ export default function InvestigationOfficerRegistrationPage() {
                           + Add
                         </button>
                       </div>
+
+                      {/* Datalist for school suggestions from school_table & institute_table */}
+                      <datalist id="school-suggestions-list">
+                        {schoolSuggestions.map((schoolName, idx) => (
+                          <option key={idx} value={schoolName} />
+                        ))}
+                      </datalist>
+
                       {formChildrenSchools.length > 0 ? (
                         <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", backgroundColor: "#f8fafc", padding: "10px", borderRadius: "8px", border: "1px solid #e2e8f0", marginTop: "8px" }}>
                           {formChildrenSchools.map((s, idx) => (

@@ -113,3 +113,31 @@ model institute_table {
   @@map("institute_table")
 }
 
+model commitee_table {
+  id           String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employee_no  String         @unique @db.VarChar(255)
+  full_name    String         @db.VarChar(255)
+  email        String?        @unique @db.VarChar(255)
+  position     String?        @db.VarChar(255)
+  nic_no       String?        @unique @db.VarChar(255)
+  state        String?        @db.VarChar(255)
+  created_at   DateTime?      @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime?      @default(now()) @db.Timestamptz(6)
+  school_table school_table[]
+
+  @@map("commitee_table")
+}
+
+model school_table {
+  id                           String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employee_no                  String?         @db.VarChar(255)
+  member_school_name           String?         @db.VarChar(255)
+  member_children_schools_name String?         @db.Text
+  created_at                   DateTime?       @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime?       @default(now()) @db.Timestamptz(6)
+  commitee_table               commitee_table? @relation(fields: [employee_no], references: [employee_no], onDelete: Cascade, onUpdate: Cascade)
+
+  @@map("school_table")
+}
+
+
