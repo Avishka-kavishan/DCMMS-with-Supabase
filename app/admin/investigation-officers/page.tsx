@@ -14,6 +14,7 @@ import {
 
 interface Officer {
   id: string;
+  employeeNo?: string;
   fullName: string;
   nicNo?: string;
   officerRole?: "Chairman" | "Member";
@@ -38,6 +39,7 @@ export default function InvestigationOfficersPage() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
+  const [formEmpNo, setFormEmpNo] = useState("");
   const [formName, setFormName] = useState("");
   const [formNic, setFormNic] = useState("");
   const [formOfficerRole, setFormOfficerRole] = useState<"Chairman" | "Member">("Member");
@@ -90,8 +92,9 @@ export default function InvestigationOfficersPage() {
       if (res.success && res.data && res.data.length > 0) {
         result = res.data.map((p: any) => ({
           id: p.id,
+          employeeNo: p.employee_no || "",
           fullName: p.full_name || "",
-          nicNo: p.employee_no || "",
+          nicNo: p.nic_no || p.nic || "",
           officerRole: "Member",
           studiedSchools: [],
           childrenSchools: [],
@@ -117,8 +120,9 @@ export default function InvestigationOfficersPage() {
         if (!error && data) {
           result = data.map((p: any) => ({
             id: p.id,
+            employeeNo: p.employee_no || "",
             fullName: p.full_name || "",
-            nicNo: p.employee_no || "",
+            nicNo: p.nic_no || p.nic || "",
             officerRole: "Member",
             studiedSchools: [],
             childrenSchools: [],
@@ -194,6 +198,7 @@ export default function InvestigationOfficersPage() {
   // ── Validation ─────────────────────────────────────────────────────────────
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
+    if (!formEmpNo.trim()) newErrors.empNo = "Employee No is required.";
     if (!formName.trim()) newErrors.name = t("pleaseFillAllFields", "Officer Name is required.");
     if (!formNic.trim()) newErrors.nic = "NIC No is required.";
     if (!formEmail.trim()) {
@@ -209,6 +214,7 @@ export default function InvestigationOfficersPage() {
   const openAddModal = () => {
     setIsEditMode(false);
     setEditingId(null);
+    setFormEmpNo("");
     setFormName("");
     setFormNic("");
     setFormOfficerRole("Member");
@@ -224,6 +230,7 @@ export default function InvestigationOfficersPage() {
   const openEditModal = (o: Officer) => {
     setIsEditMode(true);
     setEditingId(o.id);
+    setFormEmpNo(o.employeeNo || "");
     setFormName(o.fullName);
     setFormNic(o.nicNo || "");
     setFormOfficerRole(o.officerRole || "Member");
@@ -247,7 +254,7 @@ export default function InvestigationOfficersPage() {
 
     const payload = {
       id: targetId,
-      employee_no: formNic.trim() || `EMP-${Date.now().toString().slice(-6)}`,
+      employee_no: formEmpNo.trim() || `EMP-${Date.now().toString().slice(-6)}`,
       full_name: formName.trim(),
       email: formEmail.trim().toLowerCase(),
       role: "Investigation officer",
@@ -375,7 +382,7 @@ export default function InvestigationOfficersPage() {
           <table className="letters-data-table">
             <thead>
               <tr>
-                <th scope="col">Officer Name & NIC</th>
+                <th scope="col">Officer Name &amp; Credentials</th>
                 <th scope="col">Studied Schools</th>
                 <th scope="col">Children's Schools</th>
                 <th scope="col">{t("emailAddress", "E-mail Address")}</th>
@@ -400,9 +407,16 @@ export default function InvestigationOfficersPage() {
                           {item.officerRole || "Member"}
                         </span>
                       </div>
-                      <span style={{ fontSize: "11px", color: "#475569", display: "inline-block", backgroundColor: "#f1f5f9", padding: "1px 6px", borderRadius: "4px", marginTop: "2px" }}>
-                        NIC: {item.nicNo || "N/A"}
-                      </span>
+                      <div style={{ display: "flex", gap: "6px", marginTop: "4px", flexWrap: "wrap", alignItems: "center" }}>
+                        {item.employeeNo && (
+                          <span style={{ fontSize: "11px", color: "#1e40af", backgroundColor: "#dbeafe", padding: "1px 6px", borderRadius: "4px", fontWeight: 600 }}>
+                            Emp No: {item.employeeNo}
+                          </span>
+                        )}
+                        <span style={{ fontSize: "11px", color: "#475569", backgroundColor: "#f1f5f9", padding: "1px 6px", borderRadius: "4px" }}>
+                          NIC: {item.nicNo || "N/A"}
+                        </span>
+                      </div>
                     </td>
                     <td>
                       {item.studiedSchools && item.studiedSchools.length > 0 ? (
@@ -507,6 +521,8 @@ export default function InvestigationOfficersPage() {
                     </span>
                   </div>
                   <div style={{ display: "flex", gap: "10px", fontSize: "12px", color: "#64748b" }}>
+                    <span>Emp No: <strong style={{ color: "#334155" }}>{formEmpNo || "N/A"}</strong></span>
+                    <span>•</span>
                     <span>NIC: <strong style={{ color: "#334155" }}>{formNic || "N/A"}</strong></span>
                     <span>•</span>
                     <span>Status: <strong style={{ color: formStatus === "Active" ? "#16a34a" : "#dc2626" }}>{formStatus}</strong></span>
@@ -541,8 +557,23 @@ export default function InvestigationOfficersPage() {
                     {errors.name && <span className="field-error-text" style={{ fontSize: "11px", color: "#ef4444" }}>{errors.name}</span>}
                   </div>
 
-                  {/* NIC No & Role - 2 columns */}
+                  {/* Employee No & NIC No - 2 columns */}
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                    <div className="form-field-group">
+                      <label htmlFor="empNo" className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "12px" }}>
+                        Employee No <span className="required-star">*</span>
+                      </label>
+                      <input
+                        id="empNo"
+                        type="text"
+                        placeholder="e.g. EMP-100234"
+                        value={formEmpNo}
+                        onChange={(e) => setFormEmpNo(e.target.value)}
+                        className={`field-input ${errors.empNo ? "field-input-invalid" : ""}`}
+                        style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", width: "100%", fontSize: "13px" }}
+                      />
+                      {errors.empNo && <span className="field-error-text" style={{ fontSize: "11px", color: "#ef4444" }}>{errors.empNo}</span>}
+                    </div>
                     <div className="form-field-group">
                       <label htmlFor="nicNo" className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "12px" }}>
                         NIC No <span className="required-star">*</span>
@@ -558,6 +589,10 @@ export default function InvestigationOfficersPage() {
                       />
                       {errors.nic && <span className="field-error-text" style={{ fontSize: "11px", color: "#ef4444" }}>{errors.nic}</span>}
                     </div>
+                  </div>
+
+                  {/* Role / Position & Status - 2 columns */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
                     <div className="form-field-group">
                       <label htmlFor="officerRoleSelect" className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "12px" }}>
                         Role / Position <span className="required-star">*</span>
@@ -573,25 +608,6 @@ export default function InvestigationOfficersPage() {
                         <option value="Member">Member</option>
                       </select>
                     </div>
-                  </div>
-
-                  {/* Email & Status - 2 columns */}
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-                    <div className="form-field-group">
-                      <label htmlFor="email" className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "12px" }}>
-                        {t("emailAddress", "Email Address")} <span className="required-star">*</span>
-                      </label>
-                      <input
-                        id="email"
-                        type="email"
-                        placeholder="ranjith@moe.gov.lk"
-                        value={formEmail}
-                        onChange={(e) => setFormEmail(e.target.value)}
-                        className={`field-input ${errors.email ? "field-input-invalid" : ""}`}
-                        style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", width: "100%", fontSize: "13px" }}
-                      />
-                      {errors.email && <span className="field-error-text" style={{ fontSize: "11px", color: "#ef4444" }}>{errors.email}</span>}
-                    </div>
                     <div className="form-field-group">
                       <label htmlFor="status" className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "12px" }}>{t("status", "Account Status")}</label>
                       <select
@@ -605,6 +621,23 @@ export default function InvestigationOfficersPage() {
                         <option value="Inactive">{t("inactive", "Inactive")}</option>
                       </select>
                     </div>
+                  </div>
+
+                  {/* Email Address */}
+                  <div className="form-field-group">
+                    <label htmlFor="email" className="field-label" style={{ fontWeight: 600, color: "#334155", fontSize: "12px" }}>
+                      {t("emailAddress", "Email Address")} <span className="required-star">*</span>
+                    </label>
+                    <input
+                      id="email"
+                      type="email"
+                      placeholder="ranjith@moe.gov.lk"
+                      value={formEmail}
+                      onChange={(e) => setFormEmail(e.target.value)}
+                      className={`field-input ${errors.email ? "field-input-invalid" : ""}`}
+                      style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", width: "100%", fontSize: "13px" }}
+                    />
+                    {errors.email && <span className="field-error-text" style={{ fontSize: "11px", color: "#ef4444" }}>{errors.email}</span>}
                   </div>
 
                 </div>

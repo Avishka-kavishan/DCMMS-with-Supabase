@@ -36,6 +36,7 @@ interface Inquiry {
 
 interface Officer {
   id: string;
+  employeeNo?: string;
   fullName: string;
   nicNo?: string;
   officerRole?: "Chairman" | "Member";
@@ -694,6 +695,7 @@ export default function InvestigationPage() {
 
       result.push({
         id,
+        employeeNo: raw.employeeNo || raw.employee_no || "",
         fullName,
         nicNo: raw.nicNo || raw.nic_no || "",
         officerRole: roleType,

@@ -36,6 +36,7 @@ export default function InvestigationOfficerRegistrationPage() {
   const [fontScale, setFontScale] = useState<"small" | "medium" | "large">("medium");
 
   // Form State
+  const [formEmpNo, setFormEmpNo] = useState("");
   const [formName, setFormName] = useState("");
   const [formNic, setFormNic] = useState("");
   const [formOfficerRole, setFormOfficerRole] = useState<"Chairman" | "Member">("Member");
@@ -123,6 +124,9 @@ export default function InvestigationOfficerRegistrationPage() {
   // Form Validation
   const validateForm = () => {
     const errs: Record<string, string> = {};
+    if (!formEmpNo.trim()) {
+      errs.empNo = lang === "si" ? "සේවක අංකය ඇතුළත් කිරීම අනිවාර්ය වේ" : "Employee No is required";
+    }
     if (!formName.trim()) {
       errs.name = lang === "si" ? "නිලධාරියාගේ නම ඇතුළත් කිරීම අනිවාර්ය වේ" : "Officer Name is required";
     }
@@ -143,8 +147,10 @@ export default function InvestigationOfficerRegistrationPage() {
 
     setIsSaving(true);
     const now = new Date().toISOString().slice(0, 10);
+    const empNoFinal = formEmpNo.trim() || `EMP-${Date.now().toString().slice(-6)}`;
     const newOfficer = {
       id: `off-${Date.now()}`,
+      employeeNo: empNoFinal,
       fullName: formName.trim(),
       nicNo: formNic.trim(),
       officerRole: formOfficerRole,
@@ -177,6 +183,7 @@ export default function InvestigationOfficerRegistrationPage() {
       try {
         const invPayload = {
           id: newOfficer.id,
+          employee_no: newOfficer.employeeNo,
           full_name: newOfficer.fullName,
           nic_no: newOfficer.nicNo,
           officer_role: newOfficer.officerRole,
@@ -189,7 +196,7 @@ export default function InvestigationOfficerRegistrationPage() {
 
         // Sync to commitee_table & school_table in Supabase
         await supabase.from("commitee_table").upsert({
-          employee_no: newOfficer.nicNo || `EMP-${Date.now().toString().slice(-6)}`,
+          employee_no: newOfficer.employeeNo,
           full_name: newOfficer.fullName,
           email: newOfficer.email,
           position: newOfficer.officerRole,
@@ -198,7 +205,7 @@ export default function InvestigationOfficerRegistrationPage() {
         }).catch(() => {});
 
         await supabase.from("school_table").upsert({
-          employee_no: newOfficer.nicNo || `EMP-${Date.now().toString().slice(-6)}`,
+          employee_no: newOfficer.employeeNo,
           member_school_name: newOfficer.studiedSchools.join(", "),
           member_children_schools_name: newOfficer.childrenSchools.join(", "),
         }).catch(() => {});
@@ -223,7 +230,7 @@ export default function InvestigationOfficerRegistrationPage() {
           "REGISTER_OFFICER",
           "dcmms_investigation_officers",
           newOfficer.id,
-          { fullName: newOfficer.fullName, role: newOfficer.officerRole, nicNo: newOfficer.nicNo }
+          { fullName: newOfficer.fullName, role: newOfficer.officerRole, nicNo: newOfficer.nicNo, employeeNo: newOfficer.employeeNo }
         );
       } catch (err) {
         console.warn("Supabase save warning:", err);
@@ -232,7 +239,7 @@ export default function InvestigationOfficerRegistrationPage() {
 
     // Always dual-persist to local PostgreSQL commitee_table & school_table via Prisma Server Action
     saveCommitteeOfficerAndSchoolsServer({
-      employee_no: newOfficer.nicNo || `EMP-${Date.now().toString().slice(-6)}`,
+      employee_no: newOfficer.employeeNo,
       full_name: newOfficer.fullName,
       email: newOfficer.email,
       position: newOfficer.officerRole,
@@ -243,7 +250,7 @@ export default function InvestigationOfficerRegistrationPage() {
     }).catch((e) => console.error("PostgreSQL saveCommitteeOfficerAndSchoolsServer error:", e));
 
     saveRegisterOfficerServer({
-      employee_no: newOfficer.nicNo || `EMP-${Date.now().toString().slice(-6)}`,
+      employee_no: newOfficer.employeeNo,
       full_name: newOfficer.fullName,
       email: newOfficer.email,
       role: "Investigation officer",
@@ -251,6 +258,7 @@ export default function InvestigationOfficerRegistrationPage() {
     }).catch((e) => console.error("PostgreSQL saveRegisterOfficerServer error:", e));
 
     upsertInvestigationOfficerServer({
+      employee_no: newOfficer.employeeNo,
       officer_name: newOfficer.fullName,
       nic: newOfficer.nicNo,
       designation: newOfficer.officerRole,
@@ -262,7 +270,7 @@ export default function InvestigationOfficerRegistrationPage() {
       "REGISTER_OFFICER",
       "commitee_table",
       newOfficer.id,
-      { fullName: newOfficer.fullName, role: newOfficer.officerRole, nicNo: newOfficer.nicNo }
+      { fullName: newOfficer.fullName, role: newOfficer.officerRole, nicNo: newOfficer.nicNo, employeeNo: newOfficer.employeeNo }
     ).catch((e) => console.error("PostgreSQL audit error:", e));
 
     setIsSaving(false);
@@ -462,6 +470,8 @@ export default function InvestigationOfficerRegistrationPage() {
                     </span>
                   </div>
                   <div style={{ display: "flex", gap: "16px", fontSize: "13px", color: "#64748b" }}>
+                    <span>Emp No: <strong style={{ color: "#1e293b" }}>{formEmpNo || "N/A"}</strong></span>
+                    <span>•</span>
                     <span>NIC: <strong style={{ color: "#1e293b" }}>{formNic || "N/A"}</strong></span>
                     <span>•</span>
                     <span>Status: <strong style={{ color: formStatus === "Active" ? "#16a34a" : "#dc2626" }}>{formStatus}</strong></span>
@@ -498,8 +508,23 @@ export default function InvestigationOfficerRegistrationPage() {
                       {errors.name && <span style={{ fontSize: "11px", color: "#ef4444", marginTop: "3px", display: "block" }}>{errors.name}</span>}
                     </div>
 
-                    {/* NIC No & Role - 2 columns */}
+                    {/* Employee No & NIC No - 2 columns */}
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                      <div className="form-field-group">
+                        <label htmlFor="empNo" style={{ display: "block", fontWeight: 600, color: "#334155", fontSize: "13px", marginBottom: "4px" }}>
+                          {lang === "si" ? "සේවක අංකය (Employee No)" : "Employee No"} <span style={{ color: "#ef4444" }}>*</span>
+                        </label>
+                        <input
+                          id="empNo"
+                          type="text"
+                          placeholder="e.g. EMP-100234"
+                          value={formEmpNo}
+                          onChange={(e) => setFormEmpNo(e.target.value)}
+                          style={{ padding: "10px 12px", borderRadius: "8px", border: `1px solid ${errors.empNo ? "#ef4444" : "#cbd5e1"}`, width: "100%", fontSize: "14px", backgroundColor: "#ffffff" }}
+                        />
+                        {errors.empNo && <span style={{ fontSize: "11px", color: "#ef4444", marginTop: "3px", display: "block" }}>{errors.empNo}</span>}
+                      </div>
+
                       <div className="form-field-group">
                         <label htmlFor="nicNo" style={{ display: "block", fontWeight: 600, color: "#334155", fontSize: "13px", marginBottom: "4px" }}>
                           {lang === "si" ? "ජාතික හැඳුනුම්පත් අංකය" : "NIC No"} <span style={{ color: "#ef4444" }}>*</span>
@@ -514,7 +539,10 @@ export default function InvestigationOfficerRegistrationPage() {
                         />
                         {errors.nic && <span style={{ fontSize: "11px", color: "#ef4444", marginTop: "3px", display: "block" }}>{errors.nic}</span>}
                       </div>
+                    </div>
 
+                    {/* Role / Position & Account Status - 2 columns */}
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
                       <div className="form-field-group">
                         <label htmlFor="officerRoleSelect" style={{ display: "block", fontWeight: 600, color: "#334155", fontSize: "13px", marginBottom: "4px" }}>
                           {lang === "si" ? "තනතුර / වගකීම" : "Role / Position"} <span style={{ color: "#ef4444" }}>*</span>
@@ -528,24 +556,6 @@ export default function InvestigationOfficerRegistrationPage() {
                           <option value="Chairman">Chairman (සභාපති)</option>
                           <option value="Member">Member (සාමාජික)</option>
                         </select>
-                      </div>
-                    </div>
-
-                    {/* Email & Status - 2 columns */}
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                      <div className="form-field-group">
-                        <label htmlFor="email" style={{ display: "block", fontWeight: 600, color: "#334155", fontSize: "13px", marginBottom: "4px" }}>
-                          {lang === "si" ? "විද්‍යුත් තැපෑල" : "Email Address"} <span style={{ color: "#ef4444" }}>*</span>
-                        </label>
-                        <input
-                          id="email"
-                          type="email"
-                          placeholder="ranjith@moe.gov.lk"
-                          value={formEmail}
-                          onChange={(e) => setFormEmail(e.target.value)}
-                          style={{ padding: "10px 12px", borderRadius: "8px", border: `1px solid ${errors.email ? "#ef4444" : "#cbd5e1"}`, width: "100%", fontSize: "14px", backgroundColor: "#ffffff" }}
-                        />
-                        {errors.email && <span style={{ fontSize: "11px", color: "#ef4444", marginTop: "3px", display: "block" }}>{errors.email}</span>}
                       </div>
 
                       <div className="form-field-group">
@@ -562,6 +572,22 @@ export default function InvestigationOfficerRegistrationPage() {
                           <option value="Inactive">Inactive (අක්‍රිය)</option>
                         </select>
                       </div>
+                    </div>
+
+                    {/* Email Address */}
+                    <div className="form-field-group">
+                      <label htmlFor="email" style={{ display: "block", fontWeight: 600, color: "#334155", fontSize: "13px", marginBottom: "4px" }}>
+                        {lang === "si" ? "විද්‍යුත් තැපෑල" : "Email Address"} <span style={{ color: "#ef4444" }}>*</span>
+                      </label>
+                      <input
+                        id="email"
+                        type="email"
+                        placeholder="ranjith@moe.gov.lk"
+                        value={formEmail}
+                        onChange={(e) => setFormEmail(e.target.value)}
+                        style={{ padding: "10px 12px", borderRadius: "8px", border: `1px solid ${errors.email ? "#ef4444" : "#cbd5e1"}`, width: "100%", fontSize: "14px", backgroundColor: "#ffffff" }}
+                      />
+                      {errors.email && <span style={{ fontSize: "11px", color: "#ef4444", marginTop: "3px", display: "block" }}>{errors.email}</span>}
                     </div>
 
                   </div>
