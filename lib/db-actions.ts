@@ -982,6 +982,14 @@ export async function saveAccusedOfficerServer(officerData: any) {
       );
     `);
 
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS accused_officer_subject_officer_form_table (
+        accused_officer_id UUID NOT NULL REFERENCES accused_officer_table(id) ON DELETE CASCADE,
+        subject_officer_form_id BIGINT NOT NULL REFERENCES subject_officer_form_table(id) ON DELETE CASCADE,
+        PRIMARY KEY (accused_officer_id, subject_officer_form_id)
+      );
+    `);
+
     // 1. Create or update accused_school_table if school name is provided
     let schoolId: any = null;
     if (accused_school_name && String(accused_school_name).trim()) {
@@ -1013,56 +1021,82 @@ export async function saveAccusedOfficerServer(officerData: any) {
       }
     }
 
-    // 2. Create or update accused_officer_table
-    let officerId: string | null = null;
-    const nameTrimmed = accused_officer_name ? String(accused_officer_name).trim() : "";
-    const nicTrimmed = nic_no ? String(nic_no).trim() : "";
-
-    let existingOfficer: any[] = [];
-    if (nicTrimmed) {
-      existingOfficer = await prisma.$queryRaw`
-        SELECT id FROM accused_officer_table WHERE nic_no = ${nicTrimmed} LIMIT 1;
-      `;
-    }
-    if ((!existingOfficer || existingOfficer.length === 0) && nameTrimmed) {
-      existingOfficer = await prisma.$queryRaw`
-        SELECT id FROM accused_officer_table WHERE LOWER(accused_officer_name) = ${nameTrimmed.toLowerCase()} LIMIT 1;
-      `;
+    // 2. Prepare array of officer details to save
+    let officersToSave: any[] = [];
+    if (Array.isArray(data.accused_officers) && data.accused_officers.length > 0) {
+      officersToSave = data.accused_officers.filter((o: any) => o && (o.accused_officer_name || o.name || o.nic_no || o.nic));
+    } else if (accused_officer_name && String(accused_officer_name).trim()) {
+      officersToSave = [{
+        accused_officer_name,
+        address,
+        position,
+        date_of_birth,
+        nic_no,
+        appointment_date,
+      }];
     }
 
-    const dobVal = parseSafeDate(date_of_birth);
-    const apptVal = parseSafeDate(appointment_date);
+    // 3. Process and upsert each accused officer into accused_officer_table
+    const savedOfficerIds: string[] = [];
+    for (const off of officersToSave) {
+      const nameTrimmed = (off.accused_officer_name || off.name || "").trim();
+      const nicTrimmed = (off.nic_no || off.nic || "").trim();
+      const offAddress = off.address || null;
+      const offPos = off.position || null;
+      const dobVal = parseSafeDate(off.date_of_birth || off.dob);
+      const apptVal = parseSafeDate(off.appointment_date || off.appointmentDate);
 
-    if (existingOfficer && existingOfficer.length > 0) {
-      officerId = existingOfficer[0].id;
-      await prisma.$queryRaw`
-        UPDATE accused_officer_table
-        SET accused_officer_name = ${nameTrimmed || "Accused Officer"},
-            address = ${address || null},
-            position = ${position || null},
-            date_of_birth = ${dobVal},
-            nic_no = ${nicTrimmed || null},
-            appointment_date = ${apptVal},
-            accused_school_id = ${schoolId ? Number(schoolId) : null},
-            updated_at = NOW()
-        WHERE id = ${officerId}::uuid;
-      `;
-    } else {
-      const insertedOfficer: any[] = await prisma.$queryRaw`
-        INSERT INTO accused_officer_table (
-          accused_officer_name, address, position, date_of_birth, nic_no, appointment_date, accused_school_id
-        )
-        VALUES (
-          ${nameTrimmed || "Accused Officer"}, ${address || null}, ${position || null}, ${dobVal}, ${nicTrimmed || null}, ${apptVal}, ${schoolId ? Number(schoolId) : null}
-        )
-        RETURNING id;
-      `;
-      if (insertedOfficer && insertedOfficer.length > 0) {
-        officerId = insertedOfficer[0].id;
+      let officerId: string | null = null;
+      let existingOfficer: any[] = [];
+      if (nicTrimmed) {
+        existingOfficer = await prisma.$queryRaw`
+          SELECT id FROM accused_officer_table WHERE nic_no = ${nicTrimmed} LIMIT 1;
+        `;
+      }
+      if ((!existingOfficer || existingOfficer.length === 0) && nameTrimmed) {
+        existingOfficer = await prisma.$queryRaw`
+          SELECT id FROM accused_officer_table WHERE LOWER(accused_officer_name) = ${nameTrimmed.toLowerCase()} LIMIT 1;
+        `;
+      }
+
+      if (existingOfficer && existingOfficer.length > 0) {
+        officerId = existingOfficer[0].id;
+        await prisma.$queryRaw`
+          UPDATE accused_officer_table
+          SET accused_officer_name = ${nameTrimmed || "Accused Officer"},
+              address = ${offAddress},
+              position = ${offPos},
+              date_of_birth = ${dobVal},
+              nic_no = ${nicTrimmed || null},
+              appointment_date = ${apptVal},
+              accused_school_id = ${schoolId ? Number(schoolId) : null},
+              updated_at = NOW()
+          WHERE id = ${officerId}::uuid;
+        `;
+      } else {
+        const insertedOfficer: any[] = await prisma.$queryRaw`
+          INSERT INTO accused_officer_table (
+            accused_officer_name, address, position, date_of_birth, nic_no, appointment_date, accused_school_id
+          )
+          VALUES (
+            ${nameTrimmed || "Accused Officer"}, ${offAddress}, ${offPos}, ${dobVal}, ${nicTrimmed || null}, ${apptVal}, ${schoolId ? Number(schoolId) : null}
+          )
+          RETURNING id;
+        `;
+        if (insertedOfficer && insertedOfficer.length > 0) {
+          officerId = insertedOfficer[0].id;
+        }
+      }
+
+      if (officerId) {
+        savedOfficerIds.push(String(officerId));
       }
     }
 
-    // 3. Connect with subject_officer_form_table if ref_number is provided
+    const primaryOfficerId = savedOfficerIds.length > 0 ? savedOfficerIds[0] : null;
+
+    // 4. Connect with subject_officer_form_table if ref_number is provided
+    let formId: any = null;
     if (ref_number && String(ref_number).trim()) {
       const refTrimmed = String(ref_number).trim();
 
@@ -1084,9 +1118,10 @@ export async function saveAccusedOfficerServer(officerData: any) {
       `;
 
       if (existingForms && existingForms.length > 0) {
+        formId = existingForms[0].id;
         await prisma.$queryRaw`
           UPDATE subject_officer_form_table
-          SET accused_officer_id = ${officerId ? officerId : null}::uuid,
+          SET accused_officer_id = ${primaryOfficerId ? primaryOfficerId : null}::uuid,
               daily_mail_letter_id = ${dailyMailId ? Number(dailyMailId) : null},
               subject_file_no = ${subject_file_no || null},
               future_action = ${future_action || null},
@@ -1098,23 +1133,47 @@ export async function saveAccusedOfficerServer(officerData: any) {
           WHERE ref_number = ${refTrimmed};
         `;
       } else {
-        await prisma.$queryRaw`
+        const insertedForm: any[] = await prisma.$queryRaw`
           INSERT INTO subject_officer_form_table (
             ref_number, daily_mail_letter_id, accused_officer_id, subject_file_no, future_action,
             date_prepared_and_submitted_for_signature, classification_of_complaint_letter,
             name_of_the_presenting_the_complain, address_of_the_person_presenting_the_complaint
           )
           VALUES (
-            ${refTrimmed}, ${dailyMailId ? Number(dailyMailId) : null}, ${officerId ? officerId : null}::uuid,
+            ${refTrimmed}, ${dailyMailId ? Number(dailyMailId) : null}, ${primaryOfficerId ? primaryOfficerId : null}::uuid,
             ${subject_file_no || null}, ${future_action || null}, ${prepDateVal},
             ${classification_of_complaint_letter || null}, ${name_of_the_presenting_the_complain || null},
             ${address_of_the_person_presenting_the_complaint || null}
-          );
+          )
+          RETURNING id;
         `;
+        if (insertedForm && insertedForm.length > 0) {
+          formId = insertedForm[0].id;
+        }
+      }
+
+      // 5. Update Many-to-Many junction table accused_officer_subject_officer_form_table
+      if (formId) {
+        await prisma.$executeRaw`
+          DELETE FROM accused_officer_subject_officer_form_table WHERE subject_officer_form_id = ${Number(formId)}::bigint;
+        `;
+        for (const offId of savedOfficerIds) {
+          await prisma.$executeRaw`
+            INSERT INTO accused_officer_subject_officer_form_table (accused_officer_id, subject_officer_form_id)
+            VALUES (${offId}::uuid, ${Number(formId)}::bigint)
+            ON CONFLICT DO NOTHING;
+          `;
+        }
       }
     }
 
-    return { success: true, officer_id: officerId ? String(officerId) : null, school_id: schoolId ? String(schoolId) : null };
+    return {
+      success: true,
+      form_id: formId ? String(formId) : null,
+      officer_id: primaryOfficerId ? String(primaryOfficerId) : null,
+      officer_ids: savedOfficerIds,
+      school_id: schoolId ? String(schoolId) : null
+    };
   } catch (error: any) {
     console.error("Error in saveAccusedOfficerServer:", error);
     return { success: false, error: error?.message || "Failed to save accused officer details" };
@@ -1128,8 +1187,8 @@ export async function getAccusedOfficerByRefServer(refNumber: string) {
     }
     const refTrimmed = String(refNumber).trim();
 
-    // Query subject_officer_form_table joined with accused_officer_table & accused_school_table
-    const records: any[] = await prisma.$queryRaw`
+    // 1. Query subject_officer_form_table
+    const forms: any[] = await prisma.$queryRaw`
       SELECT 
         sof.id as form_id,
         sof.ref_number,
@@ -1139,6 +1198,22 @@ export async function getAccusedOfficerByRefServer(refNumber: string) {
         sof.classification_of_complaint_letter,
         sof.name_of_the_presenting_the_complain,
         sof.address_of_the_person_presenting_the_complaint,
+        sof.accused_officer_id
+      FROM subject_officer_form_table sof
+      WHERE sof.ref_number = ${refTrimmed}
+      LIMIT 1;
+    `;
+
+    if (!forms || forms.length === 0) {
+      return { success: true, data: null };
+    }
+
+    const form = forms[0];
+    const formId = form.form_id;
+
+    // 2. Query all assigned accused officers via Many-to-Many junction table
+    let assignedOfficers: any[] = await prisma.$queryRaw`
+      SELECT 
         ao.id as accused_officer_id,
         ao.accused_officer_name,
         ao.address as officer_address,
@@ -1152,48 +1227,72 @@ export async function getAccusedOfficerByRefServer(refNumber: string) {
         sch.province,
         sch.district,
         sch.zone
-      FROM subject_officer_form_table sof
-      LEFT JOIN accused_officer_table ao ON sof.accused_officer_id = ao.id
+      FROM accused_officer_subject_officer_form_table j
+      JOIN accused_officer_table ao ON j.accused_officer_id = ao.id
       LEFT JOIN accused_school_table sch ON ao.accused_school_id = sch.id
-      WHERE sof.ref_number = ${refTrimmed}
-      LIMIT 1;
+      WHERE j.subject_officer_form_id = ${Number(formId)}::bigint;
     `;
 
-    if (records && records.length > 0) {
-      const r = records[0];
-      return {
-        success: true,
-        data: {
-          form_id: r.form_id ? String(r.form_id) : null,
-          ref_number: r.ref_number,
-          subject_file_no: r.subject_file_no,
-          future_action: r.future_action,
-          date_prepared_and_submitted_for_signature: r.date_prepared_and_submitted_for_signature,
-          classification_of_complaint_letter: r.classification_of_complaint_letter,
-          name_of_the_presenting_the_complain: r.name_of_the_presenting_the_complain,
-          address_of_the_person_presenting_the_complaint: r.address_of_the_person_presenting_the_complaint,
-          accused_officer: {
-            id: r.accused_officer_id,
-            accused_officer_name: r.accused_officer_name,
-            address: r.officer_address,
-            position: r.position,
-            date_of_birth: r.date_of_birth,
-            nic_no: r.nic_no,
-            appointment_date: r.appointment_date,
-          },
-          accused_school: {
-            id: r.school_id ? String(r.school_id) : null,
-            accused_school_name: r.accused_school_name,
-            address: r.school_address,
-            province: r.province,
-            district: r.district,
-            zone: r.zone,
-          }
-        }
-      };
+    // Fallback: If no junction records exist yet, try legacy foreign key on subject_officer_form_table
+    if ((!assignedOfficers || assignedOfficers.length === 0) && form.accused_officer_id) {
+      assignedOfficers = await prisma.$queryRaw`
+        SELECT 
+          ao.id as accused_officer_id,
+          ao.accused_officer_name,
+          ao.address as officer_address,
+          ao.position,
+          ao.date_of_birth,
+          ao.nic_no,
+          ao.appointment_date,
+          sch.id as school_id,
+          sch.accused_school_name,
+          sch.address as school_address,
+          sch.province,
+          sch.district,
+          sch.zone
+        FROM accused_officer_table ao
+        LEFT JOIN accused_school_table sch ON ao.accused_school_id = sch.id
+        WHERE ao.id = ${form.accused_officer_id}::uuid;
+      `;
     }
 
-    return { success: true, data: null };
+    const officerList = (assignedOfficers || []).map((ao: any) => ({
+      id: ao.accused_officer_id,
+      accused_officer_name: ao.accused_officer_name,
+      address: ao.officer_address,
+      position: ao.position,
+      date_of_birth: ao.date_of_birth,
+      nic_no: ao.nic_no,
+      appointment_date: ao.appointment_date,
+    }));
+
+    const primaryOfficer = officerList.length > 0 ? officerList[0] : null;
+
+    const schoolInfo = assignedOfficers && assignedOfficers.length > 0 && assignedOfficers[0].school_id ? {
+      id: String(assignedOfficers[0].school_id),
+      accused_school_name: assignedOfficers[0].accused_school_name,
+      address: assignedOfficers[0].school_address,
+      province: assignedOfficers[0].province,
+      district: assignedOfficers[0].district,
+      zone: assignedOfficers[0].zone,
+    } : null;
+
+    return {
+      success: true,
+      data: {
+        form_id: String(form.form_id),
+        ref_number: form.ref_number,
+        subject_file_no: form.subject_file_no,
+        future_action: form.future_action,
+        date_prepared_and_submitted_for_signature: form.date_prepared_and_submitted_for_signature,
+        classification_of_complaint_letter: form.classification_of_complaint_letter,
+        name_of_the_presenting_the_complain: form.name_of_the_presenting_the_complain,
+        address_of_the_person_presenting_the_complaint: form.address_of_the_person_presenting_the_complaint,
+        accused_officer: primaryOfficer,
+        accused_officers: officerList,
+        accused_school: schoolInfo,
+      }
+    };
   } catch (error: any) {
     console.error("Error in getAccusedOfficerByRefServer:", error);
     return { success: false, error: error?.message || "Failed to fetch accused officer details" };

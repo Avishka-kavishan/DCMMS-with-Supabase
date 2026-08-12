@@ -74,3 +74,10 @@ CREATE TABLE IF NOT EXISTS dcmms_investigation_officers (
     appointment_date DATE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 7. Accused Officer to Subject Officer Form Many-to-Many Junction Table
+CREATE TABLE IF NOT EXISTS accused_officer_subject_officer_form_table (
+    accused_officer_id UUID NOT NULL REFERENCES accused_officer_table(id) ON DELETE CASCADE,
+    subject_officer_form_id BIGINT NOT NULL REFERENCES subject_officer_form_table(id) ON DELETE CASCADE,
+    PRIMARY KEY (accused_officer_id, subject_officer_form_id)
+);

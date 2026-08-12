@@ -1,82 +1,98 @@
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
-async function testFlow() {
-  console.log("--- Starting Accused Officer Database Connection Test ---");
+function parseSafeDate(val) {
+  if (!val) return null;
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? null : d;
+}
 
-  const testRef = "TEST-REF-ACCUSED-" + Date.now();
-  const nameTrimmed = "Kavishan Perera";
-  const nicTrimmed = "881350999V";
-  const schoolNameTrimmed = "Kandy National School";
+async function testFlow() {
+  console.log("--- Starting Accused Officer Many-to-Many M:N Relationship Test ---");
+
+  const testRef1 = "TEST-REF-MN-1-" + Date.now();
+  const testRef2 = "TEST-REF-MN-2-" + Date.now();
 
   try {
-    // 1. Insert/Update accused_school_table
-    console.log("1. Testing insertion into accused_school_table...");
-    const schoolRes = await prisma.$queryRaw`
-      INSERT INTO accused_school_table (accused_school_name, address, province, district, zone)
-      VALUES (${schoolNameTrimmed}, 'Kandy Road', 'Central', 'Kandy', 'Kandy')
+    // 1. Insert 2 Accused Officers into accused_officer_table
+    console.log("1. Inserting 2 Accused Officers...");
+    const off1 = await prisma.$queryRaw`
+      INSERT INTO accused_officer_table (accused_officer_name, address, position, date_of_birth, nic_no)
+      VALUES ('Kamal Perera', '123 Kandy Road', 'Teacher', '1985-05-12'::date, ${'851350001V'})
       RETURNING id;
     `;
-    const schoolId = schoolRes[0].id;
-    console.log("Inserted school ID:", schoolId);
+    const officerId1 = off1[0].id;
 
-    // 2. Insert into accused_officer_table
-    console.log("2. Testing insertion into accused_officer_table...");
-    const officerRes = await prisma.$queryRaw`
-      INSERT INTO accused_officer_table (
-        accused_officer_name, address, position, date_of_birth, nic_no, appointment_date, accused_school_id
-      )
-      VALUES (
-        ${nameTrimmed}, '123 Kandy Road', 'Teacher', '1990-01-01'::date, ${nicTrimmed}, '2015-06-01'::date, ${schoolId}::bigint
-      )
+    const off2 = await prisma.$queryRaw`
+      INSERT INTO accused_officer_table (accused_officer_name, address, position, date_of_birth, nic_no)
+      VALUES ('Nimal Silva', '456 Colombo Road', 'Principal', '1980-01-20'::date, ${'801350002V'})
       RETURNING id;
     `;
-    const officerId = officerRes[0].id;
-    console.log("Inserted accused officer ID:", officerId);
+    const officerId2 = off2[0].id;
 
-    // 3. Insert into subject_officer_form_table
-    console.log("3. Testing insertion into subject_officer_form_table...");
-    await prisma.$queryRaw`
-      INSERT INTO subject_officer_form_table (
-        ref_number, accused_officer_id, classification_of_complaint_letter,
-        name_of_the_presenting_the_complain, address_of_the_person_presenting_the_complaint
-      )
-      VALUES (
-        ${testRef}, ${officerId}::uuid, 'nominal', 'Complainant Name', 'Complainant Address'
-      );
+    console.log(`Inserted Officers: ${officerId1}, ${officerId2}`);
+
+    // 2. Insert 2 Subject Officer Forms
+    console.log("2. Inserting 2 Subject Officer Forms...");
+    const form1 = await prisma.$queryRaw`
+      INSERT INTO subject_officer_form_table (ref_number, accused_officer_id, classification_of_complaint_letter)
+      VALUES (${testRef1}, ${officerId1}::uuid, 'nominal')
+      RETURNING id;
+    `;
+    const formId1 = form1[0].id;
+
+    const form2 = await prisma.$queryRaw`
+      INSERT INTO subject_officer_form_table (ref_number, accused_officer_id, classification_of_complaint_letter)
+      VALUES (${testRef2}, ${officerId1}::uuid, 'nominal')
+      RETURNING id;
+    `;
+    const formId2 = form2[0].id;
+
+    console.log(`Inserted Forms: ${formId1}, ${formId2}`);
+
+    // 3. Assign Officer 1 & Officer 2 to Form 1 (Many officers assigned to Form 1)
+    //    And Officer 1 assigned to Form 2 (Officer 1 assigned to Many forms)
+    console.log("3. Assigning Officers to Forms in accused_officer_subject_officer_form_table...");
+    await prisma.$executeRaw`
+      INSERT INTO accused_officer_subject_officer_form_table (accused_officer_id, subject_officer_form_id)
+      VALUES 
+        (${officerId1}::uuid, ${formId1}::bigint),
+        (${officerId2}::uuid, ${formId1}::bigint),
+        (${officerId1}::uuid, ${formId2}::bigint);
     `;
 
-    // 4. Query joined tables
-    console.log("4. Querying subject_officer_form_table JOIN accused_officer_table JOIN accused_school_table...");
-    const records = await prisma.$queryRaw`
-      SELECT 
-        sof.ref_number,
-        sof.classification_of_complaint_letter,
-        ao.accused_officer_name,
-        ao.position,
-        ao.nic_no,
-        sch.accused_school_name
-      FROM subject_officer_form_table sof
-      JOIN accused_officer_table ao ON sof.accused_officer_id = ao.id
-      JOIN accused_school_table sch ON ao.accused_school_id = sch.id
-      WHERE sof.ref_number = ${testRef};
+    // 4. Query assigned officers for Form 1
+    console.log("4. Querying assigned officers for Form 1...");
+    const form1Officers = await prisma.$queryRaw`
+      SELECT ao.accused_officer_name, ao.position, ao.nic_no 
+      FROM accused_officer_subject_officer_form_table j
+      JOIN accused_officer_table ao ON j.accused_officer_id = ao.id
+      WHERE j.subject_officer_form_id = ${formId1}::bigint;
     `;
+    console.log("Form 1 Officers:", form1Officers);
 
-    console.log("Retrieved record:", records[0]);
+    // 5. Query assigned forms for Officer 1
+    console.log("5. Querying assigned forms for Officer 1 (Kamal Perera)...");
+    const officer1Forms = await prisma.$queryRaw`
+      SELECT sof.ref_number, sof.classification_of_complaint_letter 
+      FROM accused_officer_subject_officer_form_table j
+      JOIN subject_officer_form_table sof ON j.subject_officer_form_id = sof.id
+      WHERE j.accused_officer_id = ${officerId1}::uuid;
+    `;
+    console.log("Officer 1 Forms:", officer1Forms);
 
-    if (records && records.length > 0 && records[0].accused_officer_name === nameTrimmed) {
-      console.log("✅ SUCCESS: Accused Officer Details form is fully connected with accused_officer_table, accused_school_table, and subject_officer_form_table!");
+    if (form1Officers.length === 2 && officer1Forms.length === 2) {
+      console.log("✅ SUCCESS: Many-to-Many M:N relationship verified! (1 form has many officers & 1 officer has many forms)");
     } else {
-      console.error("❌ FAILURE: Retried records did not match inserted values.");
+      console.error("❌ FAILURE: Many-to-Many queries did not return expected row counts.");
     }
 
     // Cleanup
-    await prisma.$executeRaw`DELETE FROM subject_officer_form_table WHERE ref_number = ${testRef}`;
-    await prisma.$executeRaw`DELETE FROM accused_officer_table WHERE id = ${officerId}::uuid`;
-    await prisma.$executeRaw`DELETE FROM accused_school_table WHERE id = ${schoolId}::bigint`;
-    console.log("Cleaned up test data.");
+    await prisma.$executeRaw`DELETE FROM subject_officer_form_table WHERE id IN (${formId1}::bigint, ${formId2}::bigint)`;
+    await prisma.$executeRaw`DELETE FROM accused_officer_table WHERE id IN (${officerId1}::uuid, ${officerId2}::uuid)`;
+    console.log("Cleaned up test records.");
   } catch (err) {
-    console.error("Test failed with error:", err);
+    console.error("Test failed:", err);
   } finally {
     await prisma.$disconnect();
   }

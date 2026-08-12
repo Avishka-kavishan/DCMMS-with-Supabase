@@ -43,18 +43,19 @@ model DailyMailLetterTable {
 }
 
 model accused_officer_table {
-  id                         String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  accused_officer_name       String                    @db.VarChar(255)
-  address                    String?
-  position                   String?                   @db.VarChar(150)
-  date_of_birth              DateTime?                 @db.Date
-  nic_no                     String?                   @db.VarChar(12)
-  appointment_date           DateTime?                 @db.Date
-  created_at                 DateTime?                 @default(now()) @db.Timestamptz(6)
-  updated_at                 DateTime?                 @default(now()) @db.Timestamptz(6)
-  accused_school_id          BigInt?
-  accused_school_table       accused_school_table?     @relation(fields: [accused_school_id], references: [id], onUpdate: NoAction)
-  subject_officer_form_table SubjectOfficerFormTable[]
+  id                                         String                                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  accused_officer_name                       String                                       @db.VarChar(255)
+  address                                    String?
+  position                                   String?                                      @db.VarChar(150)
+  date_of_birth                              DateTime?                                    @db.Date
+  nic_no                                     String?                                      @db.VarChar(12)
+  appointment_date                           DateTime?                                    @db.Date
+  created_at                                 DateTime?                                    @default(now()) @db.Timestamptz(6)
+  updated_at                                 DateTime?                                    @default(now()) @db.Timestamptz(6)
+  accused_school_id                          BigInt?
+  accused_school_table                       accused_school_table?                        @relation(fields: [accused_school_id], references: [id], onUpdate: NoAction)
+  subject_officer_form_table                 SubjectOfficerFormTable[]
+  accused_officer_subject_officer_form_table accused_officer_subject_officer_form_table[]
 }
 
 model accused_school_table {
@@ -70,22 +71,33 @@ model accused_school_table {
 }
 
 model SubjectOfficerFormTable {
-  id                                              BigInt                @id @default(autoincrement())
+  id                                              BigInt                                       @id @default(autoincrement())
   daily_mail_letter_id                            BigInt?
-  ref_number                                      String?               @db.VarChar(100)
-  subject_file_no                                 String?               @db.VarChar(100)
+  ref_number                                      String?                                      @db.VarChar(100)
+  subject_file_no                                 String?                                      @db.VarChar(100)
   future_action                                   String?
-  date_prepared_and_submitted_for_signature       DateTime?             @db.Date
-  classification_of_complaint_letter              String?               @db.VarChar(100)
-  name_of_the_presenting_the_complain             String?               @db.VarChar(255)
+  date_prepared_and_submitted_for_signature       DateTime?                                    @db.Date
+  classification_of_complaint_letter              String?                                      @db.VarChar(100)
+  name_of_the_presenting_the_complain             String?                                      @db.VarChar(255)
   address_of_the_person_presenting_the_complaint String?
-  accused_officer_id                              String?               @db.Uuid
-  accused_officer                                 accused_officer_table? @relation(fields: [accused_officer_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
-  daily_mail_letter                               DailyMailLetterTable? @relation(fields: [daily_mail_letter_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
-  created_at                                      DateTime?             @default(now()) @db.Timestamptz(6)
-  updated_at                                      DateTime?             @default(now()) @db.Timestamptz(6)
+  accused_officer_id                              String?                                      @db.Uuid
+  accused_officer                                 accused_officer_table?                       @relation(fields: [accused_officer_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  daily_mail_letter                               DailyMailLetterTable?                        @relation(fields: [daily_mail_letter_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  created_at                                      DateTime?                                    @default(now()) @db.Timestamptz(6)
+  updated_at                                      DateTime?                                    @default(now()) @db.Timestamptz(6)
+  accused_officer_subject_officer_form_table      accused_officer_subject_officer_form_table[]
 
   @@map("subject_officer_form_table")
+}
+
+model accused_officer_subject_officer_form_table {
+  accused_officer_id      String                  @db.Uuid
+  subject_officer_form_id BigInt
+  accused_officer         accused_officer_table   @relation(fields: [accused_officer_id], references: [id], onDelete: Cascade)
+  subject_officer_form    SubjectOfficerFormTable @relation(fields: [subject_officer_form_id], references: [id], onDelete: Cascade)
+
+  @@id([accused_officer_id, subject_officer_form_id])
+  @@map("accused_officer_subject_officer_form_table")
 }
 
 model institute_table {

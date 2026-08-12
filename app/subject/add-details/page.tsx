@@ -617,17 +617,25 @@ function CaseDetailsForm() {
               setReceivedDate(String(d.date_prepared_and_submitted_for_signature).split("T")[0]);
             }
 
-            const ao = d.accused_officer;
-            if (ao && (ao.accused_officer_name || ao.position || ao.nic_no)) {
-              setConcernedPersons([{
+            const officersList = Array.isArray(d.accused_officers) && d.accused_officers.length > 0
+              ? d.accused_officers
+              : (d.accused_officer ? [d.accused_officer] : []);
+
+            if (officersList.length > 0) {
+              const mappedPersons = officersList.map((ao: any) => ({
+                id: ao.id,
                 name: cleanVal(ao.accused_officer_name),
                 position: cleanVal(ao.position),
                 dob: ao.date_of_birth ? String(ao.date_of_birth).split("T")[0] : "",
                 nic: cleanVal(ao.nic_no),
                 appointmentDate: ao.appointment_date ? String(ao.appointment_date).split("T")[0] : "",
                 address: cleanVal(ao.address),
-              }]);
-              setIsConcerned("yes");
+              })).filter(p => p.name || p.position || p.nic);
+
+              if (mappedPersons.length > 0) {
+                setConcernedPersons(mappedPersons);
+                setIsConcerned("yes");
+              }
             }
 
             const sch = d.accused_school;
@@ -893,15 +901,28 @@ function CaseDetailsForm() {
 
     // 1. Save directly into PostgreSQL database tables (subject_officer_form_table, accused_officer_table, accused_school_table, institute_table)
     try {
-      const firstPerson = isConcerned === "yes" && concernedPersons.length > 0 ? concernedPersons[0] : null;
+      const formattedAccusedOfficers = isConcerned === "yes"
+        ? concernedPersons.map(p => ({
+            accused_officer_name: p.name || "",
+            address: p.address || "",
+            position: p.position || "",
+            date_of_birth: p.dob || null,
+            nic_no: p.nic || null,
+            appointment_date: p.appointmentDate || null,
+          })).filter(p => (p.accused_officer_name && p.accused_officer_name.trim()) || p.nic_no)
+        : [];
+
+      const firstPerson = formattedAccusedOfficers.length > 0 ? formattedAccusedOfficers[0] : null;
+
       const res = await saveAccusedOfficerServer({
         ref_number: refNo,
-        accused_officer_name: isConcerned === "yes" ? (firstPerson?.name || "") : "",
-        address: isConcerned === "yes" ? (firstPerson?.address || "") : "",
-        position: isConcerned === "yes" ? (firstPerson?.position || "") : "",
-        date_of_birth: isConcerned === "yes" ? (firstPerson?.dob || null) : null,
-        nic_no: isConcerned === "yes" ? (firstPerson?.nic || null) : null,
-        appointment_date: isConcerned === "yes" ? (firstPerson?.appointmentDate || null) : null,
+        accused_officers: formattedAccusedOfficers,
+        accused_officer_name: firstPerson?.accused_officer_name || "",
+        address: firstPerson?.address || "",
+        position: firstPerson?.position || "",
+        date_of_birth: firstPerson?.date_of_birth || null,
+        nic_no: firstPerson?.nic_no || null,
+        appointment_date: firstPerson?.appointment_date || null,
         accused_school_name: schoolName || "",
         school_address: schoolAddress || "",
         province: schoolProvince || "",
