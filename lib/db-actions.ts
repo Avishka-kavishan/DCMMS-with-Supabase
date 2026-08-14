@@ -1249,23 +1249,23 @@ export async function saveAccusedOfficerServer(officerData: any) {
       }
     }
 
-    return {
+    return serializeForServerAction({
       success: true,
       form_id: formId ? String(formId) : null,
       officer_id: primaryOfficerId ? String(primaryOfficerId) : null,
       officer_ids: savedOfficerIds,
       school_id: schoolId ? String(schoolId) : null
-    };
+    });
   } catch (error: any) {
     console.error("Error in saveAccusedOfficerServer:", error);
-    return { success: false, error: error?.message || "Failed to save accused officer details" };
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to save accused officer details" });
   }
 }
 
 export async function getAccusedOfficerByRefServer(refNumber: string) {
   try {
     if (!refNumber || !String(refNumber).trim()) {
-      return { success: false, error: "Ref number is required" };
+      return serializeForServerAction({ success: false, error: "Ref number is required" });
     }
     const refTrimmed = String(refNumber).trim();
 
@@ -1318,7 +1318,7 @@ export async function getAccusedOfficerByRefServer(refNumber: string) {
             institute_name: null,
             school_address: null,
           }));
-          return {
+          return serializeForServerAction({
             success: true,
             data: {
               form_id: null,
@@ -1328,11 +1328,11 @@ export async function getAccusedOfficerByRefServer(refNumber: string) {
               accused_officers: officerList,
               accused_school: null,
             }
-          };
+          });
         }
       } catch (e) {}
 
-      return { success: true, data: null };
+      return serializeForServerAction({ success: true, data: null });
     }
 
     const form = forms[0];
@@ -1433,10 +1433,10 @@ export async function getAccusedOfficerByRefServer(refNumber: string) {
 
     const primaryOfficer = officerList.length > 0 ? officerList[0] : null;
 
-    return {
+    return serializeForServerAction({
       success: true,
       data: {
-        form_id: String(form.form_id),
+        form_id: form.form_id ? String(form.form_id) : null,
         ref_number: form.ref_number,
         subject_file_no: form.subject_file_no,
         future_action: form.future_action,
@@ -1448,10 +1448,10 @@ export async function getAccusedOfficerByRefServer(refNumber: string) {
         accused_officers: officerList,
         accused_school: schoolInfo,
       }
-    };
+    });
   } catch (error: any) {
     console.error("Error in getAccusedOfficerByRefServer:", error);
-    return { success: false, error: error?.message || "Failed to fetch accused officer details" };
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to fetch accused officer details" });
   }
 }
 

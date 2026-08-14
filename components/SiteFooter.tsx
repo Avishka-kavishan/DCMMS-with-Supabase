@@ -49,7 +49,7 @@ export function SiteFooter() {
               </div>
               <div className="footer-contact-details">
                 <span className="footer-contact-label">{t("footerBranchLabel", "Data Management Branch")}</span>
-                <span className="footer-contact-value">+94 72 60 664</span>
+                <span className="footer-contact-value"> +94 11 280 5891</span>
               </div>
             </li>
             <li>
@@ -59,7 +59,7 @@ export function SiteFooter() {
               <div className="footer-contact-details">
                 <span className="footer-contact-label">{t("footerEmailLabel", "E mail")}</span>
                 <a href="mailto:datamanagement@gmail.com" className="footer-contact-value footer-link">
-                  datamanagement@gmail.com
+                  datamanagementbranch@gmail.com
                 </a>
               </div>
             </li>
@@ -87,7 +87,7 @@ export function SiteFooter() {
               </div>
               <div className="footer-info-details">
                 <span className="footer-info-label">{t("footerVersionLabel", "Version")}</span>
-                <span className="footer-info-value">1.0.0</span>
+                <span className="footer-info-value">1.2.0</span>
               </div>
             </li>
             <li>

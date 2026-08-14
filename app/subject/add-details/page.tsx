@@ -236,6 +236,72 @@ function CaseDetailsForm() {
   const [complaintMatter, setComplaintMatter] = useState("");
   const [complaintAge, setComplaintAge] = useState<"new" | "old">("new");
 
+  const isUserEditingReportStateRef = useRef(false);
+
+  const normalizeReportState = (val: string | null | undefined): string => {
+    if (!val) return "";
+    const trimmed = String(val).trim();
+    if (!trimmed || trimmed.toUpperCase() === "N/A" || trimmed === "—" || trimmed === "-") return "";
+
+    const optionMap: Record<string, string[]> = {
+      statusCallingReports: [
+        "statuscallingreports",
+        "calling reports from principal/zone/province/police",
+        "විදුහල්පති/කලාප/පළාත්/පොලිස් වාර්තා කැදවීම",
+      ],
+      statusCallingCourtReports: [
+        "statuscallingcourtreports",
+        "calling court reports",
+        "අධිකරණ වාර්තා කැදවීම",
+        "උසාවි වාර්තා කැදවීම",
+      ],
+      statusPreliminaryInvestigation: [
+        "statuspreliminaryinvestigation",
+        "conducting preliminary investigations",
+        "මූලික විමර්ශන සිදු කිරීම",
+      ],
+      statusInquiry: [
+        "statusinquiry",
+        "conducting an inquiry",
+        "පරීක්ෂණයක් සිදු කිරීම",
+        "පරීක්ෂණයක් පැවැත්වීම",
+      ],
+      statusConsultRelevantInstitutes: [
+        "statusconsultrelevantinstitutes",
+        "taking advice from relevant institutes for complaints",
+        "පැමිණිලි සදහා අදාළ ආයතන වලින් උපදෙස් ලබා ගැනීම",
+        "පැමිණිලි සදහා අදාල ආයතන වලින් උපදෙස් ලබා ගැනීම",
+      ],
+      statusObtainStatements: [
+        "statusobtainstatements",
+        "proceeding by taking statements",
+        "ප්රකාශ ලබා ගැනීම මගින් ඉදිරි කටයුතු සිදු කිරීම",
+        "කටඋත්තර ලබා ගනිමින් කටයුතු කිරීම",
+      ],
+      statusUnclearAnonymous: [
+        "statusunclearanonymous",
+        "unclear facts / anonymous letters file",
+        "කරුණු අපැදිලි/නිර්නාමික ලිපි ගොනු",
+        "අපැහැදිලි තොරතුරු / නිර්නාමික ලිපි ගොනු කිරීම",
+      ],
+      statusReferOtherInstitute: [
+        "statusreferotherinstitute",
+        "referring letters not related to this ministry system to other institutes",
+        "මෙම අමාත්යංශ පද්ධතියට අයත් නොවන ලිපි වෙනත් ආයතන වෙත යොමු කිරීම",
+        "මෙම අමාත්‍යාංශ පද්ධතියට අදාල නැති ලිපි වෙනත් ආයතන වලට යොමු කිරීම",
+      ],
+    };
+
+    const lower = trimmed.toLowerCase();
+    for (const [key, aliases] of Object.entries(optionMap)) {
+      if (key.toLowerCase() === lower || aliases.some((a) => a.toLowerCase() === lower)) {
+        return key;
+      }
+    }
+
+    return trimmed;
+  };
+
   // Institute Autocomplete States (from institute_table)
   const isUserEditingSchoolRef = useRef(false);
   const [institutesList, setInstitutesList] = useState<{ name: string; address: string; province: string; district: string; zone: string }[]>([]);
@@ -245,7 +311,15 @@ function CaseDetailsForm() {
   useEffect(() => {
     const fetchInstitutesForAutocomplete = async () => {
       try {
-        const res = await getInstitutesServer();
+        let res: any = null;
+        try {
+          res = await getInstitutesServer();
+        } catch (actionErr) {
+          try {
+            const apiRes = await fetch("/api/institutes");
+            if (apiRes.ok) res = await apiRes.json();
+          } catch (e) {}
+        }
         if (res && res.success && Array.isArray(res.data)) {
           const list = res.data
             .map((item: any) => {
@@ -537,7 +611,9 @@ function CaseDetailsForm() {
               if (mapped.length > 0) {
                 const latest = mapped[0];
                 setSubjectOfficer(latest.subjectOfficerName || "");
-                setReportState(latest.reportState || "");
+                if (!isUserEditingReportStateRef.current) {
+                  setReportState(normalizeReportState(latest.reportState));
+                }
                 setReceivedDate(latest.receivedDate || "2026-06-23");
                 
                 const rawStep = latest.stepTaken || "";
@@ -600,9 +676,17 @@ function CaseDetailsForm() {
           }
         }
 
-        // Always load PostgreSQL form, accused officer & school details directly via getAccusedOfficerByRefServer
+        // Always load PostgreSQL form, accused officer & school details directly via getAccusedOfficerByRefServer with API fallback
         try {
-          const pgRes = await getAccusedOfficerByRefServer(caseNoParam);
+          let pgRes: any = null;
+          try {
+            pgRes = await getAccusedOfficerByRefServer(caseNoParam);
+          } catch (actionErr) {
+            try {
+              const apiRes = await fetch(`/api/subject-officer-form?ref_number=${encodeURIComponent(caseNoParam)}`);
+              if (apiRes.ok) pgRes = await apiRes.json();
+            } catch (e) {}
+          }
           if (pgRes && pgRes.success && pgRes.data) {
             const d = pgRes.data;
             const cleanVal = (val: string | null | undefined) => {
@@ -624,8 +708,8 @@ function CaseDetailsForm() {
             if (d.subject_file_no) {
               setSpecialNotes(cleanVal(d.subject_file_no));
             }
-            if (d.future_action) {
-              setComplaintMatter(cleanVal(d.future_action));
+            if (!isUserEditingReportStateRef.current && d.future_action) {
+              setReportState(normalizeReportState(d.future_action));
             }
             if (d.date_prepared_and_submitted_for_signature) {
               setReceivedDate(String(d.date_prepared_and_submitted_for_signature).split("T")[0]);
@@ -644,7 +728,7 @@ function CaseDetailsForm() {
                 nic: cleanVal(ao.nic_no),
                 appointmentDate: ao.appointment_date ? String(ao.appointment_date).split("T")[0] : "",
                 address: cleanVal(ao.address),
-              })).filter(p => p.name || p.position || p.nic);
+              })).filter((p: any) => p.name || p.position || p.nic);
 
               if (mappedPersons.length > 0) {
                 setConcernedPersons(mappedPersons);
@@ -711,7 +795,9 @@ function CaseDetailsForm() {
               if (foundActions.length > 0) {
                 const latest = foundActions[0];
                 setSubjectOfficer(latest.subjectOfficerName || "");
-                setReportState(latest.reportState || "");
+                if (!isUserEditingReportStateRef.current) {
+                  setReportState(normalizeReportState(latest.reportState));
+                }
                 setReceivedDate(latest.receivedDate || "2026-06-23");
                 
                 const rawStep = latest.stepTaken || "";
@@ -932,7 +1018,7 @@ function CaseDetailsForm() {
 
       const firstPerson = formattedAccusedOfficers.length > 0 ? formattedAccusedOfficers[0] : null;
 
-      const res = await saveAccusedOfficerServer({
+      const payload = {
         ref_number: refNo,
         accused_officers: formattedAccusedOfficers,
         accused_officer_name: firstPerson?.accused_officer_name || "",
@@ -951,14 +1037,38 @@ function CaseDetailsForm() {
         classification_of_complaint_letter: classification,
         name_of_the_presenting_the_complain: classification === "nominal" ? complainantName : "Anonymous",
         address_of_the_person_presenting_the_complaint: classification === "nominal" ? complainantAddress : "N/A",
-        future_action: complaintMatter || specialNotes || "",
-      });
+        future_action: reportState || "",
+      };
+
+      let res: any = null;
+      try {
+        res = await saveAccusedOfficerServer(payload);
+      } catch (actionErr) {
+        try {
+          const apiRes = await fetch("/api/subject-officer-form", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          if (apiRes.ok) res = await apiRes.json();
+        } catch (e) {}
+      }
 
       if (schoolName && schoolName.trim()) {
-        await saveInstituteServer({
-          name: schoolName.trim(),
-          address: schoolAddress ? schoolAddress.trim() : "",
-        });
+        try {
+          await saveInstituteServer({
+            name: schoolName.trim(),
+            address: schoolAddress ? schoolAddress.trim() : "",
+          });
+        } catch (actionErr) {
+          try {
+            await fetch("/api/institutes", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ name: schoolName.trim(), address: schoolAddress ? schoolAddress.trim() : "" }),
+            });
+          } catch (e) {}
+        }
       }
     } catch (postErr) {
       console.error("Failed to save data to PostgreSQL database tables:", postErr);
@@ -1624,7 +1734,10 @@ function CaseDetailsForm() {
                                 <select
                                   id="reportState"
                                   value={reportState}
-                                  onChange={(e) => setReportState(e.target.value)}
+                                  onChange={(e) => {
+                                    isUserEditingReportStateRef.current = true;
+                                    setReportState(e.target.value);
+                                  }}
                                   className="field-select"
                                   required
                                 >
@@ -1637,6 +1750,22 @@ function CaseDetailsForm() {
                                   <option value="statusObtainStatements">{t("statusObtainStatements")}</option>
                                   <option value="statusUnclearAnonymous">{t("statusUnclearAnonymous")}</option>
                                   <option value="statusReferOtherInstitute">{t("statusReferOtherInstitute")}</option>
+                                  {reportState &&
+                                    ![
+                                      "",
+                                      "statusCallingReports",
+                                      "statusCallingCourtReports",
+                                      "statusPreliminaryInvestigation",
+                                      "statusInquiry",
+                                      "statusConsultRelevantInstitutes",
+                                      "statusObtainStatements",
+                                      "statusUnclearAnonymous",
+                                      "statusReferOtherInstitute",
+                                    ].includes(reportState) && (
+                                      <option value={reportState}>
+                                        {t(reportState, reportState)}
+                                      </option>
+                                    )}
                                 </select>
                                 <div className="select-arrow-container">
                                   <svg className="select-arrow-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
