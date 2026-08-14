@@ -2003,6 +2003,134 @@ export async function getChairmanByCaseServer(refNumber: string) {
   }
 }
 
+// -------------------------------------------------------------
+// Members By Case Table Operations (members_by_case)
+// -------------------------------------------------------------
+export async function saveMembersByCaseServer(
+  refNumber: string,
+  members: Array<{ fullName?: string; full_name?: string; name?: string; position?: string; email?: string; officerRole?: string }>
+) {
+  try {
+    if (!refNumber || !refNumber.trim()) {
+      return serializeForServerAction({ success: false, error: "Reference number is required" });
+    }
+
+    const cleanRefNo = refNumber.trim();
+    const now = new Date();
+
+    // 0. Ensure members_by_case table exists
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS members_by_case (
+          id BIGSERIAL PRIMARY KEY,
+          ref_number VARCHAR(255),
+          full_name VARCHAR(255),
+          position VARCHAR(255),
+          email VARCHAR(255),
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+    } catch (e) {
+      console.warn("members_by_case table check warning:", e);
+    }
+
+    // 1. Ensure parent record exists in subject_officer_form_table for Foreign Key constraint
+    try {
+      const parentRow: any[] = await prisma.$queryRaw`
+        SELECT id FROM subject_officer_form_table WHERE LOWER(ref_number) = LOWER(${cleanRefNo}) LIMIT 1;
+      `;
+      if (!parentRow || parentRow.length === 0) {
+        await prisma.$executeRaw`
+          INSERT INTO subject_officer_form_table (ref_number, created_at, updated_at)
+          VALUES (${cleanRefNo}, ${now}, ${now});
+        `;
+      }
+    } catch (e) {
+      console.warn("Parent row subject_officer_form_table check/insert warning:", e);
+    }
+
+    // 2. Clear existing members for this ref_number
+    await prisma.$executeRaw`
+      DELETE FROM members_by_case WHERE LOWER(ref_number) = LOWER(${cleanRefNo});
+    `;
+
+    if (!members || !Array.isArray(members) || members.length === 0) {
+      return serializeForServerAction({ success: true, message: "Members cleared for case" });
+    }
+
+    // 3. Insert each member
+    for (const member of members) {
+      const fullName = (member.fullName || member.full_name || member.name || "").trim();
+      if (!fullName) continue;
+
+      const position = (member.position || member.officerRole || "Member").trim();
+      const rawEmail = (member.email || "").trim();
+
+      let validEmail = null;
+      if (rawEmail) {
+        try {
+          const commCheck: any[] = await prisma.$queryRaw`
+            SELECT email FROM commitee_table WHERE LOWER(email) = LOWER(${rawEmail}) LIMIT 1;
+          `;
+          if (commCheck && commCheck.length > 0) {
+            validEmail = commCheck[0].email;
+          }
+        } catch (e) {}
+      }
+
+      await prisma.$executeRaw`
+        INSERT INTO members_by_case (ref_number, full_name, position, email, created_at, updated_at)
+        VALUES (${cleanRefNo}, ${fullName}, ${position}, ${validEmail}, ${now}, ${now});
+      `;
+    }
+
+    return serializeForServerAction({
+      success: true,
+      message: "Members saved by case successfully",
+    });
+  } catch (error: any) {
+    console.error("Error saving members by case:", error);
+    return serializeForServerAction({
+      success: false,
+      error: error?.message || "Failed to save members by case",
+    });
+  }
+}
+
+export async function getMembersByCaseServer(refNumber: string) {
+  try {
+    if (!refNumber || !refNumber.trim()) {
+      return serializeForServerAction({ success: false, error: "Reference number is required", data: [] });
+    }
+
+    const cleanRefNo = refNumber.trim();
+    const records: any[] = await prisma.$queryRaw`
+      SELECT 
+        id::text as id,
+        ref_number,
+        full_name,
+        position,
+        email,
+        created_at,
+        updated_at
+      FROM members_by_case
+      WHERE LOWER(ref_number) = LOWER(${cleanRefNo})
+      ORDER BY id ASC;
+    `;
+
+    return serializeForServerAction({ success: true, data: records || [] });
+  } catch (error: any) {
+    console.error("Error fetching members by case:", error);
+    return serializeForServerAction({
+      success: false,
+      error: error?.message || "Failed to fetch members by case",
+      data: [],
+    });
+  }
+}
+
+
 
 
 

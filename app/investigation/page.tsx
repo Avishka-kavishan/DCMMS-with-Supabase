@@ -10,7 +10,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 import { signOut, getCurrentProfile } from "@/lib/auth";
-import { getInvestigationOfficersServer, assignOfficerToInvestigationServer, logAuditEventServer, getAccusedOfficerByRefServer, getCommitteeOfficersWithSchoolsServer, saveChairmanByCaseServer, getChairmanByCaseServer } from "@/lib/db-actions";
+import { getInvestigationOfficersServer, assignOfficerToInvestigationServer, logAuditEventServer, getAccusedOfficerByRefServer, getCommitteeOfficersWithSchoolsServer, saveChairmanByCaseServer, getChairmanByCaseServer, saveMembersByCaseServer, getMembersByCaseServer } from "@/lib/db-actions";
 import { 
   UserPlus, X, Edit, Trash2, Check, Eye, ClipboardList, 
   UserCheck, Shield, ChevronRight, Calendar as CalendarIcon, 
@@ -287,6 +287,46 @@ export default function InvestigationPage() {
     });
   };
 
+  const syncMembersToCase = async (caseRef: string, membersList: any[]) => {
+    if (!caseRef || !caseRef.trim()) return;
+    const cleanRef = caseRef.trim();
+    try {
+      await saveMembersByCaseServer(cleanRef, membersList);
+    } catch (e) {}
+
+    if (isSupabaseConfigured) {
+      try {
+        await supabase.from("members_by_case").delete().eq("ref_number", cleanRef);
+        if (membersList.length > 0) {
+          const rowsToInsert = [];
+          for (const m of membersList) {
+            const fName = (m.fullName || m.full_name || m.name || "").trim();
+            if (!fName) continue;
+            let validEmail = null;
+            if (m.email) {
+              const { data: commData } = await supabase
+                .from("commitee_table")
+                .select("email")
+                .ilike("email", m.email.trim())
+                .maybeSingle();
+              if (commData) validEmail = commData.email;
+            }
+            rowsToInsert.push({
+              ref_number: cleanRef,
+              full_name: fName,
+              position: m.position || m.officerRole || "Member",
+              email: validEmail,
+              updated_at: new Date().toISOString(),
+            });
+          }
+          if (rowsToInsert.length > 0) {
+            await supabase.from("members_by_case").insert(rowsToInsert);
+          }
+        }
+      } catch (e) {}
+    }
+  };
+
   const handleSelectChairman = async (officerId: string) => {
     const currentCaseRefNo = selectedCase ? (selectedCase.inquiryNo || (selectedCase as any).caseNo || (selectedCase as any).refNo || "") : "";
     if (!officerId) {
@@ -306,16 +346,18 @@ export default function InvestigationPage() {
     const found = officers.find((o) => o.id === officerId);
     if (found) {
       setSelectedChairman(found);
-      setSelectedMembers((prev) => prev.filter((m) => m.id !== officerId && m.fullName !== found.fullName));
+      const filteredMembers = selectedMembers.filter((m) => m.id !== officerId && m.fullName !== found.fullName);
+      setSelectedMembers(filteredMembers);
       if (currentCaseRefNo) {
         const payload = {
-          fullName: found.fullName || found.name || "",
+          fullName: found.fullName || (found as any).name || "",
           position: found.position || "Chairman",
           email: found.email || "",
         };
         try {
           await saveChairmanByCaseServer(currentCaseRefNo, payload);
         } catch (e) {}
+        syncMembersToCase(currentCaseRefNo, filteredMembers);
         if (isSupabaseConfigured) {
           try {
             let validEmail = null;
@@ -341,6 +383,7 @@ export default function InvestigationPage() {
   };
 
   const handleAddMemberSelect = (officerId: string) => {
+    const currentCaseRefNo = selectedCase ? (selectedCase.inquiryNo || (selectedCase as any).caseNo || (selectedCase as any).refNo || "") : "";
     if (!officerId) return;
     const found = officers.find((o) => o.id === officerId);
     if (found) {
@@ -354,12 +397,17 @@ export default function InvestigationPage() {
         setMemberSelectId("");
         return;
       }
-      setSelectedMembers((prev) => [...prev, found]);
+      const updated = [...selectedMembers, found];
+      setSelectedMembers(updated);
       setMemberSelectId("");
+      if (currentCaseRefNo) {
+        syncMembersToCase(currentCaseRefNo, updated);
+      }
     }
   };
 
   const handleAddCustomMember = () => {
+    const currentCaseRefNo = selectedCase ? (selectedCase.inquiryNo || (selectedCase as any).caseNo || (selectedCase as any).refNo || "") : "";
     const name = customMemberInput.trim();
     if (!name) return;
     if (selectedChairman && (selectedChairman.fullName || selectedChairman.name || "").toLowerCase() === name.toLowerCase()) {
@@ -376,12 +424,21 @@ export default function InvestigationPage() {
       officerRole: "Member",
       role: "investigation_officer",
     };
-    setSelectedMembers((prev) => [...prev, customMember]);
+    const updated = [...selectedMembers, customMember];
+    setSelectedMembers(updated);
     setCustomMemberInput("");
+    if (currentCaseRefNo) {
+      syncMembersToCase(currentCaseRefNo, updated);
+    }
   };
 
   const handleRemoveMember = (index: number) => {
-    setSelectedMembers((prev) => prev.filter((_, i) => i !== index));
+    const currentCaseRefNo = selectedCase ? (selectedCase.inquiryNo || (selectedCase as any).caseNo || (selectedCase as any).refNo || "") : "";
+    const updated = selectedMembers.filter((_, i) => i !== index);
+    setSelectedMembers(updated);
+    if (currentCaseRefNo) {
+      syncMembersToCase(currentCaseRefNo, updated);
+    }
   };
 
   const handleRemoveChairman = async () => {
@@ -1394,6 +1451,21 @@ export default function InvestigationPage() {
               }
             }
           } catch (e) {}
+
+          try {
+            const memRes = await getMembersByCaseServer(currentCaseRefNo);
+            if (memRes && memRes.success && Array.isArray(memRes.data) && memRes.data.length > 0) {
+              const mappedMembers = memRes.data.map((row: any) => ({
+                id: row.id || `mem-${row.ref_number}-${row.id}`,
+                fullName: row.full_name,
+                name: row.full_name,
+                position: row.position || "Member",
+                email: row.email || "",
+                officerRole: "Member",
+              }));
+              setSelectedMembers(mappedMembers);
+            }
+          } catch (e) {}
         }
       } catch (e) {
         console.error("Failed to load assignment data", e);
@@ -1721,6 +1793,12 @@ export default function InvestigationPage() {
           }, { onConflict: "ref_number" });
         } catch (e) {}
       }
+    }
+
+    if (caseNo) {
+      try {
+        await syncMembersToCase(caseNo, selectedMembers);
+      } catch (e) {}
     }
 
     if (typeof window !== "undefined") {
