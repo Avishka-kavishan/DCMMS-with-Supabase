@@ -13,7 +13,7 @@ import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 import { getCurrentProfile, dashboardPath } from "@/lib/auth";
-import { CheckCircle, X } from "lucide-react";
+import { CheckCircle, X, ShieldCheck, Users, UserCheck, CalendarClock, Calendar } from "lucide-react";
 import { getInstitutesServer, saveInstituteServer, saveAccusedOfficerServer, getAccusedOfficerByRefServer } from "@/lib/db-actions";
 const formatStepTaken = (step: string, t: any) => {
   if (!step) return "";
@@ -1614,6 +1614,138 @@ function CaseDetailsForm() {
                   </div>
                 )}
 
+                {/* Standalone Investigation Details Cards Section (Placed separately outside form grid) */}
+                {(assignedOfficersText || (assignmentData && (assignmentData.extensionTerm || assignmentData.extensionStartDate || assignmentData.extension_start_date || assignmentData.extensionRequestedByAdmin))) && (
+                  <div className="investigation-details-banners-wrapper">
+                    {/* Assigned Investigation Committee Card */}
+                    {assignedOfficersText && (
+                      <div className="committee-detail-card">
+                        <div className="committee-card-header">
+                          <div className="committee-header-title">
+                            <ShieldCheck className="committee-header-icon" />
+                            {i18n.language === "si" ? "පවරන ලද විමර්ශන කමිටුව (Investigation Admin වෙතින්):" : "Assigned Investigation Committee (From Admin):"}
+                          </div>
+                          <span className="committee-header-badge">
+                            <CheckCircle className="w-3.5 h-3.5" />
+                            {i18n.language === "si" ? "පත් කර ඇත" : "Assigned"}
+                          </span>
+                        </div>
+
+                        {(() => {
+                          const committee = parseCommitteeDetails({
+                            assignedOfficers: assignedOfficersText,
+                            chairman: assignmentData?.chairman,
+                            members: assignmentData?.members
+                          });
+
+                          if (committee.hasDetails) {
+                            return (
+                              <div className="committee-members-body">
+                                {committee.chairmanName && (
+                                  <div className="committee-chairman-row">
+                                    <span className="chairman-role-badge">
+                                      👑 {i18n.language === "si" ? "සභාපති" : "Chairman"}:
+                                    </span>
+                                    <span className="chairman-name-text">{committee.chairmanName}</span>
+                                    {committee.chairmanNic && (
+                                      <span className="chairman-nic-text">
+                                        NIC: {committee.chairmanNic}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+
+                                {committee.memberList.length > 0 && (
+                                  <div className="committee-members-row">
+                                    <span className="members-role-badge">
+                                      <Users className="w-3.5 h-3.5 inline mr-1" />
+                                      {i18n.language === "si"
+                                        ? `සාමාජිකයින් (${committee.memberList.length})`
+                                        : `Members (${committee.memberList.length})`}:
+                                    </span>
+                                    {committee.memberList.map((m: string, idx: number) => (
+                                      <span key={idx} className="member-chip-item">
+                                        <UserCheck className="w-3.5 h-3.5 text-slate-500" />
+                                        {m}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div style={{ fontSize: "14px", fontWeight: 700, color: "#0369a1" }}>
+                              {assignedOfficersText}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+
+                    {/* Date Extension Details Card */}
+                    {assignmentData && (assignmentData.extensionTerm || assignmentData.extensionStartDate || assignmentData.extension_start_date || assignmentData.extensionRequestedByAdmin) && (
+                      <div className="extension-detail-card">
+                        <div className="extension-card-header">
+                          <div className="extension-header-title">
+                            <CalendarClock className="w-4 h-4 text-amber-600" />
+                            {i18n.language === "si"
+                              ? "දිනයන් දීර්ඝ කිරීමේ තොරතුරු (Investigation Admin වෙතින්):"
+                              : "Date Extension Details (From Investigation Admin):"}
+                          </div>
+                          <span
+                            className={`extension-status-badge ${
+                              assignmentData.extensionApprovalStatus === "Approved"
+                                ? "status-approved"
+                                : assignmentData.extensionApprovalStatus === "Disapproved"
+                                ? "status-disapproved"
+                                : "status-pending"
+                            }`}
+                          >
+                            {assignmentData.extensionApprovalStatus === "Approved"
+                              ? (i18n.language === "si" ? "අනුමතයි" : "APPROVED")
+                              : assignmentData.extensionApprovalStatus === "Disapproved"
+                              ? (i18n.language === "si" ? "ප්‍රතික්ෂේපයි" : "DISAPPROVED")
+                              : (i18n.language === "si" ? "අනුමැතිය අපේක්ෂාවෙන්" : "PENDING APPROVAL")}
+                          </span>
+                        </div>
+
+                        <div className="extension-metrics-grid">
+                          <div className="extension-metric-card">
+                            <div className="extension-metric-label">
+                              {i18n.language === "si" ? "වාරය" : "Term"}
+                            </div>
+                            <div className="extension-metric-value">
+                              {assignmentData.extensionTerm || assignmentData.extension_term || "First"}
+                            </div>
+                          </div>
+
+                          <div className="extension-metric-card">
+                            <div className="extension-metric-label">
+                              <Calendar className="w-3 h-3 text-amber-700" />
+                              {i18n.language === "si" ? "ආරම්භය" : "Start Date"}
+                            </div>
+                            <div className="extension-metric-value">
+                              {assignmentData.extensionStartDate || assignmentData.extension_start_date || "—"}
+                            </div>
+                          </div>
+
+                          <div className="extension-metric-card">
+                            <div className="extension-metric-label">
+                              <Calendar className="w-3 h-3 text-amber-700" />
+                              {i18n.language === "si" ? "අවසානය" : "End Date"}
+                            </div>
+                            <div className="extension-metric-value">
+                              {assignmentData.extensionEndDate || assignmentData.extension_end_date || "—"}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="add-details-cards-grid">
                   {/* ───────────────── Left Card ("Complaint Information" Flowchart) ───────────────── */}
                   <div className="add-details-card">
@@ -1625,64 +1757,6 @@ function CaseDetailsForm() {
                     </h2>
 
                     <div className="flowchart-container">
-                      {/* Investigation Committee & Step 2 Dates Banner from Admin */}
-                      {assignedOfficersText && (
-                        <div style={{ backgroundColor: "#eff6ff", border: "1px solid #93c5fd", borderRadius: "10px", padding: "14px 16px", marginBottom: "16px" }}>
-                          <div style={{ fontSize: "12px", fontWeight: 700, color: "#1d4ed8", textTransform: "uppercase", marginBottom: "6px" }}>
-                            ✓ {i18n.language === "si" ? "පවරන ලද විමර්ශන නිලධාරීන් (Investigation Admin වෙතින් ලැබිණි):" : "Assigned Investigation Committee (From Admin):"}
-                          </div>
-                          {(() => {
-                            const committee = parseCommitteeDetails({ assignedOfficers: assignedOfficersText, chairman: assignmentData?.chairman, members: assignmentData?.members });
-                            if (committee.hasDetails) {
-                              return (
-                                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                                  {committee.chairmanName && (
-                                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-                                      <span style={{ fontSize: "11px", backgroundColor: "#fef3c7", color: "#92400e", border: "1px solid #fde68a", padding: "2px 8px", borderRadius: "12px", fontWeight: 700 }}>
-                                        👑 {i18n.language === "si" ? "සභාපති" : "Chairman"}:
-                                      </span>
-                                      <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "14px" }}>{committee.chairmanName}</span>
-                                      {committee.chairmanNic && <span style={{ fontSize: "11px", color: "#64748b" }}>(NIC: {committee.chairmanNic})</span>}
-                                    </div>
-                                  )}
-                                  {committee.memberList.length > 0 && (
-                                    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px", marginTop: "2px" }}>
-                                      <span style={{ fontSize: "11px", backgroundColor: "#e0e7ff", color: "#3730a3", border: "1px solid #c7d2fe", padding: "2px 8px", borderRadius: "12px", fontWeight: 700 }}>
-                                        👥 {i18n.language === "si" ? `සාමාජිකයින් (${committee.memberList.length})` : `Members (${committee.memberList.length})`}:
-                                      </span>
-                                      {committee.memberList.map((m: string, idx: number) => (
-                                        <span key={idx} style={{ fontSize: "12px", backgroundColor: "#ffffff", border: "1px solid #cbd5e1", padding: "2px 8px", borderRadius: "6px", color: "#334155", fontWeight: 600 }}>
-                                          {m}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            }
-                            return <div style={{ fontSize: "14px", fontWeight: 700, color: "#0369a1" }}>{assignedOfficersText}</div>;
-                          })()}
-                        </div>
-                      )}
-
-                      {/* Extension Details Banner if requested by Admin */}
-                      {assignmentData && (assignmentData.extensionTerm || assignmentData.extensionStartDate || assignmentData.extension_start_date || assignmentData.extensionRequestedByAdmin) && (
-                        <div style={{ backgroundColor: "#fffbeb", border: "1px solid #fde68a", borderRadius: "10px", padding: "14px 16px", marginBottom: "16px" }}>
-                          <div style={{ fontSize: "12px", fontWeight: 700, color: "#92400e", textTransform: "uppercase", marginBottom: "6px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                            <span>⏳ {i18n.language === "si" ? "දිනයන් දීර්ඝ කිරීමේ තොරතුරු (Investigation Admin වෙතින්):" : "Date Extension Details (From Investigation Admin):"}</span>
-                            <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "12px", backgroundColor: assignmentData.extensionApprovalStatus === "Approved" ? "#dcfce7" : assignmentData.extensionApprovalStatus === "Disapproved" ? "#fee2e2" : "#fef3c7", color: assignmentData.extensionApprovalStatus === "Approved" ? "#15803d" : assignmentData.extensionApprovalStatus === "Disapproved" ? "#b91c1c" : "#b45309" }}>
-                              {assignmentData.extensionApprovalStatus === "Approved" ? (i18n.language === "si" ? "අනුමතයි" : "Approved") : assignmentData.extensionApprovalStatus === "Disapproved" ? (i18n.language === "si" ? "ප්‍රතික්ෂේපයි" : "Disapproved") : (i18n.language === "si" ? "අනුමැතිය අපේක්ෂාවෙන්" : "Pending Approval")}
-                            </span>
-                          </div>
-                          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", fontSize: "13px", fontWeight: 700, color: "#78350f" }}>
-                            <span>{i18n.language === "si" ? "වාරය:" : "Term:"} {assignmentData.extensionTerm || assignmentData.extension_term || "First"}</span>
-                            <span>|</span>
-                            <span>{i18n.language === "si" ? "ආරම්භය:" : "Start:"} {assignmentData.extensionStartDate || assignmentData.extension_start_date || "—"}</span>
-                            <span>|</span>
-                            <span>{i18n.language === "si" ? "අවසානය:" : "End:"} {assignmentData.extensionEndDate || assignmentData.extension_end_date || "—"}</span>
-                          </div>
-                        </div>
-                      )}
 
                       {/* Step 1: Case Administration */}
                       <div className="flowchart-step">
