@@ -1879,5 +1879,130 @@ export async function getSchoolSuggestionsServer() {
   }
 }
 
+// -------------------------------------------------------------
+// Chairman By Case Table Operations (chairment_by_case)
+// -------------------------------------------------------------
+export async function saveChairmanByCaseServer(
+  refNumber: string,
+  chairman: { fullName?: string; full_name?: string; position?: string; email?: string } | null
+) {
+  try {
+    if (!refNumber || !refNumber.trim()) {
+      return serializeForServerAction({ success: false, error: "Reference number is required" });
+    }
+
+    const cleanRefNo = refNumber.trim();
+    const now = new Date();
+
+    // 1. Ensure parent record exists in subject_officer_form_table for Foreign Key constraint
+    try {
+      const parentRow: any[] = await prisma.$queryRaw`
+        SELECT id FROM subject_officer_form_table WHERE LOWER(ref_number) = LOWER(${cleanRefNo}) LIMIT 1;
+      `;
+      if (!parentRow || parentRow.length === 0) {
+        await prisma.$executeRaw`
+          INSERT INTO subject_officer_form_table (ref_number, created_at, updated_at)
+          VALUES (${cleanRefNo}, ${now}, ${now});
+        `;
+      }
+    } catch (e) {
+      console.warn("Parent row subject_officer_form_table check/insert warning:", e);
+    }
+
+    // 2. If chairman is null/empty, clear chairman record for this case
+    if (!chairman || (!chairman.fullName && !chairman.full_name)) {
+      await prisma.$executeRaw`
+        DELETE FROM chairment_by_case WHERE LOWER(ref_number) = LOWER(${cleanRefNo});
+      `;
+      return serializeForServerAction({ success: true, message: "Chairman removed for case" });
+    }
+
+    const fullName = (chairman.fullName || chairman.full_name || "").trim();
+    const position = (chairman.position || "Chairman").trim();
+    const rawEmail = (chairman.email || "").trim();
+
+    // 3. Verify if email exists in commitee_table for FK constraint (or pass null if not found)
+    let validEmail = null;
+    if (rawEmail) {
+      const commCheck: any[] = await prisma.$queryRaw`
+        SELECT email FROM commitee_table WHERE LOWER(email) = LOWER(${rawEmail}) LIMIT 1;
+      `;
+      if (commCheck && commCheck.length > 0) {
+        validEmail = commCheck[0].email;
+      }
+    }
+
+    // 4. Upsert into chairment_by_case table
+    const existing: any[] = await prisma.$queryRaw`
+      SELECT id FROM chairment_by_case WHERE LOWER(ref_number) = LOWER(${cleanRefNo}) LIMIT 1;
+    `;
+
+    if (existing && existing.length > 0) {
+      await prisma.$executeRaw`
+        UPDATE chairment_by_case
+        SET full_name = ${fullName},
+            position = ${position},
+            email = ${validEmail},
+            updated_at = ${now}
+        WHERE LOWER(ref_number) = LOWER(${cleanRefNo});
+      `;
+    } else {
+      await prisma.$executeRaw`
+        INSERT INTO chairment_by_case (ref_number, full_name, position, email, created_at, updated_at)
+        VALUES (${cleanRefNo}, ${fullName}, ${position}, ${validEmail}, ${now}, ${now});
+      `;
+    }
+
+    return serializeForServerAction({
+      success: true,
+      data: { ref_number: cleanRefNo, full_name: fullName, position, email: validEmail },
+    });
+  } catch (error: any) {
+    console.error("Error saving chairman by case:", error);
+    return serializeForServerAction({
+      success: false,
+      error: error?.message || "Failed to save chairman by case",
+    });
+  }
+}
+
+export async function getChairmanByCaseServer(refNumber: string) {
+  try {
+    if (!refNumber || !refNumber.trim()) {
+      return serializeForServerAction({ success: false, error: "Reference number is required", data: null });
+    }
+
+    const cleanRefNo = refNumber.trim();
+    const records: any[] = await prisma.$queryRaw`
+      SELECT 
+        id::text as id,
+        ref_number,
+        full_name,
+        position,
+        email,
+        created_at,
+        updated_at
+      FROM chairment_by_case
+      WHERE LOWER(ref_number) = LOWER(${cleanRefNo})
+      ORDER BY updated_at DESC
+      LIMIT 1;
+    `;
+
+    if (records && records.length > 0) {
+      return serializeForServerAction({ success: true, data: records[0] });
+    }
+
+    return serializeForServerAction({ success: true, data: null });
+  } catch (error: any) {
+    console.error("Error fetching chairman by case:", error);
+    return serializeForServerAction({
+      success: false,
+      error: error?.message || "Failed to fetch chairman by case",
+      data: null,
+    });
+  }
+}
+
+
 
 
