@@ -11,7 +11,7 @@ import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 import { getCurrentProfile } from "@/lib/auth";
-import { saveDailyMailRecordServer, saveDailyMailToNewTableServer, logAuditEventServer, getSubjectOfficersServer, getInstitutesServer } from "@/lib/db-actions";
+import { saveDailyMailRecordServer, saveDailyMailToNewTableServer, logAuditEventServer, getSubjectOfficersServer, getInstitutesServer, getDailyMailRecordsServer } from "@/lib/db-actions";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
@@ -96,6 +96,7 @@ function RegisterComplaintForm() {
   const [subjectActions, setSubjectActions] = useState<any[]>([]);
   const [previousLetters, setPreviousLetters] = useState<any[]>([]);
 
+  const [initialOfficerName, setInitialOfficerName] = useState<string>("");
   const [officerOptions, setOfficerOptions] = useState<string[]>([]);
   const [officerSearchQuery, setOfficerSearchQuery] = useState("");
   const [isOfficerDropdownOpen, setIsOfficerDropdownOpen] = useState(false);
@@ -139,6 +140,8 @@ function RegisterComplaintForm() {
     status: "registered" as "registered" | "assigned" | "pending",
     isAnswerLetter: false as boolean | string,
   });
+
+  const isOfficerLocked = Boolean(isEditMode || initialOfficerName);
 
   // Sync document properties
   useEffect(() => {
@@ -356,6 +359,8 @@ function RegisterComplaintForm() {
       }));
 
       const fetchCurrentCase = async () => {
+        let currentOfficerName = "";
+
         if (isSupabaseConfigured) {
           try {
             const { data, error } = await supabase
@@ -366,14 +371,18 @@ function RegisterComplaintForm() {
 
             if (!error && data && data.length > 0) {
               const originalMail = data[0];
+              currentOfficerName = originalMail.officer_name || originalMail.officerName || "";
               setCurrentCaseDetails({
                 letterNo: originalMail.letter_no || "—",
-                officerName: originalMail.officer_name || "—",
+                officerName: currentOfficerName || "—",
                 refNo: originalMail.ref_no || "—",
                 priority: originalMail.priority || "medium",
                 receivedDate: originalMail.received_date || "—",
                 letterType: originalMail.letter_type || "—",
               });
+              if (currentOfficerName && currentOfficerName !== "—") {
+                setFormState((prev) => ({ ...prev, officerName: currentOfficerName }));
+              }
             }
           } catch (e) {
             console.error("Failed to load current case details from Supabase", e);
@@ -438,14 +447,18 @@ function RegisterComplaintForm() {
               const matchingMails = list.filter((item: any) => item.refNo === caseNo);
               if (matchingMails.length > 0) {
                 const originalMail = matchingMails[matchingMails.length - 1];
+                currentOfficerName = originalMail.officerName || originalMail.officer_name || "";
                 setCurrentCaseDetails({
                   letterNo: originalMail.letterNo || "—",
-                  officerName: originalMail.officerName || "—",
+                  officerName: currentOfficerName || "—",
                   refNo: originalMail.refNo || "—",
                   priority: originalMail.priority || "medium",
                   receivedDate: originalMail.receivedDate || "—",
                   letterType: originalMail.letterType || "—",
                 });
+                if (currentOfficerName && currentOfficerName !== "—") {
+                  setFormState((prev) => ({ ...prev, officerName: currentOfficerName }));
+                }
               }
             }
           } catch (e) {
@@ -500,32 +513,76 @@ function RegisterComplaintForm() {
 
     const loadLetter = async () => {
       setIsEditMode(true);
+
+      const formatFormDate = (d?: any) => {
+        if (!d) return "";
+        try {
+          const parsed = new Date(d);
+          if (isNaN(parsed.getTime())) return String(d);
+          return parsed.toISOString().split("T")[0];
+        } catch (e) {
+          return String(d);
+        }
+      };
+
+      const populateForm = (found: any) => {
+        const priorityVal = found.priority ? String(found.priority).toLowerCase() : "medium";
+        const validPriority = priorityVal.includes("high") ? "high" : priorityVal.includes("low") ? "low" : "medium";
+        const loadedOfficer = found.action_officer || found.officer_name || found.officerName || "";
+        if (loadedOfficer) {
+          setInitialOfficerName(loadedOfficer);
+        }
+
+        setFormState({
+          id: String(found.id || id),
+          letterNo: found.letter_no || found.letterNo || found.letter_number || "",
+          senderName: found.sender || found.sender_name || found.senderName || found.senders_party || found.sender_party || "",
+          letterType: found.method || found.mode_of_receipt || found.type || found.letterType || found.nature_of_letter || "",
+          officerName: loadedOfficer,
+          subjectCategory: found.classification || found.subject_category || found.subjectCategory || "Other",
+          instituteName: found.institute_name || found.instituteName || "",
+          refNo: found.serial_no || found.ref_no || found.refNo || found.ref_number || found.received_letter_number || "",
+          letterDate: formatFormDate(found.submitted_date || found.date_letter_handover_discipline || found.letter_date || found.letterDate),
+          subject: found.subject || found.subject_of_letter || "",
+          regionProvince: found.type || found.nature_of_letter || found.region_province || found.regionProvince || "",
+          receivedDate: formatFormDate(found.received_date || found.date_received_by_add_secretary || found.receivedDate),
+          priority: validPriority as any,
+          status: found.status || "registered",
+          isAnswerLetter: found.is_answer_letter === true || String(found.is_answer_letter) === "true",
+        });
+      };
+
+      // 1. Try PostgreSQL via Server Action (handles daily_mail_letter_table, daily_mail, & dcmms_daily_mail)
+      try {
+        const res = await getDailyMailRecordsServer();
+        if (res && res.success && Array.isArray(res.data) && res.data.length > 0) {
+          const match = res.data.find(
+            (item: any) =>
+              String(item.id) === String(id) ||
+              String(item.serial_no) === String(id) ||
+              String(item.letter_no) === String(id) ||
+              String(item.refNo) === String(id) ||
+              String(item.letterNo) === String(id)
+          );
+          if (match) {
+            populateForm(match);
+            return;
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load letter from PostgreSQL server action:", e);
+      }
+
+      // 2. Try Supabase
       if (isSupabaseConfigured) {
         try {
           const { data, error } = await supabase
             .from("dcmms_daily_mail")
             .select("*")
-            .eq("id", id)
-            .single();
+            .or(`id.eq.${id},ref_no.eq.${id},letter_no.eq.${id}`);
 
-          if (!error && data) {
-            setFormState({
-              id: data.id,
-              letterNo: data.letter_no || "",
-              senderName: data.sender_name || "",
-              letterType: data.letter_type || "",
-              officerName: data.officer_name || "",
-              subjectCategory: data.subject_category || "Other",
-              instituteName: data.institute_name || "",
-              refNo: data.ref_no || "",
-              letterDate: data.letter_date || "",
-              subject: data.subject || "",
-              regionProvince: data.region_province || "",
-              receivedDate: data.received_date || "",
-              priority: data.priority || "medium",
-              status: data.status || "registered",
-              isAnswerLetter: data.is_answer_letter === true || String(data.is_answer_letter) === "true",
-            });
+          if (!error && data && data.length > 0) {
+            populateForm(data[0]);
             return;
           }
         } catch (err) {
@@ -533,30 +590,22 @@ function RegisterComplaintForm() {
         }
       }
 
+      // 3. Fallback to localStorage
       if (typeof window !== "undefined") {
         const stored = localStorage.getItem("dcmms_letters");
         if (stored) {
           try {
             const list = JSON.parse(stored);
-            const found = list.find((item: any) => item.id === id);
+            const found = list.find(
+              (item: any) =>
+                String(item.id) === String(id) ||
+                String(item.refNo) === String(id) ||
+                String(item.letterNo) === String(id) ||
+                String(item.serial_no) === String(id)
+            );
             if (found) {
-              setFormState({
-                id: found.id,
-                letterNo: found.letterNo || "",
-                senderName: found.senderName || "",
-                letterType: found.letterType || "",
-                officerName: found.officerName || "",
-                subjectCategory: found.subjectCategory || "Other",
-                instituteName: found.instituteName || "",
-                refNo: found.refNo || "",
-                letterDate: found.letterDate || "",
-                subject: found.subject || "",
-                regionProvince: found.regionProvince || "",
-                receivedDate: found.receivedDate || "",
-                priority: found.priority || "medium",
-                status: found.status || "registered",
-                isAnswerLetter: found.isAnswerLetter === true || String(found.isAnswerLetter) === "true",
-              });
+              populateForm(found);
+              return;
             }
           } catch (err) {
             console.error("Failed to parse stored letters for edit:", err);
@@ -619,22 +668,47 @@ function RegisterComplaintForm() {
     }
 
     if (isSubsequentMode) {
+      const isAnswer = formState.isAnswerLetter === "true" || formState.isAnswerLetter === true;
       if (isSupabaseConfigured) {
         try {
-          // Ensure the case row exists (needed for FK constraint) before inserting subsequent mail
+          // Ensure/update the case row in dcmms_subject with proper status
+          const caseStatus = isAnswer ? "assigned answer letter" : "In Progress";
+          const casePayload: any = {
+            id: `case-${newLetter.refNo}`,
+            case_no: newLetter.refNo,
+            assigned_date: newLetter.receivedDate,
+            subject: newLetter.subject || null,
+            priority: newLetter.priority || "medium",
+            status: caseStatus,
+          };
+          if (newLetter.officerName) {
+            casePayload.officer_name = newLetter.officerName;
+          }
+
           const { error: caseUpsertError } = await supabase
             .from("dcmms_subject")
-            .upsert({
-              id: `case-${newLetter.refNo}`,
-              case_no: newLetter.refNo,
-              assigned_date: newLetter.receivedDate,
-              subject: newLetter.subject || null,
-              priority: newLetter.priority || "medium",
-              status: "In Progress",
-            }, { onConflict: "case_no", ignoreDuplicates: true });
+            .upsert(casePayload, { onConflict: "case_no" });
 
           if (caseUpsertError) {
             console.warn("Case upsert warning (may already exist):", caseUpsertError.message);
+          }
+
+          // If subject officer is specified, also upsert into dcmms_subject_assignments
+          if (newLetter.officerName) {
+            try {
+              await supabase
+                .from("dcmms_subject_assignments")
+                .upsert({
+                  id: `asgn-${newLetter.refNo}`,
+                  case_no: newLetter.refNo,
+                  subject_officer_name: newLetter.officerName,
+                  assigned_officers: newLetter.officerName,
+                  assigned_date: newLetter.receivedDate,
+                  status: caseStatus,
+                }, { onConflict: "case_no" });
+            } catch (asgnErr) {
+              console.warn("Assignment upsert warning:", asgnErr);
+            }
           }
 
           let subMailPayload: any = {
@@ -646,7 +720,7 @@ function RegisterComplaintForm() {
             letter_type: newLetter.letterType || null,
             mail_date: newLetter.letterDate,
             received_date: newLetter.receivedDate,
-            is_answer_letter: formState.isAnswerLetter === "true",
+            is_answer_letter: isAnswer,
           };
 
           const { error } = await supabase
@@ -676,14 +750,14 @@ function RegisterComplaintForm() {
             received_date: newLetter.receivedDate,
             subject: newLetter.subject,
             priority: newLetter.priority || "medium",
-            status: "registered",
+            status: isAnswer ? "assigned answer letter" : "registered",
             letter_no: newLetter.letterNo || null,
             letter_type: newLetter.letterType || null,
             officer_name: newLetter.officerName || null,
             subject_category: newLetter.subjectCategory || null,
             institute_name: newLetter.instituteName || null,
             region_province: mapRegionProvince(newLetter.regionProvince),
-            is_answer_letter: formState.isAnswerLetter === "true",
+            is_answer_letter: isAnswer,
           };
 
           let { error: mailError } = await supabase
@@ -715,6 +789,7 @@ function RegisterComplaintForm() {
 
       // Local storage fallback for subsequent mails
       if (typeof window !== "undefined") {
+        const isAnswer = formState.isAnswerLetter === "true" || formState.isAnswerLetter === true;
         // 1. Save to dcmms_new_mail_current_case
         const stored = localStorage.getItem("dcmms_new_mail_current_case") || "[]";
         let list = [];
@@ -732,7 +807,54 @@ function RegisterComplaintForm() {
         });
         localStorage.setItem("dcmms_new_mail_current_case", JSON.stringify(list));
 
-        // 2. Also save to dcmms_letters so it displays in the homepage list fallback
+        // 2. Update dcmms_cases status if isAnswer is true
+        if (isAnswer) {
+          try {
+            const storedCases = localStorage.getItem("dcmms_cases") || "[]";
+            let casesList = JSON.parse(storedCases);
+            const idx = casesList.findIndex((c: any) => String(c.caseNo || c.refNo || "").trim() === String(newLetter.refNo).trim());
+            if (idx >= 0) {
+              casesList[idx].status = "assigned answer letter";
+              if (newLetter.officerName) casesList[idx].officerName = newLetter.officerName;
+            } else {
+              casesList.push({
+                id: `case-${newLetter.refNo}`,
+                caseNo: newLetter.refNo,
+                subject: newLetter.subject,
+                assignedDate: newLetter.receivedDate,
+                officerName: newLetter.officerName,
+                status: "assigned answer letter",
+                priority: newLetter.priority || "medium",
+              });
+            }
+            localStorage.setItem("dcmms_cases", JSON.stringify(casesList));
+          } catch (e) {}
+
+          if (newLetter.officerName) {
+            try {
+              const storedAsgns = localStorage.getItem("dcmms_subject_assignments") || "[]";
+              let asgnsList = JSON.parse(storedAsgns);
+              const aIdx = asgnsList.findIndex((a: any) => String(a.caseNo || a.case_no || "").trim() === String(newLetter.refNo).trim());
+              if (aIdx >= 0) {
+                asgnsList[aIdx].mailOfficerName = newLetter.officerName;
+                asgnsList[aIdx].officerName = newLetter.officerName;
+                asgnsList[aIdx].status = "assigned answer letter";
+              } else {
+                asgnsList.push({
+                  id: `asgn-${newLetter.refNo}`,
+                  caseNo: newLetter.refNo,
+                  mailOfficerName: newLetter.officerName,
+                  officerName: newLetter.officerName,
+                  status: "assigned answer letter",
+                  assignedDate: newLetter.receivedDate,
+                });
+              }
+              localStorage.setItem("dcmms_subject_assignments", JSON.stringify(asgnsList));
+            } catch (e) {}
+          }
+        }
+
+        // 3. Also save to dcmms_letters so it displays in the homepage list fallback
         const storedLetters = localStorage.getItem("dcmms_letters") || "[]";
         let lettersList = [];
         try { lettersList = JSON.parse(storedLetters); } catch (e) {}
@@ -1148,13 +1270,15 @@ function RegisterComplaintForm() {
                 <div className="register-header-left">
                   <h1 className="register-title">
                     {isEditMode 
-                      ? t("editLetterTitle", "Edit Letter") 
+                      ? (lang === "si" ? "පූර්වයෙන් යොමු කළ ලිපි විස්තර නැරඹීම" : t("viewSubmittedLetterTitle", "View Submitted Letter Details")) 
                       : isSubsequentMode 
                         ? t("registerLetterForCurrentComplaintTitle", "Register New Letter for Current Complaint") 
                         : t("registerComplaintTitle")}
                   </h1>
                   <p className="register-subtitle">
-                    {isEditMode ? t("editLetterDesc", "Update the saved letter details and save changes.") : t("registerComplaintDesc")}
+                    {isEditMode 
+                      ? (lang === "si" ? "පූර්වයෙන් ඇතුළත් කළ ලිපි දත්ත කියවීම සඳහා පමණි (වෙනස් කළ නොහැක)." : t("viewSubmittedLetterDesc", "Previously submitted letter data is read-only and cannot be modified.")) 
+                      : t("registerComplaintDesc")}
                   </p>
                 </div>
                 <div className="register-header-right-btns">
@@ -1164,26 +1288,28 @@ function RegisterComplaintForm() {
                     </svg>
                     {t("backToHome")}
                   </Link>
-                  <button
-                    type="button"
-                    className="btn-action-draft"
-                    onClick={handleSaveDraft}
-                    title={t("saveAsDraft")}
-                    aria-label={t("saveAsDraft")}
-                  >
-                    <svg
-                      className="btn-action-icon"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                      width="20"
-                      height="20"
+                  {!isEditMode && (
+                    <button
+                      type="button"
+                      className="btn-action-draft"
+                      onClick={handleSaveDraft}
+                      title={t("saveAsDraft")}
+                      aria-label={t("saveAsDraft")}
                     >
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V8l-4-4H8z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 20v-8M9 12h6" />
-                    </svg>
-                  </button>
+                      <svg
+                        className="btn-action-icon"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        width="20"
+                        height="20"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V8l-4-4H8z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 20v-8M9 12h6" />
+                      </svg>
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -1322,6 +1448,33 @@ function RegisterComplaintForm() {
 
               {/* Form entries section */}
               <div className="entries-container">
+                {isEditMode && (
+                  <div style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "12px",
+                    backgroundColor: "#eff6ff",
+                    color: "#1e40af",
+                    border: "1px solid #bfdbfe",
+                    padding: "14px 18px",
+                    borderRadius: "10px",
+                    marginBottom: "20px",
+                    fontWeight: 600,
+                    fontSize: "13.5px"
+                  }}>
+                    <svg style={{ width: "22px", height: "22px", flexShrink: 0, color: "#2563eb" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                    <span>
+                      {lang === "si"
+                        ? "පූර්වයෙන් යොමු කළ ලිපි විස්තර (කියවීම සඳහා පමණි - වෙනස් කළ නොහැක)"
+                        : lang === "ta"
+                        ? "முன்பு சமர்ப்பிக்கப்பட்ட கடித விவரங்கள் (வாசிக்க மட்டுமே - திருத்த முடியாது)"
+                        : "Previously submitted letter details (Read-Only mode: Previously submitted data cannot be edited)"}
+                    </span>
+                  </div>
+                )}
+
                 <h2 className="entries-header">
                   <svg className="entries-header-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -1342,10 +1495,13 @@ function RegisterComplaintForm() {
                         <input
                           id="letterNo"
                           type="text"
+                          disabled={isEditMode}
+                          readOnly={isEditMode}
                           value={formState.letterNo}
                           onChange={(e) => setFormState({ ...formState, letterNo: e.target.value })}
                           placeholder={t("placeholderLetterNo")}
                           className="field-input"
+                          style={isEditMode ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
                         />
                       </div>
 
@@ -1356,11 +1512,13 @@ function RegisterComplaintForm() {
                           id="refNo"
                           type="text"
                           required
+                          disabled={isEditMode || isSubsequentMode}
+                          readOnly={isEditMode || isSubsequentMode}
                           value={formState.refNo}
                           onChange={(e) => setFormState({ ...formState, refNo: e.target.value })}
                           placeholder={t("refPlaceholder")}
                           className="field-input"
-                          readOnly={isSubsequentMode}
+                          style={(isEditMode || isSubsequentMode) ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
                         />
                       </div>
 
@@ -1369,9 +1527,11 @@ function RegisterComplaintForm() {
                         <label htmlFor="letterType" className="field-label">{t("letterType")}</label>
                         <select
                           id="letterType"
+                          disabled={isEditMode}
                           value={formState.letterType}
                           onChange={(e) => setFormState({ ...formState, letterType: e.target.value })}
                           className="field-select"
+                          style={isEditMode ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
                         >
                           <option value="">{t("placeholderLetterType")}</option>
                           {receiptModes.map((mode) => (
@@ -1382,57 +1542,61 @@ function RegisterComplaintForm() {
                         </select>
                       </div>
 
-                      {/* Is Answer Letter */}
-                      <div className="form-field-group">
-                        <label className="field-label">{t("isAnswerLetter", "Is this an answer letter?")}</label>
-                        <div className="radio-group-container">
-                          <label
-                            id="labelIsAnswerYes"
-                            className="radio-option-item"
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "8px",
-                              cursor: "pointer",
-                              userSelect: "none"
-                            }}
-                          >
-                            <input
-                              id="isAnswerYes"
-                              type="radio"
-                              name="isAnswerLetterRadio"
-                              value="true"
-                              checked={String(formState.isAnswerLetter) === "true"}
-                              onChange={() => setFormState((prev) => ({ ...prev, isAnswerLetter: "true" }))}
-                              style={{ width: "18px", height: "18px", accentColor: "#0e162f", cursor: "pointer" }}
-                            />
-                            <span style={{ fontWeight: 700, color: "#0e162f", fontSize: "13px" }}>{t("yes", "Yes")}</span>
-                          </label>
+                      {/* Is Answer Letter (Only in Register New Letter for Current Complaint form) */}
+                      {isSubsequentMode && (
+                        <div className="form-field-group">
+                          <label className="field-label">{t("isAnswerLetter", "Is this an answer letter?")}</label>
+                          <div className="radio-group-container">
+                            <label
+                              id="labelIsAnswerYes"
+                              className="radio-option-item"
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "8px",
+                                cursor: isEditMode ? "not-allowed" : "pointer",
+                                userSelect: "none"
+                              }}
+                            >
+                              <input
+                                id="isAnswerYes"
+                                type="radio"
+                                name="isAnswerLetterRadio"
+                                disabled={isEditMode}
+                                value="true"
+                                checked={String(formState.isAnswerLetter) === "true"}
+                                onChange={() => setFormState((prev) => ({ ...prev, isAnswerLetter: "true" }))}
+                                style={{ width: "18px", height: "18px", accentColor: "#0e162f", cursor: isEditMode ? "not-allowed" : "pointer" }}
+                              />
+                              <span style={{ fontWeight: 700, color: "#0e162f", fontSize: "13px" }}>{t("yes", "Yes")}</span>
+                            </label>
 
-                          <label
-                            id="labelIsAnswerNo"
-                            className="radio-option-item"
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "8px",
-                              cursor: "pointer",
-                              userSelect: "none"
-                            }}
-                          >
-                            <input
-                              id="isAnswerNo"
-                              type="radio"
-                              name="isAnswerLetterRadio"
-                              value="false"
-                              checked={String(formState.isAnswerLetter) !== "true"}
-                              onChange={() => setFormState((prev) => ({ ...prev, isAnswerLetter: "false" }))}
-                              style={{ width: "18px", height: "18px", accentColor: "#0e162f", cursor: "pointer" }}
-                            />
-                            <span style={{ fontWeight: 700, color: "#0e162f", fontSize: "13px" }}>{t("no", "No")}</span>
-                          </label>
+                            <label
+                              id="labelIsAnswerNo"
+                              className="radio-option-item"
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "8px",
+                                cursor: isEditMode ? "not-allowed" : "pointer",
+                                userSelect: "none"
+                              }}
+                            >
+                              <input
+                                id="isAnswerNo"
+                                type="radio"
+                                name="isAnswerLetterRadio"
+                                disabled={isEditMode}
+                                value="false"
+                                checked={String(formState.isAnswerLetter) !== "true"}
+                                onChange={() => setFormState((prev) => ({ ...prev, isAnswerLetter: "false" }))}
+                                style={{ width: "18px", height: "18px", accentColor: "#0e162f", cursor: isEditMode ? "not-allowed" : "pointer" }}
+                              />
+                              <span style={{ fontWeight: 700, color: "#0e162f", fontSize: "13px" }}>{t("no", "No")}</span>
+                            </label>
+                          </div>
                         </div>
-                      </div>
+                      )}
 
                     </div>
                   </div>
@@ -1449,10 +1613,13 @@ function RegisterComplaintForm() {
                           id="senderName"
                           type="text"
                           required
+                          disabled={isEditMode}
+                          readOnly={isEditMode}
                           value={formState.senderName}
                           onChange={(e) => setFormState({ ...formState, senderName: e.target.value })}
                           placeholder={t("senderPlaceholder")}
                           className="field-input"
+                          style={isEditMode ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
                         />
                       </div>
 
@@ -1461,9 +1628,11 @@ function RegisterComplaintForm() {
                         <label htmlFor="regionProvince" className="field-label">{t("regionProvince")}</label>
                         <select
                           id="regionProvince"
+                          disabled={isEditMode}
                           value={formState.regionProvince}
                           onChange={(e) => setFormState({ ...formState, regionProvince: e.target.value })}
                           className="field-select"
+                          style={isEditMode ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
                         >
                           <option value="">{t("selectClassification")}</option>
                           {letterNatures.map((nature) => (
@@ -1479,9 +1648,11 @@ function RegisterComplaintForm() {
                         <label htmlFor="subjectCategory" className="field-label">{t("subjectCategory")}</label>
                         <select
                           id="subjectCategory"
+                          disabled={isEditMode}
                           value={formState.subjectCategory}
                           onChange={(e) => setFormState({ ...formState, subjectCategory: e.target.value })}
                           className="field-select"
+                          style={isEditMode ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
                         >
                           <option value="">{t("selectCategory", "Select category...")}</option>
                           {letterClassifications.map((item) => (
@@ -1506,10 +1677,13 @@ function RegisterComplaintForm() {
                         <input
                           id="subject"
                           type="text"
+                          disabled={isEditMode}
+                          readOnly={isEditMode}
                           value={formState.subject}
                           onChange={(e) => setFormState({ ...formState, subject: e.target.value })}
                           placeholder={t("subjectPlaceholder")}
                           className="field-input"
+                          style={isEditMode ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
                         />
                       </div>
 
@@ -1520,9 +1694,12 @@ function RegisterComplaintForm() {
                           <input
                             id="receivedDate"
                             type="date"
+                            disabled={isEditMode}
+                            readOnly={isEditMode}
                             value={formState.receivedDate}
                             onChange={(e) => setFormState({ ...formState, receivedDate: e.target.value })}
                             className="field-input input-with-right-icon"
+                            style={isEditMode ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
                           />
                           <div className="input-right-icons">
                             <svg className="input-right-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -1539,9 +1716,12 @@ function RegisterComplaintForm() {
                           <input
                             id="letterDate"
                             type="date"
+                            disabled={isEditMode}
+                            readOnly={isEditMode}
                             value={formState.letterDate}
                             onChange={(e) => setFormState({ ...formState, letterDate: e.target.value })}
                             className="field-input input-with-right-icon"
+                            style={isEditMode ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
                           />
                           <div className="input-right-icons">
                             <svg className="input-right-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -1561,20 +1741,34 @@ function RegisterComplaintForm() {
 
                       {/* Subject Officer Name (Searchable & Filterable Select) */}
                       <div className="form-field-group" ref={officerDropdownRef}>
-                        <label htmlFor="officerNameInput" className="field-label">{t("nameOfOfficer")}</label>
+                        <label htmlFor="officerNameInput" className="field-label" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                          <span>{t("nameOfOfficer")}</span>
+                          {isOfficerLocked && (
+                            <span style={{ fontSize: "11px", fontWeight: 700, color: "#1e40af", backgroundColor: "#dbeafe", border: "1px solid #bfdbfe", padding: "2px 8px", borderRadius: "12px", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                              <svg style={{ width: "12px", height: "12px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                              </svg>
+                              {lang === "si" ? "වෙනස් කළ නොහැක (Locked)" : lang === "ta" ? "பூட்டப்பட்டது (Locked)" : "Locked"}
+                            </span>
+                          )}
+                        </label>
                         <div className="searchable-select-wrapper">
                           <div className="searchable-select-input-container">
                             <input
                               id="officerNameInput"
                               type="text"
                               readOnly
+                              disabled={isOfficerLocked}
                               value={formState.officerName || ""}
-                              onClick={() => setIsOfficerDropdownOpen(!isOfficerDropdownOpen)}
+                              onClick={() => {
+                                if (!isOfficerLocked) setIsOfficerDropdownOpen(!isOfficerDropdownOpen);
+                              }}
                               placeholder={t("selectSubjectOfficer")}
                               className="field-input searchable-select-input"
+                              style={isOfficerLocked ? { backgroundColor: "#f1f5f9", cursor: "not-allowed", opacity: 0.9, fontWeight: 700, borderColor: "#cbd5e1" } : {}}
                             />
                             <div className="searchable-select-icons">
-                              {formState.officerName && (
+                              {formState.officerName && !isOfficerLocked && (
                                 <button
                                   type="button"
                                   className="searchable-select-clear-btn"
@@ -1592,29 +1786,39 @@ function RegisterComplaintForm() {
                               )}
                               <button
                                 type="button"
+                                disabled={isOfficerLocked}
                                 className="searchable-select-arrow-btn"
-                                onClick={() => setIsOfficerDropdownOpen(!isOfficerDropdownOpen)}
+                                onClick={() => {
+                                  if (!isOfficerLocked) setIsOfficerDropdownOpen(!isOfficerDropdownOpen);
+                                }}
+                                style={isOfficerLocked ? { cursor: "not-allowed", opacity: 0.6 } : {}}
                               >
-                                <svg
-                                  className="select-arrow-icon"
-                                  style={{
-                                    width: "16px",
-                                    height: "16px",
-                                    transform: isOfficerDropdownOpen ? "rotate(180deg)" : "rotate(0deg)",
-                                    transition: "transform 0.2s ease"
-                                  }}
-                                  fill="none"
-                                  viewBox="0 0 24 24"
-                                  stroke="currentColor"
-                                  strokeWidth="2.5"
-                                >
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                                </svg>
+                                {isOfficerLocked ? (
+                                  <svg style={{ width: "16px", height: "16px", color: "#64748b" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                  </svg>
+                                ) : (
+                                  <svg
+                                    className="select-arrow-icon"
+                                    style={{
+                                      width: "16px",
+                                      height: "16px",
+                                      transform: isOfficerDropdownOpen ? "rotate(180deg)" : "rotate(0deg)",
+                                      transition: "transform 0.2s ease"
+                                    }}
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                    strokeWidth="2.5"
+                                  >
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                                  </svg>
+                                )}
                               </button>
                             </div>
                           </div>
 
-                          {isOfficerDropdownOpen && (
+                          {!isOfficerLocked && isOfficerDropdownOpen && (
                             <div className="searchable-select-dropdown">
                               <div className="searchable-select-search-box">
                                 <input
@@ -1679,9 +1883,11 @@ function RegisterComplaintForm() {
                           <div className="select-wrapper" style={{ flex: 1 }}>
                             <select
                               id="priority"
+                              disabled={isEditMode}
                               value={formState.priority}
                               onChange={(e) => setFormState({ ...formState, priority: e.target.value as any })}
                               className="field-select"
+                              style={isEditMode ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
                             >
                               <option value="high" className="priority-option-high">{t("priorityHigh")}</option>
                               <option value="medium" className="priority-option-medium">{t("priorityMedium")}</option>
@@ -1706,15 +1912,17 @@ function RegisterComplaintForm() {
                       className="btn-action-cancel"
                       onClick={() => router.push("/daily-mail")}
                     >
-                      {t("cancelBtn")}
+                      {isEditMode ? (lang === "si" ? "නැවත ප්‍රධාන පුවරුවට" : lang === "ta" ? "முகப்புக்குச் செல்" : "Back to Dashboard") : t("cancelBtn")}
                     </button>
 
-                    <button
-                      type="submit"
-                      className="btn-action-submit"
-                    >
-                      {isEditMode ? t("saveChangesBtn", "Save Changes") : t("submitBtn")}
-                    </button>
+                    {!isEditMode && (
+                      <button
+                        type="submit"
+                        className="btn-action-submit"
+                      >
+                        {t("submitBtn")}
+                      </button>
+                    )}
                   </div>
 
                 </form>

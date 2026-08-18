@@ -24,7 +24,7 @@ interface Case {
   createdAt?: string;
   subject: string;
   priority: "high" | "medium" | "low";
-  status: "In Progress" | "Closed" | "Pending";
+  status: "In Progress" | "Closed" | "Pending" | "assigned answer letter" | "Assigned Answer Letter" | string;
   isOld?: boolean;
 }
 
@@ -3292,7 +3292,11 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
                             </span>
                           </td>
                           <td>
-                            {item.status === "In Progress" ? t("statusInProgress") :
+                            {item.status === "assigned answer letter" || item.status === "Assigned Answer Letter" ? (
+                              <span className="badge-badge badge-status-closed" style={{ backgroundColor: "#e0e7ff", color: "#3730a3", border: "1px solid #c7d2fe", fontWeight: 700, padding: "4px 10px", borderRadius: "12px", fontSize: "11px" }}>
+                                {lang === "si" ? "පවරන ලද පිළිතුරු ලිපිය" : "Assigned Answer Letter"}
+                              </span>
+                            ) : item.status === "In Progress" ? t("statusInProgress") :
                               item.status === "Closed" ? t("statusClosed") : t("statusPending")}
                           </td>
                           <td>
