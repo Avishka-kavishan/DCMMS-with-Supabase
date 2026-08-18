@@ -166,6 +166,21 @@ model members_by_case {
   @@map("members_by_case")
 }
 
+model case_by_appointment_and_report_due_date {
+  id                         BigInt    @id @default(autoincrement())
+  subject_file_no            String?   @db.VarChar(100)
+  sub_file_no                String?   @db.VarChar(100)
+  subject_officer_form_id    BigInt?
+  appointment_letter_date    DateTime? @db.Date
+  report_due_date            DateTime? @db.Date
+  dates_submitted_by_subject Boolean?  @default(true)
+  created_at                 DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at                 DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@map("case_by_appointment_and_report_due_date")
+}
+
+
 
 
 

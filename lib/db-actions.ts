@@ -2323,6 +2323,145 @@ export async function getCaseByDateExtensionServer(subjectFileNo: string) {
   }
 }
 
+export async function saveCaseByAppointmentAndReportDueDateServer(payload: {
+  subject_file_no: string;
+  sub_file_no?: string;
+  appointment_letter_date?: string | null;
+  report_due_date?: string | null;
+  dates_submitted_by_subject?: boolean;
+}) {
+  try {
+    if (!payload.subject_file_no) {
+      return serializeForServerAction({ success: false, error: "subject_file_no is required" });
+    }
+    const cleanRef = payload.subject_file_no.trim();
+    const subRef = payload.sub_file_no ? payload.sub_file_no.trim() : cleanRef;
+    const apptDate = payload.appointment_letter_date ? new Date(payload.appointment_letter_date) : null;
+    const dueDate = payload.report_due_date ? new Date(payload.report_due_date) : null;
+    const isSubmitted = payload.dates_submitted_by_subject ?? true;
+    const now = new Date();
+
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS public.case_by_appointment_and_report_due_date (
+          id BIGSERIAL PRIMARY KEY,
+          subject_file_no VARCHAR(100),
+          sub_file_no VARCHAR(100),
+          subject_officer_form_id BIGINT,
+          appointment_letter_date DATE,
+          report_due_date DATE,
+          dates_submitted_by_subject BOOLEAN DEFAULT TRUE,
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_appointment_and_report_due_date ADD COLUMN IF NOT EXISTS sub_file_no VARCHAR(100);`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_appointment_and_report_due_date ADD COLUMN IF NOT EXISTS subject_officer_form_id BIGINT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_appointment_and_report_due_date ADD COLUMN IF NOT EXISTS appointment_letter_date DATE;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_appointment_and_report_due_date ADD COLUMN IF NOT EXISTS report_due_date DATE;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_appointment_and_report_due_date ADD COLUMN IF NOT EXISTS dates_submitted_by_subject BOOLEAN DEFAULT TRUE;`);
+    } catch (e) {}
+
+    const existing: any[] = await prisma.$queryRaw`
+      SELECT id FROM public.case_by_appointment_and_report_due_date
+      WHERE LOWER(subject_file_no) = LOWER(${cleanRef})
+         OR LOWER(sub_file_no) = LOWER(${cleanRef})
+      LIMIT 1;
+    `;
+
+    if (existing && existing.length > 0) {
+      await prisma.$executeRaw`
+        UPDATE public.case_by_appointment_and_report_due_date
+        SET 
+          appointment_letter_date = ${apptDate},
+          report_due_date = ${dueDate},
+          dates_submitted_by_subject = ${isSubmitted},
+          updated_at = ${now}
+        WHERE LOWER(subject_file_no) = LOWER(${cleanRef})
+           OR LOWER(sub_file_no) = LOWER(${cleanRef});
+      `;
+    } else {
+      await prisma.$executeRaw`
+        INSERT INTO public.case_by_appointment_and_report_due_date (
+          subject_file_no,
+          sub_file_no,
+          appointment_letter_date,
+          report_due_date,
+          dates_submitted_by_subject,
+          created_at,
+          updated_at
+        ) VALUES (
+          ${cleanRef},
+          ${subRef},
+          ${apptDate},
+          ${dueDate},
+          ${isSubmitted},
+          ${now},
+          ${now}
+        );
+      `;
+    }
+
+    return serializeForServerAction({ success: true, message: "Appointment & report due dates saved to PostgreSQL" });
+  } catch (error: any) {
+    console.error("Error saving case_by_appointment_and_report_due_date:", error);
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to save dates" });
+  }
+}
+
+export async function getCaseByAppointmentAndReportDueDateServer(subjectFileNo: string) {
+  try {
+    if (!subjectFileNo || !subjectFileNo.trim()) {
+      return serializeForServerAction({ success: false, error: "subjectFileNo is required", data: null });
+    }
+    const cleanRef = subjectFileNo.trim();
+
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS public.case_by_appointment_and_report_due_date (
+          id BIGSERIAL PRIMARY KEY,
+          subject_file_no VARCHAR(100),
+          sub_file_no VARCHAR(100),
+          subject_officer_form_id BIGINT,
+          appointment_letter_date DATE,
+          report_due_date DATE,
+          dates_submitted_by_subject BOOLEAN DEFAULT TRUE,
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_appointment_and_report_due_date ADD COLUMN IF NOT EXISTS sub_file_no VARCHAR(100);`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_appointment_and_report_due_date ADD COLUMN IF NOT EXISTS subject_officer_form_id BIGINT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_appointment_and_report_due_date ADD COLUMN IF NOT EXISTS appointment_letter_date DATE;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_appointment_and_report_due_date ADD COLUMN IF NOT EXISTS report_due_date DATE;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_appointment_and_report_due_date ADD COLUMN IF NOT EXISTS dates_submitted_by_subject BOOLEAN DEFAULT TRUE;`);
+    } catch (e) {}
+
+    const records: any[] = await prisma.$queryRaw`
+      SELECT 
+        id::text as id,
+        subject_file_no,
+        sub_file_no,
+        appointment_letter_date,
+        report_due_date,
+        dates_submitted_by_subject,
+        created_at,
+        updated_at
+      FROM public.case_by_appointment_and_report_due_date
+      WHERE LOWER(subject_file_no) = LOWER(${cleanRef})
+         OR LOWER(sub_file_no) = LOWER(${cleanRef})
+      ORDER BY created_at DESC
+      LIMIT 1;
+    `;
+
+    return serializeForServerAction({ success: true, data: records && records.length > 0 ? records[0] : null });
+  } catch (error: any) {
+    console.error("Error fetching case_by_appointment_and_report_due_date:", error);
+    return serializeForServerAction({ success: false, error: error?.message, data: null });
+  }
+}
+
+
 
 
 

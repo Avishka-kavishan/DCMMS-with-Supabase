@@ -12,7 +12,7 @@ import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { getCurrentProfile, signOut, UserProfile } from "@/lib/auth";
-import { updateCaseByDateExtensionApprovalServer } from "@/lib/db-actions";
+import { updateCaseByDateExtensionApprovalServer, saveCaseByAppointmentAndReportDueDateServer } from "@/lib/db-actions";
 import { CheckCircle, XCircle, FileText, Send, Clock, X, AlertCircle, ShieldCheck, Calendar as CalendarIcon, ChevronDown, ChevronUp, Bell, Eye, MoreHorizontal, Filter, Check, MailCheck, ClipboardList } from "lucide-react";
 
 interface Case {
@@ -1437,6 +1437,17 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
       window.dispatchEvent(new Event("storage"));
     }
 
+    // Save into dedicated PostgreSQL case_by_appointment_and_report_due_date table
+    try {
+      saveCaseByAppointmentAndReportDueDateServer({
+        subject_file_no: updated.caseNo || caseKey,
+        sub_file_no: updated.caseNo || caseKey,
+        appointment_letter_date: finalAppt,
+        report_due_date: finalDue,
+        dates_submitted_by_subject: true,
+      }).then();
+    } catch (e) {}
+
     if (isSupabaseConfigured) {
       supabase.from("dcmms_subject_assignments").upsert({
         id: updated.id || `asgn-${updated.caseNo}`,
@@ -1449,6 +1460,14 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
         report_due_date: finalDue,
         dates_submitted_by_subject: true,
         status: updated.status,
+      }).then();
+
+      supabase.from("case_by_appointment_and_report_due_date").upsert({
+        subject_file_no: updated.caseNo,
+        sub_file_no: updated.caseNo,
+        appointment_letter_date: finalAppt,
+        report_due_date: finalDue,
+        dates_submitted_by_subject: true,
       }).then();
     }
 

@@ -13,7 +13,7 @@ import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 import { getCurrentProfile, signOut } from "@/lib/auth";
-import { getAccusedOfficerByRefServer, getCommitteeOfficersWithSchoolsServer, saveChairmanByCaseServer, getChairmanByCaseServer, saveMembersByCaseServer, getMembersByCaseServer, saveCaseByDateExtensionServer, getCaseByDateExtensionServer } from "@/lib/db-actions";
+import { getAccusedOfficerByRefServer, getCommitteeOfficersWithSchoolsServer, saveChairmanByCaseServer, getChairmanByCaseServer, saveMembersByCaseServer, getMembersByCaseServer, saveCaseByDateExtensionServer, getCaseByDateExtensionServer, saveCaseByAppointmentAndReportDueDateServer, getCaseByAppointmentAndReportDueDateServer } from "@/lib/db-actions";
 import { 
   Shield, User, Calendar as CalendarIcon, FileCheck, Send, Clock, 
   CheckCircle, ArrowLeft, RefreshCw, AlertCircle, Award, Building, 
@@ -638,6 +638,23 @@ function InvestigationCaseDetailsContent() {
             extensionEndDate: dbExt.end_date || assignment?.extensionEndDate,
             extensionApprovalStatus: dbExt.approval_status || assignment?.extensionApprovalStatus,
             extensionDecisionDate: dbExt.decision_date || assignment?.extensionDecisionDate,
+          };
+        }
+      } catch (e) {}
+
+      try {
+        const apptRes = await getCaseByAppointmentAndReportDueDateServer(caseNoParam);
+        if (apptRes && apptRes.success && apptRes.data) {
+          const dbAppt = apptRes.data;
+          const formattedAppt = formatToInputDate(dbAppt.appointment_letter_date);
+          const formattedDue = formatToInputDate(dbAppt.report_due_date);
+          if (formattedAppt) setStep2ApptDate(formattedAppt);
+          if (formattedDue) setStep2DueDate(formattedDue);
+          assignment = {
+            ...(assignment || {}),
+            appointmentDate: formattedAppt || assignment?.appointmentDate,
+            reportDueDate: formattedDue || assignment?.reportDueDate,
+            datesSubmittedBySubject: dbAppt.dates_submitted_by_subject ?? assignment?.datesSubmittedBySubject ?? true,
           };
         }
       } catch (e) {}
