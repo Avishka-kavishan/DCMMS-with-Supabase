@@ -1234,6 +1234,29 @@ export async function saveAccusedOfficerServer(officerData: any) {
         }
       }
 
+      if (subject_file_no && String(subject_file_no).trim()) {
+        const cleanSubNo = String(subject_file_no).trim();
+        try {
+          await prisma.$executeRaw`
+            UPDATE public.case_by_appointment_and_report_due_date
+            SET subject_file_no = ${cleanSubNo}, sub_file_no = ${cleanSubNo}, subject_officer_form_id = ${Number(formId)}::bigint
+            WHERE LOWER(subject_file_no) = LOWER(${refTrimmed})
+               OR LOWER(sub_file_no) = LOWER(${refTrimmed})
+               OR (subject_officer_form_id IS NOT NULL AND subject_officer_form_id = ${Number(formId)}::bigint);
+          `;
+          await prisma.$executeRaw`
+            UPDATE public.members_by_case
+            SET ref_number = ${cleanSubNo}
+            WHERE LOWER(ref_number) = LOWER(${refTrimmed});
+          `;
+          await prisma.$executeRaw`
+            UPDATE public.chairment_by_case
+            SET ref_number = ${cleanSubNo}
+            WHERE LOWER(ref_number) = LOWER(${refTrimmed});
+          `;
+        } catch (e) {}
+      }
+
       // 5. Update Many-to-Many junction table accused_officer_subject_officer_form_table
       if (formId) {
         await prisma.$executeRaw`
@@ -1891,28 +1914,23 @@ export async function saveChairmanByCaseServer(
       return serializeForServerAction({ success: false, error: "Reference number is required" });
     }
 
-    const cleanRefNo = refNumber.trim();
+    const resolved = await resolveSubjectFileDetails(refNumber);
+    const cleanRefNo = resolved.clean;
+    const actualSubNo = resolved.subjectFileNo;
+    const refNum = resolved.refNumber;
     const now = new Date();
 
-    // 1. Ensure parent record exists in subject_officer_form_table for Foreign Key constraint
     try {
-      const parentRow: any[] = await prisma.$queryRaw`
-        SELECT id FROM subject_officer_form_table WHERE LOWER(ref_number) = LOWER(${cleanRefNo}) LIMIT 1;
-      `;
-      if (!parentRow || parentRow.length === 0) {
-        await prisma.$executeRaw`
-          INSERT INTO subject_officer_form_table (ref_number, created_at, updated_at)
-          VALUES (${cleanRefNo}, ${now}, ${now});
-        `;
-      }
-    } catch (e) {
-      console.warn("Parent row subject_officer_form_table check/insert warning:", e);
-    }
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.chairment_by_case DROP CONSTRAINT IF EXISTS chairment_by_case_ref_number_fkey;`);
+    } catch (e) {}
 
-    // 2. If chairman is null/empty, clear chairman record for this case
+    // If chairman is null/empty, clear chairman record for this case
     if (!chairman || (!chairman.fullName && !chairman.full_name)) {
       await prisma.$executeRaw`
-        DELETE FROM chairment_by_case WHERE LOWER(ref_number) = LOWER(${cleanRefNo});
+        DELETE FROM chairment_by_case 
+        WHERE LOWER(ref_number) = LOWER(${cleanRefNo})
+           OR LOWER(ref_number) = LOWER(${actualSubNo})
+           OR LOWER(ref_number) = LOWER(${refNum});
       `;
       return serializeForServerAction({ success: true, message: "Chairman removed for case" });
     }
@@ -1921,7 +1939,6 @@ export async function saveChairmanByCaseServer(
     const position = (chairman.position || "Chairman").trim();
     const rawEmail = (chairman.email || "").trim();
 
-    // 3. Verify if email exists in commitee_table for FK constraint (or pass null if not found)
     let validEmail = null;
     if (rawEmail) {
       const commCheck: any[] = await prisma.$queryRaw`
@@ -1932,30 +1949,34 @@ export async function saveChairmanByCaseServer(
       }
     }
 
-    // 4. Upsert into chairment_by_case table
     const existing: any[] = await prisma.$queryRaw`
-      SELECT id FROM chairment_by_case WHERE LOWER(ref_number) = LOWER(${cleanRefNo}) LIMIT 1;
+      SELECT id FROM chairment_by_case 
+      WHERE LOWER(ref_number) = LOWER(${cleanRefNo})
+         OR LOWER(ref_number) = LOWER(${actualSubNo})
+         OR LOWER(ref_number) = LOWER(${refNum})
+      LIMIT 1;
     `;
 
     if (existing && existing.length > 0) {
       await prisma.$executeRaw`
         UPDATE chairment_by_case
-        SET full_name = ${fullName},
+        SET ref_number = ${actualSubNo},
+            full_name = ${fullName},
             position = ${position},
             email = ${validEmail},
             updated_at = ${now}
-        WHERE LOWER(ref_number) = LOWER(${cleanRefNo});
+        WHERE id = ${existing[0].id};
       `;
     } else {
       await prisma.$executeRaw`
         INSERT INTO chairment_by_case (ref_number, full_name, position, email, created_at, updated_at)
-        VALUES (${cleanRefNo}, ${fullName}, ${position}, ${validEmail}, ${now}, ${now});
+        VALUES (${actualSubNo}, ${fullName}, ${position}, ${validEmail}, ${now}, ${now});
       `;
     }
 
     return serializeForServerAction({
       success: true,
-      data: { ref_number: cleanRefNo, full_name: fullName, position, email: validEmail },
+      data: { ref_number: actualSubNo, full_name: fullName, position, email: validEmail },
     });
   } catch (error: any) {
     console.error("Error saving chairman by case:", error);
@@ -1972,7 +1993,11 @@ export async function getChairmanByCaseServer(refNumber: string) {
       return serializeForServerAction({ success: false, error: "Reference number is required", data: null });
     }
 
-    const cleanRefNo = refNumber.trim();
+    const resolved = await resolveSubjectFileDetails(refNumber);
+    const cleanRefNo = resolved.clean;
+    const actualSubNo = resolved.subjectFileNo;
+    const refNum = resolved.refNumber;
+
     const records: any[] = await prisma.$queryRaw`
       SELECT 
         id::text as id,
@@ -1984,6 +2009,8 @@ export async function getChairmanByCaseServer(refNumber: string) {
         updated_at
       FROM chairment_by_case
       WHERE LOWER(ref_number) = LOWER(${cleanRefNo})
+         OR LOWER(ref_number) = LOWER(${actualSubNo})
+         OR LOWER(ref_number) = LOWER(${refNum})
       ORDER BY updated_at DESC
       LIMIT 1;
     `;
@@ -2015,11 +2042,14 @@ export async function saveMembersByCaseServer(
       return serializeForServerAction({ success: false, error: "Reference number is required" });
     }
 
-    const cleanRefNo = refNumber.trim();
+    const resolved = await resolveSubjectFileDetails(refNumber);
+    const cleanRefNo = resolved.clean;
+    const actualSubNo = resolved.subjectFileNo;
+    const refNum = resolved.refNumber;
     const now = new Date();
 
-    // 0. Ensure members_by_case table exists
     try {
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.members_by_case DROP CONSTRAINT IF EXISTS members_by_case_ref_number_fkey;`);
       await prisma.$executeRawUnsafe(`
         CREATE TABLE IF NOT EXISTS members_by_case (
           id BIGSERIAL PRIMARY KEY,
@@ -2031,35 +2061,19 @@ export async function saveMembersByCaseServer(
           updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
       `);
-    } catch (e) {
-      console.warn("members_by_case table check warning:", e);
-    }
+    } catch (e) {}
 
-    // 1. Ensure parent record exists in subject_officer_form_table for Foreign Key constraint
-    try {
-      const parentRow: any[] = await prisma.$queryRaw`
-        SELECT id FROM subject_officer_form_table WHERE LOWER(ref_number) = LOWER(${cleanRefNo}) LIMIT 1;
-      `;
-      if (!parentRow || parentRow.length === 0) {
-        await prisma.$executeRaw`
-          INSERT INTO subject_officer_form_table (ref_number, created_at, updated_at)
-          VALUES (${cleanRefNo}, ${now}, ${now});
-        `;
-      }
-    } catch (e) {
-      console.warn("Parent row subject_officer_form_table check/insert warning:", e);
-    }
-
-    // 2. Clear existing members for this ref_number
     await prisma.$executeRaw`
-      DELETE FROM members_by_case WHERE LOWER(ref_number) = LOWER(${cleanRefNo});
+      DELETE FROM members_by_case 
+      WHERE LOWER(ref_number) = LOWER(${cleanRefNo})
+         OR LOWER(ref_number) = LOWER(${actualSubNo})
+         OR LOWER(ref_number) = LOWER(${refNum});
     `;
 
     if (!members || !Array.isArray(members) || members.length === 0) {
       return serializeForServerAction({ success: true, message: "Members cleared for case" });
     }
 
-    // 3. Insert each member
     for (const member of members) {
       const fullName = (member.fullName || member.full_name || member.name || "").trim();
       if (!fullName) continue;
@@ -2081,7 +2095,7 @@ export async function saveMembersByCaseServer(
 
       await prisma.$executeRaw`
         INSERT INTO members_by_case (ref_number, full_name, position, email, created_at, updated_at)
-        VALUES (${cleanRefNo}, ${fullName}, ${position}, ${validEmail}, ${now}, ${now});
+        VALUES (${actualSubNo}, ${fullName}, ${position}, ${validEmail}, ${now}, ${now});
       `;
     }
 
@@ -2104,7 +2118,11 @@ export async function getMembersByCaseServer(refNumber: string) {
       return serializeForServerAction({ success: false, error: "Reference number is required", data: [] });
     }
 
-    const cleanRefNo = refNumber.trim();
+    const resolved = await resolveSubjectFileDetails(refNumber);
+    const cleanRefNo = resolved.clean;
+    const actualSubNo = resolved.subjectFileNo;
+    const refNum = resolved.refNumber;
+
     const records: any[] = await prisma.$queryRaw`
       SELECT 
         id::text as id,
@@ -2116,6 +2134,8 @@ export async function getMembersByCaseServer(refNumber: string) {
         updated_at
       FROM members_by_case
       WHERE LOWER(ref_number) = LOWER(${cleanRefNo})
+         OR LOWER(ref_number) = LOWER(${actualSubNo})
+         OR LOWER(ref_number) = LOWER(${refNum})
       ORDER BY id ASC;
     `;
 
@@ -2128,6 +2148,36 @@ export async function getMembersByCaseServer(refNumber: string) {
       data: [],
     });
   }
+}
+
+// Helper to resolve subject_file_no, sub_file_no, and subject_officer_form_id from subject_officer_form_table
+async function resolveSubjectFileDetails(refOrSubNo: string) {
+  const clean = refOrSubNo ? refOrSubNo.trim() : "";
+  let subjectFileNo = clean;
+  let subFileNo = clean;
+  let formId: any = null;
+  let refNumber = clean;
+
+  if (clean) {
+    try {
+      const sofRows: any[] = await prisma.$queryRaw`
+        SELECT id, ref_number, subject_file_no
+        FROM subject_officer_form_table
+        WHERE LOWER(ref_number) = LOWER(${clean})
+           OR LOWER(subject_file_no) = LOWER(${clean})
+        LIMIT 1;
+      `;
+      if (sofRows && sofRows.length > 0) {
+        formId = sofRows[0].id;
+        refNumber = sofRows[0].ref_number || clean;
+        if (sofRows[0].subject_file_no && sofRows[0].subject_file_no.trim()) {
+          subjectFileNo = sofRows[0].subject_file_no.trim();
+          subFileNo = sofRows[0].subject_file_no.trim();
+        }
+      }
+    } catch (e) {}
+  }
+  return { clean, subjectFileNo, subFileNo, formId, refNumber };
 }
 
 // -------------------------------------------------------------
@@ -2146,8 +2196,8 @@ export async function saveCaseByDateExtensionServer(payload: {
       return serializeForServerAction({ success: false, error: "subject_file_no is required" });
     }
 
-    const cleanRef = payload.subject_file_no.trim();
-    const subRef = payload.sub_file_no ? payload.sub_file_no.trim() : cleanRef;
+    const resolved = await resolveSubjectFileDetails(payload.subject_file_no);
+    const actualSubNo = resolved.subjectFileNo;
     const term = payload.extention_term || "First Extension (1st)";
     const start = payload.start_date ? new Date(payload.start_date) : null;
     const end = payload.end_date ? new Date(payload.end_date) : null;
@@ -2176,6 +2226,7 @@ export async function saveCaseByDateExtensionServer(payload: {
       INSERT INTO public.case_by_date_extention (
         subject_file_no,
         sub_file_no,
+        subject_officer_form_id,
         extention_term,
         start_date,
         end_date,
@@ -2183,8 +2234,9 @@ export async function saveCaseByDateExtensionServer(payload: {
         created_at,
         updated_at
       ) VALUES (
-        ${cleanRef},
-        ${subRef},
+        ${actualSubNo},
+        ${actualSubNo},
+        ${resolved.formId ? Number(resolved.formId) : null}::bigint,
         ${term},
         ${start},
         ${end},
@@ -2215,7 +2267,11 @@ export async function updateCaseByDateExtensionApprovalServer(
     if (!subjectFileNo) {
       return serializeForServerAction({ success: false, error: "subjectFileNo is required" });
     }
-    const cleanRef = subjectFileNo.trim();
+    const resolved = await resolveSubjectFileDetails(subjectFileNo);
+    const cleanRef = resolved.clean;
+    const actualSubNo = resolved.subjectFileNo;
+    const refNum = resolved.refNumber;
+    const formId = resolved.formId;
     const decDate = decisionDate ? new Date(decisionDate) : new Date();
     const now = new Date();
 
@@ -2237,7 +2293,17 @@ export async function updateCaseByDateExtensionApprovalServer(
       `);
     } catch (e) {}
 
-    const existing: any[] = await prisma.$queryRaw`
+    const existing: any[] = formId ? await prisma.$queryRaw`
+      SELECT id FROM public.case_by_date_extention
+      WHERE LOWER(subject_file_no) = LOWER(${cleanRef})
+         OR LOWER(subject_file_no) = LOWER(${actualSubNo})
+         OR LOWER(subject_file_no) = LOWER(${refNum})
+         OR LOWER(sub_file_no) = LOWER(${cleanRef})
+         OR LOWER(sub_file_no) = LOWER(${actualSubNo})
+         OR LOWER(sub_file_no) = LOWER(${refNum})
+         OR subject_officer_form_id = ${Number(formId)}::bigint
+      LIMIT 1;
+    ` : await prisma.$queryRaw`
       SELECT id FROM public.case_by_date_extention
       WHERE LOWER(subject_file_no) = LOWER(${cleanRef})
          OR LOWER(sub_file_no) = LOWER(${cleanRef})
@@ -2248,11 +2314,13 @@ export async function updateCaseByDateExtensionApprovalServer(
       await prisma.$executeRaw`
         UPDATE public.case_by_date_extention
         SET 
+          subject_file_no = ${actualSubNo},
+          sub_file_no = ${actualSubNo},
+          subject_officer_form_id = ${formId ? Number(formId) : null}::bigint,
           approval_status = ${approvalStatus},
           decision_date = ${decDate},
           updated_at = ${now}
-        WHERE LOWER(subject_file_no) = LOWER(${cleanRef})
-           OR LOWER(sub_file_no) = LOWER(${cleanRef});
+        WHERE id = ${existing[0].id};
       `;
     } else {
       const term = extDetails?.extention_term || "First Extension (1st)";
@@ -2263,6 +2331,7 @@ export async function updateCaseByDateExtensionApprovalServer(
         INSERT INTO public.case_by_date_extention (
           subject_file_no,
           sub_file_no,
+          subject_officer_form_id,
           extention_term,
           start_date,
           end_date,
@@ -2271,8 +2340,9 @@ export async function updateCaseByDateExtensionApprovalServer(
           created_at,
           updated_at
         ) VALUES (
-          ${cleanRef},
-          ${cleanRef},
+          ${actualSubNo},
+          ${actualSubNo},
+          ${formId ? Number(formId) : null}::bigint,
           ${term},
           ${start},
           ${end},
@@ -2296,12 +2366,41 @@ export async function getCaseByDateExtensionServer(subjectFileNo: string) {
     if (!subjectFileNo || !subjectFileNo.trim()) {
       return serializeForServerAction({ success: false, error: "subjectFileNo is required", data: null });
     }
-    const cleanRef = subjectFileNo.trim();
-    const records: any[] = await prisma.$queryRaw`
+    const resolved = await resolveSubjectFileDetails(subjectFileNo);
+    const cleanRef = resolved.clean;
+    const actualSubNo = resolved.subjectFileNo;
+    const refNum = resolved.refNumber;
+    const formId = resolved.formId;
+
+    const records: any[] = formId ? await prisma.$queryRaw`
       SELECT 
         id::text as id,
         subject_file_no,
         sub_file_no,
+        subject_officer_form_id::text as subject_officer_form_id,
+        extention_term,
+        start_date,
+        end_date,
+        approval_status,
+        decision_date,
+        created_at,
+        updated_at
+      FROM public.case_by_date_extention
+      WHERE LOWER(subject_file_no) = LOWER(${cleanRef})
+         OR LOWER(subject_file_no) = LOWER(${actualSubNo})
+         OR LOWER(subject_file_no) = LOWER(${refNum})
+         OR LOWER(sub_file_no) = LOWER(${cleanRef})
+         OR LOWER(sub_file_no) = LOWER(${actualSubNo})
+         OR LOWER(sub_file_no) = LOWER(${refNum})
+         OR subject_officer_form_id = ${Number(formId)}::bigint
+      ORDER BY created_at DESC
+      LIMIT 1;
+    ` : await prisma.$queryRaw`
+      SELECT 
+        id::text as id,
+        subject_file_no,
+        sub_file_no,
+        subject_officer_form_id::text as subject_officer_form_id,
         extention_term,
         start_date,
         end_date,
@@ -2334,8 +2433,11 @@ export async function saveCaseByAppointmentAndReportDueDateServer(payload: {
     if (!payload.subject_file_no) {
       return serializeForServerAction({ success: false, error: "subject_file_no is required" });
     }
-    const cleanRef = payload.subject_file_no.trim();
-    const subRef = payload.sub_file_no ? payload.sub_file_no.trim() : cleanRef;
+    const resolved = await resolveSubjectFileDetails(payload.subject_file_no);
+    const cleanRef = resolved.clean;
+    const actualSubNo = resolved.subjectFileNo;
+    const refNum = resolved.refNumber;
+    const formId = resolved.formId;
     const apptDate = payload.appointment_letter_date ? new Date(payload.appointment_letter_date) : null;
     const dueDate = payload.report_due_date ? new Date(payload.report_due_date) : null;
     const isSubmitted = payload.dates_submitted_by_subject ?? true;
@@ -2362,7 +2464,17 @@ export async function saveCaseByAppointmentAndReportDueDateServer(payload: {
       await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_appointment_and_report_due_date ADD COLUMN IF NOT EXISTS dates_submitted_by_subject BOOLEAN DEFAULT TRUE;`);
     } catch (e) {}
 
-    const existing: any[] = await prisma.$queryRaw`
+    const existing: any[] = formId ? await prisma.$queryRaw`
+      SELECT id FROM public.case_by_appointment_and_report_due_date
+      WHERE LOWER(subject_file_no) = LOWER(${cleanRef})
+         OR LOWER(subject_file_no) = LOWER(${actualSubNo})
+         OR LOWER(subject_file_no) = LOWER(${refNum})
+         OR LOWER(sub_file_no) = LOWER(${cleanRef})
+         OR LOWER(sub_file_no) = LOWER(${actualSubNo})
+         OR LOWER(sub_file_no) = LOWER(${refNum})
+         OR subject_officer_form_id = ${Number(formId)}::bigint
+      LIMIT 1;
+    ` : await prisma.$queryRaw`
       SELECT id FROM public.case_by_appointment_and_report_due_date
       WHERE LOWER(subject_file_no) = LOWER(${cleanRef})
          OR LOWER(sub_file_no) = LOWER(${cleanRef})
@@ -2373,26 +2485,30 @@ export async function saveCaseByAppointmentAndReportDueDateServer(payload: {
       await prisma.$executeRaw`
         UPDATE public.case_by_appointment_and_report_due_date
         SET 
+          subject_file_no = ${actualSubNo},
+          sub_file_no = ${actualSubNo},
+          subject_officer_form_id = ${formId ? Number(formId) : null}::bigint,
           appointment_letter_date = ${apptDate},
           report_due_date = ${dueDate},
           dates_submitted_by_subject = ${isSubmitted},
           updated_at = ${now}
-        WHERE LOWER(subject_file_no) = LOWER(${cleanRef})
-           OR LOWER(sub_file_no) = LOWER(${cleanRef});
+        WHERE id = ${existing[0].id};
       `;
     } else {
       await prisma.$executeRaw`
         INSERT INTO public.case_by_appointment_and_report_due_date (
           subject_file_no,
           sub_file_no,
+          subject_officer_form_id,
           appointment_letter_date,
           report_due_date,
           dates_submitted_by_subject,
           created_at,
           updated_at
         ) VALUES (
-          ${cleanRef},
-          ${subRef},
+          ${actualSubNo},
+          ${actualSubNo},
+          ${formId ? Number(formId) : null}::bigint,
           ${apptDate},
           ${dueDate},
           ${isSubmitted},
@@ -2414,7 +2530,11 @@ export async function getCaseByAppointmentAndReportDueDateServer(subjectFileNo: 
     if (!subjectFileNo || !subjectFileNo.trim()) {
       return serializeForServerAction({ success: false, error: "subjectFileNo is required", data: null });
     }
-    const cleanRef = subjectFileNo.trim();
+    const resolved = await resolveSubjectFileDetails(subjectFileNo);
+    const cleanRef = resolved.clean;
+    const actualSubNo = resolved.subjectFileNo;
+    const refNum = resolved.refNumber;
+    const formId = resolved.formId;
 
     try {
       await prisma.$executeRawUnsafe(`
@@ -2437,11 +2557,33 @@ export async function getCaseByAppointmentAndReportDueDateServer(subjectFileNo: 
       await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_appointment_and_report_due_date ADD COLUMN IF NOT EXISTS dates_submitted_by_subject BOOLEAN DEFAULT TRUE;`);
     } catch (e) {}
 
-    const records: any[] = await prisma.$queryRaw`
+    const records: any[] = formId ? await prisma.$queryRaw`
       SELECT 
         id::text as id,
         subject_file_no,
         sub_file_no,
+        subject_officer_form_id::text as subject_officer_form_id,
+        appointment_letter_date,
+        report_due_date,
+        dates_submitted_by_subject,
+        created_at,
+        updated_at
+      FROM public.case_by_appointment_and_report_due_date
+      WHERE LOWER(subject_file_no) = LOWER(${cleanRef})
+         OR LOWER(subject_file_no) = LOWER(${actualSubNo})
+         OR LOWER(subject_file_no) = LOWER(${refNum})
+         OR LOWER(sub_file_no) = LOWER(${cleanRef})
+         OR LOWER(sub_file_no) = LOWER(${actualSubNo})
+         OR LOWER(sub_file_no) = LOWER(${refNum})
+         OR subject_officer_form_id = ${Number(formId)}::bigint
+      ORDER BY created_at DESC
+      LIMIT 1;
+    ` : await prisma.$queryRaw`
+      SELECT 
+        id::text as id,
+        subject_file_no,
+        sub_file_no,
+        subject_officer_form_id::text as subject_officer_form_id,
         appointment_letter_date,
         report_due_date,
         dates_submitted_by_subject,
