@@ -18,8 +18,9 @@ import {
   Shield, User, Calendar as CalendarIcon, FileCheck, Send, Clock, 
   CheckCircle, ArrowLeft, RefreshCw, AlertCircle, Award, Building, 
   MapPin, CreditCard, UserPlus, CheckSquare, FileText, Info, X,
-  UserCheck, Plus, Trash2
+  UserCheck, Plus, Trash2, FileSpreadsheet
 } from "lucide-react";
+import { fetchFullInvestigationDetailsForCase, exportToExcelFile } from "@/lib/excel-export";
 
 function InvestigationCaseDetailsContent() {
   const { t, i18n } = useTranslation();
@@ -352,6 +353,43 @@ function InvestigationCaseDetailsContent() {
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(""), 3500);
+  };
+
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
+
+  const handleExportSingleCaseToExcel = async () => {
+    if (isExportingExcel) return;
+    setIsExportingExcel(true);
+    showToast(lang === "si" ? "Excel වාර්තාව සූදානම් කරමින් පවතී..." : "Preparing Excel report for this case...");
+    try {
+      const rawCaseObj = {
+        inquiryNo: caseNoParam,
+        case_no: caseNoParam,
+        subject: selectedCase?.subject || "Formal Investigation",
+        status: status || selectedCase?.status || "In Progress",
+        targetDate: selectedCase?.targetDate || targetDate || "",
+        chairman: selectedChairman,
+        members: selectedMembers,
+        subjectOfficer: assignee || selectedSubjectOfficer || customSubjectOfficerInput || "",
+        appointmentDate: step2ApptDate,
+        reportDueDate: step2DueDate,
+        extensionTerm: step3Term,
+        extensionStartDate: step3StartDate,
+        extensionEndDate: step3EndDate,
+        notes: inquiryNotes,
+        investigationNotes: inquiryNotes,
+      };
+
+      const enrichedRow = await fetchFullInvestigationDetailsForCase(rawCaseObj);
+      const cleanCaseFilename = caseNoParam.replace(/[\/\\]/g, "_");
+      exportToExcelFile([enrichedRow], `Investigation_Case_${cleanCaseFilename}`);
+      showToast(lang === "si" ? "Excel වාර්තාව සාර්ථකව බාගත කරන ලදී." : "Case Excel report downloaded successfully!");
+    } catch (err) {
+      console.error("Export case to Excel error:", err);
+      showToast(lang === "si" ? "Excel වාර්තාව සෑදීමේ දෝෂයක් සිදුවිය." : "Failed to export case Excel report.");
+    } finally {
+      setIsExportingExcel(false);
+    }
   };
 
   const handleLogout = async (e: React.MouseEvent) => {
@@ -2103,7 +2141,33 @@ function InvestigationCaseDetailsContent() {
                     Ref: <strong style={{ color: "#4f46e5" }}>{caseNoParam}</strong> | Target: <strong>{targetDate}</strong>
                   </p>
                 </div>
-                <div className="add-details-header-right-btns">
+                <div className="add-details-header-right-btns" style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <button
+                    type="button"
+                    onClick={handleExportSingleCaseToExcel}
+                    disabled={isExportingExcel}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      padding: "8px 16px",
+                      fontSize: "13px",
+                      color: "#ffffff",
+                      backgroundColor: "#166534",
+                      border: "none",
+                      borderRadius: "8px",
+                      fontWeight: 600,
+                      cursor: isExportingExcel ? "not-allowed" : "pointer",
+                      opacity: isExportingExcel ? 0.7 : 1,
+                      boxShadow: "0 2px 4px rgba(22, 101, 52, 0.2)",
+                      transition: "all 0.15s ease"
+                    }}
+                    title="Export this case's full investigation details to Excel"
+                  >
+                    <FileSpreadsheet size={16} />
+                    <span>{isExportingExcel ? (lang === "si" ? "නිර්මාණය වෙමින්..." : "Exporting...") : (lang === "si" ? "Excel වාර්තාව බාගත කරන්න" : "Export Case Excel")}</span>
+                  </button>
+
                   <Link href="/investigation" className="btn-back-home">
                     <svg className="btn-back-home-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />

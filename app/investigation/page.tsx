@@ -17,8 +17,9 @@ import {
   FileText, Clock, AlertCircle, Info, CheckCircle, Search, 
   User, Mail, ArrowRight, Sparkles, Filter, RefreshCw, FileCheck,
   Building, CreditCard, MapPin, Award, Send, CheckSquare, Layers, GraduationCap, Plus,
-  Bell, BellRing, ChevronDown, ChevronUp, Minimize2, Maximize2
+  Bell, BellRing, ChevronDown, ChevronUp, Minimize2, Maximize2, FileSpreadsheet
 } from "lucide-react";
+import { fetchFullInvestigationDetailsForCase, exportToExcelFile, InvestigationExportRow } from "@/lib/excel-export";
 
 interface Inquiry {
   id: string;
@@ -499,6 +500,29 @@ export default function InvestigationPage() {
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(""), 3500);
+  };
+
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
+
+  const handleExportAllToExcel = async (casesList: Inquiry[]) => {
+    if (isExportingExcel) return;
+    setIsExportingExcel(true);
+    showToast(lang === "si" ? "Excel වාර්තාව සූදානම් කරමින් පවතී..." : "Preparing Excel report for all cases...");
+    try {
+      const listToExport = casesList && casesList.length > 0 ? casesList : inquiries;
+      const enrichedRows: InvestigationExportRow[] = [];
+      for (const item of listToExport) {
+        const row = await fetchFullInvestigationDetailsForCase(item);
+        enrichedRows.push(row);
+      }
+      exportToExcelFile(enrichedRows, "Investigation_Details_By_Case");
+      showToast(lang === "si" ? "Excel වාර්තාව සාර්ථකව බාගත කරන ලදී." : "Excel report downloaded successfully!");
+    } catch (err) {
+      console.error("Export to Excel error:", err);
+      showToast(lang === "si" ? "Excel වාර්තාව සෑදීමේ දෝෂයක් සිදුවිය." : "Failed to export Excel report.");
+    } finally {
+      setIsExportingExcel(false);
+    }
   };
 
   // Helper: Initials generator for officer avatars
@@ -3282,35 +3306,63 @@ export default function InvestigationPage() {
                       </span>
                     </div>
 
-                    {/* Reset Filters button */}
-                    {(statusFilter !== "All" || urgencyFilter !== "All" || officerFilter !== "All" || searchQuery !== "") && (
+                    {/* Action buttons group: Reset Filters & Export Excel */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
                       <button
                         type="button"
-                        onClick={() => {
-                          setStatusFilter("All");
-                          setUrgencyFilter("All");
-                          setOfficerFilter("All");
-                          setSearchQuery("");
-                        }}
+                        onClick={() => handleExportAllToExcel(filteredInquiries)}
+                        disabled={isExportingExcel || inquiries.length === 0}
                         style={{
                           display: "inline-flex",
                           alignItems: "center",
                           gap: "6px",
-                          padding: "6px 14px",
-                          fontSize: "12px",
-                          color: "#dc2626",
-                          backgroundColor: "#fef2f2",
-                          border: "1px solid #fca5a5",
+                          padding: "8px 16px",
+                          fontSize: "13px",
+                          color: "#ffffff",
+                          backgroundColor: "#166534",
+                          border: "none",
                           borderRadius: "8px",
                           fontWeight: 600,
-                          cursor: "pointer",
+                          cursor: isExportingExcel || inquiries.length === 0 ? "not-allowed" : "pointer",
+                          opacity: isExportingExcel || inquiries.length === 0 ? 0.7 : 1,
+                          boxShadow: "0 2px 4px rgba(22, 101, 52, 0.2)",
                           transition: "all 0.15s ease"
                         }}
+                        title="Export all investigation details by case to Excel spreadsheet"
                       >
-                        <X size={14} />
-                        <span>{lang === "si" ? "සියලුම පෙරහන් ඉවත් කරන්න" : "Reset All Filters"}</span>
+                        <FileSpreadsheet size={16} />
+                        <span>{isExportingExcel ? (lang === "si" ? "නිර්මාණය වෙමින්..." : "Exporting...") : (lang === "si" ? "Excel වාර්තාව බාගත කරන්න" : "Export Excel Sheet")}</span>
                       </button>
-                    )}
+
+                      {(statusFilter !== "All" || urgencyFilter !== "All" || officerFilter !== "All" || searchQuery !== "") && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setStatusFilter("All");
+                            setUrgencyFilter("All");
+                            setOfficerFilter("All");
+                            setSearchQuery("");
+                          }}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "6px",
+                            padding: "8px 14px",
+                            fontSize: "12px",
+                            color: "#dc2626",
+                            backgroundColor: "#fef2f2",
+                            border: "1px solid #fca5a5",
+                            borderRadius: "8px",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                            transition: "all 0.15s ease"
+                          }}
+                        >
+                          <X size={14} />
+                          <span>{lang === "si" ? "සියලුම පෙරහන් ඉවත් කරන්න" : "Reset All Filters"}</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Multi-Option Filter Panel */}
