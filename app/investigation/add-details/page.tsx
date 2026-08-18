@@ -1435,7 +1435,44 @@ function InvestigationCaseDetailsContent() {
           extension_end_date: step3EndDate,
           extension_approval_status: "Pending",
         }, { onConflict: "id" });
-      } catch (e) {}
+
+        // Save into dedicated case_by_date_extention table with formatted dates & fallback
+        const cleanStart = step3StartDate ? (new Date(step3StartDate).toString() !== "Invalid Date" ? new Date(step3StartDate).toISOString().slice(0, 10) : step3StartDate) : null;
+        const cleanEnd = step3EndDate ? (new Date(step3EndDate).toString() !== "Invalid Date" ? new Date(step3EndDate).toISOString().slice(0, 10) : step3EndDate) : null;
+
+        const extFullPayload: any = {
+          subject_file_no: caseNoParam,
+          sub_file_no: caseNoParam,
+          extention_term: step3Term || "First Extension (1st)",
+          start_date: cleanStart,
+          end_date: cleanEnd,
+          approval_status: "Pending",
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+
+        const { error: extErr } = await supabase.from("case_by_date_extention").insert(extFullPayload);
+        if (extErr) {
+          console.warn("Primary case_by_date_extention insert failed, retrying with base columns:", extErr.message);
+          const { error: fallbackErr } = await supabase.from("case_by_date_extention").insert({
+            subject_file_no: caseNoParam,
+            extention_term: step3Term || "First Extension (1st)",
+            start_date: cleanStart,
+            end_date: cleanEnd,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+          if (fallbackErr) {
+            console.error("Fallback case_by_date_extention insert error:", fallbackErr.message);
+          } else {
+            console.log("Successfully saved date extension to case_by_date_extention table!");
+          }
+        } else {
+          console.log("Successfully saved date extension to case_by_date_extention table!");
+        }
+      } catch (e) {
+        console.error("Supabase extension request error:", e);
+      }
     }
 
     setIsSaving(false);

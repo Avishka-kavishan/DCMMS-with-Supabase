@@ -2264,6 +2264,41 @@ export default function InvestigationPage() {
           .from("dcmms_subject")
           .update(subUpdateObj)
           .eq("case_no", caseNo);
+
+        // Save into dedicated case_by_date_extention table with formatted dates & fallback
+        const cleanStart = extensionStartToUse ? (new Date(extensionStartToUse).toString() !== "Invalid Date" ? new Date(extensionStartToUse).toISOString().slice(0, 10) : extensionStartToUse) : null;
+        const cleanEnd = extensionEndToUse ? (new Date(extensionEndToUse).toString() !== "Invalid Date" ? new Date(extensionEndToUse).toISOString().slice(0, 10) : extensionEndToUse) : null;
+
+        const extFullPayload: any = {
+          subject_file_no: caseNo,
+          sub_file_no: caseNo,
+          extention_term: extensionTermToUse || "First Extension (1st)",
+          start_date: cleanStart,
+          end_date: cleanEnd,
+          approval_status: "Pending",
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+
+        const { error: extErr } = await supabase.from("case_by_date_extention").insert(extFullPayload);
+        if (extErr) {
+          console.warn("Primary case_by_date_extention insert failed, retrying with base columns:", extErr.message);
+          const { error: fallbackErr } = await supabase.from("case_by_date_extention").insert({
+            subject_file_no: caseNo,
+            extention_term: extensionTermToUse || "First Extension (1st)",
+            start_date: cleanStart,
+            end_date: cleanEnd,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+          if (fallbackErr) {
+            console.error("Fallback case_by_date_extention insert error:", fallbackErr.message);
+          } else {
+            console.log("Successfully saved date extension to case_by_date_extention table!");
+          }
+        } else {
+          console.log("Successfully saved date extension to case_by_date_extention table!");
+        }
       } catch (e) {
         console.warn("Extension Supabase error:", e);
       }

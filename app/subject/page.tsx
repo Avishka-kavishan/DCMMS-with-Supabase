@@ -1617,6 +1617,20 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
           console.warn("Supabase calendar update warning:", err);
         }
       }
+
+      // Update dedicated case_by_date_extention table
+      try {
+        await supabase
+          .from("case_by_date_extention")
+          .update({
+            approval_status: status,
+            decision_date: today,
+            updated_at: new Date().toISOString(),
+          })
+          .or(`subject_file_no.eq.${caseNo},sub_file_no.eq.${caseNo}`);
+      } catch (err) {
+        console.warn("Supabase case_by_date_extention update warning:", err);
+      }
     }
 
     showToast(
