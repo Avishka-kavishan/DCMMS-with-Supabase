@@ -12,6 +12,7 @@ import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { getCurrentProfile, signOut, UserProfile } from "@/lib/auth";
+import { updateCaseByDateExtensionApprovalServer } from "@/lib/db-actions";
 import { CheckCircle, XCircle, FileText, Send, Clock, X, AlertCircle, ShieldCheck, Calendar as CalendarIcon, ChevronDown, ChevronUp, Bell, Eye, MoreHorizontal, Filter, Check, MailCheck, ClipboardList } from "lucide-react";
 
 interface Case {
@@ -1040,6 +1041,24 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
             }
           });
         }
+
+        try {
+          const { data: extRows } = await supabase.from("case_by_date_extention").select("*");
+          if (extRows && extRows.length > 0) {
+            extRows.forEach((ext: any) => {
+              const fileNo = String(ext.subject_file_no || ext.sub_file_no || "").trim().toLowerCase();
+              if (!fileNo) return;
+              const idx = list.findIndex((a: any) => String(a.caseNo || a.case_no || "").trim().toLowerCase() === fileNo);
+              if (idx >= 0) {
+                if (ext.approval_status) list[idx].extensionApprovalStatus = ext.approval_status;
+                if (ext.decision_date) list[idx].extensionDecisionDate = ext.decision_date;
+                if (ext.extention_term) list[idx].extensionTerm = ext.extention_term;
+                if (ext.start_date) list[idx].extensionStartDate = ext.start_date;
+                if (ext.end_date) list[idx].extensionEndDate = ext.end_date;
+              }
+            });
+          }
+        } catch (e) {}
       } catch (e) {}
     }
 
@@ -1549,6 +1568,17 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
       window.dispatchEvent(new Event("storage"));
     }
 
+    // Update dedicated case_by_date_extention table in local PostgreSQL
+    try {
+      await updateCaseByDateExtensionApprovalServer(caseNo, status, today, {
+        extention_term: asgn.extensionTerm || asgn.extension_term,
+        start_date: asgn.extensionStartDate || asgn.extension_start_date,
+        end_date: asgn.extensionEndDate || asgn.extension_end_date,
+      });
+    } catch (err) {
+      console.error("Failed to update case_by_date_extention in PostgreSQL:", err);
+    }
+
     if (isSupabaseConfigured) {
       try {
         await supabase.from("dcmms_subject_assignments").upsert({
@@ -1619,6 +1649,10 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
       }
 
       // Update dedicated case_by_date_extention table
+      try {
+        await updateCaseByDateExtensionApprovalServer(caseNo, status, today);
+      } catch (err) {}
+
       try {
         await supabase
           .from("case_by_date_extention")

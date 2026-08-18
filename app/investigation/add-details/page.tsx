@@ -13,7 +13,7 @@ import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 import { getCurrentProfile, signOut } from "@/lib/auth";
-import { getAccusedOfficerByRefServer, getCommitteeOfficersWithSchoolsServer, saveChairmanByCaseServer, getChairmanByCaseServer, saveMembersByCaseServer, getMembersByCaseServer } from "@/lib/db-actions";
+import { getAccusedOfficerByRefServer, getCommitteeOfficersWithSchoolsServer, saveChairmanByCaseServer, getChairmanByCaseServer, saveMembersByCaseServer, getMembersByCaseServer, saveCaseByDateExtensionServer, getCaseByDateExtensionServer } from "@/lib/db-actions";
 import { 
   Shield, User, Calendar as CalendarIcon, FileCheck, Send, Clock, 
   CheckCircle, ArrowLeft, RefreshCw, AlertCircle, Award, Building, 
@@ -627,6 +627,21 @@ function InvestigationCaseDetailsContent() {
         } catch (e) {}
       }
 
+      try {
+        const extRes = await getCaseByDateExtensionServer(caseNoParam);
+        if (extRes && extRes.success && extRes.data) {
+          const dbExt = extRes.data;
+          assignment = {
+            ...(assignment || {}),
+            extensionTerm: dbExt.extention_term || assignment?.extensionTerm,
+            extensionStartDate: dbExt.start_date || assignment?.extensionStartDate,
+            extensionEndDate: dbExt.end_date || assignment?.extensionEndDate,
+            extensionApprovalStatus: dbExt.approval_status || assignment?.extensionApprovalStatus,
+            extensionDecisionDate: dbExt.decision_date || assignment?.extensionDecisionDate,
+          };
+        }
+      } catch (e) {}
+
       if (typeof window !== "undefined") {
         const storedAsgn = localStorage.getItem("dcmms_subject_assignments");
         if (storedAsgn) {
@@ -1050,6 +1065,21 @@ function InvestigationCaseDetailsContent() {
           };
         }
       } catch (e) {}
+
+      try {
+        const extRes = await getCaseByDateExtensionServer(caseNoParam);
+        if (extRes && extRes.success && extRes.data) {
+          const dbExt = extRes.data;
+          assignment = {
+            ...(assignment || {}),
+            extensionTerm: dbExt.extention_term || assignment?.extensionTerm,
+            extensionStartDate: dbExt.start_date || assignment?.extensionStartDate,
+            extensionEndDate: dbExt.end_date || assignment?.extensionEndDate,
+            extensionApprovalStatus: dbExt.approval_status || assignment?.extensionApprovalStatus,
+            extensionDecisionDate: dbExt.decision_date || assignment?.extensionDecisionDate,
+          };
+        }
+      } catch (e) {}
     }
 
     if (typeof window !== "undefined") {
@@ -1092,6 +1122,11 @@ function InvestigationCaseDetailsContent() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "dcmms_subject" },
+        () => reloadAssignmentData()
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "case_by_date_extention" },
         () => reloadAssignmentData()
       )
       .subscribe();
@@ -1435,44 +1470,26 @@ function InvestigationCaseDetailsContent() {
           extension_end_date: step3EndDate,
           extension_approval_status: "Pending",
         }, { onConflict: "id" });
+      } catch (e) {}
+    }
 
-        // Save into dedicated case_by_date_extention table with formatted dates & fallback
-        const cleanStart = step3StartDate ? (new Date(step3StartDate).toString() !== "Invalid Date" ? new Date(step3StartDate).toISOString().slice(0, 10) : step3StartDate) : null;
-        const cleanEnd = step3EndDate ? (new Date(step3EndDate).toString() !== "Invalid Date" ? new Date(step3EndDate).toISOString().slice(0, 10) : step3EndDate) : null;
+    // Save into dedicated PostgreSQL case_by_date_extention table
+    const cleanStart = step3StartDate ? (new Date(step3StartDate).toString() !== "Invalid Date" ? new Date(step3StartDate).toISOString().slice(0, 10) : step3StartDate) : null;
+    const cleanEnd = step3EndDate ? (new Date(step3EndDate).toString() !== "Invalid Date" ? new Date(step3EndDate).toISOString().slice(0, 10) : step3EndDate) : null;
 
-        const extFullPayload: any = {
-          subject_file_no: caseNoParam,
-          sub_file_no: caseNoParam,
-          extention_term: step3Term || "First Extension (1st)",
-          start_date: cleanStart,
-          end_date: cleanEnd,
-          approval_status: "Pending",
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
+    const extFullPayload: any = {
+      subject_file_no: caseNoParam,
+      sub_file_no: caseNoParam,
+      extention_term: step3Term || "First Extension (1st)",
+      start_date: cleanStart,
+      end_date: cleanEnd,
+      approval_status: "Pending",
+    };
 
-        const { error: extErr } = await supabase.from("case_by_date_extention").insert(extFullPayload);
-        if (extErr) {
-          console.warn("Primary case_by_date_extention insert failed, retrying with base columns:", extErr.message);
-          const { error: fallbackErr } = await supabase.from("case_by_date_extention").insert({
-            subject_file_no: caseNoParam,
-            extention_term: step3Term || "First Extension (1st)",
-            start_date: cleanStart,
-            end_date: cleanEnd,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          });
-          if (fallbackErr) {
-            console.error("Fallback case_by_date_extention insert error:", fallbackErr.message);
-          } else {
-            console.log("Successfully saved date extension to case_by_date_extention table!");
-          }
-        } else {
-          console.log("Successfully saved date extension to case_by_date_extention table!");
-        }
-      } catch (e) {
-        console.error("Supabase extension request error:", e);
-      }
+    try {
+      await saveCaseByDateExtensionServer(extFullPayload);
+    } catch (e) {
+      console.error("Failed to save to PostgreSQL case_by_date_extention:", e);
     }
 
     setIsSaving(false);
@@ -2620,15 +2637,23 @@ function InvestigationCaseDetailsContent() {
                               <CheckCircle size={20} style={{ color: "#16a34a", flexShrink: 0 }} />
                               <div>
                                 <div style={{ fontWeight: 700, color: "#15803d", fontSize: "13px" }}>{lang === "si" ? "විෂය නිලධාරියා විසින් අනුමත කරන ලදී" : "Extension Approved by Subject Officer"}</div>
-                                <div style={{ fontSize: "12px", color: "#166534" }}>{lang === "si" ? `නව වාර්තා දිනය: ${step3EndDate || existingAssignment?.extensionEndDate || ""}` : `Decision Date: ${existingAssignment?.extensionDecisionDate || ""} | New Due Date: ${step3EndDate || existingAssignment?.extensionEndDate || ""}`}</div>
+                                <div style={{ fontSize: "12px", color: "#166534" }}>{lang === "si" ? `තීරණ දිනය: ${existingAssignment?.extensionDecisionDate || ""} | නව වාර්තා දිනය: ${step3EndDate || existingAssignment?.extensionEndDate || ""}` : `Decision Date: ${existingAssignment?.extensionDecisionDate || ""} | New Due Date: ${step3EndDate || existingAssignment?.extensionEndDate || ""}`}</div>
                               </div>
                             </div>
-                          ) : (
+                          ) : (existingAssignment?.extensionApprovalStatus === "Disapproved" || existingAssignment?.extensionApprovalStatus === "Rejected") ? (
                             <div style={{ display: "flex", alignItems: "center", gap: "10px", backgroundColor: "#fef2f2", padding: "12px 16px", borderRadius: "10px", border: "1px solid #fca5a5" }}>
                               <X size={20} style={{ color: "#dc2626", flexShrink: 0 }} />
                               <div>
                                 <div style={{ fontWeight: 700, color: "#b91c1c", fontSize: "13px" }}>{lang === "si" ? "විෂය නිලධාරියා විසින් ප්‍රතික්ෂේප කරන ලදී" : "Extension Disapproved by Subject Officer"}</div>
-                                <div style={{ fontSize: "12px", color: "#991b1b" }}>{lang === "si" ? `ප්‍රතිඵල දිනය: ${existingAssignment?.extensionDecisionDate || ""}` : `Decision Date: ${existingAssignment?.extensionDecisionDate || ""}`}</div>
+                                <div style={{ fontSize: "12px", color: "#991b1b" }}>{lang === "si" ? `තීරණ දිනය: ${existingAssignment?.extensionDecisionDate || ""}` : `Decision Date: ${existingAssignment?.extensionDecisionDate || ""}`}</div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div style={{ display: "flex", alignItems: "center", gap: "10px", backgroundColor: "#fffbeb", padding: "12px 16px", borderRadius: "10px", border: "1px solid #fde68a" }}>
+                              <Clock size={20} style={{ color: "#d97706", flexShrink: 0 }} />
+                              <div>
+                                <div style={{ fontWeight: 700, color: "#b45309", fontSize: "13px" }}>{lang === "si" ? "විෂය නිලධාරී වෙතින් අනුමැතිය අපේක්ෂාවෙන්" : "Awaiting Decision from Subject Officer"}</div>
+                                <div style={{ fontSize: "12px", color: "#92400e" }}>{lang === "si" ? "දිනයන් දීර්ඝ කිරීමේ ඉල්ලීම යවා ඇත. විෂය නිලධාරියා අනුමත කරන තෙක් රැඳී සිටින්න." : "Extension request sent to Subject Officer. Pending approval or disapproval decision."}</div>
                               </div>
                             </div>
                           )}

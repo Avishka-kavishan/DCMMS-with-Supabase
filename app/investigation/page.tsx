@@ -10,7 +10,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 import { signOut, getCurrentProfile } from "@/lib/auth";
-import { getInvestigationOfficersServer, assignOfficerToInvestigationServer, logAuditEventServer, getAccusedOfficerByRefServer, getCommitteeOfficersWithSchoolsServer, saveChairmanByCaseServer, getChairmanByCaseServer, saveMembersByCaseServer, getMembersByCaseServer } from "@/lib/db-actions";
+import { getInvestigationOfficersServer, assignOfficerToInvestigationServer, logAuditEventServer, getAccusedOfficerByRefServer, getCommitteeOfficersWithSchoolsServer, saveChairmanByCaseServer, getChairmanByCaseServer, saveMembersByCaseServer, getMembersByCaseServer, saveCaseByDateExtensionServer } from "@/lib/db-actions";
 import { 
   UserPlus, X, Edit, Trash2, Check, Eye, ClipboardList, 
   UserCheck, Shield, ChevronRight, Calendar as CalendarIcon, 
@@ -2224,6 +2224,25 @@ export default function InvestigationPage() {
       window.dispatchEvent(new Event("storage"));
     }
 
+    // Save into dedicated PostgreSQL case_by_date_extention table
+    const cleanStart = extensionStartToUse ? (new Date(extensionStartToUse).toString() !== "Invalid Date" ? new Date(extensionStartToUse).toISOString().slice(0, 10) : extensionStartToUse) : null;
+    const cleanEnd = extensionEndToUse ? (new Date(extensionEndToUse).toString() !== "Invalid Date" ? new Date(extensionEndToUse).toISOString().slice(0, 10) : extensionEndToUse) : null;
+
+    const extFullPayload: any = {
+      subject_file_no: caseNo,
+      sub_file_no: caseNo,
+      extention_term: extensionTermToUse || "First Extension (1st)",
+      start_date: cleanStart,
+      end_date: cleanEnd,
+      approval_status: "Pending",
+    };
+
+    try {
+      await saveCaseByDateExtensionServer(extFullPayload);
+    } catch (e) {
+      console.error("Failed to save to PostgreSQL case_by_date_extention:", e);
+    }
+
     if (isSupabaseConfigured) {
       try {
         const existingId = existingAssignment?.id || `asgn-${caseNo}`;
@@ -2279,6 +2298,10 @@ export default function InvestigationPage() {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         };
+
+        try {
+          await saveCaseByDateExtensionServer(extFullPayload);
+        } catch (e) {}
 
         const { error: extErr } = await supabase.from("case_by_date_extention").insert(extFullPayload);
         if (extErr) {

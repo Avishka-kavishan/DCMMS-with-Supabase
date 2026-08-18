@@ -2130,6 +2130,200 @@ export async function getMembersByCaseServer(refNumber: string) {
   }
 }
 
+// -------------------------------------------------------------
+// 15. Case By Date Extension Operations
+// -------------------------------------------------------------
+export async function saveCaseByDateExtensionServer(payload: {
+  subject_file_no: string;
+  sub_file_no?: string;
+  extention_term?: string;
+  start_date?: string | null;
+  end_date?: string | null;
+  approval_status?: string;
+}) {
+  try {
+    if (!payload || !payload.subject_file_no) {
+      return serializeForServerAction({ success: false, error: "subject_file_no is required" });
+    }
+
+    const cleanRef = payload.subject_file_no.trim();
+    const subRef = payload.sub_file_no ? payload.sub_file_no.trim() : cleanRef;
+    const term = payload.extention_term || "First Extension (1st)";
+    const start = payload.start_date ? new Date(payload.start_date) : null;
+    const end = payload.end_date ? new Date(payload.end_date) : null;
+    const status = payload.approval_status || "Pending";
+    const now = new Date();
+
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS public.case_by_date_extention (
+          id BIGSERIAL PRIMARY KEY,
+          subject_file_no VARCHAR(100),
+          sub_file_no VARCHAR(100),
+          subject_officer_form_id BIGINT,
+          extention_term VARCHAR(50),
+          start_date DATE,
+          end_date DATE,
+          approval_status VARCHAR(50) DEFAULT 'Pending',
+          decision_date DATE,
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+    } catch (e) {}
+
+    await prisma.$executeRaw`
+      INSERT INTO public.case_by_date_extention (
+        subject_file_no,
+        sub_file_no,
+        extention_term,
+        start_date,
+        end_date,
+        approval_status,
+        created_at,
+        updated_at
+      ) VALUES (
+        ${cleanRef},
+        ${subRef},
+        ${term},
+        ${start},
+        ${end},
+        ${status},
+        ${now},
+        ${now}
+      );
+    `;
+
+    return serializeForServerAction({ success: true, message: "Date extension saved to PostgreSQL" });
+  } catch (error: any) {
+    console.error("Error saving case_by_date_extention:", error);
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to save extension" });
+  }
+}
+
+export async function updateCaseByDateExtensionApprovalServer(
+  subjectFileNo: string,
+  approvalStatus: string,
+  decisionDate?: string | null,
+  extDetails?: {
+    extention_term?: string;
+    start_date?: string | null;
+    end_date?: string | null;
+  }
+) {
+  try {
+    if (!subjectFileNo) {
+      return serializeForServerAction({ success: false, error: "subjectFileNo is required" });
+    }
+    const cleanRef = subjectFileNo.trim();
+    const decDate = decisionDate ? new Date(decisionDate) : new Date();
+    const now = new Date();
+
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS public.case_by_date_extention (
+          id BIGSERIAL PRIMARY KEY,
+          subject_file_no VARCHAR(100),
+          sub_file_no VARCHAR(100),
+          subject_officer_form_id BIGINT,
+          extention_term VARCHAR(50),
+          start_date DATE,
+          end_date DATE,
+          approval_status VARCHAR(50) DEFAULT 'Pending',
+          decision_date DATE,
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+    } catch (e) {}
+
+    const existing: any[] = await prisma.$queryRaw`
+      SELECT id FROM public.case_by_date_extention
+      WHERE LOWER(subject_file_no) = LOWER(${cleanRef})
+         OR LOWER(sub_file_no) = LOWER(${cleanRef})
+      LIMIT 1;
+    `;
+
+    if (existing && existing.length > 0) {
+      await prisma.$executeRaw`
+        UPDATE public.case_by_date_extention
+        SET 
+          approval_status = ${approvalStatus},
+          decision_date = ${decDate},
+          updated_at = ${now}
+        WHERE LOWER(subject_file_no) = LOWER(${cleanRef})
+           OR LOWER(sub_file_no) = LOWER(${cleanRef});
+      `;
+    } else {
+      const term = extDetails?.extention_term || "First Extension (1st)";
+      const start = extDetails?.start_date ? new Date(extDetails.start_date) : null;
+      const end = extDetails?.end_date ? new Date(extDetails.end_date) : null;
+
+      await prisma.$executeRaw`
+        INSERT INTO public.case_by_date_extention (
+          subject_file_no,
+          sub_file_no,
+          extention_term,
+          start_date,
+          end_date,
+          approval_status,
+          decision_date,
+          created_at,
+          updated_at
+        ) VALUES (
+          ${cleanRef},
+          ${cleanRef},
+          ${term},
+          ${start},
+          ${end},
+          ${approvalStatus},
+          ${decDate},
+          ${now},
+          ${now}
+        );
+      `;
+    }
+
+    return serializeForServerAction({ success: true, message: "Extension approval updated in PostgreSQL" });
+  } catch (error: any) {
+    console.error("Error updating case_by_date_extention approval:", error);
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to update extension approval" });
+  }
+}
+
+export async function getCaseByDateExtensionServer(subjectFileNo: string) {
+  try {
+    if (!subjectFileNo || !subjectFileNo.trim()) {
+      return serializeForServerAction({ success: false, error: "subjectFileNo is required", data: null });
+    }
+    const cleanRef = subjectFileNo.trim();
+    const records: any[] = await prisma.$queryRaw`
+      SELECT 
+        id::text as id,
+        subject_file_no,
+        sub_file_no,
+        extention_term,
+        start_date,
+        end_date,
+        approval_status,
+        decision_date,
+        created_at,
+        updated_at
+      FROM public.case_by_date_extention
+      WHERE LOWER(subject_file_no) = LOWER(${cleanRef})
+         OR LOWER(sub_file_no) = LOWER(${cleanRef})
+      ORDER BY created_at DESC
+      LIMIT 1;
+    `;
+
+    return serializeForServerAction({ success: true, data: records && records.length > 0 ? records[0] : null });
+  } catch (error: any) {
+    console.error("Error fetching case_by_date_extention:", error);
+    return serializeForServerAction({ success: false, error: error?.message, data: null });
+  }
+}
+
+
 
 
 
