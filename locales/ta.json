@@ -382,6 +382,8 @@
   "statusProvincialPreliminary": "மாகாண முதற்கட்ட விசாரணையை நடத்துவதற்கு அதிகாரத்தை வழங்குதல்",
   "statusFileClosed": "கோப்பு மூடப்பட்டது",
   "statusImplementRecommendations": "பரிந்துரைகளை அமல்படுத்துதல்",
+  "addRecommendation": "Add a recommendation (பரிந்துரை சேர்க்க)",
+  "recommendationFormTitle": "விசாரணை பரிந்துரை படிவம்",
   "statusInquiry": "விசாரணை நடத்துதல்",
   "statusReferOtherInstitute": "இந்த அமைச்சு முறைமையுடன் தொடர்பற்ற கடிதங்களை வேறு நிறுவனங்களுக்கு அனுப்புதல்",
   "statusConsultRelevantInstitutes": "முறைப்பாடுகளுக்காக உரிய நிறுவனங்களிடமிருந்து ஆலோசனைகளைப் பெறுதல்",

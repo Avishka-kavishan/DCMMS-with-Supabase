@@ -386,6 +386,8 @@
   "statusProvincialPreliminary": "Delegation of authority to conduct a provincial preliminary investigation",
   "statusFileClosed": "File Closed",
   "statusImplementRecommendations": "Implementation of Recommendations",
+  "addRecommendation": "Add a recommendation",
+  "recommendationFormTitle": "Investigation Recommendation Form",
   "statusInquiry": "Conducting an inquiry",
   "statusReferOtherInstitute": "Referring letters not related to this ministry system to other institutes",
   "statusConsultRelevantInstitutes": "Taking advice from relevant institutes for complaints",

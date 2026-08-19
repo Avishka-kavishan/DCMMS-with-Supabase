@@ -3126,18 +3126,45 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
                                           <span>{lang === "si" ? "5. මූලික විමර්ශනය අවසන් බව දැනුම් දීම (Admin ගෙන් ලැබුණි)" : lang === "ta" ? "5. ஆரம்ப விசாரணை முடிவு அறிவிப்பு (நிர்வாகியிடமிருந்து பெறப்பட்டது)" : "Step 5: Initial Investigation Complete (Notification from Admin)"}</span>
                                           <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "20px", backgroundColor: "#d1fae5", color: "#065f46" }}>✓ {lang === "si" ? "දැනුම් දෙන ලදී" : lang === "ta" ? "தெரிவிக்கப்பட்டது" : "Informed"} {asgn.initialInvestigationCompletedAt || ""}</span>
                                         </div>
-                                        <div style={{ backgroundColor: "#ecfdf5", borderRadius: "10px", border: "1px solid #a7f3d0", padding: "14px 16px", display: "flex", alignItems: "center", gap: "12px" }}>
-                                          <div style={{ width: "40px", height: "40px", borderRadius: "50%", backgroundColor: "#10b981", color: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                                            <Send size={18} />
-                                          </div>
-                                          <div>
-                                            <div style={{ fontWeight: 700, color: "#065f46", fontSize: "13px" }}>
-                                              {lang === "si" ? "මූලික විමර්ශන කටයුතු අවසන් බවට විමර්ශන පරිපාලක විසින් නිල වශයෙන් දැනුම් දී ඇත." : lang === "ta" ? "ஆரம்ப விசாரணை முடிவடைந்துவிட்டது என விசாரணை நிர்வாகியால் உத்தியோகபூர்වமாக தெரிவிக்கப்பட்டுள்ளது." : "Official notification: Investigation Administrator has informed that the initial preliminary investigation for this case is complete."}
+                                        <div style={{ backgroundColor: "#ecfdf5", borderRadius: "10px", border: "1px solid #a7f3d0", padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px", flexWrap: "wrap" }}>
+                                          <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: "260px", flex: 1 }}>
+                                            <div style={{ width: "40px", height: "40px", borderRadius: "50%", backgroundColor: "#10b981", color: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                              <Send size={18} />
                                             </div>
-                                            <div style={{ fontSize: "12px", color: "#047857", marginTop: "2px" }}>
-                                              {lang === "si" ? `යොමු අංකය: ${asgn.caseNo} | දිනය: ${asgn.initialInvestigationCompletedAt || new Date().toISOString().slice(0, 10)}` : `Ref: ${asgn.caseNo} | Date: ${asgn.initialInvestigationCompletedAt || new Date().toISOString().slice(0, 10)}`}
+                                            <div>
+                                              <div style={{ fontWeight: 700, color: "#065f46", fontSize: "13px" }}>
+                                                {lang === "si" ? "මූලික විමර්ශන කටයුතු අවසන් බවට විමර්ශන පරිපාලක විසින් නිල වශයෙන් දැනුම් දී ඇත." : lang === "ta" ? "ஆரம்ப விசாரணை முடிவடைந்துவிட்டது என விசாரணை நிர்வாகியால் உத்தியோகபூர்වமாக தெரிவிக்கப்பட்டுள்ளது." : "Official notification: Investigation Administrator has informed that the initial preliminary investigation for this case is complete."}
+                                              </div>
+                                              <div style={{ fontSize: "12px", color: "#047857", marginTop: "2px" }}>
+                                                {lang === "si" ? `යොමු අංකය: ${asgn.caseNo} | දිනය: ${asgn.initialInvestigationCompletedAt || new Date().toISOString().slice(0, 10)}` : `Ref: ${asgn.caseNo} | Date: ${asgn.initialInvestigationCompletedAt || new Date().toISOString().slice(0, 10)}`}
+                                              </div>
                                             </div>
                                           </div>
+
+                                          {/* "Add a recommendation" Button */}
+                                          <Link
+                                            href={`/subject/recommendation?caseNo=${encodeURIComponent(asgn.caseNo)}`}
+                                            style={{
+                                              display: "inline-flex",
+                                              alignItems: "center",
+                                              gap: "8px",
+                                              background: "linear-gradient(135deg, #059669, #10b981)",
+                                              color: "#ffffff",
+                                              padding: "9px 18px",
+                                              borderRadius: "8px",
+                                              fontSize: "13px",
+                                              fontWeight: 700,
+                                              textDecoration: "none",
+                                              boxShadow: "0 2px 6px rgba(5, 150, 105, 0.3)",
+                                              transition: "all 0.2s ease-in-out",
+                                              whiteSpace: "nowrap",
+                                              flexShrink: 0
+                                            }}
+                                            className="btn-add-recommendation"
+                                          >
+                                            <ClipboardList size={16} />
+                                            <span>{t("addRecommendation", "Add a recommendation")}</span>
+                                          </Link>
                                         </div>
                                       </div>
                                     </div>
