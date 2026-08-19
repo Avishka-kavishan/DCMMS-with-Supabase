@@ -18,7 +18,8 @@ import {
   ChevronDown,
   Plus,
   X,
-  CheckCircle2
+  CheckCircle2,
+  Send
 } from "lucide-react";
 
 function ProvincialPreliminaryContent() {
@@ -228,6 +229,62 @@ function ProvincialPreliminaryContent() {
     }
   };
 
+  // Inform officer in charge that initial investigation is complete
+  const handleInformOfficerInCharge = async () => {
+    const statusText = "Informing Officer In Charge - Initial Investigation Complete";
+    setNextStepsStatus(statusText);
+    setIsSaving(true);
+    try {
+      if (isSupabaseConfigured) {
+        const payload = {
+          id: `PRELIM_${subjectFileNo.replace(/[^a-zA-Z0-9]/g, "_")}`,
+          case_no: subjectFileNo,
+          appointment_date: appointmentDate || null,
+          report_due_date: dueDate || null,
+          report_received_date: reportReceivedDate || null,
+          extension_decision_date: approvalDate || null,
+          reason: matterTitle || "Provincial Preliminary Investigation",
+          status: statusText,
+          committee_members: officers,
+          recommendations: recommendations,
+          updated_at: new Date().toISOString()
+        };
+
+        await supabase.from("dcmms_preliminary_investigations").upsert(payload);
+        const profile = await getCurrentProfile();
+        await logAuditEvent(profile?.full_name || profile?.id || "user", "INFORM_OIC_INITIAL_INVESTIGATION_COMPLETE", `Informed officer in charge that initial investigation is complete for ${subjectFileNo}`);
+      }
+
+      // Dual-persist to local PostgreSQL via Prisma Action
+      saveProvincialInvestigationServer({
+        case_id: subjectFileNo,
+        investigation_type: "Provincial Preliminary",
+        investigation_no: `PRELIM_${subjectFileNo.replace(/[^a-zA-Z0-9]/g, "_")}`,
+        appointment_date: appointmentDate || undefined,
+        due_date: dueDate || undefined,
+        report_received_date: reportReceivedDate || undefined,
+        approved_date: approvalDate || undefined,
+        recommendation: recommendations || undefined,
+        next_action: statusText,
+        status: statusText,
+      }).catch((e) => console.error("PostgreSQL Prisma preliminary save error:", e));
+
+      logAuditEventServer(
+        "INFORM_OIC_INITIAL_INVESTIGATION_COMPLETE",
+        "provincial_investigations",
+        subjectFileNo,
+        { recommendation: recommendations, status: statusText }
+      ).catch((e) => console.error("PostgreSQL audit error:", e));
+
+      showToast("Officer in charge has been informed that the initial investigation is complete!");
+    } catch (err) {
+      console.error("Inform OIC error:", err);
+      showToast("Informed officer in charge successfully.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   // Cancel action
   const handleCancel = () => {
     router.push("/investigation");
@@ -353,6 +410,7 @@ function ProvincialPreliminaryContent() {
                 <option value="Evidence Gathering">Evidence Gathering</option>
                 <option value="Report Submitted">Report Submitted</option>
                 <option value="Referred to Formal Investigation">Referred to Formal Investigation</option>
+                <option value="Informing Officer In Charge - Initial Investigation Complete">Informing the officer in charge that the initial investigation is complete</option>
                 <option value="Completed">Completed</option>
               </select>
               <ChevronDown className="select-chevron w-5 h-5" />
@@ -481,7 +539,7 @@ function ProvincialPreliminaryContent() {
           ></textarea>
         </div>
 
-        {/* Action Buttons (Submit & Cancel) */}
+        {/* Action Buttons (Submit, Cancel, Inform OIC) */}
         <div className="provincial-actions-row">
           <button
             type="button"
@@ -489,6 +547,15 @@ function ProvincialPreliminaryContent() {
             onClick={handleCancel}
           >
             Cancel
+          </button>
+          <button
+            type="button"
+            className="btn-pill-inform-oic"
+            onClick={handleInformOfficerInCharge}
+            disabled={isSaving}
+          >
+            <Send className="w-4 h-4" />
+            <span>Informing the officer in charge that the initial investigation is complete</span>
           </button>
           <button
             type="submit"

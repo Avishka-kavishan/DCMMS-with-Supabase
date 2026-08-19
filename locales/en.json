@@ -441,8 +441,11 @@
   "showingResults": "Showing {{count}} of {{total}} cases",
   "exportExcel": "Export Excel",
   "exportFullReport": "Export Full Daily Report",
-  "exportExcelSuccess": "Daily Mail report exported to Excel successfully!",
   "moreLetters": "more letters",
-  "exportExcelBottom": "Extract Excel File"
+  "exportExcelBottom": "Extract Excel File",
+  "informOfficerInChargeTitle": "Informing Officer in Charge that Initial Investigation is Complete",
+  "informOfficerInChargeBtn": "Informing the officer in charge that the initial investigation is complete",
+  "informOfficerInChargeDesc": "Click the button below to notify the officer in charge that the initial preliminary investigation for this case is complete.",
+  "informOfficerInChargeSuccess": "Successfully informed the officer in charge that the initial investigation is complete!"
 }
 

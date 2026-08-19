@@ -1555,6 +1555,141 @@ function InvestigationCaseDetailsContent() {
     );
   };
 
+  // ── Handler: Inform Officer In Charge that the Initial Investigation is Complete ──
+  const handleInformOfficerInCharge = async () => {
+    setIsSaving(true);
+    const subjectOfficer = existingAssignment?.subjectOfficerName || assignee || getDisplaySubjectOfficerName() || "Subject Officer";
+    const matchKey = String(caseNoParam || "").trim().toLowerCase();
+    const now = new Date().toISOString().slice(0, 10);
+    const actionId = `act-inform-oic-${caseNoParam}-${Date.now()}`;
+    const desc = lang === "si"
+      ? `මූලික විමර්ශනය අවසන් බව භාරකාර නිලධාරියාට දැනුම් දෙන ලදී. (${caseNoParam})`
+      : `Informed the officer in charge that the initial investigation is complete for case ${caseNoParam}.`;
+
+    // 1. Save status to subject assignments
+    await saveSubjectAssignment({
+      subjectOfficerName: subjectOfficer,
+      initialInvestigationComplete: true,
+      initialInvestigationCompletedAt: now,
+      status: "Informing Officer In Charge - Initial Investigation Complete",
+    });
+
+    // 2. Update localStorage entries
+    if (typeof window !== "undefined") {
+      try {
+        const storedLetters = localStorage.getItem("dcmms_letters") || "[]";
+        let letters = JSON.parse(storedLetters);
+        const idx = letters.findIndex((l: any) => String(l.refNo || l.caseNo || "").trim().toLowerCase() === matchKey);
+        if (idx >= 0) {
+          letters[idx].status = "Informing Officer In Charge - Initial Investigation Complete";
+          letters[idx].initialInvestigationComplete = true;
+          if (subjectOfficer) letters[idx].officerName = subjectOfficer;
+        }
+        localStorage.setItem("dcmms_letters", JSON.stringify(letters));
+      } catch (e) {}
+
+      try {
+        const storedCases = localStorage.getItem("dcmms_cases") || "[]";
+        let cases = JSON.parse(storedCases);
+        const idx = cases.findIndex((c: any) => String(c.caseNo || c.refNo || "").trim().toLowerCase() === matchKey);
+        if (idx >= 0) {
+          cases[idx].status = "Informing Officer In Charge - Initial Investigation Complete";
+          cases[idx].initialInvestigationComplete = true;
+        }
+        localStorage.setItem("dcmms_cases", JSON.stringify(cases));
+      } catch (e) {}
+
+      // Save action log
+      const newActionItem = {
+        id: actionId,
+        caseNo: caseNoParam,
+        receivedDate: now,
+        reportState: "Informing Officer In Charge - Initial Investigation Complete",
+        specialNotes: desc,
+        subjectOfficerName: subjectOfficer,
+        stepTaken: desc,
+      };
+
+      try {
+        const storedActions = localStorage.getItem("dcmms_new_letter_current_case") || "[]";
+        let actionsList = [];
+        try { actionsList = JSON.parse(storedActions); } catch (e) {}
+        if (!Array.isArray(actionsList)) actionsList = [];
+        actionsList.unshift(newActionItem);
+        localStorage.setItem("dcmms_new_letter_current_case", JSON.stringify(actionsList));
+        setPreviousActions((prev) => [newActionItem, ...prev]);
+      } catch (e) {}
+
+      // Write dedicated notification for Subject Officer
+      try {
+        const notifKey = "dcmms_notifications";
+        const stored = localStorage.getItem(notifKey) || "[]";
+        let notifs: any[] = [];
+        try { notifs = JSON.parse(stored); } catch (e) {}
+        if (!Array.isArray(notifs)) notifs = [];
+        notifs.unshift({
+          id: `notif-oic-${caseNoParam}-${Date.now()}`,
+          caseNo: caseNoParam,
+          type: "initial_investigation_complete",
+          title: lang === "si" ? "මූලික විමර්ශනය අවසන් බව දැනුම් දීම" : lang === "ta" ? "ஆரம்ப விசாரணை முடிவடைந்துவிட்டது என்பதை தெரிவித்தல்" : "Informing Officer In Charge - Initial Investigation Complete",
+          message: desc,
+          targetOfficer: subjectOfficer,
+          createdAt: new Date().toISOString(),
+          read: false,
+        });
+        localStorage.setItem(notifKey, JSON.stringify(notifs));
+      } catch (e) {}
+
+      // Reset seen notifs so subject officer immediately gets unread alert
+      try {
+        const seenStored = localStorage.getItem("dcmms_subject_seen_notifs") || "[]";
+        let seenIds: string[] = JSON.parse(seenStored);
+        if (Array.isArray(seenIds)) {
+          seenIds = seenIds.filter((id: string) => id !== caseNoParam && id !== `asgn-${caseNoParam}`);
+          localStorage.setItem("dcmms_subject_seen_notifs", JSON.stringify(seenIds));
+        }
+      } catch (e) {}
+
+      window.dispatchEvent(new CustomEvent("dcmms_assignment_updated"));
+      window.dispatchEvent(new CustomEvent("dcmms_notifications_updated"));
+      window.dispatchEvent(new CustomEvent("dcmms_data_updated"));
+      window.dispatchEvent(new StorageEvent("storage", { key: "dcmms_subject_assignments" }));
+      window.dispatchEvent(new StorageEvent("storage", { key: "dcmms_notifications" }));
+    }
+
+    // 3. Persist to Supabase
+    if (isSupabaseConfigured) {
+      try {
+        await supabase
+          .from("dcmms_subject")
+          .update({
+            status: "Informing Officer In Charge - Initial Investigation Complete",
+            updated_at: new Date().toISOString(),
+          })
+          .ilike("case_no", caseNoParam.trim());
+
+        await supabase.from("dcmms_subject_details").insert({
+          id: actionId,
+          case_no: caseNoParam,
+          ref_no: caseNoParam,
+          received_date: now,
+          report_state: "Informing Officer In Charge - Initial Investigation Complete",
+          special_notes: desc,
+          subject_officer_name: subjectOfficer,
+          officer_name: subjectOfficer,
+          step_taken: desc,
+        });
+      } catch (e) {}
+    }
+
+    setIsSaving(false);
+    showToast(
+      lang === "si"
+        ? `මූලික විමර්ශනය අවසන් බව භාරකාර නිලධාරියාට සාර්ථකව දැනුම් දෙන ලදී! (${caseNoParam})`
+        : `Officer in charge has been successfully informed that the initial investigation is complete! (${caseNoParam})`
+    );
+  };
+
   // ── Handler: Investigation Administrator sends Investigation Committee Assignment details to Subject Officer ──
   const handleSendCommitteeToSubjectOfficer = async () => {
     if (!selectedChairman && selectedMembers.length === 0) {
@@ -2742,6 +2877,63 @@ function InvestigationCaseDetailsContent() {
                       )}
 
                     </div>
+                  </div>
+                </div>
+
+                {/* Step 3: Informing the Officer in Charge that Initial Investigation is Complete */}
+                <div style={{ backgroundColor: "#ffffff", padding: "20px", borderRadius: "12px", border: "1px solid #cbd5e1", boxShadow: "0 2px 4px rgba(0,0,0,0.02)", marginTop: "16px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px", borderBottom: "1px solid #f1f5f9", paddingBottom: "10px" }}>
+                    <h4 style={{ margin: 0, fontSize: "15px", color: "#1e293b", fontWeight: 700, display: "flex", alignItems: "center", gap: "8px" }}>
+                      <Send size={18} style={{ color: "#2563eb" }} />
+                      <span>{lang === "si" ? "මූලික විමර්ශනය අවසන් බව භාරකාර නිලධාරියාට දැනුම් දීම" : lang === "ta" ? "ஆரம்ப விசாரணை முடிவடைந்துவிட்டது என்பதை பொறுப்பு அதிகாரிக்கு தெரிவித்தல்" : "Informing Officer in Charge that Initial Investigation is Complete"}</span>
+                    </h4>
+                    {existingAssignment?.initialInvestigationComplete ? (
+                      <span style={{ fontSize: "11px", fontWeight: 700, backgroundColor: "#dcfce7", color: "#15803d", padding: "4px 10px", borderRadius: "12px", display: "flex", alignItems: "center", gap: "4px" }}>
+                        <CheckCircle size={13} />
+                        {lang === "si" ? "දැනුම් දෙන ලදී" : lang === "ta" ? "தெரிவிக்கப்பட்டது" : "Informed"}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <p style={{ fontSize: "13px", color: "#475569", margin: "0 0 16px 0", lineHeight: 1.5 }}>
+                    {lang === "si"
+                      ? "මූලික විමර්ශන කටයුතු අවසන් වූ පසු අදාළ භාරකාර නිලධාරියා වෙත ඒ බව දැනුම් දීමට පහත බොත්තම ක්ලික් කරන්න."
+                      : lang === "ta"
+                      ? "இந்த வழக்கிற்கான ஆரம்ப விசாரணை முடிவடைந்துவிட்டது என்பதை பொறுப்பு அதிகாரிக்கு தெரிவிக்க கீழே உள்ள பொத்தானைக் கிளிக் செய்யவும்."
+                      : "Click the button below to notify the officer in charge that the initial preliminary investigation for this case is complete."}
+                  </p>
+
+                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                    <button
+                      type="button"
+                      onClick={handleInformOfficerInCharge}
+                      disabled={isSaving}
+                      style={{
+                        padding: "11px 22px",
+                        backgroundColor: "#2563eb",
+                        color: "#ffffff",
+                        border: "none",
+                        borderRadius: "8px",
+                        fontWeight: 600,
+                        fontSize: "13px",
+                        cursor: isSaving ? "not-allowed" : "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        boxShadow: "0 2px 4px rgba(37,99,235,0.25)",
+                        transition: "all 0.15s ease",
+                        opacity: isSaving ? 0.7 : 1
+                      }}
+                    >
+                      <Send size={16} />
+                      <span>
+                        {lang === "si"
+                          ? "මූලික විමර්ශනය අවසන් බව භාරකාර නිලධාරියාට දැනුම් දෙන්න"
+                          : lang === "ta"
+                          ? "ஆரம்ப விசாரணை முடிவடைந்துவிட்டது என்பதை பொறுப்பு அதிகாரிக்கு தெரிவிக்கவும்"
+                          : "Informing the officer in charge that the initial investigation is complete"}
+                      </span>
+                    </button>
                   </div>
                 </div>
 

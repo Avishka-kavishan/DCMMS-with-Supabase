@@ -887,8 +887,9 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
       asgn.extensionTerm
     );
     const isPendingExtension = isExtensionRequested && (!asgn.extensionApprovalStatus || asgn.extensionApprovalStatus === "Pending");
+    const isInitialComplete = !!(asgn.initialInvestigationComplete || asgn.initial_investigation_complete || asgn.status === "Informing Officer In Charge - Initial Investigation Complete");
     const needsAction = !isDatesSubmitted || isPendingExtension;
-    return !isSeen || needsAction;
+    return !isSeen || needsAction || (isInitialComplete && !isSeen);
   }).length;
 
   const actionRequiredCount = assignments.filter((asgn) => {
@@ -904,7 +905,7 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
   }).length;
 
   const completedCount = assignments.filter((asgn) => {
-    return !!(asgn.afterInvestigationSent || asgn.investigationFileNo || asgn.investigationStatus);
+    return !!(asgn.afterInvestigationSent || asgn.investigationFileNo || asgn.investigationStatus || asgn.initialInvestigationComplete || asgn.initial_investigation_complete || asgn.status === "Informing Officer In Charge - Initial Investigation Complete");
   }).length;
 
   const filteredAssignments = assignments.filter((asgn) => {
@@ -920,7 +921,7 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
       return !isDatesSubmitted || isPendingExtension;
     }
     if (notifFilter === "completed") {
-      return !!(asgn.afterInvestigationSent || asgn.investigationFileNo || asgn.investigationStatus);
+      return !!(asgn.afterInvestigationSent || asgn.investigationFileNo || asgn.investigationStatus || asgn.initialInvestigationComplete || asgn.initial_investigation_complete || asgn.status === "Informing Officer In Charge - Initial Investigation Complete");
     }
     return true;
   });
@@ -1014,6 +1015,8 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
               investigationStatus: a.investigation_status || a.investigationStatus,
               investigationNotes: a.investigation_notes || a.investigationNotes,
               progressDetails: a.progress_details || a.progressDetails,
+              initialInvestigationComplete: !!(a.initial_investigation_complete || a.initialInvestigationComplete || a.status === "Informing Officer In Charge - Initial Investigation Complete"),
+              initialInvestigationCompletedAt: a.initial_investigation_completed_at || a.initialInvestigationCompletedAt || null,
               status: a.status,
               datesSubmittedBySubject: !!((a.appointment_date || a.appointmentDate) && (a.report_due_date || a.reportDueDate)),
             };
@@ -1083,6 +1086,7 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
               const normExtEnd = la.extensionEndDate || la.extension_end_date;
               const normExtApproval = la.extensionApprovalStatus || la.extension_approval_status;
               const normExtReq = la.extensionRequestedByAdmin !== undefined ? la.extensionRequestedByAdmin : la.extension_requested_by_admin;
+              const normInitialComplete = la.initialInvestigationComplete !== undefined ? la.initialInvestigationComplete : la.initial_investigation_complete;
 
               if (idx >= 0) {
                 list[idx] = { 
@@ -1096,6 +1100,8 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
                   extensionEndDate: normExtEnd || list[idx].extensionEndDate,
                   extensionApprovalStatus: normExtApproval !== undefined ? normExtApproval : list[idx].extensionApprovalStatus,
                   extensionRequestedByAdmin: normExtReq !== undefined ? !!normExtReq : list[idx].extensionRequestedByAdmin,
+                  initialInvestigationComplete: normInitialComplete !== undefined ? !!normInitialComplete : (list[idx].initialInvestigationComplete || list[idx].status === "Informing Officer In Charge - Initial Investigation Complete"),
+                  initialInvestigationCompletedAt: la.initialInvestigationCompletedAt || la.initial_investigation_completed_at || list[idx].initialInvestigationCompletedAt,
                 };
               } else {
                 list.push({ 
@@ -1109,6 +1115,8 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
                   extensionEndDate: normExtEnd,
                   extensionApprovalStatus: normExtApproval,
                   extensionRequestedByAdmin: !!normExtReq,
+                  initialInvestigationComplete: !!(normInitialComplete || la.status === "Informing Officer In Charge - Initial Investigation Complete"),
+                  initialInvestigationCompletedAt: la.initialInvestigationCompletedAt || la.initial_investigation_completed_at || null,
                 });
               }
             });
@@ -2070,6 +2078,7 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
                           const extensionStatus = asgn.extensionApprovalStatus;
                           const isPendingExtension = isExtensionRequested && (!extensionStatus || extensionStatus === "Pending");
                           const hasAfterInvestigation = !!(asgn.afterInvestigationSent || asgn.investigationFileNo || asgn.investigationStatus);
+                          const isInitialComplete = !!(asgn.initialInvestigationComplete || asgn.initial_investigation_complete || asgn.status === "Informing Officer In Charge - Initial Investigation Complete");
                           const isUnseen = !seenNotifIds.includes(asgn.id) && !seenNotifIds.includes(asgn.caseNo);
 
                           return (
@@ -2105,13 +2114,13 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
                                   width: "38px",
                                   height: "38px",
                                   borderRadius: "50%",
-                                  backgroundColor: hasAfterInvestigation ? "#dcfce7" : isPendingExtension ? "#fef3c7" : !isDatesSubmitted ? "#dbeafe" : "#f0f2f5",
-                                  color: hasAfterInvestigation ? "#15803d" : isPendingExtension ? "#b45309" : !isDatesSubmitted ? "#1d4ed8" : "#65676b",
+                                  backgroundColor: isInitialComplete ? "#d1fae5" : hasAfterInvestigation ? "#dcfce7" : isPendingExtension ? "#fef3c7" : !isDatesSubmitted ? "#dbeafe" : "#f0f2f5",
+                                  color: isInitialComplete ? "#059669" : hasAfterInvestigation ? "#15803d" : isPendingExtension ? "#b45309" : !isDatesSubmitted ? "#1d4ed8" : "#65676b",
                                   display: "flex",
                                   alignItems: "center",
                                   justifyContent: "center"
                                 }}>
-                                  {hasAfterInvestigation ? <CheckCircle size={18} /> : isPendingExtension ? <Clock size={18} /> : !isDatesSubmitted ? <CalendarIcon size={18} /> : <FileText size={18} />}
+                                  {isInitialComplete ? <CheckCircle size={18} /> : hasAfterInvestigation ? <CheckCircle size={18} /> : isPendingExtension ? <Clock size={18} /> : !isDatesSubmitted ? <CalendarIcon size={18} /> : <FileText size={18} />}
                                 </div>
                               </div>
 
@@ -2121,7 +2130,9 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
                                   <span style={{ fontWeight: 800, color: "#1877f2" }}>Case: {asgn.caseNo}</span>
                                 </div>
                                 <div style={{ fontSize: "12px", color: "#65676b", marginTop: "2px" }}>
-                                  {hasAfterInvestigation
+                                  {isInitialComplete
+                                    ? (lang === "si" ? "✓ මූලික විමර්ශනය අවසන් බව දැනුම් දෙන ලදී" : lang === "ta" ? "✓ ஆரம்ப விசாரணை முடிவடைந்தது என தெரிவிக்கப்பட்டது" : "✓ Initial investigation is complete (Informed by Admin)")
+                                    : hasAfterInvestigation
                                     ? (lang === "si" ? "✓ Step 5 — විමර්ශනය අවසන් විය" : "✓ Step 5 — After-investigation received")
                                     : isPendingExtension
                                     ? (lang === "si" ? "⚠️ Steps 3 & 4 — දිනයන් දීර්ඝ කිරීම් ඉල්ලීමක් ඇත" : "⚠️ Steps 3 & 4 — Extension decision pending")
@@ -2613,6 +2624,7 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
                         const extensionStatus = asgn.extensionApprovalStatus;
                         const isPendingExtension = isExtensionRequested && (!extensionStatus || extensionStatus === "Pending");
                         const hasAfterInvestigation = !!(asgn.afterInvestigationSent || asgn.investigationFileNo || asgn.investigationStatus);
+                        const isInitialComplete = !!(asgn.initialInvestigationComplete || asgn.initial_investigation_complete || asgn.status === "Informing Officer In Charge - Initial Investigation Complete");
 
                         const isUnseen = !seenNotifIds.includes(asgn.id) && !seenNotifIds.includes(asgn.caseNo);
                         const isCaseMinimized = !!minimizedCaseIds[asgn.id];
@@ -2647,14 +2659,14 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
                                   width: "50px",
                                   height: "50px",
                                   borderRadius: "50%",
-                                  backgroundColor: hasAfterInvestigation ? "#16a34a" : isPendingExtension ? "#d97706" : !isDatesSubmitted ? "#1877f2" : "#4f46e5",
+                                  backgroundColor: isInitialComplete ? "#059669" : hasAfterInvestigation ? "#16a34a" : isPendingExtension ? "#d97706" : !isDatesSubmitted ? "#1877f2" : "#4f46e5",
                                   color: "#ffffff",
                                   display: "flex",
                                   alignItems: "center",
                                   justifyContent: "center",
                                   boxShadow: "0 2px 6px rgba(0,0,0,0.12)"
                                 }}>
-                                  <FileText size={24} />
+                                  {isInitialComplete ? <CheckCircle size={24} /> : <FileText size={24} />}
                                 </div>
                                 <div style={{
                                   position: "absolute",
@@ -2663,14 +2675,14 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
                                   width: "22px",
                                   height: "22px",
                                   borderRadius: "50%",
-                                  backgroundColor: hasAfterInvestigation ? "#22c55e" : isPendingExtension ? "#f59e0b" : !isDatesSubmitted ? "#0284c7" : "#6366f1",
+                                  backgroundColor: isInitialComplete ? "#10b981" : hasAfterInvestigation ? "#22c55e" : isPendingExtension ? "#f59e0b" : !isDatesSubmitted ? "#0284c7" : "#6366f1",
                                   color: "#ffffff",
                                   display: "flex",
                                   alignItems: "center",
                                   justifyContent: "center",
                                   border: "2px solid #ffffff"
                                 }}>
-                                  {hasAfterInvestigation ? <CheckCircle size={12} /> : isPendingExtension ? <Clock size={12} /> : !isDatesSubmitted ? <AlertCircle size={12} /> : <CheckCircle size={12} />}
+                                  {isInitialComplete ? <CheckCircle size={12} /> : hasAfterInvestigation ? <CheckCircle size={12} /> : isPendingExtension ? <Clock size={12} /> : !isDatesSubmitted ? <AlertCircle size={12} /> : <CheckCircle size={12} />}
                                 </div>
                               </div>
 
@@ -2687,10 +2699,12 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
                                     fontWeight: 700,
                                     padding: "3px 10px",
                                     borderRadius: "14px",
-                                    backgroundColor: hasAfterInvestigation ? "#dcfce7" : isPendingExtension ? "#fef3c7" : !isDatesSubmitted ? "#fef3c7" : "#dbeafe",
-                                    color: hasAfterInvestigation ? "#15803d" : isPendingExtension ? "#b45309" : !isDatesSubmitted ? "#b45309" : "#1d4ed8"
+                                    backgroundColor: isInitialComplete ? "#d1fae5" : hasAfterInvestigation ? "#dcfce7" : isPendingExtension ? "#fef3c7" : !isDatesSubmitted ? "#fef3c7" : "#dbeafe",
+                                    color: isInitialComplete ? "#065f46" : hasAfterInvestigation ? "#15803d" : isPendingExtension ? "#b45309" : !isDatesSubmitted ? "#b45309" : "#1d4ed8"
                                   }}>
-                                    {hasAfterInvestigation
+                                    {isInitialComplete
+                                      ? (lang === "si" ? "✓ මූලික විමර්ශනය අවසන් බව දැනුම් දෙන ලදී" : lang === "ta" ? "✓ ஆரம்ப விசாரணை முடிவடைந்தது" : "✓ Initial Investigation Complete")
+                                      : hasAfterInvestigation
                                       ? (lang === "si" ? "✓ Step 5 — විමර්ශනය අවසන්" : "✓ Step 5 — After-Investigation Received")
                                       : isPendingExtension
                                       ? (lang === "si" ? "⚠️ Steps 3 & 4 — දිනයන් දීර්ඝ කිරීම් ඉල්ලීමක් ඇත" : "⚠️ Steps 3 & 4 — Extension Decision Required")
@@ -2702,7 +2716,11 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
 
                                 {/* Main Message Text */}
                                 <div style={{ fontSize: "14px", color: "#334155", marginTop: "4px", lineHeight: "1.4" }}>
-                                  {isPendingExtension ? (
+                                  {isInitialComplete ? (
+                                    <span>
+                                      <strong>{lang === "si" ? "දැනුම්දීම:" : "Notification:"}</strong> {lang === "si" ? "විමර්ශන පරිපාලක (Investigation Admin) විසින් මූලික විමර්ශන කටයුතු අවසන් බව භාරකාර නිලධාරියා වෙත දැනුම් දී ඇත." : lang === "ta" ? "விசாரணை நிர்வாகியால் இந்த வழக்கிற்கான ஆரம்ப விசாரணை முடிவடைந்துவிட்டது என்பது தெரிவிக்கப்பட்டுள்ளது." : "Investigation Administrator has informed the officer in charge that the initial preliminary investigation is complete."}
+                                    </span>
+                                  ) : isPendingExtension ? (
                                     <span>
                                       <strong>{lang === "si" ? "නියෝගය:" : "Directive:"}</strong> {lang === "si" ? "විමර්ශන පරිපාලක විසින් දිනයන් දීර්ඝ කිරීමේ වාරය ලබා දී ඇත (" : "Admin proposed "}
                                       <strong>{asgn.extensionTerm || "First"}</strong> {lang === "si" ? `වාරය: ${asgn.extensionStartDate || ""} සිට ${asgn.extensionEndDate || ""} දක්වා). කරුණාකර අනුමත කරන්න හෝ ප්‍රතික්ෂේප කරන්න.` : `extension (${asgn.extensionStartDate || ""} to ${asgn.extensionEndDate || ""}). Please review & decision needed.`}
@@ -3146,6 +3164,34 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
                                       )}
                                     </div>
                                   </div>
+
+                                  {/* ── STEP 6 ── Initial Investigation Complete Notification (from Admin) */}
+                                  {isInitialComplete && (
+                                    <div style={{ display: "flex", gap: "16px", marginTop: "16px" }}>
+                                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: "36px" }}>
+                                        <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "linear-gradient(135deg, #059669, #10b981)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "13px", flexShrink: 0 }}>✓</div>
+                                      </div>
+                                      <div style={{ flex: 1 }}>
+                                        <div style={{ fontSize: "13px", fontWeight: 700, color: "#047857", marginBottom: "8px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                          <span>{lang === "si" ? "6. මූලික විමර්ශනය අවසන් බව දැනුම් දීම (Admin ගෙන් ලැබුණි)" : lang === "ta" ? "6. ஆரம்ப விசாரணை முடிவு அறிவிப்பு (நிர்வாகியிடமிருந்து பெறப்பட்டது)" : "Step 6: Initial Investigation Complete (Notification from Admin)"}</span>
+                                          <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "20px", backgroundColor: "#d1fae5", color: "#065f46" }}>✓ {lang === "si" ? "දැනුම් දෙන ලදී" : lang === "ta" ? "தெரிவிக்கப்பட்டது" : "Informed"} {asgn.initialInvestigationCompletedAt || ""}</span>
+                                        </div>
+                                        <div style={{ backgroundColor: "#ecfdf5", borderRadius: "10px", border: "1px solid #a7f3d0", padding: "14px 16px", display: "flex", alignItems: "center", gap: "12px" }}>
+                                          <div style={{ width: "40px", height: "40px", borderRadius: "50%", backgroundColor: "#10b981", color: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                            <Send size={18} />
+                                          </div>
+                                          <div>
+                                            <div style={{ fontWeight: 700, color: "#065f46", fontSize: "13px" }}>
+                                              {lang === "si" ? "මූලික විමර්ශන කටයුතු අවසන් බවට විමර්ශන පරිපාලක විසින් නිල වශයෙන් දැනුම් දී ඇත." : lang === "ta" ? "ஆரம்ப விசாரணை முடிவடைந்துவிட்டது என விசாரணை நிர்வாகியால் உத்தியோகபூர்வமாக தெரிவிக்கப்பட்டுள்ளது." : "Official notification: Investigation Administrator has informed that the initial preliminary investigation for this case is complete."}
+                                            </div>
+                                            <div style={{ fontSize: "12px", color: "#047857", marginTop: "2px" }}>
+                                              {lang === "si" ? `යොමු අංකය: ${asgn.caseNo} | දිනය: ${asgn.initialInvestigationCompletedAt || new Date().toISOString().slice(0, 10)}` : `Ref: ${asgn.caseNo} | Date: ${asgn.initialInvestigationCompletedAt || new Date().toISOString().slice(0, 10)}`}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
 
                                 </div>
                               </div>

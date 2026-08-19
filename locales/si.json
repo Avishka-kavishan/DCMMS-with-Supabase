@@ -440,5 +440,9 @@
   "exportFullReport": "සම්පූර්ණ දෛනික වාර්තාව Excel මගින් බාගත කරන්න",
   "exportExcelSuccess": "දෛනික තැපැල් වාර්තාව සාර්ථකව Excel ගොනුවක් ලෙස බාගත විය!",
   "moreLetters": "තවත් ලිපි",
-  "exportExcelBottom": "Excel ගොනුව නිස්සාරණය කරන්න"
+  "exportExcelBottom": "Excel ගොනුව නිස්සාරණය කරන්න",
+  "informOfficerInChargeTitle": "මූලික විමර්ශනය අවසන් බව භාරකාර නිලධාරියාට දැනුම් දීම",
+  "informOfficerInChargeBtn": "මූලික විමර්ශනය අවසන් බව භාරකාර නිලධාරියාට දැනුම් දෙන්න",
+  "informOfficerInChargeDesc": "මූලික විමර්ශන කටයුතු අවසන් වූ පසු අදාළ භාරකාර නිලධාරියා වෙත ඒ බව දැනුම් දීමට පහත බොත්තම ක්ලික් කරන්න.",
+  "informOfficerInChargeSuccess": "මූලික විමර්ශනය අවසන් බව භාරකාර නිලධාරියාට සාර්ථකව දැනුම් දෙන ලදී!"
 }
