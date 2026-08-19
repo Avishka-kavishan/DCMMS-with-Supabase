@@ -333,7 +333,11 @@ export default function SubjectOfficerReportsPage() {
   // Export to CSV
   const exportToCSV = () => {
     if (filteredCases.length === 0) return;
-    const headers = ["Case Number", "Subject", "Assigned Date", "Received Date", "Priority", "Status", "Extension Status"];
+    const isSi = i18n.language === "si";
+    const headers = isSi
+      ? ["ගොනු අංකය", "විෂයය / මාතෘකාව", "පැවරූ දිනය", "ලැබුණු දිනය", "ප්‍රමුඛතාව", "තත්ත්වය", "කාල දීර්ඝ තත්ත්වය"]
+      : ["Case Number", "Subject", "Assigned Date", "Received Date", "Priority", "Status", "Extension Status"];
+
     const rows = filteredCases.map((c) => [
       `"${c.caseNo}"`,
       `"${c.subject.replace(/"/g, '""')}"`,
@@ -344,7 +348,8 @@ export default function SubjectOfficerReportsPage() {
       `"${c.extensionStatus || "None"}"`
     ]);
 
-    const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const bom = "\uFEFF";
+    const csvContent = bom + [headers.join(","), ...rows.map((r) => r.join(","))].join("\r\n");
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");

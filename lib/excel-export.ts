@@ -195,8 +195,8 @@ export async function fetchFullInvestigationDetailsForCase(rawCase: any): Promis
 /**
  * Generates and downloads an Excel CSV file (with UTF-8 BOM for full MS Excel compatibility)
  */
-export function exportToExcelFile(dataRows: InvestigationExportRow[], filenamePrefix: string = "Investigation_Details_By_Case") {
-  const headers = [
+export function exportToExcelFile(dataRows: InvestigationExportRow[], filenamePrefix: string = "Investigation_Details_By_Case", lang: string = "en") {
+  const headersEn = [
     "Case Reference No",
     "Subject / Inquiry Title",
     "Investigation Status",
@@ -219,6 +219,32 @@ export function exportToExcelFile(dataRows: InvestigationExportRow[], filenamePr
     "Report Submit Date",
     "Investigation Notes & Remarks"
   ];
+
+  const headersSi = [
+    "පරීක්ෂණ අංකය",
+    "විෂයය / පරීක්ෂණ මාතෘකාව",
+    "පරීක්ෂණ තත්ත්වය",
+    "පැවරූ දිනය",
+    "චෝදනා ලත් නිලධාරියාගේ නම",
+    "චෝදනා ලත් නිලධාරියාගේ තනතුර",
+    "පාසල / ආයතනය",
+    "චෝදනා ලත් නිලධාරියාගේ ජා.හැ.අංකය",
+    "කමිටු සභාපති",
+    "සභාපති තනතුර",
+    "සභාපති විද්‍යුත් තැපෑල",
+    "කමිටු සාමාජිකයන්",
+    "විෂය භාර නිලධාරියාගේ නම",
+    "පත්කිරීමේ ලිපියේ දිනය",
+    "වාර්තාව ලබාදිය යුතු දිනය",
+    "කාල දීර්ඝ වාරය",
+    "කාල දීර්ඝ ආරම්භක දිනය",
+    "කාල දීර්ඝ අවසන් දිනය",
+    "කාල දීර්ඝ අනුමත තත්ත්වය",
+    "වාර්තාව බාරදුන් දිනය",
+    "පරීක්ෂණ සටහන් සහ නිරීක්ෂණ"
+  ];
+
+  const headers = lang === "si" ? headersSi : headersEn;
 
   const csvRows: string[] = [];
   csvRows.push(headers.map((h) => `"${h.replace(/"/g, '""')}"`).join(","));

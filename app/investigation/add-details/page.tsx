@@ -382,7 +382,7 @@ function InvestigationCaseDetailsContent() {
 
       const enrichedRow = await fetchFullInvestigationDetailsForCase(rawCaseObj);
       const cleanCaseFilename = caseNoParam.replace(/[\/\\]/g, "_");
-      exportToExcelFile([enrichedRow], `Investigation_Case_${cleanCaseFilename}`);
+      exportToExcelFile([enrichedRow], `Investigation_Case_${cleanCaseFilename}`, lang);
       showToast(lang === "si" ? "Excel වාර්තාව සාර්ථකව බාගත කරන ලදී." : "Case Excel report downloaded successfully!");
     } catch (err) {
       console.error("Export case to Excel error:", err);

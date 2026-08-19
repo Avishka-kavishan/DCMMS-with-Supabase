@@ -515,7 +515,7 @@ export default function InvestigationPage() {
         const row = await fetchFullInvestigationDetailsForCase(item);
         enrichedRows.push(row);
       }
-      exportToExcelFile(enrichedRows, "Investigation_Details_By_Case");
+      exportToExcelFile(enrichedRows, "Investigation_Details_By_Case", lang);
       showToast(lang === "si" ? "Excel වාර්තාව සාර්ථකව බාගත කරන ලදී." : "Excel report downloaded successfully!");
     } catch (err) {
       console.error("Export to Excel error:", err);
