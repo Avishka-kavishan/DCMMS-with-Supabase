@@ -85,105 +85,303 @@ function RecommendationFormContent() {
         return;
       }
 
+      const qLower = queryNo.trim().toLowerCase();
+
       try {
         // 1. Try fetching from Supabase if configured
         if (isSupabaseConfigured) {
-          // Subject details
-          const { data: detailsData } = await supabase
-            .from("dcmms_subject_details")
-            .select("*")
-            .or(`case_no.eq.${queryNo},letter_no.eq.${queryNo}`)
-            .maybeSingle();
+          // A. Daily Mail / Letters Table (for complainant, school, subject)
+          try {
+            const { data: mailData } = await supabase
+              .from("dcmms_daily_mail")
+              .select("*")
+              .or(`ref_no.ilike.${queryNo},letter_no.ilike.${queryNo},serial_no.ilike.${queryNo}`)
+              .maybeSingle();
 
-          if (detailsData) {
-            if (detailsData.case_no) setCaseNo(detailsData.case_no);
-            if (detailsData.letter_no) setLetterNo(detailsData.letter_no);
-            if (detailsData.complainant_name) setComplainantName(detailsData.complainant_name);
-            if (detailsData.accused_name) setAccusedName(detailsData.accused_name);
-            if (detailsData.accused_designation) setAccusedDesignation(detailsData.accused_designation);
-            if (detailsData.school_name) setSchoolName(detailsData.school_name);
-            if (detailsData.matter_title || detailsData.subject) setCaseSubject(detailsData.matter_title || detailsData.subject);
-          }
-
-          // Assignment / Notification info
-          const { data: asgnData } = await supabase
-            .from("dcmms_subject_assignments")
-            .select("*")
-            .eq("case_no", queryNo)
-            .maybeSingle();
-
-          if (asgnData) {
-            if (asgnData.initial_investigation_completed_at || asgnData.initialInvestigationCompletedAt) {
-              setInitialCompletedDate(asgnData.initial_investigation_completed_at || asgnData.initialInvestigationCompletedAt);
+            if (mailData) {
+              if (mailData.letter_no) setLetterNo((prev) => prev || mailData.letter_no);
+              if (mailData.sender_name && mailData.sender_name.toLowerCase() !== "anonymous") {
+                setComplainantName((prev) => prev || mailData.sender_name);
+              } else if (mailData.sender && mailData.sender.toLowerCase() !== "anonymous") {
+                setComplainantName((prev) => prev || mailData.sender);
+              }
+              if (mailData.institute_name) setSchoolName((prev) => prev || mailData.institute_name);
+              if (mailData.subject) setCaseSubject((prev) => prev || mailData.subject);
             }
-          }
+          } catch (e) {}
 
-          // Preliminary investigations table (might already contain recommendations)
-          const { data: prelimData } = await supabase
-            .from("dcmms_preliminary_investigations")
-            .select("*")
-            .or(`case_no.eq.${queryNo},id.eq.${queryNo}`)
-            .maybeSingle();
+          // B. Concerned Officers Table (for accused officer name, designation, school)
+          try {
+            const { data: concList } = await supabase
+              .from("dcmms_concerned_officers")
+              .select("*")
+              .or(`case_no.ilike.${queryNo},subject_file_number.ilike.${queryNo}`);
 
-          if (prelimData) {
-            if (prelimData.recommendations) {
-              setRecommendationText(prelimData.recommendations);
+            if (concList && concList.length > 0) {
+              const conc = concList[0];
+              const officerName = conc.officer_name || conc.full_name;
+              if (officerName) setAccusedName((prev) => prev || officerName);
+              if (conc.position) setAccusedDesignation((prev) => prev || conc.position);
+              if (conc.institute_name) setSchoolName((prev) => prev || conc.institute_name);
             }
-            if (prelimData.report_received_date) {
-              setInitialCompletedDate((prev) => prev || prelimData.report_received_date);
+          } catch (e) {}
+
+          // C. Accused Officers Table (for officer name, position, school, complainant)
+          try {
+            const { data: accList } = await supabase
+              .from("dcmms_accused_officers")
+              .select("*")
+              .or(`ref_number.ilike.${queryNo},case_no.ilike.${queryNo}`);
+
+            if (accList && accList.length > 0) {
+              const acc = accList[0];
+              const officerName = acc.accused_officer_name || acc.officer_name || acc.full_name;
+              if (officerName) setAccusedName((prev) => prev || officerName);
+              if (acc.position) setAccusedDesignation((prev) => prev || acc.position);
+              if (acc.accused_school_name || acc.school_name) setSchoolName((prev) => prev || acc.accused_school_name || acc.school_name);
+              if (acc.name_of_the_presenting_the_complain && acc.name_of_the_presenting_the_complain.toLowerCase() !== "anonymous") {
+                setComplainantName((prev) => prev || acc.name_of_the_presenting_the_complain);
+              }
             }
-          }
+          } catch (e) {}
 
-          // Recommendations table
-          const { data: recData } = await supabase
-            .from("dcmms_recommendations")
-            .select("*")
-            .eq("case_no", queryNo)
-            .maybeSingle();
+          // D. Subject Table
+          try {
+            const { data: subjData } = await supabase
+              .from("dcmms_subject")
+              .select("*")
+              .or(`case_no.ilike.${queryNo},subject_id.ilike.${queryNo}`)
+              .maybeSingle();
 
-          if (recData) {
-            if (recData.category) setRecommendationCategory(recData.category);
-            if (recData.urgency) setRecommendationUrgency(recData.urgency);
-            if (recData.title) setRecommendationTitle(recData.title);
-            if (recData.recommendation_text) setRecommendationText(recData.recommendation_text);
-            if (recData.disciplinary_action) setDisciplinaryAction(recData.disciplinary_action);
-            if (recData.forward_to) setForwardTo(recData.forward_to);
-            if (recData.target_date) setTargetDate(recData.target_date);
-            if (recData.reference_notes) setReferenceNotes(recData.reference_notes);
-            if (recData.status) setRecommendationStatus(recData.status);
-          }
+            if (subjData) {
+              if (subjData.subject_name) setAccusedName((prev) => prev || subjData.subject_name);
+              if (subjData.designation) setAccusedDesignation((prev) => prev || subjData.designation);
+              if (subjData.workplace) setSchoolName((prev) => prev || subjData.workplace);
+            }
+          } catch (e) {}
+
+          // E. Subject Details Table
+          try {
+            const { data: detailsData } = await supabase
+              .from("dcmms_subject_details")
+              .select("*")
+              .or(`case_no.ilike.${queryNo},letter_no.ilike.${queryNo}`)
+              .order("created_at", { ascending: false });
+
+            if (detailsData && detailsData.length > 0) {
+              const d = detailsData[0];
+              if (d.case_no) setCaseNo(d.case_no);
+              if (d.letter_no) setLetterNo((prev) => prev || d.letter_no);
+              if (d.complainant_name) setComplainantName((prev) => prev || d.complainant_name);
+              if (d.accused_name) setAccusedName((prev) => prev || d.accused_name);
+              if (d.accused_designation) setAccusedDesignation((prev) => prev || d.accused_designation);
+              if (d.school_name) setSchoolName((prev) => prev || d.school_name);
+              if (d.matter_title || d.subject) setCaseSubject((prev) => prev || d.matter_title || d.subject);
+            }
+          } catch (e) {}
+
+          // F. Subject Assignments Table (for Initial Completed Date)
+          try {
+            const { data: asgnData } = await supabase
+              .from("dcmms_subject_assignments")
+              .select("*")
+              .or(`case_no.ilike.${queryNo},id.ilike.${queryNo}`)
+              .maybeSingle();
+
+            if (asgnData) {
+              if (asgnData.initial_investigation_completed_at || asgnData.initialInvestigationCompletedAt) {
+                setInitialCompletedDate((prev) => prev || asgnData.initial_investigation_completed_at || asgnData.initialInvestigationCompletedAt);
+              }
+            }
+          } catch (e) {}
+
+          // G. Preliminary Investigations Table
+          try {
+            const { data: prelimData } = await supabase
+              .from("dcmms_preliminary_investigations")
+              .select("*")
+              .or(`case_no.ilike.${queryNo},id.ilike.${queryNo}`)
+              .maybeSingle();
+
+            if (prelimData) {
+              if (prelimData.accused_name || prelimData.officer_name) {
+                setAccusedName((prev) => prev || prelimData.accused_name || prelimData.officer_name);
+              }
+              if (prelimData.designation || prelimData.position) {
+                setAccusedDesignation((prev) => prev || prelimData.designation || prelimData.position);
+              }
+              if (prelimData.school_name || prelimData.institute_name) {
+                setSchoolName((prev) => prev || prelimData.school_name || prelimData.institute_name);
+              }
+              if (prelimData.complainant_name) {
+                setComplainantName((prev) => prev || prelimData.complainant_name);
+              }
+              if (prelimData.reason || prelimData.subject_matter) {
+                setCaseSubject((prev) => prev || prelimData.reason || prelimData.subject_matter);
+              }
+              if (prelimData.recommendations) {
+                setRecommendationText((prev) => prev || prelimData.recommendations);
+              }
+              if (prelimData.report_received_date) {
+                setInitialCompletedDate((prev) => prev || prelimData.report_received_date);
+              }
+            }
+          } catch (e) {}
+
+          // H. Recommendations Table
+          try {
+            const { data: recData } = await supabase
+              .from("dcmms_recommendations")
+              .select("*")
+              .or(`case_no.ilike.${queryNo},letter_no.ilike.${queryNo}`)
+              .maybeSingle();
+
+            if (recData) {
+              if (recData.category) setRecommendationCategory(recData.category);
+              if (recData.urgency) setRecommendationUrgency(recData.urgency);
+              if (recData.title) setRecommendationTitle(recData.title);
+              if (recData.recommendation_text) setRecommendationText(recData.recommendation_text);
+              if (recData.disciplinary_action) setDisciplinaryAction(recData.disciplinary_action);
+              if (recData.forward_to) setForwardTo(recData.forward_to);
+              if (recData.target_date) setTargetDate(recData.target_date);
+              if (recData.reference_notes) setReferenceNotes(recData.reference_notes);
+              if (recData.status) setRecommendationStatus(recData.status);
+            }
+          } catch (e) {}
         }
       } catch (err) {
         console.error("Error fetching case data from Supabase:", err);
       }
 
-      // 2. Fallback / supplementary check from LocalStorage
+      // 2. Fallback & supplementary check from LocalStorage
       if (typeof window !== "undefined") {
         try {
+          // A. Letters (dcmms_letters)
+          const localLetters = JSON.parse(localStorage.getItem("dcmms_letters") || "[]");
+          const foundLetter = Array.isArray(localLetters)
+            ? localLetters.find(
+                (l: any) =>
+                  String(l.refNo || l.ref_no || l.letterNo || l.letter_no || "").trim().toLowerCase() === qLower
+              )
+            : null;
+          if (foundLetter) {
+            if (foundLetter.senderName && foundLetter.senderName.toLowerCase() !== "anonymous") {
+              setComplainantName((prev) => prev || foundLetter.senderName);
+            }
+            if (foundLetter.instituteName || foundLetter.schoolName) {
+              setSchoolName((prev) => prev || foundLetter.instituteName || foundLetter.schoolName);
+            }
+            if (foundLetter.subject) {
+              setCaseSubject((prev) => prev || foundLetter.subject);
+            }
+            if (foundLetter.letterNo || foundLetter.letter_no) {
+              setLetterNo((prev) => prev || foundLetter.letterNo || foundLetter.letter_no);
+            }
+          }
+
+          // B. Concerned Officers (dcmms_officer_concerned)
+          const localConcerned = JSON.parse(localStorage.getItem("dcmms_officer_concerned") || "{}");
+          let foundConcerned = localConcerned[queryNo];
+          if (!foundConcerned && typeof localConcerned === "object") {
+            const matchKey = Object.keys(localConcerned).find((k) => k.trim().toLowerCase() === qLower);
+            if (matchKey) foundConcerned = localConcerned[matchKey];
+          }
+          if (foundConcerned) {
+            const firstPerson =
+              Array.isArray(foundConcerned.persons) && foundConcerned.persons.length > 0
+                ? foundConcerned.persons[0]
+                : null;
+            const accN =
+              firstPerson?.name ||
+              firstPerson?.officer_name ||
+              foundConcerned.officerName ||
+              foundConcerned.officer_name ||
+              "";
+            const accDes = firstPerson?.position || foundConcerned.position || "";
+            const schN = foundConcerned.instituteName || foundConcerned.schoolName || "";
+
+            if (accN) setAccusedName((prev) => prev || accN);
+            if (accDes) setAccusedDesignation((prev) => prev || accDes);
+            if (schN) setSchoolName((prev) => prev || schN);
+          }
+
+          // C. Cases (dcmms_cases)
           const localCases = JSON.parse(localStorage.getItem("dcmms_cases") || "[]");
-          const foundCase = localCases.find((c: any) => String(c.caseNo || c.refNo || "").trim().toLowerCase() === queryNo.trim().toLowerCase());
+          const foundCase = Array.isArray(localCases)
+            ? localCases.find(
+                (c: any) =>
+                  String(c.caseNo || c.refNo || c.id || "").trim().toLowerCase() === qLower
+              )
+            : null;
           if (foundCase) {
-            setCaseSubject((prev) => prev || foundCase.subject || "");
+            if (foundCase.subject) setCaseSubject((prev) => prev || foundCase.subject);
+            if (foundCase.complainantName || foundCase.senderName) {
+              setComplainantName((prev) => prev || foundCase.complainantName || foundCase.senderName);
+            }
+            if (foundCase.accusedName || foundCase.accusedOfficer || foundCase.officerName) {
+              setAccusedName((prev) => prev || foundCase.accusedName || foundCase.accusedOfficer || foundCase.officerName);
+            }
+            if (foundCase.schoolName || foundCase.instituteName) {
+              setSchoolName((prev) => prev || foundCase.schoolName || foundCase.instituteName);
+            }
+            if (foundCase.initialCompletedDate || foundCase.initialInvestigationCompletedAt) {
+              setInitialCompletedDate(
+                (prev) => prev || foundCase.initialCompletedDate || foundCase.initialInvestigationCompletedAt
+              );
+            }
           }
 
+          // D. Subject Details (dcmms_subject_details)
           const localDetails = JSON.parse(localStorage.getItem("dcmms_subject_details") || "[]");
-          const foundDetail = Array.isArray(localDetails) ? localDetails.find((d: any) => String(d.caseNo || d.case_no || "").trim().toLowerCase() === queryNo.trim().toLowerCase()) : null;
+          const foundDetail = Array.isArray(localDetails)
+            ? localDetails.find(
+                (d: any) =>
+                  String(d.caseNo || d.case_no || "").trim().toLowerCase() === qLower
+              )
+            : null;
           if (foundDetail) {
-            setComplainantName((prev) => prev || foundDetail.complainantName || foundDetail.complainant_name || "");
-            setAccusedName((prev) => prev || foundDetail.accusedName || foundDetail.accused_name || "");
-            setAccusedDesignation((prev) => prev || foundDetail.accusedDesignation || foundDetail.accused_designation || "");
-            setSchoolName((prev) => prev || foundDetail.schoolName || foundDetail.school_name || "");
-            setLetterNo((prev) => prev || foundDetail.letterNo || foundDetail.letter_no || "");
+            if (foundDetail.complainantName || foundDetail.complainant_name) {
+              setComplainantName((prev) => prev || foundDetail.complainantName || foundDetail.complainant_name);
+            }
+            if (foundDetail.accusedName || foundDetail.accused_name) {
+              setAccusedName((prev) => prev || foundDetail.accusedName || foundDetail.accused_name);
+            }
+            if (foundDetail.accusedDesignation || foundDetail.accused_designation) {
+              setAccusedDesignation((prev) => prev || foundDetail.accusedDesignation || foundDetail.accused_designation);
+            }
+            if (foundDetail.schoolName || foundDetail.school_name) {
+              setSchoolName((prev) => prev || foundDetail.schoolName || foundDetail.school_name);
+            }
+            if (foundDetail.letterNo || foundDetail.letter_no) {
+              setLetterNo((prev) => prev || foundDetail.letterNo || foundDetail.letter_no);
+            }
+            if (foundDetail.matterTitle || foundDetail.matter_title || foundDetail.subject) {
+              setCaseSubject((prev) => prev || foundDetail.matterTitle || foundDetail.matter_title || foundDetail.subject);
+            }
           }
 
+          // E. Subject Assignments (dcmms_subject_assignments)
           const localAsgns = JSON.parse(localStorage.getItem("dcmms_subject_assignments") || "[]");
-          const foundAsgn = Array.isArray(localAsgns) ? localAsgns.find((a: any) => String(a.caseNo || a.case_no || "").trim().toLowerCase() === queryNo.trim().toLowerCase()) : null;
+          const foundAsgn = Array.isArray(localAsgns)
+            ? localAsgns.find(
+                (a: any) =>
+                  String(a.caseNo || a.case_no || a.id || "").trim().toLowerCase() === qLower
+              )
+            : null;
           if (foundAsgn && (foundAsgn.initialInvestigationCompletedAt || foundAsgn.initial_investigation_completed_at)) {
-            setInitialCompletedDate((prev) => prev || foundAsgn.initialInvestigationCompletedAt || foundAsgn.initial_investigation_completed_at);
+            setInitialCompletedDate(
+              (prev) => prev || foundAsgn.initialInvestigationCompletedAt || foundAsgn.initial_investigation_completed_at
+            );
           }
 
+          // F. Recommendations (dcmms_recommendations)
           const localRecs = JSON.parse(localStorage.getItem("dcmms_recommendations") || "[]");
-          const foundRec = Array.isArray(localRecs) ? localRecs.find((r: any) => String(r.caseNo || r.case_no || "").trim().toLowerCase() === queryNo.trim().toLowerCase()) : null;
+          const foundRec = Array.isArray(localRecs)
+            ? localRecs.find(
+                (r: any) =>
+                  String(r.caseNo || r.case_no || "").trim().toLowerCase() === qLower
+              )
+            : null;
           if (foundRec) {
             if (foundRec.category) setRecommendationCategory(foundRec.category);
             if (foundRec.urgency) setRecommendationUrgency(foundRec.urgency);
