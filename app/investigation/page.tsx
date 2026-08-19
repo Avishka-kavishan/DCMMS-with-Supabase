@@ -29,6 +29,7 @@ interface Inquiry {
   status: "Scheduled" | "In Progress" | "Evidence Review" | "Completed" | "Preliminary Investigation" | "Conducting preliminary investigations" | "Under Investigation";
   assignedOfficer?: string;
   subjectOfficer?: string;
+  accusedOfficer?: string;
   notes?: string;
   createdAt?: string;
   appointmentDate?: string;
@@ -74,6 +75,17 @@ export default function InvestigationPage() {
       lower === "නොපවරන ලද"
     ) {
       return currentLang === "si" ? "පවරන ලද විෂය භාර නිලධාරී" : "Assigned Subject Officer";
+    }
+    return trimmed;
+  };
+
+  const formatAccusedOfficerName = (raw?: string | null, currentLang: string = lang): string => {
+    if (!raw || typeof raw !== "string" || !raw.trim()) {
+      return currentLang === "si" ? "නොදක්වා ඇත" : "Not Specified";
+    }
+    const trimmed = raw.trim();
+    if (trimmed.toLowerCase() === "unassigned" || trimmed.toLowerCase() === "නොපවරන ලද") {
+      return currentLang === "si" ? "නොදක්වා ඇත" : "Not Specified";
     }
     return trimmed;
   };
@@ -168,6 +180,8 @@ export default function InvestigationPage() {
   const [statusFilter, setStatusFilter] = useState<string>("All");
   const [urgencyFilter, setUrgencyFilter] = useState<string>("All");
   const [officerFilter, setOfficerFilter] = useState<string>("All");
+  const [startDateFilter, setStartDateFilter] = useState<string>("");
+  const [endDateFilter, setEndDateFilter] = useState<string>("");
   const [officerSearchQuery, setOfficerSearchQuery] = useState("");
   const [officerPositionFilter, setOfficerPositionFilter] = useState<string>("All");
 
@@ -620,8 +634,60 @@ export default function InvestigationPage() {
   // ── Fetch Inquiries & Officers ────────────────────────────────────────────
   const fetchInquiries = async () => {
     const datesMap = new Map<string, { appointmentDate?: string; reportDueDate?: string }>();
+    const accusedMap = new Map<string, string>();
+
+    if (typeof window !== "undefined") {
+      try {
+        const storedConcerned = localStorage.getItem("dcmms_officer_concerned");
+        if (storedConcerned) {
+          const parsed = JSON.parse(storedConcerned);
+          Object.keys(parsed).forEach((k) => {
+            const key = k.trim().toLowerCase();
+            const val = parsed[k];
+            let name = "";
+            if (Array.isArray(val.persons) && val.persons.length > 0) {
+              name = val.persons[0].name || val.persons[0].officer_name || val.persons[0].officerName || "";
+            } else if (val.accusedOfficer || val.accused_officer || val.accused_officer_name || val.officer_name) {
+              name = val.accusedOfficer || val.accused_officer || val.accused_officer_name || val.officer_name || "";
+            }
+            if (key && name && typeof name === "string" && name.trim()) {
+              accusedMap.set(key, name.trim());
+            }
+          });
+        }
+      } catch (e) {}
+    }
 
     if (isSupabaseConfigured) {
+      try {
+        const { data: accData } = await supabase
+          .from("dcmms_accused_officers")
+          .select("ref_number, officer_name, full_name, accused_officer_name");
+        if (accData) {
+          accData.forEach((a: any) => {
+            const key = (a.ref_number || a.refNo || a.case_no || "").trim().toLowerCase();
+            const name = a.officer_name || a.accused_officer_name || a.full_name;
+            if (key && name && typeof name === "string" && name.trim()) {
+              accusedMap.set(key, name.trim());
+            }
+          });
+        }
+      } catch (e) {}
+
+      try {
+        const { data: concData } = await supabase
+          .from("dcmms_concerned_officers")
+          .select("case_no, officer_name, full_name");
+        if (concData) {
+          concData.forEach((c: any) => {
+            const key = (c.case_no || c.ref_no || "").trim().toLowerCase();
+            const name = c.officer_name || c.full_name;
+            if (key && name && typeof name === "string" && name.trim() && !accusedMap.has(key)) {
+              accusedMap.set(key, name.trim());
+            }
+          });
+        }
+      } catch (e) {}
       try {
         const { data: assignmentsData } = await supabase
           .from("dcmms_subject_assignments")
@@ -686,6 +752,7 @@ export default function InvestigationPage() {
             .map((item: any) => {
               const itemNo = (item.case_no || item.inquiryNo || item.caseNo || "").trim().toLowerCase();
               const assignedSubjOfficer = asgnMap.get(itemNo) || item.subject_officer_name || item.officer_name || item.subjectOfficerName || item.subject_officer || item.subjectOfficer || "";
+              const accusedSubjOfficer = accusedMap.get(itemNo) || item.accused_officer_name || item.accusedOfficer || item.accused_officer || item.accused_name || "";
               const dateInfo = datesMap.get(itemNo) || {};
               return {
                 id: item.id,
@@ -695,6 +762,7 @@ export default function InvestigationPage() {
                 status: item.status as Inquiry["status"],
                 assignedOfficer: item.officer_name || item.assigned_officer,
                 subjectOfficer: assignedSubjOfficer,
+                accusedOfficer: accusedSubjOfficer,
                 appointmentDate: dateInfo.appointmentDate || formatToInputDate(item.appointment_date || item.appointmentDate),
                 reportDueDate: dateInfo.reportDueDate || formatToInputDate(item.report_due_date || item.reportDueDate),
                 createdAt: item.created_at || new Date().toISOString(),
@@ -797,6 +865,7 @@ export default function InvestigationPage() {
             .map((item: any) => {
               const itemNo = (item.caseNo || item.inquiryNo || item.case_no || "").trim().toLowerCase();
               const assignedSubjOfficer = localAsgnMap.get(itemNo) || item.subjectOfficerName || item.subject_officer_name || item.subjectOfficer || item.subject_officer || "";
+              const accusedSubjOfficer = accusedMap.get(itemNo) || item.accusedOfficer || item.accused_officer_name || item.accused_officer || item.accused_name || "";
               const dateInfo = datesMap.get(itemNo) || {};
               return {
                 id: item.id || `case-${item.caseNo}`,
@@ -806,6 +875,7 @@ export default function InvestigationPage() {
                 status: item.status,
                 assignedOfficer: item.assignedOfficer || item.assignedTo || item.officerName,
                 subjectOfficer: assignedSubjOfficer,
+                accusedOfficer: accusedSubjOfficer,
                 appointmentDate: dateInfo.appointmentDate || formatToInputDate(item.appointmentDate || item.appointment_date),
                 reportDueDate: dateInfo.reportDueDate || formatToInputDate(item.reportDueDate || item.report_due_date),
                 createdAt: item.createdAt || item.created_at || new Date().toISOString(),
@@ -840,6 +910,7 @@ export default function InvestigationPage() {
         status: "In Progress",
         assignedOfficer: "Nimali Jayasinghe",
         subjectOfficer: "Imasha Gunasekara",
+        accusedOfficer: "K. L. Bandara",
       },
       {
         id: "2",
@@ -849,6 +920,7 @@ export default function InvestigationPage() {
         status: "Evidence Review",
         assignedOfficer: "Suresh Silva",
         subjectOfficer: "Kamal Perera",
+        accusedOfficer: "M. T. Fernando",
       },
       {
         id: "3",
@@ -858,6 +930,7 @@ export default function InvestigationPage() {
         status: "Scheduled",
         assignedOfficer: "Nimali Jayasinghe",
         subjectOfficer: "Rathnaweera",
+        accusedOfficer: "S. D. Wijeratne",
       },
     ];
     setInquiries(defaults);
@@ -2844,6 +2917,24 @@ export default function InvestigationPage() {
       }
     }
 
+    // Date Range filter
+    if (startDateFilter || endDateFilter) {
+      const itemDates = [
+        formatToInputDate(item.createdAt),
+        formatToInputDate(item.appointmentDate),
+        formatToInputDate(item.reportDueDate),
+        formatToInputDate(item.targetDate)
+      ].filter(Boolean);
+
+      const matchesRange = itemDates.some((d) => {
+        if (startDateFilter && d < startDateFilter) return false;
+        if (endDateFilter && d > endDateFilter) return false;
+        return true;
+      });
+
+      if (!matchesRange) return false;
+    }
+
     // Assigned Officer filter
     if (officerFilter !== "All") {
       if (officerFilter === "Unassigned") {
@@ -3334,13 +3425,15 @@ export default function InvestigationPage() {
                         <span>{isExportingExcel ? (lang === "si" ? "නිර්මාණය වෙමින්..." : "Exporting...") : (lang === "si" ? "Excel වාර්තාව බාගත කරන්න" : "Export Excel Sheet")}</span>
                       </button>
 
-                      {(statusFilter !== "All" || urgencyFilter !== "All" || officerFilter !== "All" || searchQuery !== "") && (
+                      {(statusFilter !== "All" || urgencyFilter !== "All" || officerFilter !== "All" || searchQuery !== "" || startDateFilter !== "" || endDateFilter !== "") && (
                         <button
                           type="button"
                           onClick={() => {
                             setStatusFilter("All");
                             setUrgencyFilter("All");
                             setOfficerFilter("All");
+                            setStartDateFilter("");
+                            setEndDateFilter("");
                             setSearchQuery("");
                           }}
                           style={{
@@ -3394,26 +3487,6 @@ export default function InvestigationPage() {
                       </div>
                     </div>
 
-                    {/* Status Filter Dropdown */}
-                    <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                      <label style={{ fontSize: "11px", fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                        {lang === "si" ? "තත්ත්වය අනුව" : "Status Filter"}
-                      </label>
-                      <select
-                        value={statusFilter}
-                        onChange={(e) => setStatusFilter(e.target.value)}
-                        style={{ padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13px", color: "#0f172a", backgroundColor: "#ffffff", fontWeight: 600, width: "100%" }}
-                      >
-                        <option value="All">{lang === "si" ? "සියලුම තත්ත්වයන්" : "All Statuses"}</option>
-                        <option value="In Progress">⚡ In Progress</option>
-                        <option value="Evidence Review">🔍 Evidence Review</option>
-                        <option value="Scheduled">🗓️ Scheduled Hearings</option>
-                        <option value="Preliminary Investigation">📋 Preliminary Investigation</option>
-                        <option value="Under Investigation">🕵️ Under Investigation</option>
-                        <option value="Completed">✅ Completed</option>
-                      </select>
-                    </div>
-
                     {/* Due Date / Urgency Filter */}
                     <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
                       <label style={{ fontSize: "11px", fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px" }}>
@@ -3431,22 +3504,54 @@ export default function InvestigationPage() {
                       </select>
                     </div>
 
-                    {/* Assigned Officer Filter */}
+                    {/* From Date Filter */}
                     <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
                       <label style={{ fontSize: "11px", fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                        {lang === "si" ? "පැවරූ නිලධාරියා අනුව" : "Assigned Officer"}
+                        {lang === "si" ? "සිට දිනය" : "From Date"}
                       </label>
-                      <select
-                        value={officerFilter}
-                        onChange={(e) => setOfficerFilter(e.target.value)}
-                        style={{ padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13px", color: "#0f172a", backgroundColor: "#ffffff", fontWeight: 600, width: "100%" }}
-                      >
-                        <option value="All">{lang === "si" ? "සියලුම නිලධාරීන්" : "All Officers"}</option>
-                        <option value="Unassigned">{lang === "si" ? "නොපවරන ලද නඩු" : "Unassigned Cases"}</option>
-                        {officers.map((o) => (
-                          <option key={o.id} value={o.fullName}>{o.fullName}</option>
-                        ))}
-                      </select>
+                      <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                        <input
+                          type="date"
+                          value={startDateFilter}
+                          onChange={(e) => setStartDateFilter(e.target.value)}
+                          style={{ padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13px", color: "#0f172a", backgroundColor: "#ffffff", fontWeight: 600, width: "100%", cursor: "pointer" }}
+                        />
+                        {startDateFilter && (
+                          <button
+                            type="button"
+                            onClick={() => setStartDateFilter("")}
+                            title={lang === "si" ? "සිට දිනය ඉවත් කරන්න" : "Clear From Date"}
+                            style={{ background: "#f1f5f9", border: "1px solid #cbd5e1", borderRadius: "8px", color: "#64748b", cursor: "pointer", padding: "8px 10px", display: "flex", alignItems: "center", justifyContent: "center" }}
+                          >
+                            <X size={14} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* To Date Filter */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                      <label style={{ fontSize: "11px", fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                        {lang === "si" ? "දක්වා දිනය" : "To Date"}
+                      </label>
+                      <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                        <input
+                          type="date"
+                          value={endDateFilter}
+                          onChange={(e) => setEndDateFilter(e.target.value)}
+                          style={{ padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13px", color: "#0f172a", backgroundColor: "#ffffff", fontWeight: 600, width: "100%", cursor: "pointer" }}
+                        />
+                        {endDateFilter && (
+                          <button
+                            type="button"
+                            onClick={() => setEndDateFilter("")}
+                            title={lang === "si" ? "දක්වා දිනය ඉවත් කරන්න" : "Clear To Date"}
+                            style={{ background: "#f1f5f9", border: "1px solid #cbd5e1", borderRadius: "8px", color: "#64748b", cursor: "pointer", padding: "8px 10px", display: "flex", alignItems: "center", justifyContent: "center" }}
+                          >
+                            <X size={14} />
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                   </div>
@@ -3458,7 +3563,7 @@ export default function InvestigationPage() {
                     <thead>
                       <tr>
                         <th scope="col">{lang === "si" ? "විමර්ශන අංකය" : "Inquiry No"}</th>
-                        <th scope="col">{t("targetCompletionDate", lang === "si" ? "අති.ලේ වෙත ලද දිනය" : "Date Received at Addl. Sec.")}</th>
+                        <th scope="col" style={{ whiteSpace: "nowrap" }}>{t("targetCompletionDate", lang === "si" ? "චෝදනා ලත් නිලධාරියා" : "Accused Officer Name")}</th>
                         <th scope="col">{lang === "si" ? "විෂය කරුණ" : "Subject / Matter"}</th>
                         <th scope="col">{t("assignedSubjectOfficer", "Assigned Subject Officer")}</th>
                         <th scope="col">{lang === "si" ? "පත්වීම් ලිපියේ දිනය" : "Appt. Letter Date"}</th>
@@ -3483,8 +3588,11 @@ export default function InvestigationPage() {
                                 <span>{item.inquiryNo}</span>
                               </div>
                             </td>
-                            <td>
-                              <span style={{ fontWeight: 500, color: "#334155" }}>{item.targetDate || "-"}</span>
+                            <td style={{ whiteSpace: "nowrap" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "6px", fontWeight: 600, color: "#1e293b" }}>
+                                <User size={14} style={{ color: "#dc2626" }} />
+                                <span>{formatAccusedOfficerName(item.accusedOfficer, lang)}</span>
+                              </div>
                             </td>
                             <td className="subject-cell" style={{ maxWidth: "300px" }}>
                               <div style={{ fontWeight: 600, color: "#1e293b" }}>{item.subject}</div>
