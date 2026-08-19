@@ -47,7 +47,7 @@ function RecommendationFormContent() {
   const [initialCompletedDate, setInitialCompletedDate] = useState("");
 
   // Recommendation Form State
-  const [recommendationCategory, setRecommendationCategory] = useState("formal_inquiry");
+  const [recommendationCategory, setRecommendationCategory] = useState("issuing_charge_sheet");
   const [recommendationUrgency, setRecommendationUrgency] = useState("normal");
   const [recommendationTitle, setRecommendationTitle] = useState("");
   const [recommendationText, setRecommendationText] = useState("");
@@ -713,7 +713,11 @@ function RecommendationFormContent() {
           <div className="form-grid-3">
             <div className="form-field-group">
               <label className="form-field-label">
-                {lang === "si" ? "නිර්දේශ වර්ගය / කාණ්ඩය" : "Recommendation Category"}
+                {lang === "si"
+                  ? "නිර්දේශ වර්ගය / කාණ්ඩය (Type / Category of Recommendation)"
+                  : lang === "ta"
+                  ? "பரிந்துரை வகை / பிரிவு (Type / Category of Recommendation)"
+                  : "Type / Category of Recommendation"}
                 <span className="required-asterisk">*</span>
               </label>
               <select
@@ -722,14 +726,69 @@ function RecommendationFormContent() {
                 className="form-field-select"
                 required
               >
-                <option value="formal_inquiry">{lang === "si" ? "විධිමත් විනය පරීක්ෂණයක් පැවැත්වීම (Formal Disciplinary Inquiry)" : "Formal Disciplinary Inquiry"}</option>
-                <option value="issue_warning">{lang === "si" ? "දැඩි අවවාද නිකුත් කිරීම (Issue Severe Warning)" : "Issue Severe Warning"}</option>
-                <option value="financial_recovery">{lang === "si" ? "අලාභ අයකර ගැනීම / අධිභාරය (Surcharge / Recovery)" : "Surcharge / Recovery of Financial Loss"}</option>
-                <option value="interdiction">{lang === "si" ? "වැඩ තහනම් කිරීම (Interdiction / Suspension)" : "Interdiction / Suspension"}</option>
-                <option value="transfer">{lang === "si" ? "ස්ථාන මාරු කිරීම (Administrative / Disciplinary Transfer)" : "Administrative / Disciplinary Transfer"}</option>
-                <option value="exoneration">{lang === "si" ? "චෝදනාවලින් නිදොස් කොට ගොනුව අවසන් කිරීම (Exonerate & File Closed)" : "Exonerate & Close File"}</option>
-                <option value="refer_ciaboc_police">{lang === "si" ? "අල්ලස් / පොලිස් විමර්ශන වෙත යොමු කිරීම (Refer to CIABOC / Police)" : "Refer to CIABOC / Police"}</option>
-                <option value="other">{lang === "si" ? "වෙනත් විශේෂ නිර්දේශ (Other Special Action)" : "Other Special Action"}</option>
+                <option value="issuing_charge_sheet">
+                  {lang === "si"
+                    ? "චෝදනා පත්‍රයක් නිකුත් කිරීම (Issuing a charge sheet)"
+                    : lang === "ta"
+                    ? "குற்றப்பத்திரிகை வழங்குதல் (Issuing a charge sheet)"
+                    : "Issuing a charge sheet"}
+                </option>
+                <option value="action_based_on_court_verdict">
+                  {lang === "si"
+                    ? "අවසන් අධිකරණ තීන්දුව මත පදනම්ව ඉදිරි ක්‍රියාමාර්ග ගැනීම (Taking further action based on the final court verdict)"
+                    : lang === "ta"
+                    ? "இறுதி நீதிமன்ற தீர்ப்பின் அடிப்படையில் மேலதிக நடவடிக்கை எடுத்தல் (Taking further action based on the final court verdict)"
+                    : "Taking further action based on the final court verdict"}
+                </option>
+                <option value="giving_warnings_advice">
+                  {lang === "si"
+                    ? "අවවාද / උපදෙස් ලබා දීම (Giving warnings/advice)"
+                    : lang === "ta"
+                    ? "எச்சரிக்கைகள் / ஆலோசனைகள் வழங்குதல் (Giving warnings/advice)"
+                    : "Giving warnings/advice"}
+                </option>
+                <option value="transfers">
+                  {lang === "si"
+                    ? "ස්ථාන මාරු කිරීම් (Transfers)"
+                    : lang === "ta"
+                    ? "இடமாற்றங்கள் (Transfers)"
+                    : "Transfers"}
+                </option>
+                <option value="charging_based_on_more_104">
+                  {lang === "si"
+                    ? "MoRE 104 පරීක්ෂණය මත පදනම්ව චෝදනා ගොනු කිරීම (Charging based on MoRE 104 investigation)"
+                    : lang === "ta"
+                    ? "MoRE 104 விசாரணையின் அடிப்படையில் குற்றஞ்சாட்டுதல் (Charging based on MoRE 104 investigation)"
+                    : "Charging based on MoRE 104 investigation"}
+                </option>
+                <option value="terminating_service">
+                  {lang === "si"
+                    ? "සේවය අවසන් කිරීම (Terminating service)"
+                    : lang === "ta"
+                    ? "சேவையை நிறுத்துதல் (Terminating service)"
+                    : "Terminating service"}
+                </option>
+                <option value="sending_recommendation_other_departments">
+                  {lang === "si"
+                    ? "නිර්දේශය වෙනත් දෙපාර්තමේන්තු වෙත යොමු කිරීම / ක්‍රියාත්මක කිරීමේ උපදෙස් ලැබුණු පසු පියවර ගැනීම (Sending recommendation to other departments / taking action after getting instructions)"
+                    : lang === "ta"
+                    ? "பரிந்துரையை பிற திணைக்களங்களுக்கு அனுப்புதல் / அறிவுறுத்தல்கள் பெற்ற பின்னர் நடவடிக்கை எடுத்தல் (Sending recommendation to other departments / taking action after instructions)"
+                    : "Sending the recommendation to other departments / taking action after getting instructions to implement it"}
+                </option>
+                <option value="closing_action_non_disclosure">
+                  {lang === "si"
+                    ? "කරුණු අනාවරණය නොවීම හේතුවෙන් ක්‍රියාමාර්ගය අවසන් කිරීම (Closing the action due to non-disclosure of facts)"
+                    : lang === "ta"
+                    ? "உண்மைகள் வெளிப்படுத்தப்படாததால் நடவடிக்கையை முடிவுக்குக் கொண்டுவருதல் (Closing the action due to non-disclosure of facts)"
+                    : "Closing the action due to non-disclosure of facts"}
+                </option>
+                <option value="other">
+                  {lang === "si"
+                    ? "වෙනත් විශේෂ නිර්දේශ (Other)"
+                    : lang === "ta"
+                    ? "பிற சிறப்பு பரிந்துரைகள் (Other)"
+                    : "Other"}
+                </option>
               </select>
             </div>
 
@@ -813,12 +872,12 @@ function RecommendationFormContent() {
                 onClick={() =>
                   handleApplyPreset(
                     lang === "si"
-                      ? "මූලික විමර්ශන වාර්තාව අනුව චෝදනා තහවුරු වන බැවින් විධිමත් විනය පරීක්ෂණයක් පැවැත්වීමට නිර්දේශ කරමි."
-                      : "Evidence indicates prima facie misconduct; recommend instituting a formal disciplinary inquiry."
+                      ? "මූලික විමර්ශන වාර්තාවේ සාක්ෂි අනුව අදාළ නිලධාරියාට විධිමත් චෝදනා පත්‍රයක් නිකුත් කිරීමට නිර්දේශ කරමි."
+                      : "Evidence indicates prima facie misconduct; recommend issuing a formal charge sheet under the Establishment Code."
                   )
                 }
               >
-                + {lang === "si" ? "විධිමත් විනය පරීක්ෂණය" : "Formal Inquiry"}
+                + {lang === "si" ? "චෝදනා පත්‍රයක් නිකුත් කිරීම" : "Issuing a Charge Sheet"}
               </button>
               <button
                 type="button"
@@ -826,12 +885,12 @@ function RecommendationFormContent() {
                 onClick={() =>
                   handleApplyPreset(
                     lang === "si"
-                      ? "අදාළ අලාභය රජයට අයකර ගැනීමටත්, චෝදනා ලැබූ නිලධාරියාට දැඩි අවවාද නිකුත් කිරීමටත් නිර්දේශ කරමි."
-                      : "Recommend recovery of financial deficit from the accused officer and issuing a severe warning letter."
+                      ? "අදාළ අඩුපාඩු නිවැරදි කරගැනීමට නිලධාරියා වෙත ලිඛිත අවවාද සහ උපදෙස් ලබා දීමට නිර්දේශ කරමි."
+                      : "Recommend issuing formal written warnings and administrative advice to the officer."
                   )
                 }
               >
-                + {lang === "si" ? "අලාභ අයකර ගැනීම සහ අවවාද කිරීම" : "Surcharge & Warning"}
+                + {lang === "si" ? "අවවාද / උපදෙස් ලබා දීම" : "Warnings / Advice"}
               </button>
               <button
                 type="button"
@@ -839,12 +898,38 @@ function RecommendationFormContent() {
                 onClick={() =>
                   handleApplyPreset(
                     lang === "si"
-                      ? "පරීක්ෂණ වාර්තාව අනුව චෝදනා තහවුරු නොවන බැවින් මෙම නඩුව තවදුරටත් ඉදිරියට නොගෙන ගොනුව අවසන් කිරීමට නිර්දේශ කරමි."
-                      : "Allegations are unsubstantiated per investigation findings; recommend closing the case file with exoneration."
+                      ? "පරීක්ෂණයේ සාධාරණත්වය හා ආයතනික අවශ්‍යතාවය මත නිලධාරියා වහාම වෙනත් සේවා ස්ථානයකට මාරු කිරීමට නිර්දේශ කරමි."
+                      : "Recommend administrative transfer of the officer with immediate effect."
                   )
                 }
               >
-                + {lang === "si" ? "නිදොස් කොට ගොනුව අවසන් කිරීම" : "Exonerate & Close"}
+                + {lang === "si" ? "ස්ථාන මාරු කිරීම" : "Transfers"}
+              </button>
+              <button
+                type="button"
+                className="preset-chip"
+                onClick={() =>
+                  handleApplyPreset(
+                    lang === "si"
+                      ? "MoRE 104 විමර්ශන වාර්තාවේ නිරීක්ෂණ මත පදනම්ව චෝදනා ගොනු කිරීමට නිර්දේශ කරමි."
+                      : "Recommend filing charges based on the findings of MoRE 104 investigation."
+                  )
+                }
+              >
+                + {lang === "si" ? "MoRE 104 පරීක්ෂණය මත චෝදනා" : "MoRE 104 Charging"}
+              </button>
+              <button
+                type="button"
+                className="preset-chip"
+                onClick={() =>
+                  handleApplyPreset(
+                    lang === "si"
+                      ? "පරීක්ෂණයේදී කරුණු අනාවරණය නොවීම හේතුවෙන් මෙම නඩුවේ ක්‍රියාමාර්ගය අවසන් කිරීමට නිර්දේශ කරමි."
+                      : "Allegations remain unsubstantiated due to non-disclosure of facts; recommend closing the action."
+                  )
+                }
+              >
+                + {lang === "si" ? "කරුණු අනාවරණය නොවීම මත අවසන් කිරීම" : "Close (Non-disclosure)"}
               </button>
             </div>
           </div>

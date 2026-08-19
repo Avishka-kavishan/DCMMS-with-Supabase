@@ -444,6 +444,26 @@
   "informOfficerInChargeTitle": "ஆரம்ப விசாரணை முடிவடைந்துவிட்டது என்பதை பொறுப்பு அதிகாரிக்கு தெரிவித்தல்",
   "informOfficerInChargeBtn": "ஆரம்ப விசாரணை முடிவடைந்துவிட்டது என்பதை பொறுப்பு அதிகாரிக்கு தெரிவிக்கவும்",
   "informOfficerInChargeDesc": "இந்த வழக்கிற்கான ஆரம்ப விசாரணை முடிவடைந்துவிட்டது என்பதை பொறுப்பு அதிகாரிக்கு தெரிவிக்க கீழே உள்ள பொத்தானைக் கிளிக் செய்யவும்.",
-  "informOfficerInChargeSuccess": "ஆரம்ப விசாரணை முடிவடைந்துவிட்டது என்பது பொறுப்பு அதிகாரிக்கு வெற்றிகரமாக தெரிவிக்கப்பட்டது!"
+  "informOfficerInChargeSuccess": "ஆரம்ப விசாரணை முடிவடைந்துவிட்டது என்பது பொறுப்பு அதிகாரிக்கு வெற்றிகரமாக தெரிவிக்கப்பட்டது!",
+  "investigationRecommendationsTab": "விசாரணை பரிந்துரை",
+  "recommendationsOverview": "ஒதுக்கப்பட்ட வழக்குகளுக்காக பதிவு செய்யப்பட்ட அனைத்து விசாரணை பரிந்துரைகள் மற்றும் ஒழுங்கு நடவடிக்கைகளின் கண்ணோட்டம்.",
+  "newRecommendationBtn": "புதிய பரிந்துரை சேர்க்க",
+  "totalRecommendations": "மொத்த பரிந்துரைகள்",
+  "submittedRecommendations": "சமர்ப்பிக்கப்பட்டவை",
+  "draftRecommendations": "வரைவுகள்",
+  "urgentRecommendations": "அவசர நடவடிக்கை",
+  "filterByCategory": "அனைத்து வகைகள்",
+  "filterByUrgency": "அனைத்து முன்னுரிமைகள்",
+  "searchRecommendationsPlaceholder": "பரிந்துரைகளைத் தேடுக (வழக்கு எண், தலைப்பு, குற்றம் சாட்டப்பட்டவர்)...",
+  "noRecommendationsFound": "பொருத்தமான பரிந்துரைகள் எதுவும் கிடைக்கவில்லை",
+  "noRecommendationsYet": "விசாரணை பரிந்துரைகள் எதுவும் இன்னும் சமர்ப்பிக்கப்படவில்லை",
+  "assignedCasesAwaitingRec": "பரிந்துரைக்காக ஒதுக்கப்பட்ட விசாரணை முடிந்த வழக்குகள்",
+  "assignedCasesAwaitingRecDesc": "நிர்வாகத்தால் முதற்கட்ட விசாரணை முடிக்கப்பட்டு, ஒழுங்குப் பரிந்துரை தயாரிப்பதற்காக உங்களுக்கு ஒதுக்கப்பட்ட வழக்குகள்.",
+  "completedInvestigationsTitle": "பரிந்துரைக்காக ஒதுக்கப்பட்ட விசாரணை முடிந்த வழக்குகள்",
+  "completedInvestigationsSubtitle": "முதற்கட்ட விசாரணை முடிக்கப்பட்டு, பரிந்துரை தயாரிப்பிற்காக உங்களுக்கு ஒதுக்கப்பட்ட வழக்குகள்.",
+  "completedInvestigationsCount": "விசாரணை முடிந்த வழக்குகள்",
+  "awaitingRecommendation": "பரிந்துரை எதிர்பார்க்கப்படுகிறது",
+  "recommendationSubmitted": "பரிந்துரை சமர்ப்பிக்கப்பட்டது",
+  "addRecommendationForCase": "+ பரிந்துரை சேர்க்க"
 }
 

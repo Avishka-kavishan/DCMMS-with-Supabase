@@ -448,6 +448,26 @@
   "informOfficerInChargeTitle": "Informing Officer in Charge that Initial Investigation is Complete",
   "informOfficerInChargeBtn": "Informing the officer in charge that the initial investigation is complete",
   "informOfficerInChargeDesc": "Click the button below to notify the officer in charge that the initial preliminary investigation for this case is complete.",
-  "informOfficerInChargeSuccess": "Successfully informed the officer in charge that the initial investigation is complete!"
+  "informOfficerInChargeSuccess": "Successfully informed the officer in charge that the initial investigation is complete!",
+  "investigationRecommendationsTab": "Investigation Recommendation",
+  "recommendationsOverview": "Overview of all investigation recommendations and disciplinary actions registered for your assigned cases.",
+  "newRecommendationBtn": "New Recommendation",
+  "totalRecommendations": "Total Recommendations",
+  "submittedRecommendations": "Submitted",
+  "draftRecommendations": "Drafts",
+  "urgentRecommendations": "Urgent Action",
+  "filterByCategory": "All Categories",
+  "filterByUrgency": "All Urgencies",
+  "searchRecommendationsPlaceholder": "Search recommendations (Case No, Title, Accused, Notes)...",
+  "noRecommendationsFound": "No recommendations found matching the filter",
+  "noRecommendationsYet": "No investigation recommendations submitted yet",
+  "assignedCasesAwaitingRec": "Completed Investigation Cases Assigned for Recommendation",
+  "assignedCasesAwaitingRecDesc": "Initial preliminary investigations completed by administration and assigned to you for disciplinary recommendation formulation.",
+  "completedInvestigationsTitle": "Completed Investigation Cases Assigned for Recommendation",
+  "completedInvestigationsSubtitle": "Cases where initial investigation has been completed and assigned to you for recommendation formulation.",
+  "completedInvestigationsCount": "Completed Investigations",
+  "awaitingRecommendation": "Awaiting Recommendation",
+  "recommendationSubmitted": "Recommendation Submitted",
+  "addRecommendationForCase": "+ Add Recommendation"
 }
 

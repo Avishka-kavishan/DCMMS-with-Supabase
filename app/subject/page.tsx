@@ -13,7 +13,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { getCurrentProfile, signOut, UserProfile } from "@/lib/auth";
 import { updateCaseByDateExtensionApprovalServer, saveCaseByAppointmentAndReportDueDateServer } from "@/lib/db-actions";
-import { CheckCircle, XCircle, FileText, Send, Clock, X, AlertCircle, ShieldCheck, Calendar as CalendarIcon, ChevronDown, ChevronUp, Bell, Eye, MoreHorizontal, Filter, Check, MailCheck, ClipboardList } from "lucide-react";
+import { CheckCircle, XCircle, FileText, Send, Clock, X, AlertCircle, ShieldCheck, Calendar as CalendarIcon, ChevronDown, ChevronUp, Bell, Eye, MoreHorizontal, Filter, Check, MailCheck, ClipboardList, Plus, Sparkles, ExternalLink, User, Building, ArrowRight, ShieldAlert, FileCheck, Layers } from "lucide-react";
 
 interface Case {
   id: string;
@@ -758,10 +758,116 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
       }
     };
 
+    const fetchRecommendations = async () => {
+      let recList: any[] = [];
+      try {
+        if (isSupabaseConfigured) {
+          const { data: recData, error } = await supabase
+            .from("dcmms_recommendations")
+            .select("*")
+            .order("created_at", { ascending: false });
+
+          if (!error && recData) {
+            recList = recData.map((r: any) => ({
+              id: r.id,
+              caseNo: r.case_no,
+              letterNo: r.letter_no,
+              category: r.category || "issuing_charge_sheet",
+              urgency: r.urgency || "normal",
+              title: r.title || "Preliminary Investigation Recommendation",
+              recommendationText: r.recommendation_text || "",
+              disciplinaryAction: r.disciplinary_action || "",
+              forwardTo: r.forward_to || "disciplinary_branch",
+              targetDate: r.target_date || "",
+              referenceNotes: r.reference_notes || "",
+              status: r.status || "Submitted",
+              submittedAt: r.submitted_at || r.created_at || "",
+              updatedAt: r.updated_at || r.created_at || "",
+              createdAt: r.created_at || "",
+            }));
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching recommendations from Supabase:", err);
+      }
+
+      if (typeof window !== "undefined") {
+        try {
+          const storedRecs = localStorage.getItem("dcmms_recommendations");
+          if (storedRecs) {
+            const localList = JSON.parse(storedRecs);
+            if (Array.isArray(localList)) {
+              localList.forEach((lr: any) => {
+                const cNo = (lr.caseNo || lr.case_no || "").trim().toLowerCase();
+                const existingIdx = recList.findIndex((r: any) => (r.caseNo || r.case_no || "").trim().toLowerCase() === cNo);
+                const item = {
+                  id: lr.id || `rec-${lr.caseNo || lr.case_no}`,
+                  caseNo: lr.caseNo || lr.case_no,
+                  letterNo: lr.letterNo || lr.letter_no,
+                  category: lr.category || "issuing_charge_sheet",
+                  urgency: lr.urgency || "normal",
+                  title: lr.title || "Preliminary Investigation Recommendation",
+                  recommendationText: lr.recommendationText || lr.recommendation_text || "",
+                  disciplinaryAction: lr.disciplinaryAction || lr.disciplinary_action || "",
+                  forwardTo: lr.forwardTo || lr.forward_to || "disciplinary_branch",
+                  targetDate: lr.targetDate || lr.target_date || "",
+                  referenceNotes: lr.referenceNotes || lr.reference_notes || "",
+                  status: lr.status || "Submitted",
+                  submittedAt: lr.submittedAt || lr.submitted_at || lr.updatedAt || "",
+                  updatedAt: lr.updatedAt || lr.updated_at || "",
+                  createdAt: lr.createdAt || lr.created_at || "",
+                };
+                if (existingIdx >= 0) {
+                  recList[existingIdx] = { ...recList[existingIdx], ...item };
+                } else {
+                  recList.push(item);
+                }
+              });
+            }
+          }
+        } catch (e) {
+          console.error("Error parsing local recommendations:", e);
+        }
+      }
+
+      // Enrich recommendations with accused / complainant / subject details
+      if (typeof window !== "undefined") {
+        try {
+          const storedCases = JSON.parse(localStorage.getItem("dcmms_cases") || "[]");
+          const storedLetters = JSON.parse(localStorage.getItem("dcmms_letters") || "[]");
+          const storedDailyMail = JSON.parse(localStorage.getItem("dcmms_daily_mail") || "[]");
+          const storedAccused = JSON.parse(localStorage.getItem("dcmms_accused_officers") || "[]");
+          const storedConcerned = JSON.parse(localStorage.getItem("dcmms_concerned_officers") || "[]");
+
+          recList = recList.map((r: any) => {
+            const cNo = (r.caseNo || "").trim().toLowerCase();
+            const foundCase = Array.isArray(storedCases) ? storedCases.find((c: any) => (c.caseNo || "").trim().toLowerCase() === cNo) : null;
+            const foundLetter = Array.isArray(storedLetters) ? storedLetters.find((l: any) => (l.refNo || "").trim().toLowerCase() === cNo) : null;
+            const foundMail = Array.isArray(storedDailyMail) ? storedDailyMail.find((m: any) => (m.ref_no || m.refNo || "").trim().toLowerCase() === cNo) : null;
+            const foundAcc = Array.isArray(storedAccused) ? storedAccused.find((a: any) => (a.ref_number || a.refNumber || a.case_no || "").trim().toLowerCase() === cNo) : null;
+            const foundConc = Array.isArray(storedConcerned) ? storedConcerned.find((c: any) => (c.case_no || c.subject_file_number || "").trim().toLowerCase() === cNo) : null;
+
+            return {
+              ...r,
+              subject: r.subject || foundCase?.subject || foundLetter?.subject || foundMail?.subject || "",
+              accusedName: r.accusedName || foundAcc?.accused_officer_name || foundAcc?.officer_name || foundConc?.officer_name || foundConc?.full_name || foundCase?.accusedName || "",
+              accusedDesignation: r.accusedDesignation || foundAcc?.position || foundConc?.position || foundCase?.accusedDesignation || "",
+              schoolName: r.schoolName || foundAcc?.accused_school_name || foundAcc?.school_name || foundConc?.institute_name || foundMail?.institute_name || "",
+              complainantName: r.complainantName || foundMail?.sender_name || foundLetter?.senderName || foundAcc?.name_of_the_presenting_the_complain || "",
+            };
+          });
+        } catch (e) {}
+      }
+
+      setRecommendations(recList);
+    };
+
     fetchCases();
+    fetchRecommendations();
 
     const handleSyncAll = () => {
       fetchCases();
+      fetchRecommendations();
       if (typeof fetchAssignments === "function") {
         fetchAssignments();
       }
@@ -773,6 +879,7 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
       .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_daily_mail" }, handleSyncAll)
       .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subject_assignments" }, handleSyncAll)
       .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subsequent_mails" }, handleSyncAll)
+      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_recommendations" }, handleSyncAll)
       .subscribe();
 
     const interval = setInterval(handleSyncAll, 15_000);
@@ -784,6 +891,7 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
         e.key === "dcmms_cases" ||
         e.key === "dcmms_letters" ||
         e.key === "dcmms_subsequent_mails" ||
+        e.key === "dcmms_recommendations" ||
         e.key === "dcmms_new_mail_current_case"
       ) {
         handleSyncAll();
@@ -792,19 +900,29 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
 
     window.addEventListener("storage", handleStorageEvent);
     window.addEventListener("dcmms_assignment_updated", handleSyncAll);
+    window.addEventListener("dcmms_recommendation_updated", handleSyncAll);
 
     return () => {
       supabase.removeChannel(channel);
       clearInterval(interval);
       window.removeEventListener("storage", handleStorageEvent);
       window.removeEventListener("dcmms_assignment_updated", handleSyncAll);
+      window.removeEventListener("dcmms_recommendation_updated", handleSyncAll);
     };
   }, [profile, t]);
 
   // Tab navigation state
-  const [activeTab, setActiveTab] = useState<"cases" | "answer_letters">("cases");
+  const [activeTab, setActiveTab] = useState<"cases" | "answer_letters" | "recommendations">("cases");
   const [assignedAnswerLetters, setAssignedAnswerLetters] = useState<any[]>([]);
   const [answerSearchQuery, setAnswerSearchQuery] = useState("");
+
+  // Investigation Recommendations state
+  const [recommendations, setRecommendations] = useState<any[]>([]);
+  const [recSearchQuery, setRecSearchQuery] = useState("");
+  const [recCategoryFilter, setRecCategoryFilter] = useState("all");
+  const [recUrgencyFilter, setRecUrgencyFilter] = useState("all");
+  const [recStatusFilter, setRecStatusFilter] = useState("all");
+  const [selectedRecModal, setSelectedRecModal] = useState<any | null>(null);
 
   // Search & filter state
   const [searchQuery, setSearchQuery] = useState("");
@@ -1937,6 +2055,114 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
     );
   });
 
+  // Check if an investigation is completed for a case
+  const isInvestigationCompleteForCase = (caseNo: string) => {
+    const cNo = (caseNo || "").trim().toLowerCase();
+    const matchingAsgn = assignments.find((a: any) => (a.caseNo || a.case_no || "").trim().toLowerCase() === cNo);
+    const matchingCase = cases.find((c: any) => (c.caseNo || "").trim().toLowerCase() === cNo);
+    
+    if (matchingAsgn) {
+      if (
+        matchingAsgn.initialInvestigationComplete ||
+        matchingAsgn.initial_investigation_complete ||
+        matchingAsgn.status === "Informing Officer In Charge - Initial Investigation Complete" ||
+        matchingAsgn.status === "Investigation Completed" ||
+        matchingAsgn.status === "Implementation of Recommendations" ||
+        matchingAsgn.reportContent ||
+        matchingAsgn.reportSubmitDate
+      ) {
+        return true;
+      }
+    }
+    
+    if (matchingCase) {
+      if (
+        matchingCase.status === "Informing Officer In Charge - Initial Investigation Complete" ||
+        matchingCase.status === "Completed" ||
+        matchingCase.status === "Investigation Completed" ||
+        matchingCase.status === "Implementation of Recommendations"
+      ) {
+        return true;
+      }
+    }
+    
+    return false;
+  };
+
+  // List of all completed investigation cases assigned to this subject officer
+  const completedInvestigationCases = cases.filter((c) => isInvestigationCompleteForCase(c.caseNo));
+
+  // Completed cases awaiting recommendation submission
+  const completedAwaitingRecCases = completedInvestigationCases.filter((c) => {
+    const rec = recommendations.find((r) => (r.caseNo || "").trim().toLowerCase() === (c.caseNo || "").trim().toLowerCase());
+    return !rec || rec.status !== "Submitted";
+  });
+
+  // Filter investigation recommendations list in real-time
+  const filteredRecommendations = recommendations.filter((item) => {
+    const q = recSearchQuery.trim().toLowerCase();
+    const matchesSearch =
+      !q ||
+      (item.caseNo && item.caseNo.toLowerCase().includes(q)) ||
+      (item.letterNo && item.letterNo.toLowerCase().includes(q)) ||
+      (item.title && item.title.toLowerCase().includes(q)) ||
+      (item.accusedName && item.accusedName.toLowerCase().includes(q)) ||
+      (item.schoolName && item.schoolName.toLowerCase().includes(q)) ||
+      (item.recommendationText && item.recommendationText.toLowerCase().includes(q)) ||
+      (item.disciplinaryAction && item.disciplinaryAction.toLowerCase().includes(q));
+
+    const matchesCategory = recCategoryFilter === "all" || item.category === recCategoryFilter;
+    const matchesUrgency = recUrgencyFilter === "all" || item.urgency === recUrgencyFilter;
+    const matchesStatus =
+      recStatusFilter === "all" ||
+      item.status === recStatusFilter ||
+      (recStatusFilter === "Awaiting" && !recommendations.some(r => r.caseNo === item.caseNo && r.status === "Submitted"));
+
+    return matchesSearch && matchesCategory && matchesUrgency && matchesStatus;
+  });
+
+  const getCategoryLabel = (category: string) => {
+    switch (category) {
+      case "issuing_charge_sheet":
+        return lang === "si" ? "චෝදනා පත්‍රයක් නිකුත් කිරීම" : lang === "ta" ? "குற்றப்பத்திரிகை வழங்குதல்" : "Issuing a charge sheet";
+      case "action_based_on_court_verdict":
+        return lang === "si" ? "අධිකරණ තීන්දුව මත පදනම්ව ඉදිරි ක්‍රියාමාර්ග" : lang === "ta" ? "நீதிமன்ற தீர்ப்பின் அடிப்படையில் நடவடிக்கை" : "Action based on court verdict";
+      case "giving_warnings_advice":
+        return lang === "si" ? "අවවාද / උපදෙස් ලබා දීම" : lang === "ta" ? "எச்சரிக்கைகள் / ஆலோசனைகள் வழங்குதல்" : "Giving warnings/advice";
+      case "transfers":
+        return lang === "si" ? "ස්ථාන මාරු කිරීම්" : lang === "ta" ? "இடமாற்றங்கள்" : "Transfers";
+      case "charging_based_on_more_104":
+        return lang === "si" ? "MoRE 104 පරීක්ෂණය මත චෝදනා ගොනු කිරීම" : lang === "ta" ? "MoRE 104 குற்றஞ்சாட்டுதல்" : "Charging based on MoRE 104";
+      case "terminating_service":
+        return lang === "si" ? "සේවය අවසන් කිරීම" : lang === "ta" ? "சேவையை நிறுத்துதல்" : "Terminating service";
+      case "sending_recommendation_other_departments":
+        return lang === "si" ? "වෙනත් දෙපාර්තමේන්තු වෙත යොමු කිරීම" : lang === "ta" ? "பிற திணைக்களங்களுக்கு அனுப்புதல்" : "Sending to other departments";
+      case "closing_action_non_disclosure":
+        return lang === "si" ? "කරුණු අනාවරණය නොවීම මත අවසන් කිරීම" : lang === "ta" ? "நடவடிக்கையை முடிவுக்குக் கொண்டுவருதல்" : "Closing action (non-disclosure)";
+      default:
+        return category || (lang === "si" ? "සාමාන්‍ය නිර්දේශය" : "General Recommendation");
+    }
+  };
+
+  const getForwardToLabel = (target: string) => {
+    switch (target) {
+      case "disciplinary_branch":
+        return lang === "si" ? "විනය ශාඛාව (Disciplinary Branch)" : lang === "ta" ? "ஒழுங்குப் பிரிவு (Disciplinary Branch)" : "Disciplinary Branch";
+      case "legal_division":
+        return lang === "si" ? "නීති අංශය (Legal Division)" : lang === "ta" ? "சட்டப் பிரிவு (Legal Division)" : "Legal Division";
+      case "investigation_director":
+        return lang === "si" ? "විමර්ශන අධ්‍යක්ෂ (Investigation Director)" : lang === "ta" ? "விசாரணை பணிப்பாளர் (Investigation Director)" : "Investigation Director";
+      case "provincial_office":
+        return lang === "si" ? "පළාත් කාර්යාලය (Provincial Office)" : lang === "ta" ? "மாகாண அலுவலகம் (Provincial Office)" : "Provincial Office";
+      case "ministry_secretary":
+        return lang === "si" ? "අධ්‍යාපන අමාත්‍යාංශ ලේකම් (Ministry Secretary)" : lang === "ta" ? "அமைச்சு செயலாளர் (Ministry Secretary)" : "Ministry Secretary";
+      case "psc":
+        return lang === "si" ? "රාජ්‍ය සේවා කොමිෂන් සභාව (PSC)" : lang === "ta" ? "அரசு சேவை ஆணைக்குழு (PSC)" : "Public Service Commission";
+      default:
+        return target || (lang === "si" ? "විනය ශාඛාව" : "Disciplinary Branch");
+    }
+  };
+
   return (
     <div className="dashboard-container" data-font-scale={fontScale}>
       {/* ── Skip Link (A11y) ── */}
@@ -2407,6 +2633,42 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
                   {assignedAnswerLetters.length}
                 </span>
               )}
+            </button>
+            <button
+              type="button"
+              className={`nav-tab-btn${activeTab === "recommendations" ? " active" : ""}`}
+              onClick={() => setActiveTab("recommendations")}
+            >
+              <Sparkles className="tab-icon" />
+              <span>{lang === "si" ? "විමර්ශන නිර්දේශ" : lang === "ta" ? "விசாரணை பரிந்துரை" : "Investigation Recommendation"}</span>
+              {completedAwaitingRecCases.length > 0 ? (
+                <span style={{
+                  backgroundColor: "#e11d48",
+                  color: "#ffffff",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  padding: "2px 8px",
+                  borderRadius: "12px",
+                  marginLeft: "4px",
+                  boxShadow: "0 2px 4px rgba(225, 29, 72, 0.3)",
+                  transition: "all 0.2s ease"
+                }}>
+                  {completedAwaitingRecCases.length}
+                </span>
+              ) : recommendations.length > 0 ? (
+                <span style={{
+                  backgroundColor: activeTab === "recommendations" ? "#4f46e5" : "#94a3b8",
+                  color: "#ffffff",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  padding: "2px 8px",
+                  borderRadius: "12px",
+                  marginLeft: "4px",
+                  transition: "all 0.2s ease"
+                }}>
+                  {recommendations.length}
+                </span>
+              ) : null}
             </button>
           </div>
 
@@ -3485,6 +3747,488 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
             </section>
           )}
 
+          {/* ==================== TAB 3: INVESTIGATION RECOMMENDATIONS VIEW ==================== */}
+          {activeTab === "recommendations" && (
+            <section style={{ marginBottom: "30px" }}>
+              {/* Header Row with Action */}
+              <div className="section-header-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "12px" }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "20px", fontWeight: 800, color: "#1e1b4b", display: "flex", alignItems: "center", gap: "10px" }}>
+                    <Sparkles style={{ color: "#4f46e5", width: "24px", height: "24px" }} />
+                    <span>{lang === "si" ? "විමර්ශන නිර්දේශ (Investigation Recommendation)" : lang === "ta" ? "விசாரணை பரிந்துரை (Investigation Recommendation)" : "Investigation Recommendation"}</span>
+                  </h3>
+                  <p style={{ margin: "4px 0 0 0", fontSize: "13px", color: "#64748b" }}>
+                    {t("recommendationsOverview", "Overview of all investigation recommendations and disciplinary actions registered for your assigned cases.")}
+                  </p>
+                </div>
+
+                <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                  <Link
+                    href="/subject/recommendation"
+                    className="btn-create-rec"
+                  >
+                    <Plus size={16} />
+                    <span>{t("newRecommendationBtn", "New Recommendation")}</span>
+                  </Link>
+                </div>
+              </div>
+
+              {/* Alert Banner for Completed Investigation Cases Awaiting Recommendation */}
+              {completedAwaitingRecCases.length > 0 && (
+                <div style={{
+                  backgroundColor: "#eff6ff",
+                  border: "1px solid #bfdbfe",
+                  borderRadius: "14px",
+                  padding: "14px 20px",
+                  marginBottom: "20px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  gap: "12px",
+                  boxShadow: "0 2px 4px rgba(37,99,235,0.06)"
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <div style={{ width: "38px", height: "38px", borderRadius: "10px", backgroundColor: "#dbeafe", display: "flex", alignItems: "center", justifyContent: "center", color: "#2563eb", flexShrink: 0 }}>
+                      <AlertCircle size={22} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: "14px", fontWeight: 700, color: "#1e3a8a" }}>
+                        {lang === "si" 
+                          ? `විමර්ශනය අවසන් නඩු ${completedAwaitingRecCases.length} ක් නිර්දේශ සඳහා පවරා ඇත` 
+                          : `${completedAwaitingRecCases.length} Completed Investigation Case(s) Assigned for Recommendation`}
+                      </div>
+                      <div style={{ fontSize: "12px", color: "#3b82f6", marginTop: "2px" }}>
+                        {lang === "si"
+                          ? "මූලික විමර්ශන කටයුතු අවසන් කර ඇති අතර විනය ක්‍රියාමාර්ග නිර්දේශ ඉදිරිපත් කිරීම ඔබ වෙත පවරා ඇත."
+                          : "Preliminary investigations have concluded and are assigned to you for disciplinary recommendation submission."}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                    <span style={{ fontSize: "12px", fontWeight: 700, backgroundColor: "#dbeafe", color: "#1d4ed8", padding: "4px 12px", borderRadius: "12px" }}>
+                      {completedAwaitingRecCases.length} {lang === "si" ? "අපේක්ෂිතයි" : "Pending Action"}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Recommendation Quick Summary KPI Cards */}
+              <div className="dashboard-stats-grid subject-stats-grid" style={{ marginBottom: "20px" }}>
+                <div className="premium-stat-card total-cases-card" style={{ height: "100px", padding: "16px" }}>
+                  <div className="premium-card-top">
+                    <div className="premium-card-title-area">
+                      <FileCheck className="premium-card-icon" />
+                      <span>{t("completedInvestigationsCount", "Completed Investigations")}</span>
+                    </div>
+                  </div>
+                  <div className="premium-card-bottom">
+                    <div className="premium-card-value-area">
+                      <span className="premium-card-value">{String(completedInvestigationCases.length).padStart(2, "0")}</span>
+                      <span className="premium-card-label">{lang === "si" ? "නඩු" : "cases"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="premium-stat-card inprogress-cases-card" style={{ height: "100px", padding: "16px", background: completedAwaitingRecCases.length > 0 ? "linear-gradient(135deg, #e11d48, #be123c)" : "linear-gradient(135deg, #f97316, #c2410c)" }}>
+                  <div className="premium-card-top">
+                    <div className="premium-card-title-area">
+                      <ShieldAlert className="premium-card-icon" />
+                      <span>{t("awaitingRecommendation", "Awaiting Recommendation")}</span>
+                    </div>
+                  </div>
+                  <div className="premium-card-bottom">
+                    <div className="premium-card-value-area">
+                      <span className="premium-card-value">{String(completedAwaitingRecCases.length).padStart(2, "0")}</span>
+                      <span className="premium-card-label">{lang === "si" ? "අපේක්ෂිත" : "pending"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="premium-stat-card closed-cases-card" style={{ height: "100px", padding: "16px", background: "linear-gradient(135deg, #4f46e5, #3730a3)" }}>
+                  <div className="premium-card-top">
+                    <div className="premium-card-title-area">
+                      <CheckCircle className="premium-card-icon" />
+                      <span>{t("submittedRecommendations", "Submitted")}</span>
+                    </div>
+                  </div>
+                  <div className="premium-card-bottom">
+                    <div className="premium-card-value-area">
+                      <span className="premium-card-value">
+                        {String(recommendations.filter(r => r.status === "Submitted" || r.status === "Approved").length).padStart(2, "0")}
+                      </span>
+                      <span className="premium-card-label">{lang === "si" ? "යොමු කළ" : "submitted"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="premium-stat-card pending-cases-card" style={{ height: "100px", padding: "16px" }}>
+                  <div className="premium-card-top">
+                    <div className="premium-card-title-area">
+                      <Clock className="premium-card-icon" />
+                      <span>{t("draftRecommendations", "Drafts")}</span>
+                    </div>
+                  </div>
+                  <div className="premium-card-bottom">
+                    <div className="premium-card-value-area">
+                      <span className="premium-card-value">
+                        {String(recommendations.filter(r => r.status === "Draft").length).padStart(2, "0")}
+                      </span>
+                      <span className="premium-card-label">{lang === "si" ? "කෙටුම්පත්" : "drafts"}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Dedicated Section: Completed Investigation Cases Assigned for Recommendation */}
+              {completedInvestigationCases.length > 0 && (
+                <div style={{ marginBottom: "24px", backgroundColor: "#ffffff", borderRadius: "16px", border: "1px solid #e2e8f0", padding: "20px 24px", boxShadow: "0 2px 4px rgba(0,0,0,0.02)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "8px" }}>
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: "16px", fontWeight: 800, color: "#1e1b4b", display: "flex", alignItems: "center", gap: "8px" }}>
+                        <CheckCircle size={18} style={{ color: "#16a34a" }} />
+                        <span>{t("completedInvestigationsTitle", "Completed Investigation Cases Assigned for Recommendation")}</span>
+                        <span style={{ fontSize: "11px", fontWeight: 700, backgroundColor: "#dcfce7", color: "#15803d", padding: "2px 8px", borderRadius: "12px" }}>
+                          {completedInvestigationCases.length} {lang === "si" ? "නඩු" : "Cases"}
+                        </span>
+                      </h4>
+                      <p style={{ margin: "3px 0 0 0", fontSize: "12px", color: "#64748b" }}>
+                        {t("completedInvestigationsSubtitle", "Cases where initial investigation has been completed and assigned to you for recommendation formulation.")}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "14px" }}>
+                    {completedInvestigationCases.map((c) => {
+                      const rec = recommendations.find((r) => (r.caseNo || "").trim().toLowerCase() === (c.caseNo || "").trim().toLowerCase());
+                      const isSubmitted = rec && (rec.status === "Submitted" || rec.status === "Approved");
+                      const isDraft = rec && rec.status === "Draft";
+
+                      return (
+                        <div
+                          key={`completed-inv-${c.caseNo}`}
+                          style={{
+                            backgroundColor: isSubmitted ? "#f8fafc" : "#ffffff",
+                            borderRadius: "14px",
+                            border: isSubmitted ? "1px solid #cbd5e1" : "1px solid #818cf8",
+                            padding: "16px",
+                            display: "flex",
+                            flexDirection: "column",
+                            justifyContent: "space-between",
+                            gap: "12px",
+                            boxShadow: isSubmitted ? "none" : "0 4px 6px -1px rgba(79, 70, 229, 0.08)"
+                          }}
+                        >
+                          <div>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
+                              <div>
+                                <span style={{ fontWeight: 800, color: "#1e1b4b", fontSize: "15px" }}>{c.caseNo}</span>
+                                <div style={{ fontSize: "11px", color: "#16a34a", fontWeight: 700, display: "flex", alignItems: "center", gap: "4px", marginTop: "2px" }}>
+                                  <CheckCircle size={12} />
+                                  <span>{lang === "si" ? "මූලික විමර්ශනය අවසන්" : "Initial Investigation Complete"}</span>
+                                </div>
+                              </div>
+
+                              {isSubmitted ? (
+                                <span style={{ fontSize: "11px", fontWeight: 700, color: "#15803d", backgroundColor: "#dcfce7", padding: "3px 10px", borderRadius: "12px", border: "1px solid #bbf7d0" }}>
+                                  ✓ {lang === "si" ? "නිර්දේශය යොමු කළා" : "Submitted"}
+                                </span>
+                              ) : isDraft ? (
+                                <span style={{ fontSize: "11px", fontWeight: 700, color: "#854d0e", backgroundColor: "#fef9c3", padding: "3px 10px", borderRadius: "12px", border: "1px solid #fef08a" }}>
+                                  📝 {lang === "si" ? "කෙටුම්පත" : "Draft Saved"}
+                                </span>
+                              ) : (
+                                <span style={{ fontSize: "11px", fontWeight: 700, color: "#b91c1c", backgroundColor: "#fee2e2", padding: "3px 10px", borderRadius: "12px", border: "1px solid #fecaca" }}>
+                                  ⚡ {lang === "si" ? "නිර්දේශය අපේක්ෂිතයි" : "Action Required"}
+                                </span>
+                              )}
+                            </div>
+
+                            <p style={{ margin: "6px 0 0 0", fontSize: "13px", color: "#334155", lineHeight: 1.4, fontWeight: 500 }}>
+                              {c.subject || "Formal Preliminary Investigation Completed"}
+                            </p>
+                          </div>
+
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: "10px", borderTop: "1px solid #f1f5f9" }}>
+                            <span style={{ fontSize: "11px", color: "#64748b" }}>
+                              {c.letterDate || c.assignedDate}
+                            </span>
+                            <Link
+                              href={`/subject/recommendation?caseNo=${c.caseNo}`}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "6px",
+                                fontSize: "12px",
+                                fontWeight: 700,
+                                color: isSubmitted ? "#4f46e5" : "#ffffff",
+                                backgroundColor: isSubmitted ? "#e0e7ff" : "#4f46e5",
+                                padding: "6px 14px",
+                                borderRadius: "8px",
+                                textDecoration: "none",
+                                transition: "all 0.15s ease"
+                              }}
+                            >
+                              {isSubmitted ? (
+                                <>
+                                  <span>View Recommendation</span>
+                                  <ArrowRight size={12} />
+                                </>
+                              ) : isDraft ? (
+                                <>
+                                  <span>Edit Draft</span>
+                                  <ArrowRight size={12} />
+                                </>
+                              ) : (
+                                <>
+                                  <Plus size={13} />
+                                  <span>{t("addRecommendationForCase", "+ Add Recommendation")}</span>
+                                </>
+                              )}
+                            </Link>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Filter and Search Bar */}
+              <div className="letters-list-header" style={{ marginBottom: "16px", backgroundColor: "#ffffff", padding: "12px 18px", borderRadius: "12px", border: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: 700, color: "#1e1b4b", fontSize: "14px" }}>
+                  <Filter size={16} style={{ color: "#4f46e5" }} />
+                  <span>Filter Recommendations</span>
+                </div>
+
+                <div className="letters-filters-group" style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", margin: 0 }}>
+                  {/* Search Bar */}
+                  <div className="search-box" style={{ width: "220px" }}>
+                    <svg className="search-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    <input
+                      type="text"
+                      value={recSearchQuery}
+                      onChange={(e) => setRecSearchQuery(e.target.value)}
+                      placeholder={t("searchRecommendationsPlaceholder", "Search recommendations...")}
+                      className="search-input"
+                    />
+                  </div>
+
+                  {/* Category Filter */}
+                  <div className="filter-dropdown-wrapper">
+                    <select
+                      value={recCategoryFilter}
+                      onChange={(e) => setRecCategoryFilter(e.target.value)}
+                      className="filter-priority-select"
+                      style={{ maxWidth: "160px" }}
+                    >
+                      <option value="all">{t("filterByCategory", "All Categories")}</option>
+                      <option value="issuing_charge_sheet">{lang === "si" ? "චෝදනා පත්‍රයක් නිකුත් කිරීම" : "Issuing Charge Sheet"}</option>
+                      <option value="action_based_on_court_verdict">{lang === "si" ? "අධිකරණ තීන්දුව මත ක්‍රියාමාර්ග" : "Court Verdict Action"}</option>
+                      <option value="giving_warnings_advice">{lang === "si" ? "අවවාද / උපදෙස්" : "Warnings/Advice"}</option>
+                      <option value="transfers">{lang === "si" ? "ස්ථාන මාරු කිරීම්" : "Transfers"}</option>
+                      <option value="charging_based_on_more_104">{lang === "si" ? "MoRE 104 චෝදනා" : "MoRE 104 Charging"}</option>
+                      <option value="terminating_service">{lang === "si" ? "සේවය අවසන් කිරීම" : "Terminating Service"}</option>
+                      <option value="sending_recommendation_other_departments">{lang === "si" ? "වෙනත් දෙපාර්තමේන්තු වෙත" : "Other Departments"}</option>
+                      <option value="closing_action_non_disclosure">{lang === "si" ? "ක්‍රියාමාර්ගය අවසන් කිරීම" : "Closing Action"}</option>
+                      <option value="other">{lang === "si" ? "වෙනත්" : "Other"}</option>
+                    </select>
+                  </div>
+
+                  {/* Urgency Filter */}
+                  <div className="filter-dropdown-wrapper">
+                    <select
+                      value={recUrgencyFilter}
+                      onChange={(e) => setRecUrgencyFilter(e.target.value)}
+                      className="filter-priority-select"
+                    >
+                      <option value="all">{t("filterByUrgency", "All Urgencies")}</option>
+                      <option value="high">🔴 High / Urgent</option>
+                      <option value="normal">🟡 Normal</option>
+                      <option value="low">🟢 Low</option>
+                    </select>
+                  </div>
+
+                  {/* Status Filter */}
+                  <div className="filter-dropdown-wrapper">
+                    <select
+                      value={recStatusFilter}
+                      onChange={(e) => setRecStatusFilter(e.target.value)}
+                      className="filter-priority-select"
+                    >
+                      <option value="all">All Statuses</option>
+                      <option value="Awaiting">{lang === "si" ? "නිර්දේශ අපේක්ෂිතයි (Awaiting Action)" : "Awaiting Recommendation"}</option>
+                      <option value="Submitted">Submitted</option>
+                      <option value="Draft">Draft</option>
+                      <option value="Approved">Approved</option>
+                    </select>
+                  </div>
+
+                  {(recSearchQuery || recCategoryFilter !== "all" || recUrgencyFilter !== "all" || recStatusFilter !== "all") && (
+                    <a
+                      href="#"
+                      className="view-all-reset-link"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setRecSearchQuery("");
+                        setRecCategoryFilter("all");
+                        setRecUrgencyFilter("all");
+                        setRecStatusFilter("all");
+                      }}
+                    >
+                      {t("viewAll")} <span className="arrow-span">→</span>
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              {/* Data Table */}
+              <div className="table-responsive-container">
+                <table className="letters-data-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">{t("caseNo")}</th>
+                      <th scope="col">{lang === "si" ? "චෝදනා ලත් නිලධාරියා / ආයතනය" : "Accused Officer / Institution"}</th>
+                      <th scope="col">{lang === "si" ? "නිර්දේශ වර්ගය සහ මාතෘකාව" : "Category & Recommendation"}</th>
+                      <th scope="col">{lang === "si" ? "ප්‍රමුඛතාව" : "Urgency"}</th>
+                      <th scope="col">{t("status", "Status")}</th>
+                      <th scope="col">{lang === "si" ? "යොමු කළ අංශය" : "Forwarded To"}</th>
+                      <th scope="col">{lang === "si" ? "දිනය" : "Target / Date"}</th>
+                      <th scope="col" className="text-center">{t("actions", "Actions")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredRecommendations.length > 0 ? (
+                      filteredRecommendations.map((item, idx) => (
+                        <tr key={item.id ? `${item.id}-${idx}` : `rec-${item.caseNo}-${idx}`} className="letter-table-row">
+                          <td className="font-semibold" style={{ color: "#1e1b4b" }}>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                              <span style={{ fontWeight: 700 }}>{item.caseNo}</span>
+                              {item.letterNo && item.letterNo !== item.caseNo && (
+                                <span style={{ fontSize: "11px", color: "#64748b" }}>Letter: {item.letterNo}</span>
+                              )}
+                            </div>
+                          </td>
+                          <td>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                              <span style={{ fontWeight: 600, color: "#1e293b", display: "flex", alignItems: "center", gap: "4px" }}>
+                                <User size={13} style={{ color: "#64748b" }} />
+                                {item.accusedName || item.officerName || "—"}
+                              </span>
+                              {(item.schoolName || item.accusedDesignation) && (
+                                <span style={{ fontSize: "11px", color: "#64748b", display: "flex", alignItems: "center", gap: "4px" }}>
+                                  <Building size={11} style={{ color: "#94a3b8" }} />
+                                  {[item.accusedDesignation, item.schoolName].filter(Boolean).join(" • ")}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "4px", maxWidth: "260px" }}>
+                              <span className="badge-category-tag" title={getCategoryLabel(item.category)}>
+                                {getCategoryLabel(item.category)}
+                              </span>
+                              <span style={{ fontSize: "12px", fontWeight: 600, color: "#334155", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={item.title || item.recommendationText}>
+                                {item.title || item.recommendationText || "Formal Recommendation"}
+                              </span>
+                            </div>
+                          </td>
+                          <td>
+                            {item.urgency === "high" ? (
+                              <span className="badge-urgency-high">
+                                🔴 {lang === "si" ? "ඉහළ" : "High"}
+                              </span>
+                            ) : item.urgency === "low" ? (
+                              <span className="badge-urgency-low">
+                                🟢 {lang === "si" ? "අඩු" : "Low"}
+                              </span>
+                            ) : (
+                              <span className="badge-urgency-normal">
+                                🟡 {lang === "si" ? "සාමාන්‍ය" : "Normal"}
+                              </span>
+                            )}
+                          </td>
+                          <td>
+                            {item.status === "Draft" ? (
+                              <span className="badge-status-draft-rec">
+                                📝 {lang === "si" ? "කෙටුම්පත" : "Draft"}
+                              </span>
+                            ) : item.status === "Approved" ? (
+                              <span className="badge-status-submitted-rec" style={{ backgroundColor: "#dcfce7", color: "#166534", borderColor: "#bbf7d0" }}>
+                                <CheckCircle size={12} /> {lang === "si" ? "අනුමතයි" : "Approved"}
+                              </span>
+                            ) : (
+                              <span className="badge-status-submitted-rec">
+                                <Send size={12} /> {lang === "si" ? "යොමු කරන ලදී" : "Submitted"}
+                              </span>
+                            )}
+                          </td>
+                          <td>
+                            <span style={{ fontSize: "12px", color: "#475569", fontWeight: 500 }}>
+                              {getForwardToLabel(item.forwardTo)}
+                            </span>
+                          </td>
+                          <td>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "2px", fontSize: "12px", color: "#64748b" }}>
+                              {item.targetDate && (
+                                <span>Target: <strong>{item.targetDate}</strong></span>
+                              )}
+                              <span>{item.submittedAt ? item.submittedAt.slice(0, 10) : item.updatedAt ? item.updatedAt.slice(0, 10) : "—"}</span>
+                            </div>
+                          </td>
+                          <td className="text-center actions-cell">
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+                              <Link
+                                href={`/subject/recommendation?caseNo=${item.caseNo}`}
+                                className="add-details-link"
+                                style={{ padding: "4px 12px", fontSize: "11px" }}
+                                title="Open full recommendation form"
+                              >
+                                {item.status === "Draft" ? "Edit Draft" : "View / Edit"}
+                              </Link>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedRecModal(item)}
+                                className="btn-quick-view"
+                                title="Quick Preview"
+                              >
+                                <Eye size={13} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={8} className="text-center py-5 text-muted" style={{ padding: "40px 20px" }}>
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
+                            <Sparkles size={44} style={{ color: "#cbd5e1" }} />
+                            <span style={{ fontSize: "15px", fontWeight: 600, color: "#64748b" }}>
+                              {recSearchQuery || recCategoryFilter !== "all" || recUrgencyFilter !== "all" || recStatusFilter !== "all"
+                                ? (lang === "si" ? "සෙවීමට ගැළපෙන විමර්ශන නිර්දේශ හමු නොවිණි" : "No recommendations found matching search criteria")
+                                : (lang === "si" ? "තවම විමර්ශන නිර්දේශ ඉදිරිපත් කර නොමැත" : "No investigation recommendations registered yet")}
+                            </span>
+                            <Link
+                              href="/subject/recommendation"
+                              className="btn-create-rec"
+                              style={{ marginTop: "4px" }}
+                            >
+                              <Plus size={16} />
+                              <span>{lang === "si" ? "නව නිර්දේශයක් එක් කරන්න" : "Create First Recommendation"}</span>
+                            </Link>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
           {/* Footer Branding Notice */}
           <SiteFooter />
         </main>
@@ -3580,6 +4324,133 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
 
             </form>
 
+          </div>
+        </div>
+      )}
+
+      {/* ==================== QUICK VIEW RECOMMENDATION MODAL ==================== */}
+      {selectedRecModal && (
+        <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="rec-modal-title">
+          <div className="modal-content-wrapper premium-modal" style={{ maxWidth: "650px", width: "95%", borderRadius: "16px", overflow: "hidden", backgroundColor: "#ffffff", boxShadow: "0 20px 25px -5px rgba(0,0,0,0.15)" }}>
+            <header className="modal-header" style={{ padding: "18px 24px", backgroundColor: "#1e1b4b", color: "#ffffff", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                <div style={{ width: "40px", height: "40px", borderRadius: "10px", backgroundColor: "rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Sparkles size={20} style={{ color: "#a5b4fc" }} />
+                </div>
+                <div>
+                  <h3 id="rec-modal-title" style={{ color: "#ffffff", margin: 0, fontSize: "17px", fontWeight: 700 }}>
+                    {lang === "si" ? "විමර්ශන නිර්දේශ විස්තරය" : "Investigation Recommendation Details"}
+                  </h3>
+                  <span style={{ fontSize: "12px", color: "#cbd5e1" }}>
+                    Case: <strong>{selectedRecModal.caseNo}</strong> {selectedRecModal.letterNo && selectedRecModal.letterNo !== selectedRecModal.caseNo ? `• Letter: ${selectedRecModal.letterNo}` : ""}
+                  </span>
+                </div>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setSelectedRecModal(null)}
+                style={{ color: "#ffffff", backgroundColor: "rgba(255,255,255,0.1)", border: "none", padding: "8px", borderRadius: "50%", cursor: "pointer" }}
+              >
+                <X size={18} />
+              </button>
+            </header>
+
+            <div style={{ padding: "20px 24px", backgroundColor: "#ffffff", display: "flex", flexDirection: "column", gap: "16px", maxHeight: "70vh", overflowY: "auto" }}>
+              
+              {/* Category & Urgency Badges */}
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+                <span className="badge-category-tag" style={{ maxWidth: "none", fontSize: "12px", padding: "4px 12px" }}>
+                  {getCategoryLabel(selectedRecModal.category)}
+                </span>
+                {selectedRecModal.urgency === "high" ? (
+                  <span className="badge-urgency-high">🔴 High Urgency</span>
+                ) : (
+                  <span className="badge-urgency-normal">🟡 Normal Urgency</span>
+                )}
+                <span className="badge-status-submitted-rec">
+                  {selectedRecModal.status || "Submitted"}
+                </span>
+              </div>
+
+              {/* Accused & Complainant Details */}
+              <div style={{ backgroundColor: "#f8fafc", padding: "14px 16px", borderRadius: "10px", border: "1px solid #e2e8f0", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <div>
+                  <div style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>Accused Officer</div>
+                  <div style={{ fontSize: "13px", fontWeight: 700, color: "#1e293b", marginTop: "2px" }}>
+                    {selectedRecModal.accusedName || "—"}
+                  </div>
+                  {selectedRecModal.schoolName && (
+                    <div style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}>{selectedRecModal.schoolName}</div>
+                  )}
+                </div>
+                <div>
+                  <div style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>Forwarded To</div>
+                  <div style={{ fontSize: "13px", fontWeight: 700, color: "#1e293b", marginTop: "2px" }}>
+                    {getForwardToLabel(selectedRecModal.forwardTo)}
+                  </div>
+                  {selectedRecModal.targetDate && (
+                    <div style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}>Target: {selectedRecModal.targetDate}</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Recommendation Title */}
+              {selectedRecModal.title && (
+                <div>
+                  <div style={{ fontSize: "12px", fontWeight: 700, color: "#475569", marginBottom: "4px" }}>Recommendation Title:</div>
+                  <div style={{ fontSize: "14px", fontWeight: 600, color: "#1e1b4b", backgroundColor: "#f1f5f9", padding: "10px 14px", borderRadius: "8px" }}>
+                    {selectedRecModal.title}
+                  </div>
+                </div>
+              )}
+
+              {/* Detailed Recommendation Text */}
+              <div>
+                <div style={{ fontSize: "12px", fontWeight: 700, color: "#475569", marginBottom: "4px" }}>Recommendation Content & Findings:</div>
+                <div style={{ fontSize: "13px", color: "#334155", backgroundColor: "#ffffff", padding: "12px 14px", borderRadius: "8px", border: "1px solid #cbd5e1", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
+                  {selectedRecModal.recommendationText || "No detailed text provided."}
+                </div>
+              </div>
+
+              {/* Disciplinary Action */}
+              {selectedRecModal.disciplinaryAction && (
+                <div>
+                  <div style={{ fontSize: "12px", fontWeight: 700, color: "#475569", marginBottom: "4px" }}>Proposed Disciplinary Action:</div>
+                  <div style={{ fontSize: "13px", color: "#334155", backgroundColor: "#fff7ed", padding: "10px 14px", borderRadius: "8px", border: "1px solid #ffedd5" }}>
+                    {selectedRecModal.disciplinaryAction}
+                  </div>
+                </div>
+              )}
+
+              {/* Reference Notes */}
+              {selectedRecModal.referenceNotes && (
+                <div>
+                  <div style={{ fontSize: "12px", fontWeight: 700, color: "#475569", marginBottom: "4px" }}>Reference Notes & Remarks:</div>
+                  <div style={{ fontSize: "13px", color: "#64748b", backgroundColor: "#f8fafc", padding: "10px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    {selectedRecModal.referenceNotes}
+                  </div>
+                </div>
+              )}
+
+            </div>
+
+            <footer style={{ padding: "14px 24px", borderTop: "1px solid #e2e8f0", backgroundColor: "#f8fafc", display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+              <button
+                type="button"
+                onClick={() => setSelectedRecModal(null)}
+                style={{ padding: "8px 18px", borderRadius: "8px", backgroundColor: "#ffffff", border: "1px solid #cbd5e1", color: "#475569", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}
+              >
+                Close
+              </button>
+              <Link
+                href={`/subject/recommendation?caseNo=${selectedRecModal.caseNo}`}
+                className="btn-create-rec"
+                style={{ padding: "8px 20px", fontSize: "13px" }}
+              >
+                <ExternalLink size={14} />
+                <span>Open Full Form</span>
+              </Link>
+            </footer>
           </div>
         </div>
       )}
