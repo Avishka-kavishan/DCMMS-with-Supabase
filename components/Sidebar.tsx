@@ -218,51 +218,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         ),
         isActive: pathname.endsWith("/investigation"),
       },
-      {
-        id: "investigations",
-        label: "Investigations",
-        href: "#",
-        badge: 2,
-        icon: (
-          <svg className="menu-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10.5 8.5V13" />
-          </svg>
-        ),
-        isActive: false,
-      },
-      {
-        id: "evidence",
-        label: "Evidence Records",
-        href: "#",
-        icon: (
-          <svg className="menu-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 009 15c0-1.18-.91-2.164-2.09-2.201a5.122 5.122 0 00-4.74 2.817m9.886-3m-3-3.75a3 3 0 11-6 0 3 3 0 016 0zM16.5 7.5h3.75m0 0v3.75m0-3.75L16.5 11.25" />
-          </svg>
-        ),
-        isActive: false,
-      },
-      {
-        id: "reports",
-        label: "Reports",
-        href: "#",
-        icon: (
-          <svg className="menu-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-        ),
-        isActive: false,
-      },
-      {
-        id: "calendar",
-        label: "Calendar",
-        href: `${basePath}/calendar`,
-        icon: (
-          <svg className="menu-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-        ),
-        isActive: pathname.endsWith("/calendar"),
-      },
     ],
     system_admin: [
       {
