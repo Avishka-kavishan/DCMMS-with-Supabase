@@ -209,6 +209,7 @@ function CaseDetailsForm() {
   };
 
   // Form States - Left Card ("Add Details")
+  const [fileName, setFileName] = useState<"discipline" | "mail">("discipline");
   const [subjectOfficer, setSubjectOfficer] = useState("");
   const [reportState, setReportState] = useState("");
   const [receivedDate, setReceivedDate] = useState("2026-06-23");
@@ -708,6 +709,10 @@ function CaseDetailsForm() {
             if (d.subject_file_no) {
               setSpecialNotes(cleanVal(d.subject_file_no));
             }
+            if (d.file_name) {
+              const cleanFileName = String(d.file_name).trim().toLowerCase();
+              setFileName(cleanFileName === "mail" ? "mail" : "discipline");
+            }
             if (!isUserEditingReportStateRef.current && d.future_action) {
               setReportState(normalizeReportState(d.future_action));
             }
@@ -1020,6 +1025,7 @@ function CaseDetailsForm() {
 
       const payload = {
         ref_number: refNo,
+        file_name: fileName,
         accused_officers: formattedAccusedOfficers,
         accused_officer_name: firstPerson?.accused_officer_name || "",
         address: firstPerson?.address || "",
@@ -1763,6 +1769,74 @@ function CaseDetailsForm() {
                         <div className="step-indicator">1</div>
                         <div className="step-content">
                           <h3 className="step-section-title">{t("caseAdministration", "Case Administration")}</h3>
+                          
+                          {/* File Name Radio Group (Discipline / Mail) */}
+                          <div className="form-field-group" style={{ marginBottom: "16px" }}>
+                            <label className="field-label" style={{ display: "block", marginBottom: "8px" }}>
+                              {t("fileName", "File name")} <span className="required-star">*</span>
+                            </label>
+                            <div className="radio-group-container" role="radiogroup" aria-label={t("fileName", "File name")} style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                              <label
+                                className={`radio-option-item ${fileName === "discipline" ? "active" : ""}`}
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "8px",
+                                  cursor: "pointer",
+                                  padding: "9px 18px",
+                                  borderRadius: "8px",
+                                  border: fileName === "discipline" ? "1.5px solid #2563eb" : "1.5px solid #e2e8f0",
+                                  backgroundColor: fileName === "discipline" ? "#eff6ff" : "#ffffff",
+                                  color: fileName === "discipline" ? "#1d4ed8" : "#334155",
+                                  fontWeight: 600,
+                                  fontSize: "14px",
+                                  transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+                                  userSelect: "none"
+                                }}
+                              >
+                                <input
+                                  type="radio"
+                                  name="fileNameRadio"
+                                  id="fileNameDiscipline"
+                                  value="discipline"
+                                  checked={fileName === "discipline"}
+                                  onChange={() => setFileName("discipline")}
+                                  style={{ width: "18px", height: "18px", accentColor: "#2563eb", cursor: "pointer" }}
+                                />
+                                <span>{t("discipline", "Discipline")}</span>
+                              </label>
+
+                              <label
+                                className={`radio-option-item ${fileName === "mail" ? "active" : ""}`}
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "8px",
+                                  cursor: "pointer",
+                                  padding: "9px 18px",
+                                  borderRadius: "8px",
+                                  border: fileName === "mail" ? "1.5px solid #2563eb" : "1.5px solid #e2e8f0",
+                                  backgroundColor: fileName === "mail" ? "#eff6ff" : "#ffffff",
+                                  color: fileName === "mail" ? "#1d4ed8" : "#334155",
+                                  fontWeight: 600,
+                                  fontSize: "14px",
+                                  transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+                                  userSelect: "none"
+                                }}
+                              >
+                                <input
+                                  type="radio"
+                                  name="fileNameRadio"
+                                  id="fileNameMail"
+                                  value="mail"
+                                  checked={fileName === "mail"}
+                                  onChange={() => setFileName("mail")}
+                                  style={{ width: "18px", height: "18px", accentColor: "#2563eb", cursor: "pointer" }}
+                                />
+                                <span>{t("mail", "Mail")}</span>
+                              </label>
+                            </div>
+                          </div>
                           
                           <div className="form-grid-2">
                             {/* Reference Number */}

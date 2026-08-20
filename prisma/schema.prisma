@@ -75,6 +75,7 @@ model SubjectOfficerFormTable {
   daily_mail_letter_id                            BigInt?
   ref_number                                      String?                                      @db.VarChar(100)
   subject_file_no                                 String?                                      @db.VarChar(100)
+  file_name                                       String?                                      @db.VarChar(100)
   future_action                                   String?
   date_prepared_and_submitted_for_signature       DateTime?                                    @db.Date
   classification_of_complaint_letter              String?                                      @db.VarChar(100)

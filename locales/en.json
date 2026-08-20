@@ -468,6 +468,10 @@
   "completedInvestigationsCount": "Completed Investigations",
   "awaitingRecommendation": "Awaiting Recommendation",
   "recommendationSubmitted": "Recommendation Submitted",
-  "addRecommendationForCase": "+ Add Recommendation"
+  "addRecommendationForCase": "+ Add Recommendation",
+  "fileName": "File name",
+  "discipline": "Discipline",
+  "mail": "Mail"
 }
+
 

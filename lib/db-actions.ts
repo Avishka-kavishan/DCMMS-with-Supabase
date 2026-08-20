@@ -973,6 +973,7 @@ export async function saveAccusedOfficerServer(officerData: any) {
         accused_officer_id UUID REFERENCES accused_officer_table(id) ON DELETE SET NULL,
         ref_number VARCHAR(100) NOT NULL UNIQUE,
         subject_file_no VARCHAR(100),
+        file_name VARCHAR(100),
         future_action TEXT,
         date_prepared_and_submitted_for_signature DATE,
         classification_of_complaint_letter VARCHAR(255),
@@ -982,6 +983,12 @@ export async function saveAccusedOfficerServer(officerData: any) {
         updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );
     `);
+
+    try {
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE subject_officer_form_table ADD COLUMN IF NOT EXISTS file_name VARCHAR(100);
+      `);
+    } catch (e) {}
 
     await prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS accused_officer_subject_officer_form_table (
@@ -1194,6 +1201,7 @@ export async function saveAccusedOfficerServer(officerData: any) {
       } catch (e) {}
 
       const prepDateVal = parseSafeDate(date_prepared_and_submitted_for_signature);
+      const fileNameVal = officerData.file_name || officerData.fileName || "discipline";
 
       const existingForms: any[] = await prisma.$queryRaw`
         SELECT id FROM subject_officer_form_table WHERE ref_number = ${refTrimmed} LIMIT 1;
@@ -1206,6 +1214,7 @@ export async function saveAccusedOfficerServer(officerData: any) {
           SET accused_officer_id = ${primaryOfficerId ? primaryOfficerId : null}::uuid,
               daily_mail_letter_id = ${dailyMailId ? Number(dailyMailId) : null},
               subject_file_no = ${subject_file_no || null},
+              file_name = ${fileNameVal},
               future_action = ${future_action || null},
               date_prepared_and_submitted_for_signature = ${prepDateVal},
               classification_of_complaint_letter = ${classification_of_complaint_letter || null},
@@ -1217,13 +1226,13 @@ export async function saveAccusedOfficerServer(officerData: any) {
       } else {
         const insertedForm: any[] = await prisma.$queryRaw`
           INSERT INTO subject_officer_form_table (
-            ref_number, daily_mail_letter_id, accused_officer_id, subject_file_no, future_action,
+            ref_number, daily_mail_letter_id, accused_officer_id, subject_file_no, file_name, future_action,
             date_prepared_and_submitted_for_signature, classification_of_complaint_letter,
             name_of_the_presenting_the_complain, address_of_the_person_presenting_the_complaint
           )
           VALUES (
             ${refTrimmed}, ${dailyMailId ? Number(dailyMailId) : null}, ${primaryOfficerId ? primaryOfficerId : null}::uuid,
-            ${subject_file_no || null}, ${future_action || null}, ${prepDateVal},
+            ${subject_file_no || null}, ${fileNameVal}, ${future_action || null}, ${prepDateVal},
             ${classification_of_complaint_letter || null}, ${name_of_the_presenting_the_complain || null},
             ${address_of_the_person_presenting_the_complaint || null}
           )
@@ -1298,6 +1307,7 @@ export async function getAccusedOfficerByRefServer(refNumber: string) {
         sof.id as form_id,
         sof.ref_number,
         sof.subject_file_no,
+        sof.file_name,
         sof.future_action,
         sof.date_prepared_and_submitted_for_signature,
         sof.classification_of_complaint_letter,

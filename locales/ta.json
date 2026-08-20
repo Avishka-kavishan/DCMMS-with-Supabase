@@ -464,6 +464,9 @@
   "completedInvestigationsCount": "விசாரணை முடிந்த வழக்குகள்",
   "awaitingRecommendation": "பரிந்துரை எதிர்பார்க்கப்படுகிறது",
   "recommendationSubmitted": "பரிந்துரை சமர்ப்பிக்கப்பட்டது",
-  "addRecommendationForCase": "+ பரிந்துரை சேர்க்க"
+  "addRecommendationForCase": "+ பரிந்துரை சேர்க்க",
+  "fileName": "கோப்பு பெயர்",
+  "discipline": "ஒழுக்கம்",
+  "mail": "அஞ்சல்"
 }
 

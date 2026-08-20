@@ -466,5 +466,8 @@
   "completedInvestigationsCount": "විමර්ශනය අවසන් නඩු",
   "awaitingRecommendation": "නිර්දේශ අපේක්ෂිතයි",
   "recommendationSubmitted": "නිර්දේශය යොමු කර ඇත",
-  "addRecommendationForCase": "+ නිර්දේශය එක් කරන්න"
+  "addRecommendationForCase": "+ නිර්දේශය එක් කරන්න",
+  "fileName": "ගොනු නම",
+  "discipline": "විනය",
+  "mail": "තැපැල්"
 }
