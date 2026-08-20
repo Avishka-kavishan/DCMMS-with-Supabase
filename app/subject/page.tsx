@@ -2636,8 +2636,8 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
             </button>
             <button
               type="button"
-              className={`nav-tab-btn${activeTab === "recommendations" ? " active" : ""}`}
-              onClick={() => setActiveTab("recommendations")}
+              className="nav-tab-btn"
+              onClick={() => router.push("/subject/recommendation")}
             >
               <Sparkles className="tab-icon" />
               <span>{lang === "si" ? "විමර්ශන නිර්දේශ" : lang === "ta" ? "விசாரணை பரிந்துரை" : "Investigation Recommendation"}</span>
@@ -2657,7 +2657,7 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
                 </span>
               ) : recommendations.length > 0 ? (
                 <span style={{
-                  backgroundColor: activeTab === "recommendations" ? "#4f46e5" : "#94a3b8",
+                  backgroundColor: "#4f46e5",
                   color: "#ffffff",
                   fontSize: "11px",
                   fontWeight: 700,
