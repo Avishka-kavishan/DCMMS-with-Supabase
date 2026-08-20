@@ -2380,36 +2380,6 @@ function CaseDetailsForm() {
                       </div>
 
                     </div>
-
-                    {/* Timeline of actions taken (placed at the bottom of the card) */}
-                    {previousActions && previousActions.length > 0 && (
-                      <div className="previous-actions-timeline" style={{ marginTop: "32px", paddingTop: "24px", borderTop: "2px solid #e2e8f0" }}>
-                        <h3 className="timeline-title" style={{ fontSize: "15px", fontWeight: "700" }}>
-                          <svg className="action-row-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          {t("previousActionsHistory", "History of Actions Taken")}
-                        </h3>
-                        <div className="timeline-items-wrapper">
-                          {previousActions.map((act: any, idx: number) => (
-                            <div key={act.id || idx} className="timeline-item">
-                              <div className="timeline-header">
-                                <span>{act.receivedDate}</span>
-                                <span className={`timeline-status timeline-status-${act.reportState?.toLowerCase().replace(/\s+/g, "") || "pending"}`}>
-                                  {t(act.reportState || "Pending")}
-                                </span>
-                              </div>
-                              <p className="timeline-step">{formatStepTaken(act.stepTaken, t)}</p>
-                              {act.specialNotes && (
-                                <p className="timeline-notes">
-                                  {t("notes", "Notes")}: {act.specialNotes}
-                                </p>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
                   </div>
                 </div>
 
