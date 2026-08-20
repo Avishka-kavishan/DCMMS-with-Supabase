@@ -37,7 +37,8 @@ import {
   ArrowRight,
   Menu,
   CheckCircle,
-  X
+  X,
+  FileCheck
 } from "lucide-react";
 
 interface CaseOption {
@@ -64,6 +65,10 @@ interface RecommendationRecord {
   forwardTo: string;
   targetDate?: string;
   referenceNotes?: string;
+  issuedChargeSheet?: string;
+  chargeSheetIssuedDate?: string;
+  chargeSheetResponseDate?: string;
+  disciplinaryOrder?: string;
   status: string;
   submittedAt?: string;
   updatedAt?: string;
@@ -111,6 +116,12 @@ function RecommendationFormContent() {
   const [targetDate, setTargetDate] = useState("");
   const [referenceNotes, setReferenceNotes] = useState("");
   const [recommendationStatus, setRecommendationStatus] = useState("Submitted");
+
+  // Conditional Charge Sheet Details State (When category === 'issuing_charge_sheet')
+  const [issuedChargeSheet, setIssuedChargeSheet] = useState("");
+  const [chargeSheetIssuedDate, setChargeSheetIssuedDate] = useState("");
+  const [chargeSheetResponseDate, setChargeSheetResponseDate] = useState("");
+  const [disciplinaryOrder, setDisciplinaryOrder] = useState("");
 
   // List View Filter & Search State
   const [recSearchQuery, setRecSearchQuery] = useState("");
@@ -169,6 +180,10 @@ function RecommendationFormContent() {
               forwardTo: r.forward_to || "disciplinary_branch",
               targetDate: r.target_date,
               referenceNotes: r.reference_notes,
+              issuedChargeSheet: r.issued_charge_sheet || r.charge_sheet_issued || r.issuedChargeSheet,
+              chargeSheetIssuedDate: r.charge_sheet_issued_date || r.issued_charge_sheet_date || r.chargeSheetIssuedDate,
+              chargeSheetResponseDate: r.charge_sheet_response_date || r.response_charge_sheet_date || r.chargeSheetResponseDate,
+              disciplinaryOrder: r.disciplinary_order || r.disciplinaryOrder,
               status: r.status || "Submitted",
               submittedAt: r.submitted_at,
               updatedAt: r.updated_at
@@ -259,6 +274,10 @@ function RecommendationFormContent() {
                   forwardTo: lr.forwardTo || lr.forward_to || "disciplinary_branch",
                   targetDate: lr.targetDate || lr.target_date,
                   referenceNotes: lr.referenceNotes || lr.reference_notes,
+                  issuedChargeSheet: lr.issuedChargeSheet || lr.issued_charge_sheet || lr.chargeSheetIssued,
+                  chargeSheetIssuedDate: lr.chargeSheetIssuedDate || lr.charge_sheet_issued_date || lr.issuedChargeSheetDate,
+                  chargeSheetResponseDate: lr.chargeSheetResponseDate || lr.charge_sheet_response_date || lr.responseChargeSheetDate,
+                  disciplinaryOrder: lr.disciplinaryOrder || lr.disciplinary_order,
                   status: lr.status || "Submitted",
                   submittedAt: lr.submittedAt || lr.submitted_at,
                   updatedAt: lr.updatedAt || lr.updated_at
@@ -362,6 +381,10 @@ function RecommendationFormContent() {
     setTargetDate("");
     setReferenceNotes("");
     setRecommendationStatus("Submitted");
+    setIssuedChargeSheet("");
+    setChargeSheetIssuedDate("");
+    setChargeSheetResponseDate("");
+    setDisciplinaryOrder("");
 
     try {
       if (isSupabaseConfigured) {
@@ -448,6 +471,18 @@ function RecommendationFormContent() {
             if (recData.target_date) setTargetDate(recData.target_date);
             if (recData.reference_notes) setReferenceNotes(recData.reference_notes);
             if (recData.status) setRecommendationStatus(recData.status);
+            if (recData.issued_charge_sheet || recData.charge_sheet_issued || recData.issuedChargeSheet) {
+              setIssuedChargeSheet(recData.issued_charge_sheet || recData.charge_sheet_issued || recData.issuedChargeSheet);
+            }
+            if (recData.charge_sheet_issued_date || recData.issued_charge_sheet_date || recData.chargeSheetIssuedDate) {
+              setChargeSheetIssuedDate(recData.charge_sheet_issued_date || recData.issued_charge_sheet_date || recData.chargeSheetIssuedDate);
+            }
+            if (recData.charge_sheet_response_date || recData.response_charge_sheet_date || recData.chargeSheetResponseDate) {
+              setChargeSheetResponseDate(recData.charge_sheet_response_date || recData.response_charge_sheet_date || recData.chargeSheetResponseDate);
+            }
+            if (recData.disciplinary_order || recData.disciplinaryOrder) {
+              setDisciplinaryOrder(recData.disciplinary_order || recData.disciplinaryOrder);
+            }
           }
         } catch (e) {}
       }
@@ -482,6 +517,18 @@ function RecommendationFormContent() {
           if (foundRec.targetDate) setTargetDate(foundRec.targetDate);
           if (foundRec.referenceNotes) setReferenceNotes(foundRec.referenceNotes);
           if (foundRec.status) setRecommendationStatus(foundRec.status);
+          if (foundRec.issuedChargeSheet || foundRec.issued_charge_sheet || foundRec.chargeSheetIssued) {
+            setIssuedChargeSheet(foundRec.issuedChargeSheet || foundRec.issued_charge_sheet || foundRec.chargeSheetIssued);
+          }
+          if (foundRec.chargeSheetIssuedDate || foundRec.charge_sheet_issued_date || foundRec.issuedChargeSheetDate) {
+            setChargeSheetIssuedDate(foundRec.chargeSheetIssuedDate || foundRec.charge_sheet_issued_date || foundRec.issuedChargeSheetDate);
+          }
+          if (foundRec.chargeSheetResponseDate || foundRec.charge_sheet_response_date || foundRec.responseChargeSheetDate) {
+            setChargeSheetResponseDate(foundRec.chargeSheetResponseDate || foundRec.charge_sheet_response_date || foundRec.responseChargeSheetDate);
+          }
+          if (foundRec.disciplinaryOrder || foundRec.disciplinary_order) {
+            setDisciplinaryOrder(foundRec.disciplinaryOrder || foundRec.disciplinary_order);
+          }
         }
       }
     } catch (e) {
@@ -516,7 +563,7 @@ function RecommendationFormContent() {
 
     setIsSaving(true);
     const now = new Date().toISOString().slice(0, 10);
-    const payload = {
+    const payload: any = {
       case_no: caseNo,
       letter_no: letterNo || null,
       category: recommendationCategory,
@@ -527,6 +574,10 @@ function RecommendationFormContent() {
       forward_to: forwardTo,
       target_date: targetDate || null,
       reference_notes: referenceNotes,
+      issued_charge_sheet: recommendationCategory === "issuing_charge_sheet" ? issuedChargeSheet : null,
+      charge_sheet_issued_date: recommendationCategory === "issuing_charge_sheet" ? (chargeSheetIssuedDate || null) : null,
+      charge_sheet_response_date: recommendationCategory === "issuing_charge_sheet" ? (chargeSheetResponseDate || null) : null,
+      disciplinary_order: recommendationCategory === "issuing_charge_sheet" ? disciplinaryOrder : null,
       status: "Draft",
       updated_at: new Date().toISOString()
     };
@@ -554,6 +605,10 @@ function RecommendationFormContent() {
           forwardTo,
           targetDate,
           referenceNotes,
+          issuedChargeSheet: recommendationCategory === "issuing_charge_sheet" ? issuedChargeSheet : "",
+          chargeSheetIssuedDate: recommendationCategory === "issuing_charge_sheet" ? chargeSheetIssuedDate : "",
+          chargeSheetResponseDate: recommendationCategory === "issuing_charge_sheet" ? chargeSheetResponseDate : "",
+          disciplinaryOrder: recommendationCategory === "issuing_charge_sheet" ? disciplinaryOrder : "",
           status: "Draft",
           updatedAt: now
         });
@@ -587,7 +642,7 @@ function RecommendationFormContent() {
 
     setIsSaving(true);
     const now = new Date().toISOString().slice(0, 10);
-    const payload = {
+    const payload: any = {
       case_no: caseNo,
       letter_no: letterNo || null,
       category: recommendationCategory,
@@ -598,6 +653,10 @@ function RecommendationFormContent() {
       forward_to: forwardTo,
       target_date: targetDate || null,
       reference_notes: referenceNotes,
+      issued_charge_sheet: recommendationCategory === "issuing_charge_sheet" ? issuedChargeSheet : null,
+      charge_sheet_issued_date: recommendationCategory === "issuing_charge_sheet" ? (chargeSheetIssuedDate || null) : null,
+      charge_sheet_response_date: recommendationCategory === "issuing_charge_sheet" ? (chargeSheetResponseDate || null) : null,
+      disciplinary_order: recommendationCategory === "issuing_charge_sheet" ? disciplinaryOrder : null,
       status: "Submitted",
       submitted_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -639,6 +698,10 @@ function RecommendationFormContent() {
           forwardTo,
           targetDate,
           referenceNotes,
+          issuedChargeSheet: recommendationCategory === "issuing_charge_sheet" ? issuedChargeSheet : "",
+          chargeSheetIssuedDate: recommendationCategory === "issuing_charge_sheet" ? chargeSheetIssuedDate : "",
+          chargeSheetResponseDate: recommendationCategory === "issuing_charge_sheet" ? chargeSheetResponseDate : "",
+          disciplinaryOrder: recommendationCategory === "issuing_charge_sheet" ? disciplinaryOrder : "",
           status: "Submitted",
           submittedAt: now,
           updatedAt: now
@@ -1081,6 +1144,106 @@ function RecommendationFormContent() {
                     />
                   </div>
                 </section>
+
+                {/* Conditional Section: Charge Sheet & Disciplinary Order Details (Displayed ONLY when 'issuing a charge sheet' is selected) */}
+                {recommendationCategory === "issuing_charge_sheet" && (
+                  <section className="recommendation-form-card charge-sheet-card">
+                    <div className="section-header-pill charge-sheet-pill">
+                      <FileCheck size={16} />
+                      <span>
+                        {lang === "si"
+                          ? "චෝදනා පත්‍රය සහ විනය නියෝගය පිළිබඳ විස්තර"
+                          : lang === "ta"
+                          ? "குற்றப்பத்திரிகை மற்றும் ஒழுங்கு நடவடிக்கை உத்தரவு விவரங்கள்"
+                          : "Charge Sheet & Disciplinary Order Details"}
+                      </span>
+                    </div>
+
+                    <div className="form-grid-3">
+                      {/* 1. Issued charge sheet */}
+                      <div className="form-field-group">
+                        <label className="form-field-label">
+                          {lang === "si"
+                            ? "නිකුත් කරන ලද චෝදනා පත්‍රය (Issued charge sheet)"
+                            : lang === "ta"
+                            ? "வழங்கப்பட்ட குற்றப்பத்திரிகை (Issued charge sheet)"
+                            : "Issued charge sheet"}
+                          <span className="required-asterisk">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={issuedChargeSheet}
+                          onChange={(e) => setIssuedChargeSheet(e.target.value)}
+                          placeholder={
+                            lang === "si"
+                              ? "උදා: CS/2026/044 - මුදල් අක්‍රමිකතා චෝදනා පත්‍රය"
+                              : "e.g., Charge Sheet No. / Specific charges / Reference"
+                          }
+                          className="form-field-input"
+                          required={recommendationCategory === "issuing_charge_sheet"}
+                        />
+                      </div>
+
+                      {/* 2. Date the charge sheet was issued */}
+                      <div className="form-field-group">
+                        <label className="form-field-label">
+                          {lang === "si"
+                            ? "චෝදනා පත්‍රය නිකුත් කළ දිනය"
+                            : lang === "ta"
+                            ? "குற்றப்பத்திரிகை வழங்கப்பட்ட திகதி"
+                            : "Date the charge sheet was issued"}
+                          <span className="required-asterisk">*</span>
+                        </label>
+                        <input
+                          type="date"
+                          value={chargeSheetIssuedDate}
+                          onChange={(e) => setChargeSheetIssuedDate(e.target.value)}
+                          className="form-field-input"
+                          required={recommendationCategory === "issuing_charge_sheet"}
+                        />
+                      </div>
+
+                      {/* 3. Date the response to the charge sheet was given */}
+                      <div className="form-field-group">
+                        <label className="form-field-label">
+                          {lang === "si"
+                            ? "චෝදනා පත්‍රයට පිළිතුරු ලබා දුන් දිනය"
+                            : lang === "ta"
+                            ? "குற்றப்பத்திரிகைக்கு பதில் அளிக்கப்பட்ட திகதி"
+                            : "Date the response to the charge sheet was given"}
+                        </label>
+                        <input
+                          type="date"
+                          value={chargeSheetResponseDate}
+                          onChange={(e) => setChargeSheetResponseDate(e.target.value)}
+                          className="form-field-input"
+                        />
+                      </div>
+                    </div>
+
+                    {/* 4. Disciplinary order */}
+                    <div className="form-field-group" style={{ marginTop: "14px" }}>
+                      <label className="form-field-label">
+                        {lang === "si"
+                          ? "විනය නියෝගය (Disciplinary order)"
+                          : lang === "ta"
+                          ? "ஒழுங்கு நடவடிக்கை உத்தரவு (Disciplinary order)"
+                          : "Disciplinary order"}
+                      </label>
+                      <input
+                        type="text"
+                        value={disciplinaryOrder}
+                        onChange={(e) => setDisciplinaryOrder(e.target.value)}
+                        placeholder={
+                          lang === "si"
+                            ? "උදා: විධිමත් විනය පරීක්ෂණයක් පැවැත්වීමට නියෝග කිරීම / වැඩ තහනම් කිරීම"
+                            : "e.g., Disciplinary inquiry ordered / Interdiction / Formal order details"
+                        }
+                        className="form-field-input"
+                      />
+                    </div>
+                  </section>
+                )}
 
                 {/* Card 2: Detailed Findings & Recommendation */}
                 <section className="recommendation-form-card">
@@ -1803,6 +1966,58 @@ function RecommendationFormContent() {
                       )}
                     </div>
                   </div>
+
+                  {/* Charge Sheet & Disciplinary Order Details (If present) */}
+                  {(selectedRecModal.issuedChargeSheet || selectedRecModal.chargeSheetIssuedDate || selectedRecModal.chargeSheetResponseDate || selectedRecModal.disciplinaryOrder) && (
+                    <div style={{ backgroundColor: "#f0f4ff", padding: "14px 16px", borderRadius: "10px", border: "1.5px solid #c7d2fe", display: "flex", flexDirection: "column", gap: "10px" }}>
+                      <div style={{ fontSize: "12.5px", fontWeight: 700, color: "#3730a3", display: "flex", alignItems: "center", gap: "6px" }}>
+                        <FileCheck size={16} />
+                        <span>{lang === "si" ? "චෝදනා පත්‍රය සහ විනය නියෝග විස්තර" : "Charge Sheet & Disciplinary Order Details"}</span>
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                        {selectedRecModal.issuedChargeSheet && (
+                          <div style={{ gridColumn: "span 2" }}>
+                            <div style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>
+                              {lang === "si" ? "නිකුත් කරන ලද චෝදනා පත්‍රය (Issued Charge Sheet)" : "Issued Charge Sheet"}
+                            </div>
+                            <div style={{ fontSize: "13px", fontWeight: 600, color: "#1e1b4b", marginTop: "2px" }}>
+                              {selectedRecModal.issuedChargeSheet}
+                            </div>
+                          </div>
+                        )}
+                        {selectedRecModal.chargeSheetIssuedDate && (
+                          <div>
+                            <div style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>
+                              {lang === "si" ? "නිකුත් කළ දිනය" : "Date Issued"}
+                            </div>
+                            <div style={{ fontSize: "13px", fontWeight: 600, color: "#1e1b4b", marginTop: "2px" }}>
+                              {selectedRecModal.chargeSheetIssuedDate}
+                            </div>
+                          </div>
+                        )}
+                        {selectedRecModal.chargeSheetResponseDate && (
+                          <div>
+                            <div style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>
+                              {lang === "si" ? "පිළිතුරු ලබා දුන් දිනය" : "Response Date"}
+                            </div>
+                            <div style={{ fontSize: "13px", fontWeight: 600, color: "#1e1b4b", marginTop: "2px" }}>
+                              {selectedRecModal.chargeSheetResponseDate}
+                            </div>
+                          </div>
+                        )}
+                        {selectedRecModal.disciplinaryOrder && (
+                          <div style={{ gridColumn: "span 2" }}>
+                            <div style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>
+                              {lang === "si" ? "විනය නියෝගය (Disciplinary Order)" : "Disciplinary Order"}
+                            </div>
+                            <div style={{ fontSize: "13px", fontWeight: 600, color: "#1e1b4b", marginTop: "2px" }}>
+                              {selectedRecModal.disciplinaryOrder}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {selectedRecModal.title && (
                     <div>

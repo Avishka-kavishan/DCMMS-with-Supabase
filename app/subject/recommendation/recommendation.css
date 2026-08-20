@@ -212,6 +212,30 @@
   border: 1px solid #a7f3d0;
 }
 
+.charge-sheet-card {
+  border: 1.5px solid #818cf8 !important;
+  background: linear-gradient(180deg, #ffffff 0%, #f8faff 100%);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.08);
+  animation: fadeInDown 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.charge-sheet-pill {
+  background-color: #e0e7ff !important;
+  color: #3730a3 !important;
+  border-color: #c7d2fe !important;
+}
+
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .form-grid-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
