@@ -46,6 +46,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         subtitle: t("educationalInstitutesDescAdmin", "Register and manage educational institutes")
       };
     }
+    if (cleanPath === "/admin/officer-workflow") {
+      return {
+        title: t("officerWorkflow", "Officer Workflow"),
+        subtitle: t("officerWorkflowDesc", "Workload summary and case distribution for all registered officers")
+      };
+    }
     return {
       title: t("adminDashboardTitle", "Discipline Branch Administrator"),
       subtitle: t("adminDashboardDesc", "Manage cases and user access")

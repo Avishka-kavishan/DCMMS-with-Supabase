@@ -467,6 +467,27 @@
   "addRecommendationForCase": "+ பரிந்துரை சேர்க்க",
   "fileName": "கோப்பு பெயர்",
   "discipline": "ஒழுக்கம்",
-  "mail": "அஞ்சல்"
+  "mail": "அஞ்சல்",
+  "officerWorkflow": "அதிகாரி பணிப்பாய்வு",
+  "officerWorkflowDesc": "அனைத்து பதிவுசெய்யப்பட்ட அதிகாரிகளின் பணிச்சுமை சுருக்கம் மற்றும் வழக்கு பகிர்வு",
+  "officerWorkflowSummary": "அனைத்து பதிவுசெய்யப்பட்ட அதிகாரிகளின் பணிச்சுமை சுருக்கம்",
+  "allRegisteredOfficers": "அனைத்து பதிவுசெய்யப்பட்ட அதிகாரிகள்",
+  "workloadSummary": "பணிச்சுமை சுருக்கம்",
+  "totalWorkload": "மொத்த பணிச்சுமை",
+  "workloadDistribution": "பணிச்சுமை பகிர்வு",
+  "workloadStatus": "பணிச்சுமை நிலை",
+  "workloadOptimal": "சீரான",
+  "workloadHeavy": "அதிக சுமை",
+  "workloadLight": "கிடைக்கக்கூடிய",
+  "viewWorkloadBreakdown": "விவரங்களைப் பார்க்கவும்",
+  "closeWorkloadModal": "மூடு",
+  "allRoles": "அனைத்து பாத்திரங்கள்",
+  "allWorkloadLevels": "அனைத்து பணிச்சுமை நிலைகள்",
+  "activeOfficers": "செயலில் உள்ள அதிகாரிகள்",
+  "inactiveOfficers": "செயலற்ற அதிகாரிகள்",
+  "subjectWorkload": "விடய பணிச்சுமை",
+  "investigationWorkload": "விசாரணை பணிச்சுமை",
+  "dailyMailWorkload": "அஞ்சல் பணிச்சுமை",
+  "exportWorkloadSummary": "சுருக்கத்தை பதிவிறக்குக"
 }
 

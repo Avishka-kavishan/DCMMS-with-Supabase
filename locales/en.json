@@ -471,7 +471,28 @@
   "addRecommendationForCase": "+ Add Recommendation",
   "fileName": "File name",
   "discipline": "Discipline",
-  "mail": "Mail"
+  "mail": "Mail",
+  "officerWorkflow": "Officer Workflow",
+  "officerWorkflowDesc": "Workload summary and case distribution for all registered officers",
+  "officerWorkflowSummary": "Officer Workload Summary",
+  "allRegisteredOfficers": "All Registered Officers",
+  "workloadSummary": "Workload Summary",
+  "totalWorkload": "Total Workload",
+  "workloadDistribution": "Workload Distribution",
+  "workloadStatus": "Workload Status",
+  "workloadOptimal": "Optimal",
+  "workloadHeavy": "Heavy Load",
+  "workloadLight": "Available",
+  "viewWorkloadBreakdown": "View Breakdown",
+  "closeWorkloadModal": "Close",
+  "allRoles": "All Roles",
+  "allWorkloadLevels": "All Workload Levels",
+  "activeOfficers": "Active Officers",
+  "inactiveOfficers": "Inactive Officers",
+  "subjectWorkload": "Subject Workload",
+  "investigationWorkload": "Investigation Workload",
+  "dailyMailWorkload": "Daily Mail Workload",
+  "exportWorkloadSummary": "Export Summary"
 }
 
 
