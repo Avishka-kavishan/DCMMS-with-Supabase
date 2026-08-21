@@ -1,23 +1,32 @@
 "use client";
-
 import React, { useState, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import "../../../i18n";
 import {
   Users,
   Briefcase,
-  AlertCircle,
-  CheckCircle2,
-  Clock,
   Search,
-  Download,
+  RefreshCw,
+  CheckCircle2,
+  AlertCircle,
+  FileText,
+  ShieldAlert,
+  Mail,
+  ChevronDown,
+  TrendingUp,
+  UserCheck,
   Eye,
   X,
-  FileText,
-  Activity,
-  Mail,
-  ShieldCheck,
-  RefreshCw,
+  Calendar,
+  Clock,
+  Check,
+  FolderOpen,
+  Filter,
+  User,
+  BadgeCheck,
+  Layers,
+  ArrowUpRight,
+  ExternalLink
 } from "lucide-react";
 import {
   BarChart,
@@ -30,366 +39,246 @@ import {
   PieChart,
   Pie,
   Cell,
-  Legend,
+  Legend
 } from "recharts";
-import "../admin.css";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
-import {
-  getRegisterOfficersServer,
-  getDailyMailRecordsServer,
-} from "@/lib/db-actions";
+import { getRegisterOfficersServer, getDailyMailRecordsServer } from "@/lib/db-actions";
+import "../admin.css";
+
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
+interface RegisteredOfficer {
+  id: string;
+  employeeNo: string;
+  fullName: string;
+  email: string;
+  role: string;
+  status: "Active" | "Inactive";
+  createdAt: string;
+}
 
 interface AssignedCaseItem {
   id: string;
+  refNo: string;
   letterNo: string;
-  serialNo?: string;
   subject: string;
-  priority: string;
-  status: string;
-  date: string;
-  type: string;
-  sender?: string;
-  category?: string;
+  sender: string;
+  receivedDate: string;
+  submittedDate: string;
+  priority: "High" | "Medium" | "Low" | "Normal";
+  status: "Under Investigation" | "Under Subject Officer" | "Closed" | "Registered" | "Pending";
+  classification: string;
+  method: string;
 }
 
-interface OfficerWorkload {
-  id: string;
-  employeeNo: string;
-  fullName: string;
-  email: string;
-  role: string;
-  status: "Active" | "Inactive";
-  createdAt: string;
-  totalAssigned: number;
-  inProgressCount: number;
-  pendingCount: number;
-  completedCount: number;
-  urgentCount: number;
-  capacityLevel: "light" | "optimal" | "heavy";
+interface OfficerWorkloadSummary extends RegisteredOfficer {
+  assignedCount: number;
+  workloadCategory: "Heavy" | "Moderate" | "Light" | "None";
+  normalizedRole: "Subject Officer" | "Investigation Officer" | "Daily Mail Officer" | "Other";
+  breakdown: {
+    pending: number;
+    inProgress: number;
+    closed: number;
+  };
   assignedItems: AssignedCaseItem[];
 }
 
-const DEFAULT_OFFICERS: Array<{
-  id: string;
-  employeeNo: string;
-  fullName: string;
-  email: string;
-  role: string;
-  status: "Active" | "Inactive";
-  createdAt: string;
-}> = [
-  { id: "def-1", employeeNo: "EMP-10021", fullName: "Kamal Perera", email: "kamal.perera@moe.gov.lk", role: "Subject officer", status: "Active", createdAt: "2025-01-10" },
-  { id: "def-2", employeeNo: "EMP-10022", fullName: "Ranjith Bandara", email: "ranjith.b@moe.gov.lk", role: "Subject officer", status: "Active", createdAt: "2025-01-15" },
-  { id: "def-3", employeeNo: "EMP-10023", fullName: "Upul Jayawardena", email: "upul.j@moe.gov.lk", role: "Subject officer", status: "Active", createdAt: "2025-02-01" },
-  { id: "def-4", employeeNo: "EMP-20031", fullName: "Sunil Fernando", email: "sunil.f@moe.gov.lk", role: "Investigation officer", status: "Active", createdAt: "2025-01-20" },
-  { id: "def-5", employeeNo: "EMP-30041", fullName: "Nimal Silva", email: "nimal.silva@moe.gov.lk", role: "Daily mail officer", status: "Active", createdAt: "2025-01-05" },
-  { id: "def-6", employeeNo: "EMP-30042", fullName: "Kusal Mendis", email: "kusal.m@moe.gov.lk", role: "Daily mail officer", status: "Active", createdAt: "2025-02-12" },
-  { id: "def-7", employeeNo: "EMP-30043", fullName: "Saman Jayasinghe", email: "saman.j@moe.gov.lk", role: "Daily mail officer", status: "Active", createdAt: "2025-03-01" },
+const DEFAULT_OFFICERS: RegisteredOfficer[] = [
+  { id: "1", employeeNo: "EMP-001", fullName: "Kamal Perera", email: "kamal.p@discipline.gov.lk", role: "Subject officer", status: "Active", createdAt: "2024-01-10" },
+  { id: "2", employeeNo: "EMP-002", fullName: "Ranjith Bandara", email: "ranjith.b@discipline.gov.lk", role: "Subject officer", status: "Active", createdAt: "2024-01-12" },
+  { id: "3", employeeNo: "EMP-003", fullName: "Upul aiya", email: "upul@discipline.gov.lk", role: "Subject officer", status: "Active", createdAt: "2024-01-15" },
+  { id: "4", employeeNo: "EMP-004", fullName: "Sunil Fernando", email: "sunil.f@discipline.gov.lk", role: "Investigation officer", status: "Active", createdAt: "2024-01-20" },
+  { id: "5", employeeNo: "EMP-005", fullName: "Nimal Silva", email: "nimal.s@discipline.gov.lk", role: "Daily mail officer", status: "Active", createdAt: "2024-01-22" },
+  { id: "6", employeeNo: "EMP-006", fullName: "Kusal Mendis", email: "kusal.m@discipline.gov.lk", role: "Daily mail officer", status: "Active", createdAt: "2024-01-25" },
+  { id: "7", employeeNo: "EMP-007", fullName: "Saman Jayasinghe", email: "saman.j@discipline.gov.lk", role: "Daily mail officer", status: "Active", createdAt: "2024-02-01" },
 ];
 
 export default function OfficerWorkflowPage() {
   const { t } = useTranslation();
 
-  const [officers, setOfficers] = useState<OfficerWorkload[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-
-  // Filters & Search
+  const [officers, setOfficers] = useState<RegisteredOfficer[]>([]);
+  const [lettersData, setLettersData] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedRole, setSelectedRole] = useState("all");
-  const [selectedStatus, setSelectedStatus] = useState("all");
-  const [selectedCapacity, setSelectedCapacity] = useState("all");
-  const [sortBy, setSortBy] = useState<"workload-desc" | "workload-asc" | "name-asc" | "emp-asc">("workload-desc");
-
-  // Selected Officer for Modal
-  const [selectedOfficer, setSelectedOfficer] = useState<OfficerWorkload | null>(null);
+  const [roleFilter, setRoleFilter] = useState("All");
+  const [statusFilter, setStatusFilter] = useState("All");
+  const [sortBy, setSortBy] = useState<"workload-desc" | "workload-asc" | "name-asc" | "name-desc">("workload-desc");
+  
+  // Officer Full Details Modal State
+  const [selectedOfficerModal, setSelectedOfficerModal] = useState<OfficerWorkloadSummary | null>(null);
+  const [activeModalTab, setActiveModalTab] = useState<"cases" | "analytics" | "profile">("cases");
   const [modalSearchQuery, setModalSearchQuery] = useState("");
+  const [modalStatusFilter, setModalStatusFilter] = useState("All");
 
-  // ── Load All Registered Officers and Correlate Workloads ──
-  const loadWorkflowData = async (silent = false) => {
-    if (!silent) setIsLoading(true);
-    else setIsRefreshing(true);
+  // ── Helper to normalize roles ──────────────────────────────────────────────
+  const getNormalizedRole = (role: string): "Subject Officer" | "Investigation Officer" | "Daily Mail Officer" | "Other" => {
+    const r = (role || "").toLowerCase();
+    if (r.includes("subject")) return "Subject Officer";
+    if (r.includes("investigation") || r.includes("inquiry")) return "Investigation Officer";
+    if (r.includes("daily") || r.includes("mail")) return "Daily Mail Officer";
+    return "Other";
+  };
 
+  // ── Fetch officers and workload data ────────────────────────────────────────
+  const fetchData = async (isSilent = false) => {
+    if (!isSilent) setIsLoading(true);
+
+    let officerList: RegisteredOfficer[] = [];
+    let lettersList: any[] = [];
+
+    // 1. Fetch Registered Officers from PostgreSQL
     try {
-      // 1. Fetch Registered Officers
-      let rawOfficersList: Array<{
-        id: string;
-        employeeNo: string;
-        fullName: string;
-        email: string;
-        role: string;
-        status: "Active" | "Inactive";
-        createdAt: string;
-      }> = [];
+      const regRes = await getRegisterOfficersServer();
+      if (regRes && regRes.success && Array.isArray(regRes.data) && regRes.data.length > 0) {
+        officerList = regRes.data.map((p: any) => ({
+          id: String(p.id),
+          employeeNo: p.employee_no || "",
+          fullName: p.full_name || "",
+          email: p.email || "",
+          role: p.role || "subject_officer",
+          status: p.is_active === false ? "Inactive" : "Active",
+          createdAt: p.created_at ? new Date(p.created_at).toISOString().slice(0, 10) : "",
+        }));
+      }
+    } catch (e) {
+      console.warn("getRegisterOfficersServer warning in workflow:", e);
+    }
 
+    // 2. Fetch Officers via API route fallback
+    if (officerList.length === 0) {
       try {
-        const regRes = await getRegisterOfficersServer();
-        if (regRes && regRes.success && Array.isArray(regRes.data) && regRes.data.length > 0) {
-          rawOfficersList = regRes.data.map((p: any) => ({
-            id: String(p.id),
-            employeeNo: p.employee_no || `EMP-${(p.id || "").slice(-5)}`,
-            fullName: p.full_name || "Unknown Officer",
+        const apiRes = await fetch(`${basePath}/api/officers`).then((r) => r.json()).catch(() => null);
+        if (apiRes && apiRes.success && Array.isArray(apiRes.data) && apiRes.data.length > 0) {
+          officerList = apiRes.data.map((p: any) => ({
+            id: String(p.id || p.employee_no || Math.random()),
+            employeeNo: p.employee_no || "",
+            fullName: p.full_name || "",
             email: p.email || "",
-            role: p.role || "Subject officer",
+            role: p.role || "subject_officer",
             status: p.is_active === false ? "Inactive" : "Active",
             createdAt: p.created_at ? new Date(p.created_at).toISOString().slice(0, 10) : "",
           }));
         }
       } catch (e) {
-        console.warn("getRegisterOfficersServer error in officer workflow:", e);
+        console.warn("/api/officers fallback warning:", e);
       }
+    }
 
-      // Supabase Fallback
-      if (rawOfficersList.length === 0 && isSupabaseConfigured) {
-        try {
-          const { data: regData } = await supabase
-            .from("register_officer_table")
-            .select("*")
-            .order("created_at", { ascending: false });
-
-          if (regData && regData.length > 0) {
-            rawOfficersList = regData.map((p: any) => ({
+    // 3. Fallback: Supabase direct query
+    if (officerList.length === 0 && isSupabaseConfigured) {
+      try {
+        const { data: regData } = await supabase.from("register_officer_table").select("*");
+        if (regData && regData.length > 0) {
+          officerList = regData.map((p: any) => ({
+            id: String(p.id),
+            employeeNo: p.employee_no || "",
+            fullName: p.full_name || "",
+            email: p.email || "",
+            role: p.role || "subject_officer",
+            status: p.is_active === false ? "Inactive" : "Active",
+            createdAt: (p.created_at || "").slice(0, 10),
+          }));
+        } else {
+          const { data: profs } = await supabase.from("dcmms_profiles").select("*");
+          if (profs && profs.length > 0) {
+            officerList = profs.map((p: any) => ({
               id: String(p.id),
-              employeeNo: p.employee_no || `EMP-${(p.id || "").slice(-5)}`,
-              fullName: p.full_name || "Unknown Officer",
+              employeeNo: p.employee_no || "",
+              fullName: p.full_name || "",
               email: p.email || "",
-              role: p.role || "Subject officer",
-              status: p.is_active === false ? "Inactive" : "Active",
+              role: p.role || "subject_officer",
+              status: "Active",
               createdAt: (p.created_at || "").slice(0, 10),
             }));
           }
-        } catch (e) {
-          console.warn("Supabase register_officer_table query error:", e);
-        }
-      }
-
-      // LocalStorage merge fallback
-      if (typeof window !== "undefined") {
-        const stored = localStorage.getItem("dcmms_custom_profiles");
-        if (stored) {
-          try {
-            const list = JSON.parse(stored);
-            const seenNames = new Set(rawOfficersList.map((o) => o.fullName.toLowerCase()));
-            list.forEach((o: any) => {
-              if (o.fullName && !seenNames.has(o.fullName.toLowerCase())) {
-                rawOfficersList.push({
-                  id: o.id || `loc-${Date.now()}-${Math.random()}`,
-                  employeeNo: o.employeeNo || `EMP-${Date.now().toString().slice(-4)}`,
-                  fullName: o.fullName,
-                  email: o.email || "",
-                  role: o.role || "Subject officer",
-                  status: o.status || "Active",
-                  createdAt: o.createdAt || new Date().toISOString().slice(0, 10),
-                });
-              }
-            });
-          } catch (e) {
-            console.error("Local profiles parse error", e);
-          }
-        }
-      }
-
-      if (rawOfficersList.length === 0) {
-        rawOfficersList = DEFAULT_OFFICERS;
-      }
-
-      // 2. Fetch Daily Mail Letters & Subject Cases to calculate workloads
-      let lettersList: any[] = [];
-      try {
-        const mailRes = await getDailyMailRecordsServer();
-        if (mailRes && mailRes.success && Array.isArray(mailRes.data)) {
-          lettersList = mailRes.data;
         }
       } catch (e) {
-        console.warn("getDailyMailRecordsServer error:", e);
+        console.warn("Supabase direct query warning:", e);
       }
-
-      if (lettersList.length === 0 && isSupabaseConfigured) {
-        try {
-          const { data: dcmmsMail } = await supabase
-            .from("dcmms_daily_mail")
-            .select("*")
-            .order("created_at", { ascending: false });
-          if (dcmmsMail && dcmmsMail.length > 0) {
-            lettersList = dcmmsMail;
-          }
-        } catch (e) {
-          console.warn("Supabase dcmms_daily_mail error:", e);
-        }
-      }
-
-      // 3. Correlate workloads for each officer
-      const subjectOfficers = rawOfficersList.filter((o) =>
-        (o.role || "").toLowerCase().includes("subject")
-      );
-      const invOfficers = rawOfficersList.filter((o) =>
-        (o.role || "").toLowerCase().includes("investigation")
-      );
-      const dmOfficers = rawOfficersList.filter((o) =>
-        (o.role || "").toLowerCase().includes("daily")
-      );
-
-      const computedWorkflow: OfficerWorkload[] = rawOfficersList.map((officer, officerIdx) => {
-        const roleLower = (officer.role || "").toLowerCase();
-        let assignedItems: AssignedCaseItem[] = [];
-
-        if (roleLower.includes("subject")) {
-          // Find letters specifically assigned to this subject officer
-          assignedItems = lettersList
-            .filter((l: any) => {
-              const offName = (l.officer_name || l.action_officer || l.assigned_officer || "").toLowerCase();
-              return offName === officer.fullName.toLowerCase();
-            })
-            .map((l: any, idx: number) => ({
-              id: l.id || `sub-case-${idx}`,
-              letterNo: l.letter_no || l.serial_no || `LTR-${idx + 1}`,
-              serialNo: l.serial_no,
-              subject: l.subject || "Disciplinary inquiry case dossier",
-              priority: l.priority || "Normal",
-              status: l.status || "In Progress",
-              date: l.received_date || l.submitted_date || (l.created_at || "").slice(0, 10) || new Date().toISOString().slice(0, 10),
-              type: l.type || l.nature_of_letter || "Complaint",
-              sender: l.sender || l.senders_party || "Data Management Branch",
-              category: l.classification || l.subject_category || "Misconduct",
-            }));
-
-          // If no specific assigned items are directly tagged, assign realistic slice of unassigned letters
-          if (assignedItems.length === 0 && lettersList.length > 0) {
-            const subCount = Math.max(1, subjectOfficers.length);
-            const mySlice = lettersList.filter((_, idx) => idx % subCount === officerIdx % subCount);
-            assignedItems = mySlice.slice(0, 8).map((l: any, idx: number) => ({
-              id: l.id || `sub-case-${officerIdx}-${idx}`,
-              letterNo: l.letter_no || l.serial_no || `LTR-${officerIdx + 1}${idx + 1}`,
-              serialNo: l.serial_no,
-              subject: l.subject || "Disciplinary inquiry case document",
-              priority: l.priority || (idx % 3 === 0 ? "High" : "Normal"),
-              status: idx % 4 === 0 ? "Closed" : idx % 2 === 0 ? "In Progress" : "Pending",
-              date: l.received_date || (l.created_at || "").slice(0, 10) || new Date().toISOString().slice(0, 10),
-              type: l.type || "Complaint",
-              sender: l.sender || "Ministry of Education",
-              category: l.classification || "General",
-            }));
-          }
-        } else if (roleLower.includes("investigation")) {
-          // Investigation Officer items
-          assignedItems = lettersList
-            .filter((l: any) => {
-              const offName = (l.investigation_officer || l.assigned_officer || l.action_officer || "").toLowerCase();
-              return offName === officer.fullName.toLowerCase();
-            })
-            .map((l: any, idx: number) => ({
-              id: l.id || `inv-case-${idx}`,
-              letterNo: l.letter_no || `INQ-${idx + 101}`,
-              serialNo: l.serial_no,
-              subject: l.subject || "Preliminary formal investigation inquiry",
-              priority: l.priority || "High",
-              status: l.status || "Investigation Ongoing",
-              date: l.received_date || (l.created_at || "").slice(0, 10) || new Date().toISOString().slice(0, 10),
-              type: "Formal Investigation",
-              sender: l.sender || "Disciplinary Committee",
-              category: "Preliminary Inquiry",
-            }));
-
-          if (assignedItems.length === 0 && lettersList.length > 0) {
-            const invCount = Math.max(1, invOfficers.length);
-            const mySlice = lettersList.filter((_, idx) => idx % invCount === officerIdx % invCount);
-            assignedItems = mySlice.slice(0, 6).map((l: any, idx: number) => ({
-              id: l.id || `inv-case-${officerIdx}-${idx}`,
-              letterNo: `INQ/${(l.letter_no || `10${idx}`).replace(/\D/g, "") || `${100 + idx}`}`,
-              serialNo: l.serial_no,
-              subject: l.subject || `Inquiry investigation assignment #${idx + 1}`,
-              priority: idx % 2 === 0 ? "High" : "Normal",
-              status: idx % 3 === 0 ? "Report Received" : "Investigation Ongoing",
-              date: l.received_date || (l.created_at || "").slice(0, 10) || new Date().toISOString().slice(0, 10),
-              type: "Inquiry Case",
-              sender: "Investigation Unit",
-              category: "Special Inquiry",
-            }));
-          }
-        } else if (roleLower.includes("daily") || roleLower.includes("mail")) {
-          // Daily mail officers log & process letters
-          const dmCount = Math.max(1, dmOfficers.length);
-          const perDm = Math.ceil(lettersList.length / dmCount);
-          const startIdx = (officerIdx % dmCount) * perDm;
-          const mySlice = lettersList.slice(startIdx, startIdx + perDm);
-          assignedItems = mySlice.map((l: any, idx: number) => ({
-            id: l.id || `dm-${officerIdx}-${idx}`,
-            letterNo: l.letter_no || l.serial_no || `DM-${idx + 1}`,
-            serialNo: l.serial_no,
-            subject: l.subject || "Daily mail registered correspondence",
-            priority: l.priority || "Normal",
-            status: l.status || "Registered",
-            date: l.received_date || (l.created_at || "").slice(0, 10) || new Date().toISOString().slice(0, 10),
-            type: l.type || "Incoming Mail",
-            sender: l.sender || "External Agency",
-            category: l.classification || "General Mail",
-          }));
-        }
-
-        const totalAssigned = assignedItems.length;
-        const urgentCount = assignedItems.filter((i) =>
-          (i.priority || "").toLowerCase().includes("high") ||
-          (i.priority || "").toLowerCase().includes("urgent")
-        ).length;
-
-        const inProgressCount = assignedItems.filter((i) => {
-          const s = (i.status || "").toLowerCase();
-          return s.includes("progress") || s.includes("ongoing") || s.includes("subject");
-        }).length;
-
-        const completedCount = assignedItems.filter((i) => {
-          const s = (i.status || "").toLowerCase();
-          return s.includes("closed") || s.includes("completed") || s.includes("received");
-        }).length;
-
-        const pendingCount = Math.max(0, totalAssigned - inProgressCount - completedCount);
-
-        let capacityLevel: "light" | "optimal" | "heavy" = "light";
-        if (totalAssigned >= 6) capacityLevel = "heavy";
-        else if (totalAssigned >= 2) capacityLevel = "optimal";
-
-        return {
-          ...officer,
-          totalAssigned,
-          inProgressCount,
-          pendingCount,
-          completedCount,
-          urgentCount,
-          capacityLevel,
-          assignedItems,
-        };
-      });
-
-      setOfficers(computedWorkflow);
-    } catch (err) {
-      console.error("Failed to load officer workflow data:", err);
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
     }
+
+    // 4. Fallback: LocalStorage profiles if any
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("dcmms_custom_profiles");
+      if (stored) {
+        try {
+          const list = JSON.parse(stored);
+          const seenNames = new Set(officerList.map((p) => p.fullName.toLowerCase()));
+          list.forEach((o: any) => {
+            const name = o.fullName || o.full_name || "";
+            if (name && !seenNames.has(name.toLowerCase())) {
+              officerList.push({
+                id: o.id || `local-${Math.random()}`,
+                employeeNo: o.employeeNo || o.employee_no || "",
+                fullName: name,
+                email: o.email || "",
+                role: o.role || "subject_officer",
+                status: o.status || "Active",
+                createdAt: o.createdAt || new Date().toISOString().slice(0, 10),
+              });
+              seenNames.add(name.toLowerCase());
+            }
+          });
+        } catch (e) {
+          console.error("Local profiles parse error", e);
+        }
+      }
+    }
+
+    // 5. Final fallback if database is empty
+    if (officerList.length === 0) {
+      officerList = DEFAULT_OFFICERS;
+    }
+
+    // 6. Fetch Daily Mail Records / Cases to calculate workload
+    try {
+      const mailRes = await getDailyMailRecordsServer();
+      if (mailRes && mailRes.success && Array.isArray(mailRes.data)) {
+        lettersList = mailRes.data;
+      }
+    } catch (e) {
+      console.warn("getDailyMailRecordsServer in workflow warning:", e);
+    }
+
+    if (lettersList.length === 0) {
+      try {
+        const mailApiRes = await fetch(`${basePath}/api/daily-mail`).then((r) => r.json()).catch(() => null);
+        if (mailApiRes && mailApiRes.success && Array.isArray(mailApiRes.data)) {
+          lettersList = mailApiRes.data;
+        }
+      } catch (e) {
+        console.warn("/api/daily-mail fallback in workflow warning:", e);
+      }
+    }
+
+    setOfficers(officerList);
+    setLettersData(lettersList);
+    setIsLoading(false);
   };
 
   useEffect(() => {
-    loadWorkflowData();
+    fetchData();
 
-    // Supabase Real-time updates
-    const channel = supabase
-      .channel("officer-workflow-changes")
-      .on("postgres_changes", { event: "*", schema: "public", table: "register_officer_table" }, () => loadWorkflowData(true))
-      .on("postgres_changes", { event: "*", schema: "public", table: "daily_mail_letter_table" }, () => loadWorkflowData(true))
-      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_daily_mail" }, () => loadWorkflowData(true))
-      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subject" }, () => loadWorkflowData(true))
-      .subscribe();
+    // Subscribe to real-time changes
+    let channel: any = null;
+    if (isSupabaseConfigured) {
+      channel = supabase
+        .channel("admin-workflow-realtime")
+        .on("postgres_changes", { event: "*", schema: "public", table: "register_officer_table" }, () => fetchData(true))
+        .on("postgres_changes", { event: "*", schema: "public", table: "daily_mail_letter_table" }, () => fetchData(true))
+        .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_daily_mail" }, () => fetchData(true))
+        .subscribe();
+    }
 
-    const handleLocalUpdate = () => loadWorkflowData(true);
+    const handleLocalUpdate = () => fetchData(true);
     window.addEventListener("storage", handleLocalUpdate);
     window.addEventListener("dcmms_data_updated", handleLocalUpdate);
     window.addEventListener("dcmms_assignment_updated", handleLocalUpdate);
 
-    const interval = setInterval(() => loadWorkflowData(true), 15000);
+    const interval = setInterval(() => fetchData(true), 15000);
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) supabase.removeChannel(channel);
       window.removeEventListener("storage", handleLocalUpdate);
       window.removeEventListener("dcmms_data_updated", handleLocalUpdate);
       window.removeEventListener("dcmms_assignment_updated", handleLocalUpdate);
@@ -397,414 +286,454 @@ export default function OfficerWorkflowPage() {
     };
   }, []);
 
-  // ── High-Level Statistics ──
-  const kpiStats = useMemo(() => {
-    const totalOfficers = officers.length;
-    const activeOfficers = officers.filter((o) => o.status === "Active").length;
-    const inactiveOfficers = totalOfficers - activeOfficers;
+  // ── Calculate Workload Summaries and Individual Assigned Cases for Each Officer ──
+  const workloadSummaries: OfficerWorkloadSummary[] = useMemo(() => {
+    const subjectOfficers = officers.filter((o) => getNormalizedRole(o.role) === "Subject Officer");
+    const investigationOfficers = officers.filter((o) => getNormalizedRole(o.role) === "Investigation Officer");
 
-    const subjectList = officers.filter((o) => o.role.toLowerCase().includes("subject"));
-    const invList = officers.filter((o) => o.role.toLowerCase().includes("investigation"));
-    const dmList = officers.filter((o) => o.role.toLowerCase().includes("daily"));
-
-    const totalSubjectCases = subjectList.reduce((sum, o) => sum + o.totalAssigned, 0);
-    const totalInvCases = invList.reduce((sum, o) => sum + o.totalAssigned, 0);
-    const totalDmCases = dmList.reduce((sum, o) => sum + o.totalAssigned, 0);
-    const totalWorkload = officers.reduce((sum, o) => sum + o.totalAssigned, 0);
-    const avgWorkload = activeOfficers > 0 ? (totalWorkload / activeOfficers).toFixed(1) : "0";
-
-    const heavyCount = officers.filter((o) => o.capacityLevel === "heavy").length;
-    const optimalCount = officers.filter((o) => o.capacityLevel === "optimal").length;
-    const lightCount = officers.filter((o) => o.capacityLevel === "light").length;
-
-    return {
-      totalOfficers,
-      activeOfficers,
-      inactiveOfficers,
-      subjectCount: subjectList.length,
-      totalSubjectCases,
-      invCount: invList.length,
-      totalInvCases,
-      dmCount: dmList.length,
-      totalDmCases,
-      totalWorkload,
-      avgWorkload,
-      heavyCount,
-      optimalCount,
-      lightCount,
-    };
-  }, [officers]);
-
-  // ── Chart Series ──
-  const barChartData = useMemo(() => {
     return officers
-      .slice(0, 10)
+      .filter((o) => !o.role.toLowerCase().includes("admin"))
+      .map((officer, officerIdx) => {
+        const normRole = getNormalizedRole(officer.role);
+        const nameLower = officer.fullName.toLowerCase().trim();
+        let assignedItems: AssignedCaseItem[] = [];
+
+        // Helper to format any letter item to AssignedCaseItem
+        const mapToCaseItem = (l: any, idx: number, forceStatus?: string): AssignedCaseItem => {
+          const rawStatus = (l.status || "").toLowerCase();
+          let derivedStatus: "Under Investigation" | "Under Subject Officer" | "Closed" | "Registered" | "Pending" = "Registered";
+          if (forceStatus) {
+            derivedStatus = forceStatus as any;
+          } else if (rawStatus.includes("closed") || rawStatus.includes("done")) {
+            derivedStatus = "Closed";
+          } else if (rawStatus.includes("investig") || (l.serial_no || l.ref_number || "").includes("INQ/")) {
+            derivedStatus = "Under Investigation";
+          } else if (rawStatus.includes("subject") || rawStatus.includes("progress")) {
+            derivedStatus = "Under Subject Officer";
+          } else {
+            derivedStatus = "Registered";
+          }
+
+          const rawPriority = (l.priority || "Normal").toLowerCase();
+          let priority: "High" | "Medium" | "Low" | "Normal" = "Normal";
+          if (rawPriority.includes("high") || rawPriority.includes("urgent")) priority = "High";
+          else if (rawPriority.includes("medium")) priority = "Medium";
+          else if (rawPriority.includes("low")) priority = "Low";
+
+          return {
+            id: String(l.id || `case-${idx}`),
+            refNo: l.serial_no || l.ref_number || l.refNo || `REF-${202400 + idx}`,
+            letterNo: l.letter_no || l.letter_number || l.letterNo || `LT-${100 + idx}`,
+            subject: l.subject || l.subject_of_letter || "Complaint & Disciplinary Inquiry regarding Code of Conduct",
+            sender: l.sender || l.sender_party || l.senders_party || "Zonal Education Office / Ministry",
+            receivedDate: l.received_date || l.date_received_by_add_secretary || "2024-02-15",
+            submittedDate: l.submitted_date || l.date_letter_handover_discipline || "2024-02-18",
+            priority,
+            status: derivedStatus,
+            classification: l.classification || l.subject_category || l.nature_of_letter || "General Disciplinary",
+            method: l.method || l.mode_of_receipt || "Post",
+          };
+        };
+
+        if (normRole === "Subject Officer") {
+          // Direct matches by officer name
+          const directAssigned = lettersData.filter((l: any) => {
+            const actOff = (l.action_officer || "").toLowerCase().trim();
+            const offName = (l.officer_name || "").toLowerCase().trim();
+            return (actOff && actOff === nameLower) || (offName && offName === nameLower);
+          });
+
+          if (directAssigned.length > 0) {
+            assignedItems = directAssigned.map((l, i) => mapToCaseItem(l, i));
+          } else if (lettersData.length > 0) {
+            // Slice items for fair distribution so every officer has realistic assigned cases
+            const chunkSize = Math.max(1, Math.ceil(lettersData.length / Math.max(1, subjectOfficers.length)));
+            const subIdx = subjectOfficers.findIndex((s) => s.id === officer.id);
+            const start = Math.max(0, subIdx) * chunkSize;
+            const officerSlice = lettersData.slice(start, start + chunkSize);
+            assignedItems = (officerSlice.length > 0 ? officerSlice : lettersData.slice(0, 2)).map((l, i) =>
+              mapToCaseItem(l, i, "Under Subject Officer")
+            );
+          }
+        } else if (normRole === "Investigation Officer") {
+          const directAssigned = lettersData.filter((l: any) => {
+            const actOff = (l.action_officer || l.assigned_to || "").toLowerCase().trim();
+            return actOff && actOff === nameLower;
+          });
+
+          if (directAssigned.length > 0) {
+            assignedItems = directAssigned.map((l, i) => mapToCaseItem(l, i, "Under Investigation"));
+          } else if (lettersData.length > 0) {
+            const invIdx = investigationOfficers.findIndex((s) => s.id === officer.id);
+            const sliceStart = Math.max(0, invIdx) * 2;
+            const slice = lettersData.slice(sliceStart, sliceStart + 2);
+            assignedItems = (slice.length > 0 ? slice : lettersData.slice(0, 2)).map((l, i) =>
+              mapToCaseItem(l, i, "Under Investigation")
+            );
+          }
+        } else if (normRole === "Daily Mail Officer") {
+          // Daily mail officer processes all incoming daily mail entries
+          assignedItems = lettersData.map((l, i) => mapToCaseItem(l, i));
+        }
+
+        const assignedCount = assignedItems.length;
+        let pending = 0;
+        let inProgress = 0;
+        let closed = 0;
+
+        assignedItems.forEach((item) => {
+          if (item.status === "Closed") closed++;
+          else if (item.status === "Under Investigation" || item.status === "Under Subject Officer") inProgress++;
+          else pending++;
+        });
+
+        let workloadCategory: "Heavy" | "Moderate" | "Light" | "None" = "None";
+        if (assignedCount >= 6) workloadCategory = "Heavy";
+        else if (assignedCount >= 3) workloadCategory = "Moderate";
+        else if (assignedCount >= 1) workloadCategory = "Light";
+
+        return {
+          ...officer,
+          normalizedRole: normRole,
+          assignedCount,
+          workloadCategory,
+          breakdown: { pending, inProgress, closed },
+          assignedItems,
+        };
+      });
+  }, [officers, lettersData]);
+
+  // ── Overall Metric Calculations ────────────────────────────────────────────
+  const totalOfficersCount = workloadSummaries.length;
+  const activeOfficersCount = workloadSummaries.filter((o) => o.status === "Active").length;
+  const subjectOfficersCount = workloadSummaries.filter((o) => o.normalizedRole === "Subject Officer").length;
+  const investigationOfficersCount = workloadSummaries.filter((o) => o.normalizedRole === "Investigation Officer").length;
+  const dailyMailOfficersCount = workloadSummaries.filter((o) => o.normalizedRole === "Daily Mail Officer").length;
+
+  // ── Chart Data Preparations ────────────────────────────────────────────────
+  const topOfficersChartData = useMemo(() => {
+    return [...workloadSummaries]
+      .sort((a, b) => b.assignedCount - a.assignedCount)
+      .slice(0, 8)
       .map((o) => ({
-        name: o.fullName.split(" ")[0] || o.fullName,
+        name: o.fullName.length > 14 ? o.fullName.slice(0, 12) + "…" : o.fullName,
         fullName: o.fullName,
-        assigned: o.totalAssigned,
-        inProgress: o.inProgressCount,
-        pending: o.pendingCount,
-        role: o.role,
+        workload: o.assignedCount,
+        role: o.normalizedRole,
       }));
-  }, [officers]);
+  }, [workloadSummaries]);
 
-  const pieChartData = useMemo(() => {
-    return [
-      { name: "Subject Officers", value: kpiStats.totalSubjectCases, color: "#4f46e5" },
-      { name: "Investigation Officers", value: kpiStats.totalInvCases, color: "#9333ea" },
-      { name: "Daily Mail Officers", value: kpiStats.totalDmCases, color: "#0d9488" },
-    ].filter((item) => item.value > 0);
-  }, [kpiStats]);
+  const roleDistributionChartData = useMemo(() => {
+    const rolesMap: Record<string, number> = {
+      "Subject Officers": 0,
+      "Investigation Officers": 0,
+      "Daily Mail Officers": 0,
+    };
+    workloadSummaries.forEach((o) => {
+      if (o.normalizedRole === "Subject Officer") rolesMap["Subject Officers"] += o.assignedCount;
+      else if (o.normalizedRole === "Investigation Officer") rolesMap["Investigation Officers"] += o.assignedCount;
+      else if (o.normalizedRole === "Daily Mail Officer") rolesMap["Daily Mail Officers"] += o.assignedCount;
+    });
 
-  // ── Filtered & Sorted Officers ──
+    const colors = ["#4F46E5", "#0EA5E9", "#10B981"];
+    return Object.entries(rolesMap).map(([name, value], i) => ({
+      name,
+      value,
+      color: colors[i % colors.length],
+    }));
+  }, [workloadSummaries]);
+
+  // ── Filtered & Sorted Officers List ─────────────────────────────────────────
   const filteredOfficers = useMemo(() => {
-    return officers
-      .filter((officer) => {
-        // Search Filter
-        if (searchQuery.trim()) {
-          const q = searchQuery.toLowerCase();
-          const matchesName = officer.fullName.toLowerCase().includes(q);
-          const matchesEmp = officer.employeeNo.toLowerCase().includes(q);
-          const matchesEmail = officer.email.toLowerCase().includes(q);
-          const matchesRole = officer.role.toLowerCase().includes(q);
-          if (!matchesName && !matchesEmp && !matchesEmail && !matchesRole) return false;
-        }
+    return workloadSummaries
+      .filter((o) => {
+        const matchesQuery =
+          !searchQuery.trim() ||
+          o.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          o.employeeNo.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          o.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          o.role.toLowerCase().includes(searchQuery.toLowerCase());
 
-        // Role Filter
-        if (selectedRole !== "all") {
-          const r = officer.role.toLowerCase();
-          if (selectedRole === "subject" && !r.includes("subject")) return false;
-          if (selectedRole === "investigation" && !r.includes("investigation")) return false;
-          if (selectedRole === "dailymail" && !r.includes("daily")) return false;
-        }
+        const matchesRole =
+          roleFilter === "All" ||
+          (roleFilter === "Subject" && o.normalizedRole === "Subject Officer") ||
+          (roleFilter === "Investigation" && o.normalizedRole === "Investigation Officer") ||
+          (roleFilter === "DailyMail" && o.normalizedRole === "Daily Mail Officer");
 
-        // Status Filter
-        if (selectedStatus !== "all") {
-          if (officer.status.toLowerCase() !== selectedStatus.toLowerCase()) return false;
-        }
+        const matchesStatus = statusFilter === "All" || o.status === statusFilter;
 
-        // Capacity Filter
-        if (selectedCapacity !== "all") {
-          if (officer.capacityLevel !== selectedCapacity) return false;
-        }
-
-        return true;
+        return matchesQuery && matchesRole && matchesStatus;
       })
       .sort((a, b) => {
-        if (sortBy === "workload-desc") return b.totalAssigned - a.totalAssigned;
-        if (sortBy === "workload-asc") return a.totalAssigned - b.totalAssigned;
+        if (sortBy === "workload-desc") return b.assignedCount - a.assignedCount;
+        if (sortBy === "workload-asc") return a.assignedCount - b.assignedCount;
         if (sortBy === "name-asc") return a.fullName.localeCompare(b.fullName);
-        if (sortBy === "emp-asc") return a.employeeNo.localeCompare(b.employeeNo);
+        if (sortBy === "name-desc") return b.fullName.localeCompare(a.fullName);
         return 0;
       });
-  }, [officers, searchQuery, selectedRole, selectedStatus, selectedCapacity, sortBy]);
+  }, [workloadSummaries, searchQuery, roleFilter, statusFilter, sortBy]);
 
-  // ── Export CSV ──
-  const handleExportCSV = () => {
-    const headers = [
-      "Employee No",
-      "Officer Full Name",
-      "Email",
-      "Role",
-      "Status",
-      "Total Assigned",
-      "In Progress",
-      "Pending Action",
-      "Completed / Closed",
-      "Urgent Priority",
-      "Workload Level",
-    ];
-
-    const rows = filteredOfficers.map((o) => [
-      `"${o.employeeNo}"`,
-      `"${o.fullName}"`,
-      `"${o.email}"`,
-      `"${o.role}"`,
-      `"${o.status}"`,
-      o.totalAssigned,
-      o.inProgressCount,
-      o.pendingCount,
-      o.completedCount,
-      o.urgentCount,
-      `"${o.capacityLevel}"`,
-    ]);
-
-    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `DCMMS_Officer_Workflow_Summary_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  // Helper for Initials
-  const getInitials = (name: string) => {
-    const parts = (name || "").trim().split(/\s+/);
-    if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-    return (parts[0]?.slice(0, 2) || "OF").toUpperCase();
-  };
-
-  // Helper for Role Display
-  const renderRoleBadge = (role: string) => {
-    const r = (role || "").toLowerCase();
-    if (r.includes("subject")) {
-      return (
-        <span className="badge-role-tag badge-role-subject">
-          <Briefcase size={13} className="role-tag-icon" />
-          {t("roleSubjectOfficer", "Subject Officer")}
-        </span>
-      );
-    }
-    if (r.includes("investigation")) {
-      return (
-        <span className="badge-role-tag badge-role-investigation">
-          <ShieldCheck size={13} className="role-tag-icon" />
-          {t("roleInvestigationOfficer", "Investigation Officer")}
-        </span>
-      );
-    }
-    if (r.includes("daily") || r.includes("mail")) {
-      return (
-        <span className="badge-role-tag badge-role-dailymail">
-          <Mail size={13} className="role-tag-icon" />
-          {t("roleDailyMail", "Daily Mail Officer")}
-        </span>
-      );
-    }
-    return (
-      <span className="badge-role-tag badge-role-admin">
-        <Users size={13} className="role-tag-icon" />
-        {role}
-      </span>
-    );
-  };
-
-  // Filtered cases inside Modal
-  const modalFilteredItems = useMemo(() => {
-    if (!selectedOfficer) return [];
-    if (!modalSearchQuery.trim()) return selectedOfficer.assignedItems;
-    const q = modalSearchQuery.toLowerCase();
-    return selectedOfficer.assignedItems.filter(
-      (item) =>
+  // ── Filtered Cases within the Details Modal ────────────────────────────────
+  const filteredModalCases = useMemo(() => {
+    if (!selectedOfficerModal) return [];
+    return selectedOfficerModal.assignedItems.filter((item) => {
+      const q = modalSearchQuery.toLowerCase().trim();
+      const matchesSearch =
+        !q ||
+        item.refNo.toLowerCase().includes(q) ||
         item.letterNo.toLowerCase().includes(q) ||
         item.subject.toLowerCase().includes(q) ||
-        item.type.toLowerCase().includes(q) ||
-        (item.sender && item.sender.toLowerCase().includes(q))
-    );
-  }, [selectedOfficer, modalSearchQuery]);
+        item.sender.toLowerCase().includes(q) ||
+        item.classification.toLowerCase().includes(q);
+
+      const matchesStatus =
+        modalStatusFilter === "All" ||
+        item.status === modalStatusFilter ||
+        (modalStatusFilter === "InProgress" && (item.status === "Under Investigation" || item.status === "Under Subject Officer")) ||
+        (modalStatusFilter === "Pending" && item.status === "Registered") ||
+        (modalStatusFilter === "Closed" && item.status === "Closed");
+
+      return matchesSearch && matchesStatus;
+    });
+  }, [selectedOfficerModal, modalSearchQuery, modalStatusFilter]);
+
+  // Open modal helper
+  const handleOpenDetails = (officer: OfficerWorkloadSummary) => {
+    setSelectedOfficerModal(officer);
+    setActiveModalTab("cases");
+    setModalSearchQuery("");
+    setModalStatusFilter("All");
+  };
 
   return (
     <div className="admin-dashboard-container">
-      {/* ── Page Header ── */}
+      {/* ── Top Header Section ── */}
       <div className="admin-dashboard-header">
         <div>
-          <h1 className="admin-dashboard-title1" style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <Activity className="header-primary-icon" size={28} color="#4f46e5" />
-            {t("officerWorkflow", "Officer Workflow")}
-          </h1>
+          <h3 className="admin-dashboard-title1">{t("officerWorkflow", "Officer Workflow")}</h3>
+          <h2 className="admin-dashboard-title">{t("officerWorkloadSummary", "Officer Workload & Workflow Summary")}</h2>
           <p className="admin-dashboard-subtitle">
-            {t("officerWorkflowDesc", "Comprehensive workload summary, case distribution, and active assignments for all registered officers.")}
+            {t("officerWorkflowSubtitle", "Real-time summary of case loads, assigned letters, and disciplinary workflow status across all registered officers.")}
           </p>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+        <div className="admin-filters-container">
           <button
-            type="button"
-            className="btn-refresh-sync"
-            onClick={() => loadWorkflowData()}
-            disabled={isLoading || isRefreshing}
-            title="Refresh live data"
+            className="btn-admin-refresh"
+            onClick={() => fetchData()}
+            title={t("refreshData", "Refresh live data")}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              padding: "8px 16px",
+              backgroundColor: "#ffffff",
+              border: "1px solid #e5e7eb",
+              borderRadius: "8px",
+              color: "#374151",
+              fontWeight: 500,
+              fontSize: "14px",
+              cursor: "pointer",
+              boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
+            }}
           >
-            <RefreshCw size={16} className={isRefreshing ? "spin-icon" : ""} />
-            <span>{isRefreshing ? "Syncing…" : "Sync Data"}</span>
-          </button>
-
-          <button
-            type="button"
-            className="btn-export-action"
-            onClick={handleExportCSV}
-            title="Download CSV Report"
-          >
-            <Download size={16} />
-            <span>{t("exportWorkloadSummary", "Export Summary")}</span>
+            <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
+            <span>{t("refresh", "Refresh")}</span>
           </button>
         </div>
       </div>
 
-      {/* ── Top KPI Stat Cards Grid ── */}
+      {/* ── Summary Statistics Cards Grid ── */}
       <div className="admin-stats-grid">
         {/* Total Registered Officers */}
-        <div className="admin-stat-card">
-          <div className="admin-stat-header">
-            <span className="admin-stat-title">{t("allRegisteredOfficers", "Registered Officers")}</span>
-            <div className="admin-stat-icon-wrapper" style={{ backgroundColor: "#eef2ff", color: "#4f46e5" }}>
-              <Users size={20} />
+        <div className="premium-stat-card total-cases-card">
+          <div className="premium-card-top">
+            <div className="premium-card-title-area">
+              <Users className="premium-card-icon" />
+              <span>{t("totalOfficers", "REGISTERED OFFICERS")}</span>
             </div>
+            <span className="premium-card-percentage">
+              {activeOfficersCount}/{totalOfficersCount} {t("active", "Active")}
+            </span>
           </div>
-          <div className="admin-stat-value">{kpiStats.totalOfficers}</div>
-          <div className="admin-stat-subtitle" style={{ display: "flex", gap: "12px", fontSize: "13px" }}>
-            <span style={{ color: "#16a34a", fontWeight: 600 }}>● {kpiStats.activeOfficers} {t("activeOfficers", "Active")}</span>
-            {kpiStats.inactiveOfficers > 0 && (
-              <span style={{ color: "#9ca3af" }}>○ {kpiStats.inactiveOfficers} {t("inactiveOfficers", "Inactive")}</span>
-            )}
+          <div className="premium-card-bottom">
+            <div className="premium-card-value-area">
+              <span className="premium-card-value">{isLoading ? "…" : totalOfficersCount}</span>
+              <span className="premium-card-label">{t("officers", "Officers")}</span>
+            </div>
+            <div className="premium-card-sparkline">
+              <UserCheck size={28} color="#4F46E5" opacity={0.8} />
+            </div>
           </div>
         </div>
 
         {/* Subject Officers Workload */}
-        <div className="admin-stat-card">
-          <div className="admin-stat-header">
-            <span className="admin-stat-title">{t("subjectWorkload", "Subject Officers Load")}</span>
-            <div className="admin-stat-icon-wrapper" style={{ backgroundColor: "#eff6ff", color: "#2563eb" }}>
-              <Briefcase size={20} />
+        <div className="premium-stat-card inprogress-cases-card">
+          <div className="premium-card-top">
+            <div className="premium-card-title-area">
+              <FileText className="premium-card-icon" />
+              <span>{t("subjectOfficers", "SUBJECT OFFICERS")}</span>
             </div>
+            <span className="premium-card-percentage">{subjectOfficersCount} {t("staff", "Staff")}</span>
           </div>
-          <div className="admin-stat-value">{kpiStats.totalSubjectCases}</div>
-          <div className="admin-stat-subtitle">
-            <span>{kpiStats.subjectCount} {t("subjectOfficers", "Subject Officers assigned")}</span>
+          <div className="premium-card-bottom">
+            <div className="premium-card-value-area">
+              <span className="premium-card-value">
+                {isLoading ? "…" : workloadSummaries.filter((o) => o.normalizedRole === "Subject Officer").reduce((a, c) => a + c.assignedCount, 0)}
+              </span>
+              <span className="premium-card-label">{t("assignedLetters", "Letters / Cases")}</span>
+            </div>
+            <div className="premium-card-sparkline">
+              <Briefcase size={28} color="#6366F1" opacity={0.8} />
+            </div>
           </div>
         </div>
 
         {/* Investigation Officers Workload */}
-        <div className="admin-stat-card">
-          <div className="admin-stat-header">
-            <span className="admin-stat-title">{t("investigationWorkload", "Investigation Load")}</span>
-            <div className="admin-stat-icon-wrapper" style={{ backgroundColor: "#f5f3ff", color: "#9333ea" }}>
-              <ShieldCheck size={20} />
+        <div className="premium-stat-card closed-cases-card">
+          <div className="premium-card-top">
+            <div className="premium-card-title-area">
+              <ShieldAlert className="premium-card-icon" />
+              <span>{t("investigationOfficers", "INVESTIGATION OFFICERS")}</span>
             </div>
+            <span className="premium-card-percentage">{investigationOfficersCount} {t("staff", "Staff")}</span>
           </div>
-          <div className="admin-stat-value">{kpiStats.totalInvCases}</div>
-          <div className="admin-stat-subtitle">
-            <span>{kpiStats.invCount} {t("investigationOfficers", "Investigation Officers")}</span>
+          <div className="premium-card-bottom">
+            <div className="premium-card-value-area">
+              <span className="premium-card-value">
+                {isLoading ? "…" : workloadSummaries.filter((o) => o.normalizedRole === "Investigation Officer").reduce((a, c) => a + c.assignedCount, 0)}
+              </span>
+              <span className="premium-card-label">{t("investigations", "Inquiries")}</span>
+            </div>
+            <div className="premium-card-sparkline">
+              <TrendingUp size={28} color="#10B981" opacity={0.8} />
+            </div>
           </div>
         </div>
 
-        {/* Daily Mail Load / Average Balance */}
-        <div className="admin-stat-card">
-          <div className="admin-stat-header">
-            <span className="admin-stat-title">{t("dailyMailWorkload", "Daily Mail Letters")}</span>
-            <div className="admin-stat-icon-wrapper" style={{ backgroundColor: "#f0fdfa", color: "#0d9488" }}>
-              <Mail size={20} />
+        {/* Daily Mail Officers */}
+        <div className="premium-stat-card pending-cases-card">
+          <div className="premium-card-top">
+            <div className="premium-card-title-area">
+              <Mail className="premium-card-icon" />
+              <span>{t("dailyMailOfficers", "DAILY MAIL OFFICERS")}</span>
             </div>
+            <span className="premium-card-percentage">{dailyMailOfficersCount} {t("staff", "Staff")}</span>
           </div>
-          <div className="admin-stat-value">{kpiStats.totalDmCases}</div>
-          <div className="admin-stat-subtitle">
-            <span>Avg: <strong>{kpiStats.avgWorkload}</strong> {t("assignedCases", "cases / officer")}</span>
+          <div className="premium-card-bottom">
+            <div className="premium-card-value-area">
+              <span className="premium-card-value">{isLoading ? "…" : lettersData.length}</span>
+              <span className="premium-card-label">{t("loggedLetters", "Logged Letters")}</span>
+            </div>
+            <div className="premium-card-sparkline">
+              <Mail size={28} color="#F59E0B" opacity={0.8} />
+            </div>
           </div>
         </div>
       </div>
 
-      {/* ── Visual Analytics Section ── */}
-      <div className="admin-charts-grid">
-        {/* Workload Comparison Bar Chart */}
+      {/* ── Visual Analytics Charts Grid ── */}
+      <div className="admin-secondary-charts-grid">
+        {/* Workload by Officer Bar Chart */}
         <div className="admin-chart-card">
-          <div className="admin-chart-header">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
             <div>
-              <h2 className="admin-chart-title">{t("workloadDistribution", "Workload Distribution Across Officers")}</h2>
-              <p className="admin-chart-subtitle">Assigned cases and pending items per registered staff member</p>
+              <h3 className="admin-secondary-chart-title" style={{ margin: 0 }}>
+                {t("officerWorkloadChart", "Officer Workload Distribution")}
+              </h3>
+              <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#6b7280" }}>
+                {t("topOfficersByWorkload", "Top assigned disciplinary officers by case count")}
+              </p>
             </div>
           </div>
-          <div className="admin-chart-body" style={{ minHeight: "260px" }}>
+          <div className="admin-bar-chart-wrapper" style={{ minHeight: "260px" }}>
             <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={barChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="name" tick={{ fontSize: 12, fill: "#64748b" }} axisLine={{ stroke: "#e2e8f0" }} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: "#64748b" }} axisLine={{ stroke: "#e2e8f0" }} />
+              <BarChart data={topOfficersChartData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "#6B7280", fontSize: 11 }} angle={-20} textAnchor="end" />
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: "#6B7280", fontSize: 11 }} allowDecimals={false} />
                 <Tooltip
-                  formatter={(value: any, name: any) => [
-                    `${value} Cases`,
-                    name === "assigned" ? "Total Assigned" : name === "inProgress" ? "In Progress" : "Pending",
-                  ]}
-                  labelFormatter={(label, payload) => {
-                    const item = payload?.[0]?.payload;
-                    return item ? `${item.fullName} (${item.role})` : label;
-                  }}
-                  contentStyle={{
-                    backgroundColor: "#1e293b",
-                    color: "#fff",
-                    borderRadius: "8px",
-                    border: "none",
-                    fontSize: "12px",
+                  cursor={{ fill: "#F3F4F6" }}
+                  content={({ active, payload }) => {
+                    if (active && payload && payload.length) {
+                      const data = payload[0].payload;
+                      return (
+                        <div style={{ background: "#ffffff", padding: "10px 14px", borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.1)", border: "1px solid #e5e7eb" }}>
+                          <p style={{ fontWeight: 600, margin: "0 0 4px 0", color: "#1e293b" }}>{data.fullName}</p>
+                          <p style={{ fontSize: "12px", color: "#6b7280", margin: "0 0 4px 0" }}>{data.role}</p>
+                          <p style={{ fontWeight: 700, margin: 0, color: "#4f46e5" }}>{data.workload} Assigned Cases / Letters</p>
+                        </div>
+                      );
+                    }
+                    return null;
                   }}
                 />
-                <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "10px" }} />
-                <Bar dataKey="assigned" name="Total Assigned" fill="#4f46e5" radius={[4, 4, 0, 0]} maxBarSize={32} />
-                <Bar dataKey="inProgress" name="In Progress" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={32} />
+                <Bar dataKey="workload" radius={[4, 4, 0, 0]} fill="#4F46E5" />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        {/* Workload Share by Department / Role Pie Chart */}
+        {/* Workload by Role Pie Chart */}
         <div className="admin-chart-card">
-          <div className="admin-chart-header">
-            <div>
-              <h2 className="admin-chart-title">Workload by Department</h2>
-              <p className="admin-chart-subtitle">Proportion of active cases by officer role</p>
-            </div>
+          <div style={{ marginBottom: "16px" }}>
+            <h3 className="admin-secondary-chart-title" style={{ margin: 0 }}>
+              {t("workloadShareByRole", "Workload Share by Role")}
+            </h3>
+            <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#6b7280" }}>
+              {t("distributionAcrossBranches", "Proportion of total assignments per branch role")}
+            </p>
           </div>
-          <div className="admin-chart-body" style={{ minHeight: "260px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            {pieChartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={260}>
-                <PieChart>
-                  <Pie
-                    data={pieChartData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={55}
-                    outerRadius={85}
-                    paddingAngle={4}
-                    dataKey="value"
-                  >
-                    {pieChartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    formatter={(value: any) => [`${value} Cases`, "Volume"]}
-                    contentStyle={{
-                      backgroundColor: "#1e293b",
-                      color: "#fff",
-                      borderRadius: "8px",
-                      border: "none",
-                      fontSize: "12px",
-                    }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: "12px" }} />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="admin-table-no-data" style={{ padding: "40px 0" }}>
-                No active workload distribution data.
-              </div>
-            )}
+          <div className="admin-pie-chart-wrapper" style={{ minHeight: "260px" }}>
+            <ResponsiveContainer width="100%" height={260}>
+              <PieChart>
+                <Pie
+                  data={roleDistributionChartData}
+                  cx="50%"
+                  cy="45%"
+                  innerRadius={55}
+                  outerRadius={85}
+                  paddingAngle={3}
+                  dataKey="value"
+                  stroke="none"
+                >
+                  {roleDistributionChartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{ borderRadius: "8px", border: "none", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }}
+                />
+                <Legend
+                  verticalAlign="bottom"
+                  height={36}
+                  iconType="circle"
+                  formatter={(value) => <span className="admin-legend-label">{value}</span>}
+                />
+              </PieChart>
+            </ResponsiveContainer>
           </div>
         </div>
       </div>
 
-      {/* ── Officers Workload Summary List Section ── */}
-      <section className="letters-list-section" style={{ marginTop: "8px" }}>
+      {/* ── Detailed Officers Workload Summary Section ── */}
+      <section className="letters-list-section" style={{ marginTop: "16px" }}>
         <div className="letters-list-header" style={{ flexWrap: "wrap", gap: "16px" }}>
-          <div>
-            <h3 className="section-title">
-              <Users className="admin-section-icon" size={20} />
-              <span>{t("allRegisteredOfficers", "All Registered Officers Workload Summary")}</span>
-              <span className="results-count-badge">
-                {filteredOfficers.length} {filteredOfficers.length === 1 ? "Officer" : "Officers"}
-              </span>
-            </h3>
-          </div>
+          <h3 className="section-title">
+            <svg className="admin-section-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+            </svg>
+            <span>{t("allOfficersWorkloadTable", "All Registered Officers Workload Table")}</span>
+          </h3>
 
-          {/* Filters Bar */}
+          {/* Search and Filters */}
           <div className="letters-filters-group" style={{ flexWrap: "wrap", gap: "10px" }}>
-            {/* Search */}
+            {/* Search Box */}
             <div className="search-box">
               <Search className="admin-search-icon" size={16} />
               <input
                 type="text"
-                placeholder={t("searchCasesPlaceholder", "Search officer, email, EMP No…")}
+                placeholder={t("searchOfficerPlaceholder", "Search officer name, ID, role…")}
                 className="search-input"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -812,203 +741,258 @@ export default function OfficerWorkflowPage() {
             </div>
 
             {/* Role Filter */}
-            <div className="filter-select-wrapper">
+            <div className="admin-filter-wrapper" style={{ width: "auto", minWidth: "160px" }}>
               <select
+                aria-label="Filter by role"
                 className="admin-filter-select"
-                value={selectedRole}
-                onChange={(e) => setSelectedRole(e.target.value)}
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value)}
               >
-                <option value="all">{t("allRoles", "All Roles")}</option>
-                <option value="subject">{t("roleSubjectOfficer", "Subject Officer")}</option>
-                <option value="investigation">{t("roleInvestigationOfficer", "Investigation Officer")}</option>
-                <option value="dailymail">{t("roleDailyMail", "Daily Mail Officer")}</option>
+                <option value="All">{t("allRoles", "All Roles")}</option>
+                <option value="Subject">{t("roleSubjectOfficer", "Subject Officers")}</option>
+                <option value="Investigation">{t("roleInvestigationOfficer", "Investigation Officers")}</option>
+                <option value="DailyMail">{t("roleDailyMail", "Daily Mail Officers")}</option>
               </select>
+              <div className="admin-filter-icon"><ChevronDown size={14} /></div>
             </div>
 
-            {/* Capacity / Workload Level Filter */}
-            <div className="filter-select-wrapper">
+            {/* Status Filter */}
+            <div className="admin-filter-wrapper" style={{ width: "auto", minWidth: "130px" }}>
               <select
+                aria-label="Filter by status"
                 className="admin-filter-select"
-                value={selectedCapacity}
-                onChange={(e) => setSelectedCapacity(e.target.value)}
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
               >
-                <option value="all">{t("allWorkloadLevels", "All Workload Levels")}</option>
-                <option value="heavy">{t("workloadHeavy", "Heavy Load (6+)")}</option>
-                <option value="optimal">{t("workloadOptimal", "Optimal (2-5)")}</option>
-                <option value="light">{t("workloadLight", "Available / Light (0-1)")}</option>
+                <option value="All">{t("allStatuses", "All Statuses")}</option>
+                <option value="Active">{t("active", "Active")}</option>
+                <option value="Inactive">{t("inactive", "Inactive")}</option>
               </select>
+              <div className="admin-filter-icon"><ChevronDown size={14} /></div>
             </div>
 
             {/* Sort Filter */}
-            <div className="filter-select-wrapper">
+            <div className="admin-filter-wrapper" style={{ width: "auto", minWidth: "170px" }}>
               <select
+                aria-label="Sort by"
                 className="admin-filter-select"
                 value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as any)}
+                onChange={(e: any) => setSortBy(e.target.value)}
               >
-                <option value="workload-desc">Workload (High → Low)</option>
-                <option value="workload-asc">Workload (Low → High)</option>
-                <option value="name-asc">Name (A → Z)</option>
-                <option value="emp-asc">Employee ID</option>
+                <option value="workload-desc">{t("sortWorkloadHigh", "Workload (High → Low)")}</option>
+                <option value="workload-asc">{t("sortWorkloadLow", "Workload (Low → High)")}</option>
+                <option value="name-asc">{t("sortNameAsc", "Name (A → Z)")}</option>
+                <option value="name-desc">{t("sortNameDesc", "Name (Z → A)")}</option>
               </select>
+              <div className="admin-filter-icon"><ChevronDown size={14} /></div>
             </div>
-
-            {(searchQuery || selectedRole !== "all" || selectedCapacity !== "all" || selectedStatus !== "all") && (
-              <button
-                type="button"
-                className="view-all-reset-link"
-                style={{ background: "none", border: "none", cursor: "pointer" }}
-                onClick={() => {
-                  setSearchQuery("");
-                  setSelectedRole("all");
-                  setSelectedCapacity("all");
-                  setSelectedStatus("all");
-                }}
-              >
-                Reset Filters
-              </button>
-            )}
           </div>
         </div>
 
-        {/* Data Table */}
+        {/* Workload Data Table */}
         <div className="table-responsive-container">
           <table className="letters-data-table">
             <thead>
               <tr>
-                <th scope="col" style={{ width: "260px" }}>Officer Information</th>
-                <th scope="col" style={{ width: "170px" }}>Department / Role</th>
-                <th scope="col" style={{ width: "100px" }}>Status</th>
-                <th scope="col" style={{ width: "150px" }}>Workload Volume</th>
-                <th scope="col" style={{ width: "200px" }}>Status Breakdown</th>
-                <th scope="col" style={{ width: "120px", textAlign: "center" }}>Actions</th>
+                <th scope="col">Staff ID / No</th>
+                <th scope="col">{t("officerFullName", "Officer Full Name")}</th>
+                <th scope="col">{t("email", "Email Address")}</th>
+                <th scope="col">{t("role", "System Role")}</th>
+                <th scope="col">{t("status", "Account Status")}</th>
+                <th scope="col" style={{ textAlign: "center" }}>{t("assignedLoad", "Assigned Workload")}</th>
+                <th scope="col">{t("workloadLevel", "Workload Level")}</th>
+                <th scope="col" className="admin-table-header-center">{t("action", "Action")}</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="admin-table-no-data">
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "24px 0" }}>
-                      <RefreshCw size={18} className="spin-icon" />
-                      <span>{t("loadingData", "Loading officer workflow data from database…")}</span>
-                    </div>
+                  <td colSpan={8} className="admin-table-no-data">
+                    {t("loadingData", "Loading workload summary from database…")}
                   </td>
                 </tr>
               ) : filteredOfficers.length > 0 ? (
-                filteredOfficers.map((officer) => {
-                  const maxMeter = Math.max(10, ...officers.map((o) => o.totalAssigned));
-                  const meterPct = Math.min(100, Math.round((officer.totalAssigned / maxMeter) * 100));
-
-                  return (
-                    <tr
-                      key={officer.id}
-                      className="letter-table-row"
-                      onClick={() => setSelectedOfficer(officer)}
-                      style={{ cursor: "pointer" }}
-                    >
-                      {/* Officer Profile */}
-                      <td>
-                        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                          <div className="user-avatar-circle" style={{ width: "38px", height: "38px", fontSize: "14px", flexShrink: 0 }}>
-                            <span>{getInitials(officer.fullName)}</span>
-                          </div>
-                          <div>
-                            <div className="font-semibold" style={{ color: "#0f172a", fontSize: "14px" }}>
-                              {officer.fullName}
-                            </div>
-                            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "2px" }}>
-                              <span className="emp-badge">{officer.employeeNo}</span>
-                              {officer.email && (
-                                <span style={{ fontSize: "12px", color: "#64748b" }}>{officer.email}</span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Department / Role */}
-                      <td>{renderRoleBadge(officer.role)}</td>
-
-                      {/* Account Status */}
-                      <td>
-                        <span className={`badge-status-pill ${officer.status === "Active" ? "badge-status-active" : "badge-status-inactive"}`}>
-                          <span className="status-dot" />
-                          {officer.status}
-                        </span>
-                      </td>
-
-                      {/* Workload Volume & Capacity Meter */}
-                      <td>
-                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                            <span className="workload-count-badge">
-                              {officer.totalAssigned} {officer.totalAssigned === 1 ? "Case" : "Cases"}
-                            </span>
-                            <span className={`capacity-indicator-text capacity-${officer.capacityLevel}`}>
-                              {officer.capacityLevel === "heavy"
-                                ? t("workloadHeavy", "Heavy")
-                                : officer.capacityLevel === "optimal"
-                                  ? t("workloadOptimal", "Optimal")
-                                  : t("workloadLight", "Available")}
-                            </span>
-                          </div>
-                          <div className="workload-progress-bar-bg">
-                            <div
-                              className={`workload-progress-bar-fill progress-${officer.capacityLevel}`}
-                              style={{ width: `${meterPct}%` }}
-                            />
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Task Breakdown Badges */}
-                      <td>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-                          {officer.inProgressCount > 0 && (
-                            <span className="mini-breakdown-badge breakdown-in-progress" title="In Progress">
-                              <Clock size={11} /> {officer.inProgressCount} active
-                            </span>
-                          )}
-                          {officer.pendingCount > 0 && (
-                            <span className="mini-breakdown-badge breakdown-pending" title="Pending Action">
-                              <AlertCircle size={11} /> {officer.pendingCount} pending
-                            </span>
-                          )}
-                          {officer.completedCount > 0 && (
-                            <span className="mini-breakdown-badge breakdown-completed" title="Completed / Closed">
-                              <CheckCircle2 size={11} /> {officer.completedCount} done
-                            </span>
-                          )}
-                          {officer.urgentCount > 0 && (
-                            <span className="mini-breakdown-badge breakdown-urgent" title="Urgent / High Priority">
-                              ⚡ {officer.urgentCount} urgent
-                            </span>
-                          )}
-                          {officer.totalAssigned === 0 && (
-                            <span style={{ fontSize: "12px", color: "#94a3b8" }}>No active assignments</span>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Action Button */}
-                      <td style={{ textAlign: "center" }} onClick={(e) => e.stopPropagation()}>
-                        <button
-                          type="button"
-                          className="btn-view-details-action"
-                          onClick={() => setSelectedOfficer(officer)}
-                          title="View officer workload breakdown"
+                filteredOfficers.map((officer) => (
+                  <tr key={officer.id} className="letter-table-row">
+                    <td className="font-mono text-sm" style={{ color: "#4b5563" }}>
+                      {officer.employeeNo || `EMP-${officer.id.slice(0, 6)}`}
+                    </td>
+                    <td>
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                        <div
+                          style={{
+                            width: "32px",
+                            height: "32px",
+                            borderRadius: "50%",
+                            backgroundColor:
+                              officer.normalizedRole === "Subject Officer"
+                                ? "#E0E7FF"
+                                : officer.normalizedRole === "Investigation Officer"
+                                ? "#E0F2FE"
+                                : "#DCFCE7",
+                            color:
+                              officer.normalizedRole === "Subject Officer"
+                                ? "#4338CA"
+                                : officer.normalizedRole === "Investigation Officer"
+                                ? "#0369A1"
+                                : "#15803D",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontWeight: 700,
+                            fontSize: "13px",
+                          }}
                         >
-                          <Eye size={14} />
-                          <span>{t("viewWorkloadBreakdown", "Breakdown")}</span>
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })
+                          {officer.fullName ? officer.fullName.charAt(0).toUpperCase() : "O"}
+                        </div>
+                        <div>
+                          <div className="font-semibold" style={{ color: "#1e293b" }}>
+                            {officer.fullName}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td style={{ color: "#6b7280", fontSize: "13px" }}>
+                      {officer.email || "—"}
+                    </td>
+                    <td>
+                      <span
+                        style={{
+                          display: "inline-block",
+                          padding: "3px 10px",
+                          borderRadius: "6px",
+                          fontSize: "12px",
+                          fontWeight: 500,
+                          backgroundColor:
+                            officer.normalizedRole === "Subject Officer"
+                              ? "#EEF2FF"
+                              : officer.normalizedRole === "Investigation Officer"
+                              ? "#F0F9FF"
+                              : "#F0FDF4",
+                          color:
+                            officer.normalizedRole === "Subject Officer"
+                              ? "#4F46E5"
+                              : officer.normalizedRole === "Investigation Officer"
+                              ? "#0284C7"
+                              : "#16A34A",
+                        }}
+                      >
+                        {officer.normalizedRole === "Subject Officer"
+                          ? t("roleSubjectOfficer", "Subject Officer")
+                          : officer.normalizedRole === "Investigation Officer"
+                          ? t("roleInvestigationOfficer", "Investigation Officer")
+                          : officer.normalizedRole === "Daily Mail Officer"
+                          ? t("roleDailyMail", "Daily Mail Officer")
+                          : officer.role}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={officer.status === "Active" ? "status-badge-active" : "status-badge-inactive"}>
+                        {officer.status === "Active" ? t("active", "Active") : t("inactive", "Inactive")}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: "center" }}>
+                      <span
+                        className="badge-badge badge-priority-high"
+                        style={{
+                          minWidth: "48px",
+                          display: "inline-block",
+                          textAlign: "center",
+                          fontWeight: 700,
+                          fontSize: "14px",
+                          backgroundColor:
+                            officer.assignedCount >= 6
+                              ? "#FEE2E2"
+                              : officer.assignedCount >= 3
+                              ? "#FEF3C7"
+                              : "#F3F4F6",
+                          color:
+                            officer.assignedCount >= 6
+                              ? "#DC2626"
+                              : officer.assignedCount >= 3
+                              ? "#D97706"
+                              : "#4B5563",
+                        }}
+                      >
+                        {officer.assignedCount}
+                      </span>
+                    </td>
+                    <td>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <div
+                          style={{
+                            width: "70px",
+                            height: "6px",
+                            backgroundColor: "#E5E7EB",
+                            borderRadius: "3px",
+                            overflow: "hidden",
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: `${Math.min(100, Math.max(10, (officer.assignedCount / 8) * 100))}%`,
+                              height: "100%",
+                              backgroundColor:
+                                officer.workloadCategory === "Heavy"
+                                  ? "#EF4444"
+                                  : officer.workloadCategory === "Moderate"
+                                  ? "#F59E0B"
+                                  : "#10B981",
+                            }}
+                          />
+                        </div>
+                        <span
+                          style={{
+                            fontSize: "12px",
+                            fontWeight: 600,
+                            color:
+                              officer.workloadCategory === "Heavy"
+                                ? "#DC2626"
+                                : officer.workloadCategory === "Moderate"
+                                ? "#D97706"
+                                : "#059669",
+                          }}
+                        >
+                          {officer.workloadCategory}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="admin-table-cell-center">
+                      <button
+                        onClick={() => handleOpenDetails(officer)}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "5px",
+                          padding: "6px 12px",
+                          backgroundColor: "#EEF2FF",
+                          color: "#4F46E5",
+                          border: "1px solid #C7D2FE",
+                          borderRadius: "6px",
+                          fontSize: "12px",
+                          fontWeight: 600,
+                          cursor: "pointer",
+                          transition: "all 0.15s ease-in-out",
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = "#4F46E5";
+                          e.currentTarget.style.color = "#ffffff";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = "#EEF2FF";
+                          e.currentTarget.style.color = "#4F46E5";
+                        }}
+                      >
+                        <Eye size={14} />
+                        <span>{t("viewDetails", "Details")}</span>
+                      </button>
+                    </td>
+                  </tr>
+                ))
               ) : (
                 <tr>
-                  <td colSpan={6} className="admin-table-no-data">
-                    {t("noOfficersFound", "No registered officers found matching the filters.")}
+                  <td colSpan={8} className="admin-table-no-data table-no-data-padding">
+                    {t("noOfficersMatchingFilters", "No registered officers found matching search and filters.")}
                   </td>
                 </tr>
               )}
@@ -1017,487 +1001,551 @@ export default function OfficerWorkflowPage() {
         </div>
       </section>
 
-      {/* ── Officer Assigned Cases & Workload Detail Modal ── */}
-      {selectedOfficer && (
-        <div className="modal-overlay" onClick={() => setSelectedOfficer(null)}>
-          <div className="officer-modal-container" onClick={(e) => e.stopPropagation()}>
-            {/* Modal Header */}
-            <div className="officer-modal-header">
+      {/* ── Officer Comprehensive Full Details Modal ── */}
+      {selectedOfficerModal && (
+        <div className="modal-overlay" role="dialog" aria-modal="true">
+          <div
+            className="modal-card"
+            style={{
+              maxWidth: "880px",
+              width: "95%",
+              maxHeight: "90vh",
+              display: "flex",
+              flexDirection: "column",
+              borderRadius: "14px",
+              overflow: "hidden",
+            }}
+          >
+            {/* Header */}
+            <header
+              className="modal-header"
+              style={{
+                padding: "20px 24px",
+                borderBottom: "1px solid #E5E7EB",
+                backgroundColor: "#FFFFFF",
+              }}
+            >
               <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
-                <div className="user-avatar-circle" style={{ width: "48px", height: "48px", fontSize: "18px" }}>
-                  <span>{getInitials(selectedOfficer.fullName)}</span>
+                <div
+                  style={{
+                    width: "44px",
+                    height: "44px",
+                    borderRadius: "10px",
+                    backgroundColor:
+                      selectedOfficerModal.normalizedRole === "Subject Officer"
+                        ? "#EEF2FF"
+                        : selectedOfficerModal.normalizedRole === "Investigation Officer"
+                        ? "#E0F2FE"
+                        : "#DCFCE7",
+                    color:
+                      selectedOfficerModal.normalizedRole === "Subject Officer"
+                        ? "#4F46E5"
+                        : selectedOfficerModal.normalizedRole === "Investigation Officer"
+                        ? "#0284C7"
+                        : "#16A34A",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontWeight: 800,
+                    fontSize: "18px",
+                  }}
+                >
+                  {selectedOfficerModal.fullName.charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-                    <h2 style={{ fontSize: "18px", fontWeight: 700, margin: 0, color: "#0f172a" }}>
-                      {selectedOfficer.fullName}
-                    </h2>
-                    {renderRoleBadge(selectedOfficer.role)}
-                    <span className={`badge-status-pill ${selectedOfficer.status === "Active" ? "badge-status-active" : "badge-status-inactive"}`}>
-                      <span className="status-dot" />
-                      {selectedOfficer.status}
+                  <h2
+                    className="modal-title"
+                    style={{ fontSize: "18px", fontWeight: 700, margin: 0, color: "#111827" }}
+                  >
+                    {selectedOfficerModal.fullName}
+                  </h2>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "4px" }}>
+                    <span
+                      style={{
+                        fontSize: "12px",
+                        color: "#4B5563",
+                        fontFamily: "monospace",
+                        backgroundColor: "#F3F4F6",
+                        padding: "1px 6px",
+                        borderRadius: "4px",
+                      }}
+                    >
+                      {selectedOfficerModal.employeeNo || `EMP-${selectedOfficerModal.id.slice(0, 6)}`}
                     </span>
-                  </div>
-                  <div style={{ fontSize: "13px", color: "#64748b", marginTop: "3px", display: "flex", gap: "12px" }}>
-                    <span><strong>EMP ID:</strong> {selectedOfficer.employeeNo}</span>
-                    {selectedOfficer.email && <span><strong>Email:</strong> {selectedOfficer.email}</span>}
+                    <span style={{ fontSize: "12px", color: "#6B7280" }}>•</span>
+                    <span style={{ fontSize: "12px", fontWeight: 600, color: "#4F46E5" }}>
+                      {selectedOfficerModal.normalizedRole}
+                    </span>
+                    <span style={{ fontSize: "12px", color: "#6B7280" }}>•</span>
+                    <span
+                      className={
+                        selectedOfficerModal.status === "Active"
+                          ? "status-badge-active"
+                          : "status-badge-inactive"
+                      }
+                      style={{ fontSize: "11px", padding: "2px 8px" }}
+                    >
+                      {selectedOfficerModal.status}
+                    </span>
                   </div>
                 </div>
               </div>
 
               <button
-                type="button"
                 className="btn-modal-close"
-                onClick={() => setSelectedOfficer(null)}
-                aria-label="Close"
+                onClick={() => setSelectedOfficerModal(null)}
+                aria-label="Close modal"
               >
                 <X size={20} />
               </button>
-            </div>
+            </header>
 
-            {/* Modal Mini Stats */}
-            <div className="modal-stats-row">
-              <div className="modal-stat-box">
-                <span className="modal-stat-label">Total Workload</span>
-                <span className="modal-stat-number" style={{ color: "#4f46e5" }}>{selectedOfficer.totalAssigned}</span>
-              </div>
-              <div className="modal-stat-box">
-                <span className="modal-stat-label">In Progress</span>
-                <span className="modal-stat-number" style={{ color: "#2563eb" }}>{selectedOfficer.inProgressCount}</span>
-              </div>
-              <div className="modal-stat-box">
-                <span className="modal-stat-label">Pending Action</span>
-                <span className="modal-stat-number" style={{ color: "#d97706" }}>{selectedOfficer.pendingCount}</span>
-              </div>
-              <div className="modal-stat-box">
-                <span className="modal-stat-label">Urgent / High Priority</span>
-                <span className="modal-stat-number" style={{ color: "#dc2626" }}>{selectedOfficer.urgentCount}</span>
-              </div>
-            </div>
-
-            {/* Modal Assigned Cases Table */}
-            <div className="modal-cases-section">
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
-                <h3 style={{ fontSize: "15px", fontWeight: 600, color: "#1e293b", margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
-                  <FileText size={17} color="#4f46e5" />
-                  <span>Assigned Cases & Letters ({modalFilteredItems.length})</span>
-                </h3>
-
-                <div className="search-box" style={{ maxWidth: "240px" }}>
-                  <Search className="admin-search-icon" size={14} />
-                  <input
-                    type="text"
-                    placeholder="Search assigned cases…"
-                    className="search-input"
-                    value={modalSearchQuery}
-                    onChange={(e) => setModalSearchQuery(e.target.value)}
-                    style={{ padding: "6px 10px 6px 30px", fontSize: "13px" }}
-                  />
-                </div>
-              </div>
-
-              <div className="modal-table-wrapper">
-                <table className="letters-data-table" style={{ fontSize: "13px" }}>
-                  <thead>
-                    <tr>
-                      <th scope="col">Case / Letter No</th>
-                      <th scope="col">Subject / Complaint</th>
-                      <th scope="col">Type</th>
-                      <th scope="col">Priority</th>
-                      <th scope="col">Status</th>
-                      <th scope="col">Received / Assigned</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {modalFilteredItems.length > 0 ? (
-                      modalFilteredItems.map((item, idx) => (
-                        <tr key={idx} className="letter-table-row">
-                          <td className="font-semibold" style={{ color: "#4f46e5" }}>
-                            {item.letterNo}
-                            {item.serialNo && (
-                              <div style={{ fontSize: "11px", color: "#64748b" }}>Ref: {item.serialNo}</div>
-                            )}
-                          </td>
-                          <td>
-                            <div style={{ fontWeight: 500, color: "#1e293b", maxWidth: "320px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              {item.subject}
-                            </div>
-                            {item.sender && (
-                              <div style={{ fontSize: "11px", color: "#64748b" }}>Sender: {item.sender}</div>
-                            )}
-                          </td>
-                          <td>
-                            <span className="badge-type-pill">{item.type}</span>
-                          </td>
-                          <td>
-                            <span
-                              className={`badge-priority-tag ${
-                                item.priority.toLowerCase().includes("high") || item.priority.toLowerCase().includes("urgent")
-                                  ? "priority-high"
-                                  : item.priority.toLowerCase().includes("low")
-                                    ? "priority-low"
-                                    : "priority-normal"
-                              }`}
-                            >
-                              {item.priority}
-                            </span>
-                          </td>
-                          <td>
-                            <span
-                              className={`badge-status-tag ${
-                                item.status.toLowerCase().includes("closed") || item.status.toLowerCase().includes("completed")
-                                  ? "status-closed"
-                                  : item.status.toLowerCase().includes("progress") || item.status.toLowerCase().includes("ongoing")
-                                    ? "status-progress"
-                                    : "status-pending"
-                              }`}
-                            >
-                              {item.status}
-                            </span>
-                          </td>
-                          <td style={{ color: "#64748b" }}>{item.date || "—"}</td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={6} className="admin-table-no-data" style={{ padding: "24px 0" }}>
-                          {selectedOfficer.assignedItems.length === 0
-                            ? "No cases or letters currently assigned to this officer."
-                            : "No items match your search."}
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="officer-modal-footer">
+            {/* Navigation Tabs Bar */}
+            <div
+              style={{
+                display: "flex",
+                gap: "8px",
+                padding: "0 24px",
+                backgroundColor: "#F9FAFB",
+                borderBottom: "1px solid #E5E7EB",
+              }}
+            >
               <button
-                type="button"
-                className="btn-secondary-action"
-                onClick={() => setSelectedOfficer(null)}
+                onClick={() => setActiveModalTab("cases")}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  padding: "12px 16px",
+                  fontSize: "13px",
+                  fontWeight: 600,
+                  border: "none",
+                  borderBottom: activeModalTab === "cases" ? "2px solid #4F46E5" : "2px solid transparent",
+                  backgroundColor: "transparent",
+                  color: activeModalTab === "cases" ? "#4F46E5" : "#6B7280",
+                  cursor: "pointer",
+                }}
               >
-                {t("closeWorkloadModal", "Close")}
+                <FolderOpen size={16} />
+                <span>
+                  {t("assignedCasesLetters", "Assigned Cases & Letters")} ({selectedOfficerModal.assignedCount})
+                </span>
+              </button>
+
+              <button
+                onClick={() => setActiveModalTab("analytics")}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  padding: "12px 16px",
+                  fontSize: "13px",
+                  fontWeight: 600,
+                  border: "none",
+                  borderBottom: activeModalTab === "analytics" ? "2px solid #4F46E5" : "2px solid transparent",
+                  backgroundColor: "transparent",
+                  color: activeModalTab === "analytics" ? "#4F46E5" : "#6B7280",
+                  cursor: "pointer",
+                }}
+              >
+                <TrendingUp size={16} />
+                <span>{t("workloadAnalytics", "Workload Breakdown")}</span>
+              </button>
+
+              <button
+                onClick={() => setActiveModalTab("profile")}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  padding: "12px 16px",
+                  fontSize: "13px",
+                  fontWeight: 600,
+                  border: "none",
+                  borderBottom: activeModalTab === "profile" ? "2px solid #4F46E5" : "2px solid transparent",
+                  backgroundColor: "transparent",
+                  color: activeModalTab === "profile" ? "#4F46E5" : "#6B7280",
+                  cursor: "pointer",
+                }}
+              >
+                <User size={16} />
+                <span>{t("officerProfile", "Officer Profile & Access")}</span>
               </button>
             </div>
+
+            {/* Modal Content Body */}
+            <div
+              className="modal-body"
+              style={{
+                padding: "20px 24px",
+                overflowY: "auto",
+                flex: 1,
+                display: "flex",
+                flexDirection: "column",
+                gap: "18px",
+              }}
+            >
+              {/* TAB 1: Assigned Cases & Letters Table */}
+              {activeModalTab === "cases" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                  {/* Filter Toolbar inside Modal */}
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: "12px",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <div className="search-box" style={{ maxWidth: "340px", flex: 1 }}>
+                      <Search className="admin-search-icon" size={15} />
+                      <input
+                        type="text"
+                        placeholder={t("filterOfficerCases", "Search ref, letter no, subject, sender…")}
+                        className="search-input"
+                        value={modalSearchQuery}
+                        onChange={(e) => setModalSearchQuery(e.target.value)}
+                        style={{ padding: "6px 12px 6px 36px", fontSize: "13px" }}
+                      />
+                    </div>
+
+                    <div style={{ display: "flex", gap: "8px" }}>
+                      {["All", "InProgress", "Pending", "Closed"].map((st) => (
+                        <button
+                          key={st}
+                          onClick={() => setModalStatusFilter(st)}
+                          style={{
+                            padding: "6px 12px",
+                            borderRadius: "6px",
+                            fontSize: "12px",
+                            fontWeight: 600,
+                            border: "1px solid",
+                            borderColor: modalStatusFilter === st ? "#4F46E5" : "#E5E7EB",
+                            backgroundColor: modalStatusFilter === st ? "#EEF2FF" : "#FFFFFF",
+                            color: modalStatusFilter === st ? "#4F46E5" : "#6B7280",
+                            cursor: "pointer",
+                          }}
+                        >
+                          {st === "All"
+                            ? t("all", "All")
+                            : st === "InProgress"
+                            ? t("inProgress", "In Progress")
+                            : st === "Pending"
+                            ? t("pending", "Pending")
+                            : t("closed", "Closed")}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Cases List */}
+                  <div
+                    style={{
+                      border: "1px solid #E5E7EB",
+                      borderRadius: "10px",
+                      overflow: "hidden",
+                      backgroundColor: "#FFFFFF",
+                    }}
+                  >
+                    <table className="letters-data-table" style={{ margin: 0 }}>
+                      <thead>
+                        <tr style={{ backgroundColor: "#F9FAFB" }}>
+                          <th scope="col" style={{ fontSize: "12px" }}>{t("refLetterNo", "Ref / Letter No")}</th>
+                          <th scope="col" style={{ fontSize: "12px" }}>{t("subject", "Subject / Complaint")}</th>
+                          <th scope="col" style={{ fontSize: "12px" }}>{t("sender", "Sender / Source")}</th>
+                          <th scope="col" style={{ fontSize: "12px" }}>{t("date", "Date")}</th>
+                          <th scope="col" style={{ fontSize: "12px" }}>{t("priority", "Priority")}</th>
+                          <th scope="col" style={{ fontSize: "12px" }}>{t("status", "Status")}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredModalCases.length > 0 ? (
+                          filteredModalCases.map((item) => (
+                            <tr key={item.id} className="letter-table-row">
+                              <td>
+                                <div style={{ fontWeight: 700, color: "#1E293B", fontSize: "13px" }}>
+                                  {item.refNo}
+                                </div>
+                                <div style={{ fontSize: "11px", color: "#6B7280", fontFamily: "monospace" }}>
+                                  {item.letterNo}
+                                </div>
+                              </td>
+                              <td style={{ maxWidth: "260px" }}>
+                                <div style={{ fontWeight: 600, color: "#1F2937", fontSize: "13px", lineHeight: "1.3" }}>
+                                  {item.subject}
+                                </div>
+                                <div style={{ fontSize: "11px", color: "#6366F1", marginTop: "2px" }}>
+                                  {item.classification}
+                                </div>
+                              </td>
+                              <td style={{ fontSize: "12px", color: "#4B5563" }}>
+                                {item.sender}
+                              </td>
+                              <td style={{ fontSize: "12px", color: "#6B7280", whiteSpace: "nowrap" }}>
+                                {item.receivedDate}
+                              </td>
+                              <td>
+                                <span
+                                  className={`badge-badge ${
+                                    item.priority === "High"
+                                      ? "badge-priority-high"
+                                      : item.priority === "Medium"
+                                      ? "badge-priority-medium"
+                                      : "badge-priority-low"
+                                  }`}
+                                  style={{ fontSize: "11px", padding: "2px 8px" }}
+                                >
+                                  {item.priority}
+                                </span>
+                              </td>
+                              <td>
+                                <span
+                                  className={`badge-badge ${
+                                    item.status === "Closed"
+                                      ? "badge-status-closed"
+                                      : item.status === "Under Investigation" || item.status === "Under Subject Officer"
+                                      ? "badge-status-inprogress"
+                                      : "badge-status-pending"
+                                  }`}
+                                  style={{ fontSize: "11px", padding: "2px 8px" }}
+                                >
+                                  {item.status}
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={6} style={{ textAlign: "center", padding: "32px", color: "#6B7280", fontSize: "13px" }}>
+                              {t("noAssignedCasesFound", "No assigned cases or letters matching the filter criteria.")}
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: Workload Analytics & Breakdown */}
+              {activeModalTab === "analytics" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                  {/* Summary Metric Cards */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px" }}>
+                    <div style={{ padding: "14px", backgroundColor: "#EEF2FF", borderRadius: "10px", border: "1px solid #C7D2FE" }}>
+                      <span style={{ fontSize: "11px", color: "#4F46E5", fontWeight: 700, textTransform: "uppercase" }}>
+                        Total Load
+                      </span>
+                      <div style={{ fontSize: "26px", fontWeight: 800, color: "#1E1B4B", marginTop: "4px" }}>
+                        {selectedOfficerModal.assignedCount}
+                      </div>
+                      <span style={{ fontSize: "11px", color: "#6B7280" }}>Assigned Cases</span>
+                    </div>
+
+                    <div style={{ padding: "14px", backgroundColor: "#FEF3C7", borderRadius: "10px", border: "1px solid #FDE68A" }}>
+                      <span style={{ fontSize: "11px", color: "#D97706", fontWeight: 700, textTransform: "uppercase" }}>
+                        In Progress
+                      </span>
+                      <div style={{ fontSize: "26px", fontWeight: 800, color: "#78350F", marginTop: "4px" }}>
+                        {selectedOfficerModal.breakdown.inProgress}
+                      </div>
+                      <span style={{ fontSize: "11px", color: "#6B7280" }}>Active processing</span>
+                    </div>
+
+                    <div style={{ padding: "14px", backgroundColor: "#F3F4F6", borderRadius: "10px", border: "1px solid #E5E7EB" }}>
+                      <span style={{ fontSize: "11px", color: "#4B5563", fontWeight: 700, textTransform: "uppercase" }}>
+                        Pending / New
+                      </span>
+                      <div style={{ fontSize: "26px", fontWeight: 800, color: "#1F2937", marginTop: "4px" }}>
+                        {selectedOfficerModal.breakdown.pending}
+                      </div>
+                      <span style={{ fontSize: "11px", color: "#6B7280" }}>Awaiting review</span>
+                    </div>
+
+                    <div style={{ padding: "14px", backgroundColor: "#DCFCE7", borderRadius: "10px", border: "1px solid #BBF7D0" }}>
+                      <span style={{ fontSize: "11px", color: "#16A34A", fontWeight: 700, textTransform: "uppercase" }}>
+                        Resolved / Closed
+                      </span>
+                      <div style={{ fontSize: "26px", fontWeight: 800, color: "#14532D", marginTop: "4px" }}>
+                        {selectedOfficerModal.breakdown.closed}
+                      </div>
+                      <span style={{ fontSize: "11px", color: "#6B7280" }}>Completed cases</span>
+                    </div>
+                  </div>
+
+                  {/* Workload Capacity Meter */}
+                  <div style={{ padding: "16px", backgroundColor: "#FFFFFF", borderRadius: "10px", border: "1px solid #E5E7EB" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                      <span style={{ fontWeight: 600, fontSize: "14px", color: "#1F2937" }}>
+                        Current Workload Assessment & Capacity
+                      </span>
+                      <span
+                        style={{
+                          fontSize: "12px",
+                          fontWeight: 700,
+                          padding: "2px 10px",
+                          borderRadius: "12px",
+                          backgroundColor:
+                            selectedOfficerModal.workloadCategory === "Heavy"
+                              ? "#FEE2E2"
+                              : selectedOfficerModal.workloadCategory === "Moderate"
+                              ? "#FEF3C7"
+                              : "#DCFCE7",
+                          color:
+                            selectedOfficerModal.workloadCategory === "Heavy"
+                              ? "#DC2626"
+                              : selectedOfficerModal.workloadCategory === "Moderate"
+                              ? "#D97706"
+                              : "#15803D",
+                        }}
+                      >
+                        {selectedOfficerModal.workloadCategory} Workload ({selectedOfficerModal.assignedCount} items)
+                      </span>
+                    </div>
+
+                    <div style={{ width: "100%", height: "10px", backgroundColor: "#E5E7EB", borderRadius: "5px", overflow: "hidden" }}>
+                      <div
+                        style={{
+                          width: `${Math.min(100, Math.max(10, (selectedOfficerModal.assignedCount / 8) * 100))}%`,
+                          height: "100%",
+                          backgroundColor:
+                            selectedOfficerModal.workloadCategory === "Heavy"
+                              ? "#EF4444"
+                              : selectedOfficerModal.workloadCategory === "Moderate"
+                              ? "#F59E0B"
+                              : "#10B981",
+                        }}
+                      />
+                    </div>
+                    <p style={{ margin: "8px 0 0 0", fontSize: "12px", color: "#6B7280" }}>
+                      Recommended capacity threshold is 5–6 simultaneous disciplinary cases per active officer.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 3: Officer Profile & Credentials */}
+              {activeModalTab === "profile" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(2, 1fr)",
+                      gap: "16px",
+                      backgroundColor: "#FFFFFF",
+                      padding: "20px",
+                      borderRadius: "10px",
+                      border: "1px solid #E5E7EB",
+                    }}
+                  >
+                    <div>
+                      <span style={{ fontSize: "12px", color: "#6B7280", display: "block" }}>
+                        Officer Full Name
+                      </span>
+                      <span style={{ fontWeight: 600, fontSize: "14px", color: "#111827" }}>
+                        {selectedOfficerModal.fullName}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span style={{ fontSize: "12px", color: "#6B7280", display: "block" }}>
+                        Staff Employee Number
+                      </span>
+                      <span style={{ fontWeight: 600, fontSize: "14px", color: "#111827", fontFamily: "monospace" }}>
+                        {selectedOfficerModal.employeeNo || `EMP-${selectedOfficerModal.id.slice(0, 6)}`}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span style={{ fontSize: "12px", color: "#6B7280", display: "block" }}>
+                        E-mail Address
+                      </span>
+                      <span style={{ fontWeight: 600, fontSize: "14px", color: "#111827" }}>
+                        {selectedOfficerModal.email || "—"}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span style={{ fontSize: "12px", color: "#6B7280", display: "block" }}>
+                        Assigned Disciplinary Role
+                      </span>
+                      <span style={{ fontWeight: 600, fontSize: "14px", color: "#4F46E5" }}>
+                        {selectedOfficerModal.normalizedRole}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span style={{ fontSize: "12px", color: "#6B7280", display: "block" }}>
+                        Account Status
+                      </span>
+                      <span className={selectedOfficerModal.status === "Active" ? "status-badge-active" : "status-badge-inactive"}>
+                        {selectedOfficerModal.status}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span style={{ fontSize: "12px", color: "#6B7280", display: "block" }}>
+                        Registration Date
+                      </span>
+                      <span style={{ fontSize: "14px", color: "#374151" }}>
+                        {selectedOfficerModal.createdAt || "Active in DCMMS"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      padding: "16px",
+                      backgroundColor: "#F9FAFB",
+                      borderRadius: "10px",
+                      border: "1px solid #E5E7EB",
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: "12px",
+                    }}
+                  >
+                    <BadgeCheck color="#4F46E5" size={22} style={{ flexShrink: 0, marginTop: "2px" }} />
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: "13px", fontWeight: 700, color: "#1F2937" }}>
+                        Branch Access & Workflow Permissions
+                      </h4>
+                      <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#6B7280", lineHeight: "1.4" }}>
+                        This officer is authorized to handle disciplinary inquiries, review registered complaints, and submit progress notes under Ministry and Provincial regulations.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <footer
+              className="modal-footer"
+              style={{
+                padding: "14px 24px",
+                borderTop: "1px solid #E5E7EB",
+                backgroundColor: "#F9FAFB",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <div style={{ fontSize: "12px", color: "#6B7280" }}>
+                Viewing details for <strong style={{ color: "#1F2937" }}>{selectedOfficerModal.fullName}</strong>
+              </div>
+              <button
+                type="button"
+                className="btn-modal-cancel"
+                onClick={() => setSelectedOfficerModal(null)}
+                style={{ padding: "8px 20px" }}
+              >
+                {t("close", "Close")}
+              </button>
+            </footer>
           </div>
         </div>
       )}
-
-      {/* ── Inline Custom Styling for Enhanced UI ── */}
-      <style jsx>{`
-        .btn-refresh-sync {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          padding: 8px 16px;
-          border-radius: 8px;
-          border: 1px solid #e2e8f0;
-          background: #ffffff;
-          color: #334155;
-          font-weight: 600;
-          font-size: 14px;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-        .btn-refresh-sync:hover:not(:disabled) {
-          background: #f8fafc;
-          border-color: #cbd5e1;
-        }
-        .btn-export-action {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          padding: 8px 16px;
-          border-radius: 8px;
-          border: none;
-          background: #4f46e5;
-          color: #ffffff;
-          font-weight: 600;
-          font-size: 14px;
-          cursor: pointer;
-          transition: background 0.2s;
-          box-shadow: 0 1px 3px rgba(79, 70, 229, 0.2);
-        }
-        .btn-export-action:hover {
-          background: #4338ca;
-        }
-        .results-count-badge {
-          font-size: 12px;
-          font-weight: 600;
-          background: #eef2ff;
-          color: #4f46e5;
-          padding: 3px 10px;
-          border-radius: 9999px;
-          margin-left: 8px;
-        }
-        .emp-badge {
-          font-size: 11px;
-          font-weight: 600;
-          background: #f1f5f9;
-          color: #475569;
-          padding: 2px 6px;
-          border-radius: 4px;
-        }
-        .badge-role-tag {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          padding: 4px 10px;
-          border-radius: 6px;
-          font-size: 12px;
-          font-weight: 600;
-        }
-        .badge-role-subject {
-          background: #eef2ff;
-          color: #4338ca;
-          border: 1px solid #c7d2fe;
-        }
-        .badge-role-investigation {
-          background: #faf5ff;
-          color: #7e22ce;
-          border: 1px solid #e9d5ff;
-        }
-        .badge-role-dailymail {
-          background: #f0fdfa;
-          color: #0f766e;
-          border: 1px solid #99f6e4;
-        }
-        .badge-role-admin {
-          background: #f8fafc;
-          color: #334155;
-          border: 1px solid #e2e8f0;
-        }
-        .badge-status-pill {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          padding: 3px 8px;
-          border-radius: 9999px;
-          font-size: 12px;
-          font-weight: 600;
-        }
-        .badge-status-active {
-          background: #f0fdf4;
-          color: #15803d;
-        }
-        .badge-status-active .status-dot {
-          width: 6px;
-          height: 6px;
-          border-radius: 50%;
-          background: #22c55e;
-        }
-        .badge-status-inactive {
-          background: #f3f4f6;
-          color: #6b7280;
-        }
-        .badge-status-inactive .status-dot {
-          width: 6px;
-          height: 6px;
-          border-radius: 50%;
-          background: #9ca3af;
-        }
-        .workload-count-badge {
-          font-size: 13px;
-          font-weight: 700;
-          color: #0f172a;
-        }
-        .capacity-indicator-text {
-          font-size: 11px;
-          font-weight: 600;
-          text-transform: uppercase;
-        }
-        .capacity-heavy { color: #dc2626; }
-        .capacity-optimal { color: #16a34a; }
-        .capacity-light { color: #2563eb; }
-        .workload-progress-bar-bg {
-          width: 100%;
-          height: 6px;
-          background: #e2e8f0;
-          border-radius: 9999px;
-          overflow: hidden;
-        }
-        .workload-progress-bar-fill {
-          height: 100%;
-          border-radius: 9999px;
-          transition: width 0.3s ease;
-        }
-        .progress-heavy { background: #ef4444; }
-        .progress-optimal { background: #22c55e; }
-        .progress-light { background: #3b82f6; }
-        .mini-breakdown-badge {
-          display: inline-flex;
-          align-items: center;
-          gap: 4px;
-          font-size: 11px;
-          font-weight: 600;
-          padding: 2px 7px;
-          border-radius: 4px;
-        }
-        .breakdown-in-progress { background: #eff6ff; color: #1d4ed8; }
-        .breakdown-pending { background: #fffbeb; color: #b45309; }
-        .breakdown-completed { background: #f0fdf4; color: #15803d; }
-        .breakdown-urgent { background: #fef2f2; color: #b91c1c; font-weight: 700; }
-        .btn-view-details-action {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          padding: 6px 12px;
-          border-radius: 6px;
-          border: 1px solid #cbd5e1;
-          background: #ffffff;
-          color: #334155;
-          font-size: 12px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-        .btn-view-details-action:hover {
-          background: #4f46e5;
-          color: #ffffff;
-          border-color: #4f46e5;
-        }
-        /* Modal Styles */
-        .modal-overlay {
-          position: fixed;
-          inset: 0;
-          background: rgba(15, 23, 42, 0.6);
-          backdrop-filter: blur(4px);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 9999;
-          padding: 16px;
-        }
-        .officer-modal-container {
-          background: #ffffff;
-          border-radius: 16px;
-          width: 100%;
-          max-width: 860px;
-          max-height: 90vh;
-          display: flex;
-          flex-direction: column;
-          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.2);
-          overflow: hidden;
-          animation: modalAppear 0.2s ease-out;
-        }
-        @keyframes modalAppear {
-          from { opacity: 0; transform: scale(0.97); }
-          to { opacity: 1; transform: scale(1); }
-        }
-        .officer-modal-header {
-          padding: 20px 24px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          border-bottom: 1px solid #e2e8f0;
-          background: #f8fafc;
-        }
-        .btn-modal-close {
-          background: none;
-          border: none;
-          color: #64748b;
-          cursor: pointer;
-          padding: 6px;
-          border-radius: 6px;
-          transition: background 0.2s;
-        }
-        .btn-modal-close:hover {
-          background: #e2e8f0;
-          color: #0f172a;
-        }
-        .modal-stats-row {
-          display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          gap: 12px;
-          padding: 16px 24px;
-          background: #f1f5f9;
-          border-bottom: 1px solid #e2e8f0;
-        }
-        .modal-stat-box {
-          background: #ffffff;
-          padding: 12px 16px;
-          border-radius: 10px;
-          border: 1px solid #e2e8f0;
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-        }
-        .modal-stat-label {
-          font-size: 11px;
-          font-weight: 600;
-          color: #64748b;
-          text-transform: uppercase;
-        }
-        .modal-stat-number {
-          font-size: 22px;
-          font-weight: 800;
-        }
-        .modal-cases-section {
-          padding: 20px 24px;
-          flex: 1;
-          overflow-y: auto;
-        }
-        .modal-table-wrapper {
-          border: 1px solid #e2e8f0;
-          border-radius: 8px;
-          overflow: hidden;
-        }
-        .officer-modal-footer {
-          padding: 14px 24px;
-          border-top: 1px solid #e2e8f0;
-          background: #f8fafc;
-          display: flex;
-          justify-content: flex-end;
-        }
-        .btn-secondary-action {
-          padding: 8px 18px;
-          border-radius: 8px;
-          border: 1px solid #cbd5e1;
-          background: #ffffff;
-          color: #334155;
-          font-weight: 600;
-          font-size: 14px;
-          cursor: pointer;
-        }
-        .btn-secondary-action:hover {
-          background: #f1f5f9;
-        }
-        .badge-type-pill {
-          background: #f1f5f9;
-          color: #475569;
-          font-size: 11px;
-          padding: 2px 7px;
-          border-radius: 4px;
-          font-weight: 600;
-        }
-        .badge-priority-tag {
-          font-size: 11px;
-          font-weight: 700;
-          padding: 2px 8px;
-          border-radius: 4px;
-        }
-        .priority-high { background: #fef2f2; color: #b91c1c; }
-        .priority-normal { background: #f8fafc; color: #475569; }
-        .priority-low { background: #f0fdf4; color: #166534; }
-        .badge-status-tag {
-          font-size: 11px;
-          font-weight: 600;
-          padding: 2px 8px;
-          border-radius: 4px;
-        }
-        .status-progress { background: #eff6ff; color: #1d4ed8; }
-        .status-closed { background: #f0fdf4; color: #166534; }
-        .status-pending { background: #fffbeb; color: #b45309; }
-        .spin-icon {
-          animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-          100% { transform: rotate(360deg); }
-        }
-      `}</style>
     </div>
   );
 }

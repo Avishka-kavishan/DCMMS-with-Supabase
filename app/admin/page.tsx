@@ -22,30 +22,9 @@ import {
 import "./admin.css";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { signOut, getCurrentProfile } from "@/lib/auth";
-import { getRegisterOfficersServer, getDailyMailRecordsServer } from "@/lib/db-actions";
+import { getDailyMailRecordsServer } from "@/lib/db-actions";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
-
-const DEFAULT_OFFICER_STATS: OfficerStat[] = [
-  { name: "Kamal Perera", role: "Subject officer", count: 0 },
-  { name: "Ranjith Bandara", role: "Subject officer", count: 0 },
-  { name: "Upul aiya", role: "Subject officer", count: 0 },
-  { name: "Sunil Fernando", role: "Investigation officer", count: 0 },
-  { name: "Nimal Silva", role: "Daily mail officer", count: 0 },
-  { name: "Kusal Mendis", role: "Daily mail officer", count: 0 },
-  { name: "Saman Jayasinghe", role: "Daily mail officer", count: 0 },
-];
-
-const DEFAULT_OFFICERS = [
-  { name: "Kamal Perera", role: "Subject officer" },
-  { name: "Ranjith Bandara", role: "Subject officer" },
-  { name: "Upul aiya", role: "Subject officer" },
-  { name: "Sunil Fernando", role: "Investigation officer" },
-  { name: "Nimal Silva", role: "Daily mail officer" },
-  { name: "Kusal Mendis", role: "Daily mail officer" },
-  { name: "Saman Jayasinghe", role: "Daily mail officer" },
-];
-
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface CaseRow {
@@ -57,12 +36,6 @@ interface CaseRow {
   priority: string;
   status: string;
   type: string;
-}
-
-interface OfficerStat {
-  name: string;
-  role: string;
-  count: number;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -174,7 +147,6 @@ export default function AdminDashboard() {
   const [allCases, setAllCases] = useState<{ type: string; status: string }[]>([]);
   const [recentCases, setRecentCases] = useState<CaseRow[]>([]);
   const [caseDates, setCaseDates] = useState<string[]>([]);
-  const [officerStats, setOfficerStats] = useState<OfficerStat[]>(DEFAULT_OFFICER_STATS);
 
 
   // ── Session guard ──────────────────────────────────────────────────────────
@@ -258,146 +230,6 @@ export default function AdminDashboard() {
           }
         } catch (caseErr) {
           console.error("Failed to load cases from database", caseErr);
-        }
-
-        // ── Officer stats query (fetching registered officers & workloads) ──
-        try {
-          let profs: { name: string; role: string }[] = [];
-
-          // 1. Try Server Action getRegisterOfficersServer
-          try {
-            const regRes = await getRegisterOfficersServer();
-            if (regRes && regRes.success && Array.isArray(regRes.data) && regRes.data.length > 0) {
-              profs = regRes.data.map((p: any) => ({
-                name: p.full_name || "",
-                role: p.role || "",
-              }));
-            }
-          } catch (e) {
-            console.warn("getRegisterOfficersServer warning:", e);
-          }
-
-          // 2. Try HTTP fetch API route with basePath
-          if (profs.length === 0) {
-            try {
-              const url = `${basePath}/api/officers`;
-              const apiRes = await fetch(url).then((r) => r.json()).catch(() => null);
-              if (apiRes && apiRes.success && Array.isArray(apiRes.data) && apiRes.data.length > 0) {
-                profs = apiRes.data.map((p: any) => ({
-                  name: p.full_name || "",
-                  role: p.role || "",
-                }));
-              }
-            } catch (e) {
-              console.warn("/api/officers fetch warning:", e);
-            }
-          }
-
-          // 3. Fallback: Supabase register_officer_table or dcmms_profiles
-          if (profs.length === 0 && isSupabaseConfigured) {
-            try {
-              const { data: regData } = await supabase.from("register_officer_table").select("*");
-              if (regData && regData.length > 0) {
-                profs = regData.map((p: any) => ({
-                  name: p.full_name || "",
-                  role: p.role || "",
-                }));
-              } else {
-                const { data: profiles } = await supabase.from("dcmms_profiles").select("*");
-                if (profiles && profiles.length > 0) {
-                  profs = profiles.map((p: any) => ({
-                    name: p.full_name || "",
-                    role: p.role || "",
-                  }));
-                }
-              }
-            } catch (e) {
-              console.warn("Supabase profiles query warning:", e);
-            }
-          }
-
-          // 4. Fallback: LocalStorage profiles if any
-          if (typeof window !== "undefined") {
-            const stored = localStorage.getItem("dcmms_custom_profiles");
-            if (stored) {
-              try {
-                const list = JSON.parse(stored);
-                const seenNames = new Set(profs.map((p) => p.name));
-                list.forEach((o: any) => {
-                  if (o.fullName && !seenNames.has(o.fullName)) {
-                    profs.push({ name: o.fullName, role: o.role || "subject_officer" });
-                  }
-                });
-              } catch (e) {
-                console.error("Local profiles parse error", e);
-              }
-            }
-          }
-
-          // 5. Default fallback if empty
-          if (profs.length === 0) {
-            profs = DEFAULT_OFFICERS;
-          }
-
-          // Fetch daily mail letters to calculate workload counts
-          let lettersList: any[] = [];
-          try {
-            const mailRes = await getDailyMailRecordsServer();
-            if (mailRes && mailRes.success && Array.isArray(mailRes.data)) {
-              lettersList = mailRes.data;
-            }
-          } catch (e) {
-            console.warn("getDailyMailRecordsServer warning:", e);
-          }
-
-          if (lettersList.length === 0) {
-            try {
-              const mailApiRes = await fetch(`${basePath}/api/daily-mail`).then((r) => r.json()).catch(() => null);
-              if (mailApiRes && mailApiRes.success && Array.isArray(mailApiRes.data)) {
-                lettersList = mailApiRes.data;
-              }
-            } catch (e) {
-              console.warn("/api/daily-mail fetch warning:", e);
-            }
-          }
-
-          if (profs.length > 0) {
-            const stats: OfficerStat[] = profs
-              .filter((p) => p.name && !p.role.toLowerCase().includes("admin"))
-              .map((p) => {
-                const roleLower = (p.role || "").toLowerCase();
-                let count = 0;
-
-                if (roleLower.includes("subject")) {
-                  count = lettersList.filter(
-                    (l: any) =>
-                      (l.officer_name && l.officer_name.toLowerCase() === p.name.toLowerCase()) ||
-                      (l.action_officer && l.action_officer.toLowerCase() === p.name.toLowerCase())
-                  ).length;
-                  if (count === 0 && lettersList.length > 0) {
-                    const subjectCount = Math.max(1, profs.filter((pr) => pr.role.toLowerCase().includes("subject")).length);
-                    count = Math.ceil(lettersList.length / subjectCount);
-                  }
-                } else if (roleLower.includes("investigation")) {
-                  count = mapped.filter((c) => c.assignedTo && c.assignedTo.toLowerCase() === p.name.toLowerCase()).length;
-                  if (count === 0 && mapped.length > 0) {
-                    const invCount = Math.max(1, profs.filter((pr) => pr.role.toLowerCase().includes("investigation")).length);
-                    count = Math.ceil(mapped.length / invCount);
-                  }
-                } else if (roleLower.includes("daily mail") || roleLower.includes("daily_mail")) {
-                  count = lettersList.length;
-                } else {
-                  count = 0;
-                }
-
-                return { name: p.name, role: p.role, count };
-              });
-
-            setOfficerStats(stats);
-          }
-        } catch (officerErr) {
-          console.error("Failed to load officer stats", officerErr);
-          setOfficerStats(DEFAULT_OFFICER_STATS);
         }
 
       } catch (err) {
@@ -671,58 +503,6 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* Officer Workload Section */}
-      <section className="letters-list-section" style={{ marginTop: "32px" }}>
-        <div className="letters-list-header">
-          <h3 className="section-title">
-            <svg className="admin-section-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-            </svg>
-            <span>{t("officerWorkload", "Officer Workload")}</span>
-          </h3>
-        </div>
-        <div className="table-responsive-container">
-          <table className="letters-data-table">
-            <thead>
-              <tr>
-                <th scope="col">{t("officerName", "Officer Name")}</th>
-                <th scope="col">{t("role", "Role")}</th>
-                <th scope="col" style={{ textAlign: "right" }}>{t("assignedLetters", "Assigned Cases / Letters")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {officerStats.length > 0 ? (
-                officerStats.map((stat, idx) => (
-                  <tr key={idx} className="letter-table-row">
-                    <td className="font-semibold">{stat.name}</td>
-                    <td>
-                      {stat.role.toLowerCase().includes("subject")
-                        ? t("roleSubjectOfficer", "Subject Officer")
-                        : stat.role.toLowerCase().includes("investigation")
-                          ? t("roleInvestigationOfficer", "Investigation Officer")
-                          : stat.role.toLowerCase().includes("daily")
-                            ? t("roleDailyMail", "Daily Mail Officer")
-                            : stat.role}
-                    </td>
-                    <td style={{ textAlign: "right" }}>
-                      <span className="badge-badge badge-priority-high" style={{ minWidth: "40px", display: "inline-block", textAlign: "center" }}>
-                        {stat.count}
-                      </span>
-                    </td>
-
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={3} className="admin-table-no-data">
-                    {isLoading ? t("loadingData", "Loading data from database…") : t("noOfficersFound", "No officers found.")}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
       {/* Recent Cases Section */}
       <section className="letters-list-section">
         <div className="letters-list-header">
