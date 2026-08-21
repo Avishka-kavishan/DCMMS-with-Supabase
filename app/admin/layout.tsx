@@ -30,8 +30,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }
     if (cleanPath === "/admin/investigation-officers") {
       return {
-        title: t("investigationOfficers", "Investigation Officers"),
-        subtitle: t("investigationOfficersDescAdmin", "Manage investigation officer accounts")
+        title: t("investigationAdminTitle", "Investigation Administrators"),
+        subtitle: t("investigationAdminDescAdmin", "Manage investigation administrator accounts")
       };
     }
     if (cleanPath === "/admin/daily-mail-officers") {

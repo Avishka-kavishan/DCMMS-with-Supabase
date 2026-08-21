@@ -1,7 +1,15 @@
 "use client";
 
-import InvestigationOfficerRegistrationPage from "../../../investigation/officer-registration/page";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 export default function AdminOfficerRegistrationPage() {
-  return <InvestigationOfficerRegistrationPage />;
+  const router = useRouter();
+
+  useEffect(() => {
+    // Branch Admin only manages Investigation Admin accounts, not Chairman/Members.
+    router.replace("/admin/investigation-officers");
+  }, [router]);
+
+  return null;
 }

@@ -150,7 +150,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       },
       {
         id: "investigation-officers",
-        label: "Investigation Officers",
+        label: "Investigation Admins",
         href: `${basePath}/admin/investigation-officers`,
         icon: (
           <svg className="menu-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">

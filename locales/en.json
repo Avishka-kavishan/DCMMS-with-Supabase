@@ -312,6 +312,8 @@
   "underSubjectOfficer": "UNDER SUBJECT OFFICER",
   "investigationOfficers": "Investigation Officers",
   "investigationOfficersDescAdmin": "Manage investigation officer accounts",
+  "investigationAdminTitle": "Investigation Administrators",
+  "investigationAdminDescAdmin": "Manage investigation administrator accounts",
   "dailyMailOfficers": "Daily Mail Officers",
   "dailyMailOfficersDescAdmin": "Manage daily mail reporter accounts",
   "educationalInstitutes": "Educational Institutes",
