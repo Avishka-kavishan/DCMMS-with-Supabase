@@ -882,6 +882,41 @@ export async function loginOfficerServer(emailOrEmpNo: string, passwordInput: st
       return serializeForServerAction({ success: false, error: "Invalid email/employee number or password." });
     }
 
+    const sessionId = `sess-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+    const now = new Date();
+    const officerId = officer.id ? String(officer.id) : (officer.employee_no || "officer");
+
+    try {
+      // 1. Expire any previous active sessions for this user
+      await prisma.$executeRaw`
+        UPDATE public.dcmms_sessions
+        SET status = 'logged_out',
+            logout_time = ${now},
+            duration = ROUND(EXTRACT(EPOCH FROM (${now} - login_time)))
+        WHERE user_id = ${officerId} AND status = 'active';
+      `;
+
+      // 2. Insert the single new active session
+      await prisma.$executeRaw`
+        INSERT INTO public.dcmms_sessions (id, user_id, username, email, login_time, status, ip_address)
+        VALUES (${sessionId}, ${officerId}, ${officer.full_name}, ${officer.email || ""}, ${now}, 'active', '127.0.0.1')
+        ON CONFLICT (id) DO NOTHING;
+      `;
+    } catch (sessErr) {
+      console.warn("Direct session insert in loginOfficerServer warning:", sessErr);
+    }
+
+    try {
+      const auditId = `audit-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+      await prisma.$executeRaw`
+        INSERT INTO public.dcmms_audit_logs (id, timestamp, user_id, username, email, action, details)
+        VALUES (${auditId}, ${now}, ${officerId}, ${officer.full_name}, ${officer.email || ""}, 'User Logged In', ${'Officer logged in successfully.'})
+        ON CONFLICT (id) DO NOTHING;
+      `;
+    } catch (auditErr) {
+      console.warn("Direct audit insert warning:", auditErr);
+    }
+
     return serializeForServerAction({
       success: true,
       data: {
@@ -890,6 +925,7 @@ export async function loginOfficerServer(emailOrEmpNo: string, passwordInput: st
         full_name: officer.full_name,
         email: officer.email,
         role: officer.role,
+        sessionId,
       },
     });
   } catch (error: any) {
@@ -3343,6 +3379,258 @@ export async function getOfficerWorkflowDataServer() {
     });
   }
 }
+
+// -------------------------------------------------------------
+// 21. Sessions & Audit Logs Server Actions (PostgreSQL)
+// -------------------------------------------------------------
+
+export async function recordSessionLoginServer(session: {
+  id: string;
+  user_id: string;
+  username: string;
+  email: string;
+  login_time: string;
+  ip_address?: string;
+}) {
+  try {
+    const loginDate = new Date(session.login_time);
+    const ip = session.ip_address || "127.0.0.1";
+
+    // Expire any existing active sessions for this user so each user has only 1 active session
+    await prisma.$executeRaw`
+      UPDATE public.dcmms_sessions
+      SET status = 'logged_out',
+          logout_time = ${loginDate},
+          duration = ROUND(EXTRACT(EPOCH FROM (${loginDate} - login_time)))
+      WHERE user_id = ${session.user_id} AND id != ${session.id} AND status = 'active';
+    `;
+
+    await prisma.$executeRaw`
+      INSERT INTO public.dcmms_sessions (id, user_id, username, email, login_time, status, ip_address)
+      VALUES (${session.id}, ${session.user_id}, ${session.username}, ${session.email}, ${loginDate}, 'active', ${ip})
+      ON CONFLICT (id) DO UPDATE SET
+        user_id = EXCLUDED.user_id,
+        username = EXCLUDED.username,
+        email = EXCLUDED.email,
+        login_time = EXCLUDED.login_time,
+        status = 'active',
+        ip_address = EXCLUDED.ip_address;
+    `;
+
+    return serializeForServerAction({ success: true });
+  } catch (error: any) {
+    console.error("Error in recordSessionLoginServer:", error);
+    return serializeForServerAction({ success: false, error: error?.message });
+  }
+}
+
+export async function recordSessionLogoutServer(
+  sessionId?: string | null,
+  userId?: string | null,
+  logoutTime?: string,
+  duration?: number
+) {
+  try {
+    const now = logoutTime ? new Date(logoutTime) : new Date();
+
+    if (sessionId) {
+      if (duration !== undefined && duration !== null) {
+        await prisma.$executeRaw`
+          UPDATE public.dcmms_sessions 
+          SET status = 'logged_out', logout_time = ${now}, duration = ${duration} 
+          WHERE id = ${sessionId};
+        `;
+      } else {
+        await prisma.$executeRaw`
+          UPDATE public.dcmms_sessions 
+          SET status = 'logged_out', 
+              logout_time = ${now}, 
+              duration = ROUND(EXTRACT(EPOCH FROM (${now} - login_time)))
+          WHERE id = ${sessionId};
+        `;
+      }
+    } else if (userId) {
+      await prisma.$executeRaw`
+        UPDATE public.dcmms_sessions 
+        SET status = 'logged_out', 
+            logout_time = ${now}, 
+            duration = ROUND(EXTRACT(EPOCH FROM (${now} - login_time)))
+        WHERE user_id = ${userId} AND status = 'active';
+      `;
+    }
+
+    return serializeForServerAction({ success: true });
+  } catch (error: any) {
+    console.error("Error in recordSessionLogoutServer:", error);
+    return serializeForServerAction({ success: false, error: error?.message });
+  }
+}
+
+export async function forceLogoutSessionServer(sessionId: string, adminName?: string) {
+  try {
+    const now = new Date();
+    await prisma.$executeRaw`
+      UPDATE public.dcmms_sessions 
+      SET status = 'forced_logged_out', 
+          logout_time = ${now}, 
+          duration = ROUND(EXTRACT(EPOCH FROM (${now} - login_time)))
+      WHERE id = ${sessionId};
+    `;
+
+    return serializeForServerAction({ success: true });
+  } catch (error: any) {
+    console.error("Error in forceLogoutSessionServer:", error);
+    return serializeForServerAction({ success: false, error: error?.message });
+  }
+}
+
+export async function checkSessionStatusServer(sessionId: string) {
+  try {
+    const rows: any[] = await prisma.$queryRaw`
+      SELECT status FROM public.dcmms_sessions WHERE id = ${sessionId} LIMIT 1;
+    `;
+    const isForced = rows && rows.length > 0 && rows[0].status === "forced_logged_out";
+    return serializeForServerAction({ success: true, isForced });
+  } catch (error: any) {
+    return serializeForServerAction({ success: false, isForced: false });
+  }
+}
+
+export async function getActiveSessionsServer() {
+  try {
+    const rows: any[] = await prisma.$queryRaw`
+      SELECT DISTINCT ON (user_id) 
+        id, 
+        user_id, 
+        username, 
+        email, 
+        login_time, 
+        logout_time, 
+        duration, 
+        status, 
+        ip_address 
+      FROM public.dcmms_sessions 
+      WHERE status = 'active'
+      ORDER BY user_id, login_time DESC;
+    `;
+
+    const data = (rows || []).map((r) => ({
+      id: r.id,
+      user_id: r.user_id || "",
+      username: r.username || "User",
+      email: r.email || "",
+      login_time: r.login_time ? new Date(r.login_time).toISOString() : new Date().toISOString(),
+      logout_time: r.logout_time ? new Date(r.logout_time).toISOString() : undefined,
+      duration: r.duration ?? undefined,
+      status: r.status || "active",
+      ip_address: r.ip_address || "127.0.0.1",
+    }));
+
+    return serializeForServerAction({ success: true, data });
+  } catch (error: any) {
+    console.error("Error in getActiveSessionsServer:", error);
+    return serializeForServerAction({ success: false, error: error?.message, data: [] });
+  }
+}
+
+export async function getSessionHistoryServer() {
+  try {
+    const rows: any[] = await prisma.$queryRaw`
+      SELECT 
+        id, 
+        user_id, 
+        username, 
+        email, 
+        login_time, 
+        logout_time, 
+        duration, 
+        status, 
+        ip_address 
+      FROM public.dcmms_sessions 
+      ORDER BY login_time DESC
+      LIMIT 200;
+    `;
+
+    const data = (rows || []).map((r) => ({
+      id: r.id,
+      user_id: r.user_id || "",
+      username: r.username || "User",
+      email: r.email || "",
+      login_time: r.login_time ? new Date(r.login_time).toISOString() : new Date().toISOString(),
+      logout_time: r.logout_time ? new Date(r.logout_time).toISOString() : undefined,
+      duration: r.duration ?? undefined,
+      status: r.status || "logged_out",
+      ip_address: r.ip_address || "127.0.0.1",
+    }));
+
+    return serializeForServerAction({ success: true, data });
+  } catch (error: any) {
+    console.error("Error in getSessionHistoryServer:", error);
+    return serializeForServerAction({ success: false, error: error?.message, data: [] });
+  }
+}
+
+export async function recordAuditLogServer(audit: {
+  id?: string;
+  user_id?: string | null;
+  username: string;
+  email: string;
+  action: string;
+  details: string;
+  timestamp?: string;
+}) {
+  try {
+    const auditId = audit.id || `audit-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+    const ts = audit.timestamp ? new Date(audit.timestamp) : new Date();
+    const uid = audit.user_id || null;
+
+    await prisma.$executeRaw`
+      INSERT INTO public.dcmms_audit_logs (id, timestamp, user_id, username, email, action, details)
+      VALUES (${auditId}, ${ts}, ${uid}, ${audit.username}, ${audit.email}, ${audit.action}, ${audit.details})
+      ON CONFLICT (id) DO NOTHING;
+    `;
+
+    return serializeForServerAction({ success: true });
+  } catch (error: any) {
+    console.error("Error in recordAuditLogServer:", error);
+    return serializeForServerAction({ success: false, error: error?.message });
+  }
+}
+
+export async function getAuditLogsServer() {
+  try {
+    const rows: any[] = await prisma.$queryRaw`
+      SELECT 
+        id, 
+        timestamp, 
+        user_id, 
+        username, 
+        email, 
+        action, 
+        details 
+      FROM public.dcmms_audit_logs 
+      ORDER BY timestamp DESC
+      LIMIT 200;
+    `;
+
+    const data = (rows || []).map((r) => ({
+      id: r.id,
+      timestamp: r.timestamp ? new Date(r.timestamp).toISOString() : new Date().toISOString(),
+      user_id: r.user_id || null,
+      username: r.username || "System",
+      email: r.email || "",
+      action: r.action || "Event",
+      details: r.details || "",
+    }));
+
+    return serializeForServerAction({ success: true, data });
+  } catch (error: any) {
+    console.error("Error in getAuditLogsServer:", error);
+    return serializeForServerAction({ success: false, error: error?.message, data: [] });
+  }
+}
+
+
 
 
 

@@ -1,4 +1,14 @@
 import { supabase, isSupabaseConfigured } from "./supabase";
+import {
+  recordSessionLoginServer,
+  recordSessionLogoutServer,
+  forceLogoutSessionServer,
+  checkSessionStatusServer,
+  getActiveSessionsServer,
+  getSessionHistoryServer,
+  recordAuditLogServer,
+  getAuditLogsServer,
+} from "./db-actions";
 
 export interface UserSession {
   id: string;
@@ -49,6 +59,15 @@ function setLocalData<T>(key: string, data: T[]): void {
 
 // Fetch Active Sessions
 export async function getActiveSessions(): Promise<UserSession[]> {
+  try {
+    const res = await getActiveSessionsServer();
+    if (res.success && res.data && res.data.length > 0) {
+      return res.data;
+    }
+  } catch (e) {
+    console.warn("PostgreSQL getActiveSessionsServer failed, falling back:", e);
+  }
+
   if (isSupabaseConfigured) {
     try {
       const { data, error } = await supabase
@@ -78,6 +97,15 @@ export async function getActiveSessions(): Promise<UserSession[]> {
 
 // Fetch Session History
 export async function getSessionHistory(): Promise<UserSession[]> {
+  try {
+    const res = await getSessionHistoryServer();
+    if (res.success && res.data && res.data.length > 0) {
+      return res.data;
+    }
+  } catch (e) {
+    console.warn("PostgreSQL getSessionHistoryServer failed, falling back:", e);
+  }
+
   if (isSupabaseConfigured) {
     try {
       const { data, error } = await supabase
@@ -108,6 +136,15 @@ export async function getSessionHistory(): Promise<UserSession[]> {
 
 // Fetch Audit Logs
 export async function getAuditLogs(): Promise<AuditLog[]> {
+  try {
+    const res = await getAuditLogsServer();
+    if (res.success && res.data && res.data.length > 0) {
+      return res.data;
+    }
+  } catch (e) {
+    console.warn("PostgreSQL getAuditLogsServer failed, falling back:", e);
+  }
+
   if (isSupabaseConfigured) {
     try {
       const { data, error } = await supabase
@@ -146,7 +183,7 @@ export async function getAuditLogs(): Promise<AuditLog[]> {
 // Log standard user login
 export async function logLogin(userId: string, username: string, email: string) {
   const newSession: UserSession = {
-    id: `sess-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+    id: `sess-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
     user_id: userId,
     username,
     email,
@@ -155,6 +192,21 @@ export async function logLogin(userId: string, username: string, email: string) 
     ip_address: "192.168.1." + Math.floor(Math.random() * 254 + 1),
   };
 
+  // 1. PostgreSQL Direct Server Action
+  try {
+    await recordSessionLoginServer({
+      id: newSession.id,
+      user_id: userId,
+      username,
+      email,
+      login_time: newSession.login_time,
+      ip_address: newSession.ip_address,
+    });
+  } catch (e) {
+    console.warn("PostgreSQL session insert failed:", e);
+  }
+
+  // 2. Supabase fallback if configured
   if (isSupabaseConfigured) {
     try {
       await supabase.from("dcmms_sessions").insert({
@@ -171,12 +223,12 @@ export async function logLogin(userId: string, username: string, email: string) 
     }
   }
 
-  // Backup to localStorage
+  // 3. Backup to localStorage
   const local = getLocalData<UserSession>(SESSIONS_REF, []);
   local.push(newSession);
   setLocalData(SESSIONS_REF, local);
 
-  // Write login audit log
+  // 4. Write login audit log
   await logAuditEvent(userId, username, email, "User Logged In", `User ${username} (${email}) logged in successfully.`);
 
   if (typeof window !== "undefined") {
@@ -191,11 +243,32 @@ export async function logLogout(userId: string) {
   const currentSessionId = typeof window !== "undefined" ? localStorage.getItem("dcmms_current_session_id") : null;
   const now = new Date().toISOString();
 
+  // 1. Calculate duration from local backup or session ID
+  const local = getLocalData<UserSession>(SESSIONS_REF, []);
+  const target = local.find(s => s.status === "active" && (currentSessionId ? s.id === currentSessionId : s.user_id === userId));
+  let duration: number | undefined;
+  if (target) {
+    target.status = "logged_out";
+    target.logout_time = now;
+    duration = Math.round((new Date(now).getTime() - new Date(target.login_time).getTime()) / 1000);
+    target.duration = duration;
+    setLocalData(SESSIONS_REF, local);
+  }
+
+  // 2. PostgreSQL Direct Server Action
+  try {
+    await recordSessionLogoutServer(currentSessionId, userId, now, duration);
+  } catch (e) {
+    console.warn("PostgreSQL session logout update failed:", e);
+  }
+
+  // 3. Supabase fallback if configured
   if (isSupabaseConfigured) {
     try {
       let query = supabase.from("dcmms_sessions").update({
         status: "logged_out",
         logout_time: now,
+        duration: duration || null,
       });
       if (currentSessionId) {
         query = query.eq("id", currentSessionId);
@@ -208,16 +281,10 @@ export async function logLogout(userId: string) {
     }
   }
 
-  // Update localStorage backup
-  const local = getLocalData<UserSession>(SESSIONS_REF, []);
-  const target = local.find(s => s.status === "active" && (currentSessionId ? s.id === currentSessionId : s.user_id === userId));
-  if (target) {
-    target.status = "logged_out";
-    target.logout_time = now;
-    target.duration = Math.round((new Date(now).getTime() - new Date(target.login_time).getTime()) / 1000);
-    setLocalData(SESSIONS_REF, local);
-    await logAuditEvent(userId, target.username, target.email, "User Logged Out", `User ${target.username} logged out.`);
-  }
+  // 4. Audit Log
+  const name = target?.username || userId;
+  const userEmail = target?.email || `${userId}@moe.gov.lk`;
+  await logAuditEvent(userId, name, userEmail, "User Logged Out", `User ${name} logged out.`);
 
   if (typeof window !== "undefined") {
     localStorage.removeItem("dcmms_current_session_id");
@@ -233,7 +300,7 @@ export async function logFailedLogin(email: string, reason: string) {
 // Write to system audit logs
 export async function logAuditEvent(userId: string | null, username: string, email: string, action: string, details: string) {
   const newAudit: AuditLog = {
-    id: `audit-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+    id: `audit-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
     timestamp: new Date().toISOString(),
     user_id: userId,
     username,
@@ -242,6 +309,14 @@ export async function logAuditEvent(userId: string | null, username: string, ema
     details,
   };
 
+  // 1. PostgreSQL Server Action
+  try {
+    await recordAuditLogServer(newAudit);
+  } catch (e) {
+    console.warn("PostgreSQL audit log failed:", e);
+  }
+
+  // 2. Supabase fallback if configured
   if (isSupabaseConfigured) {
     try {
       await supabase.from("dcmms_audit_logs").insert({
@@ -258,6 +333,7 @@ export async function logAuditEvent(userId: string | null, username: string, ema
     }
   }
 
+  // 3. LocalStorage backup
   const logs = getLocalData<AuditLog>(AUDIT_LOGS_REF, []);
   logs.push(newAudit);
   setLocalData(AUDIT_LOGS_REF, logs);
@@ -269,6 +345,14 @@ export async function logAuditEvent(userId: string | null, username: string, ema
 export async function forceLogoutUser(sessionId: string, adminName: string) {
   const now = new Date().toISOString();
 
+  // 1. PostgreSQL Server Action
+  try {
+    await forceLogoutSessionServer(sessionId, adminName);
+  } catch (e) {
+    console.warn("PostgreSQL force logout failed:", e);
+  }
+
+  // 2. Supabase fallback
   if (isSupabaseConfigured) {
     try {
       await supabase
@@ -283,6 +367,7 @@ export async function forceLogoutUser(sessionId: string, adminName: string) {
     }
   }
 
+  // 3. Local Storage backup
   const local = getLocalData<UserSession>(SESSIONS_REF, []);
   const target = local.find(s => s.id === sessionId);
   if (target) {
@@ -307,6 +392,15 @@ export async function checkSessionStatus(userId: string): Promise<boolean> {
   const currentSessionId = localStorage.getItem("dcmms_current_session_id");
   if (!currentSessionId) return false;
 
+  // 1. PostgreSQL Server Action Check
+  try {
+    const res = await checkSessionStatusServer(currentSessionId);
+    if (res.success && res.isForced) {
+      return true;
+    }
+  } catch (e) {}
+
+  // 2. Supabase check
   if (isSupabaseConfigured) {
     try {
       const { data, error } = await supabase
@@ -321,6 +415,7 @@ export async function checkSessionStatus(userId: string): Promise<boolean> {
     } catch (e) {}
   }
 
+  // 3. Local Storage backup check
   const local = getLocalData<UserSession>(SESSIONS_REF, []);
   const current = local.find(s => s.id === currentSessionId);
   return current?.status === "forced_logged_out";

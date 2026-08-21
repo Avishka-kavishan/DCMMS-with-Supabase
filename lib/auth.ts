@@ -83,14 +83,25 @@ export function dashboardPath(role: string): string {
   }
 }
 
+import { logLogout } from "./security";
+
 /** Sign out and return to login. */
 export async function signOut() {
   if (typeof window !== "undefined") {
+    try {
+      const profile = await getCurrentProfile();
+      if (profile?.id) {
+        await logLogout(profile.id);
+      }
+    } catch (e) {
+      console.warn("Failed to log logout event:", e);
+    }
     localStorage.removeItem("dcmms_simulated_session");
     localStorage.removeItem("dcmms_username");
     localStorage.removeItem("dcmms_user_role");
     localStorage.removeItem("dcmms_current_user");
     localStorage.removeItem("dcmms_current_session_id");
+    localStorage.removeItem("dcmms_last_activity");
   }
 }
 

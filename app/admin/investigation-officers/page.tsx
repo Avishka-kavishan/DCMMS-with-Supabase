@@ -10,6 +10,7 @@ import {
   deleteRegisterOfficerServer, 
   toggleRegisterOfficerStatusServer 
 } from "@/lib/db-actions";
+import { exportToExcel } from "@/lib/export-excel";
 
 interface Officer {
   id: string;
@@ -426,10 +427,34 @@ export default function InvestigationOfficersPage() {
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
-        <button className="btn-admin-add" onClick={openAddModal}>
-          <UserPlus size={18} />
-          <span>{t("addInvestigationAdmin", "Register Investigation Administrator")}</span>
-        </button>
+        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+          <button
+            className="btn-export-excel"
+            onClick={() => {
+              const dataToExport = filteredOfficers.length > 0 ? filteredOfficers : officers;
+              const headers = ["Employee No", "Full Name", "Email Address", "Assigned Role", "Status", "Date Created"];
+              const rows = dataToExport.map((o) => [
+                o.employeeNo || "",
+                o.fullName,
+                o.email,
+                "Investigation Officer",
+                o.status,
+                o.createdAt || ""
+              ]);
+              exportToExcel(`DCMMS_Investigation_Officers_${new Date().toISOString().split("T")[0]}`, headers, rows);
+            }}
+            title="Export Investigation Officers to Excel"
+          >
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" style={{ width: 15, height: 15 }}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <span>{t("exportExcel", "Export to Excel")}</span>
+          </button>
+          <button className="btn-admin-add" onClick={openAddModal}>
+            <UserPlus size={18} />
+            <span>{t("addInvestigationAdmin", "Register Investigation Administrator")}</span>
+          </button>
+        </div>
       </div>
 
       {/* Officers Table */}

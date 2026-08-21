@@ -11,6 +11,7 @@ import Link from "next/link";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { getCurrentProfile, dashboardPath } from "@/lib/auth";
 import { getCaseFullTimelineServer } from "@/lib/db-actions";
+import { exportToExcel } from "@/lib/export-excel";
 import {
   Mail,
   Shield,
@@ -725,6 +726,29 @@ function AdminViewCaseInner() {
             <p>{t("viewCaseSubTitle", "Comprehensive multi-role investigation process timeline & connected personnel tracker")}</p>
           </div>
           <div className="vc-header-actions">
+            <button
+              onClick={() => {
+                const headers = ["Step", "Role", "Officer Name", "Action", "Category", "Date", "Status", "Details"];
+                const rows = trackingEntries.map((e, idx) => [
+                  idx + 1,
+                  e.role,
+                  e.officerName,
+                  e.action,
+                  e.category,
+                  e.date || "",
+                  e.status,
+                  e.details || ""
+                ]);
+                exportToExcel(`DCMMS_Case_${caseNoParam || "Dossier"}_Timeline_${new Date().toISOString().split("T")[0]}`, headers, rows);
+              }}
+              className="btn-export-excel"
+              title="Export Case Timeline to Excel"
+            >
+              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" style={{ width: 15, height: 15 }}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <span>{t("exportExcel", "Export to Excel")}</span>
+            </button>
             <button
               onClick={() => fetchTracking(caseNoParam)}
               className="btn-refresh-timeline"

@@ -31,11 +31,18 @@ async function main() {
   console.log('--- Connected DB Info ---');
   console.log(info);
 
-  const rows = await prisma.$queryRaw`
-    SELECT id, letter_number, ref_number, senders_party, created_at FROM public.daily_mail_letter_table;
+  const testSessId = `sess-${Date.now()}-test`;
+  await prisma.$executeRaw`
+    INSERT INTO public.dcmms_sessions (id, user_id, username, email, login_time, status, ip_address)
+    VALUES (${testSessId}, 'officer-test', 'System Administrator', 'sysadmin@moe.gov.lk', ${new Date()}, 'active', '127.0.0.1')
+    ON CONFLICT (id) DO NOTHING;
   `;
-  console.log('--- daily_mail_letter_table rows ---');
-  console.log(rows);
+
+  const sessions = await prisma.$queryRaw`
+    SELECT * FROM public.dcmms_sessions;
+  `;
+  console.log('--- dcmms_sessions rows after test insert ---');
+  console.log(sessions);
 }
 
 main().finally(() => prisma.$disconnect());

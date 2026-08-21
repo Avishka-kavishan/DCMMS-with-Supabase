@@ -5,6 +5,7 @@ import "../../../i18n";
 import { Search, Plus, X, Edit, Trash2, Check } from "lucide-react";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 import { getInstitutesServer, saveInstituteServer, deleteInstituteServer } from "@/lib/db-actions";
+import { exportToExcel } from "@/lib/export-excel";
 
 interface Institute {
   id: string;
@@ -468,10 +469,35 @@ export default function EducationalInstitutesPage() {
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
-        <button className="btn-admin-add" onClick={openAddModal}>
-          <Plus size={18} />
-          {t("addInstitute", "Add Institute")}
-        </button>
+        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+          <button
+            className="btn-export-excel"
+            onClick={() => {
+              const dataToExport = filteredInstitutes.length > 0 ? filteredInstitutes : institutes;
+              const headers = ["Institute Name", "Address", "Province", "District", "Zone", "Status", "Date Created"];
+              const rows = dataToExport.map((inst) => [
+                inst.name,
+                inst.address || "N/A",
+                inst.province || inst.regionProvince || "N/A",
+                inst.district || "N/A",
+                inst.zone || "N/A",
+                inst.status || "Active",
+                inst.createdAt || ""
+              ]);
+              exportToExcel(`DCMMS_Institutes_${new Date().toISOString().split("T")[0]}`, headers, rows);
+            }}
+            title="Export Institutes to Excel"
+          >
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" style={{ width: 15, height: 15 }}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <span>{t("exportExcel", "Export to Excel")}</span>
+          </button>
+          <button className="btn-admin-add" onClick={openAddModal}>
+            <Plus size={18} />
+            {t("addInstitute", "Add Institute")}
+          </button>
+        </div>
       </div>
 
       {/* Institutes Table */}

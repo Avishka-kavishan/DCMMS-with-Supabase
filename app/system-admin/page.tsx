@@ -205,6 +205,95 @@ export default function SystemAdminDashboard() {
 
   const chartData = getChartData();
 
+  // Export Sessions to Excel / CSV
+  const exportSessionsToExcel = () => {
+    if (!sessionHistory || sessionHistory.length === 0) {
+      alert("No session history available to export.");
+      return;
+    }
+
+    const headers = [
+      "Session ID",
+      "Officer / User",
+      "Email",
+      "Login Time",
+      "Logout Time",
+      "Duration (Seconds)",
+      "Duration (Formatted)",
+      "Status",
+      "IP Address",
+    ];
+
+    const rows = sessionHistory.map((s) => {
+      const durFormatted = s.duration
+        ? `${Math.floor(s.duration / 60)}m ${s.duration % 60}s`
+        : s.status === "active"
+        ? "Active"
+        : "—";
+
+      return [
+        `"${s.id}"`,
+        `"${(s.username || "").replace(/"/g, '""')}"`,
+        `"${(s.email || "").replace(/"/g, '""')}"`,
+        `"${new Date(s.login_time).toLocaleString()}"`,
+        `"${s.logout_time ? new Date(s.logout_time).toLocaleString() : "—"}"`,
+        `"${s.duration ?? ""}"`,
+        `"${durFormatted}"`,
+        `"${s.status}"`,
+        `"${s.ip_address || "127.0.0.1"}"`,
+      ];
+    });
+
+    const csvContent = "\uFEFF" + [headers.join(","), ...rows.map((r) => r.join(","))].join("\r\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `DCMMS_User_Sessions_${new Date().toISOString().split("T")[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Export Audit Logs to Excel / CSV
+  const exportAuditLogsToExcel = () => {
+    const dataToExport = filteredLogs.length > 0 ? filteredLogs : auditLogs;
+    if (!dataToExport || dataToExport.length === 0) {
+      alert("No audit logs available to export.");
+      return;
+    }
+
+    const headers = [
+      "Log ID",
+      "Timestamp",
+      "User ID",
+      "Username",
+      "Email",
+      "Action",
+      "Details",
+    ];
+
+    const rows = dataToExport.map((log) => [
+      `"${log.id}"`,
+      `"${new Date(log.timestamp).toLocaleString()}"`,
+      `"${log.user_id || "N/A"}"`,
+      `"${(log.username || "").replace(/"/g, '""')}"`,
+      `"${(log.email || "").replace(/"/g, '""')}"`,
+      `"${(log.action || "").replace(/"/g, '""')}"`,
+      `"${(log.details || "").replace(/"/g, '""').replace(/\r?\n/g, ' ')}"`,
+    ]);
+
+    const csvContent = "\uFEFF" + [headers.join(","), ...rows.map((r) => r.join(","))].join("\r\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `DCMMS_Audit_Logs_${new Date().toISOString().split("T")[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   if (!mounted) {
     return <div className="system-admin-container" style={{ minHeight: "100vh", opacity: 0 }}></div>;
   }
@@ -364,7 +453,7 @@ export default function SystemAdminDashboard() {
                         <td className="font-mono text-xs">{session.ip_address || "127.0.0.1"}</td>
                         <td>
                           <button 
-                            className="btn-force-logout"
+                            className="btn-force-logout" 
                             onClick={() => handleForceLogout(session.id)}
                             title="Terminate session immediately"
                           >
@@ -383,12 +472,24 @@ export default function SystemAdminDashboard() {
 
           {/* User Session History */}
           <div className="sysadmin-card-section">
-            <h3 className="card-title-header">
-              <svg className="card-title-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              {t("sysAdminHistoryTitle")}
-            </h3>
+            <div className="sysadmin-card-header-flex">
+              <h3 className="card-title-header">
+                <svg className="card-title-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {t("sysAdminHistoryTitle")}
+              </h3>
+              <button 
+                className="btn-export-excel" 
+                onClick={exportSessionsToExcel}
+                title="Export user session history to Excel"
+              >
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                {t("exportExcel", "Export to Excel")}
+              </button>
+            </div>
             {sessionHistory.length > 0 ? (
               <div className="table-responsive-container">
                 <table className="sysadmin-data-table">
@@ -432,12 +533,24 @@ export default function SystemAdminDashboard() {
 
           {/* Audit Logs & Trail */}
           <div className="sysadmin-card-section">
-            <h3 className="card-title-header">
-              <svg className="card-title-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              {t("sysAdminAuditTitle")}
-            </h3>
+            <div className="sysadmin-card-header-flex">
+              <h3 className="card-title-header">
+                <svg className="card-title-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                {t("sysAdminAuditTitle")}
+              </h3>
+              <button 
+                className="btn-export-excel" 
+                onClick={exportAuditLogsToExcel}
+                title="Export system audit logs to Excel"
+              >
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                {t("exportExcel", "Export to Excel")}
+              </button>
+            </div>
 
             {/* Filters Bar */}
             <div className="sysadmin-filter-bar">
@@ -495,3 +608,4 @@ export default function SystemAdminDashboard() {
     </div>
   );
 }
+

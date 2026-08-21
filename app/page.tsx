@@ -119,13 +119,12 @@ export default function Home() {
           role: userRole,
         };
 
+        const activeSessionId = res.data.sessionId || `sess-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+
         if (typeof window !== "undefined") {
           localStorage.setItem("dcmms_simulated_session", JSON.stringify(sessionUser));
-          localStorage.setItem("dcmms_current_session_id", res.data.id);
+          localStorage.setItem("dcmms_current_session_id", activeSessionId);
         }
-
-        // Log successful login
-        await logLogin(res.data.id, res.data.full_name, res.data.email);
 
         router.push(dashboardPath(userRole));
         return;
@@ -134,11 +133,11 @@ export default function Home() {
       // 2. Fallback check for simulated/hardcoded users if PostgreSQL returned error
       const simUser = getSimulatedUser();
       if (simUser) {
+        const simSession = await logLogin(simUser.id, simUser.full_name, email);
         if (typeof window !== "undefined") {
           localStorage.setItem("dcmms_simulated_session", JSON.stringify(simUser));
-          localStorage.setItem("dcmms_current_session_id", simUser.id);
+          localStorage.setItem("dcmms_current_session_id", simSession.id);
         }
-        await logLogin(simUser.id, simUser.full_name, email);
         router.push(dashboardPath(simUser.role as UserRole));
         return;
       }

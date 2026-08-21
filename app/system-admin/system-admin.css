@@ -266,3 +266,48 @@
 .audit-row.failure-log:hover {
   background-color: #fef3c7;
 }
+
+.sysadmin-card-header-flex {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.sysadmin-card-header-flex .card-title-header {
+  margin-bottom: 0;
+}
+
+.btn-export-excel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 0.825rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(16, 185, 129, 0.2);
+}
+
+.btn-export-excel:hover {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(16, 185, 129, 0.3);
+}
+
+.btn-export-excel:active {
+  transform: translateY(0);
+}
+
+.btn-export-excel svg {
+  width: 16px;
+  height: 16px;
+}
+

@@ -5,15 +5,13 @@ import en from "./locales/en.json";
 import si from "./locales/si.json";
 import ta from "./locales/ta.json";
 
-const savedLang = typeof window !== "undefined" ? (localStorage.getItem("dcmms_lang") || "si") : "si";
-
 i18n.use(initReactI18next).init({
   resources: {
     en: { translation: en },
     si: { translation: si },
     ta: { translation: ta },
   },
-  lng: savedLang,
+  lng: "si",
   fallbackLng: "si",
   interpolation: {
     escapeValue: false, // React already escapes output

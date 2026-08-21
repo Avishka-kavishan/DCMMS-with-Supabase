@@ -3,7 +3,8 @@
 import { useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { getCurrentProfile, signOut } from "@/lib/auth";
-import { checkSessionStatus, logLogout } from "@/lib/security";
+import { checkSessionStatus, logLogout, logLogin } from "@/lib/security";
+import { recordSessionLoginServer } from "@/lib/db-actions";
 
 export function SessionMonitor() {
   const router = useRouter();
@@ -36,9 +37,28 @@ export function SessionMonitor() {
       window.addEventListener(event, updateActivity);
     });
 
+    let hasCheckedInitialSession = false;
+
     const checkStatus = async () => {
       const profile = await getCurrentProfile();
       if (profile?.id) {
+        // Auto-save active session to database on first check
+        if (!hasCheckedInitialSession && typeof window !== "undefined") {
+          hasCheckedInitialSession = true;
+          let currentSessionId = localStorage.getItem("dcmms_current_session_id");
+          if (!currentSessionId) {
+            currentSessionId = `sess-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+            localStorage.setItem("dcmms_current_session_id", currentSessionId);
+          }
+          await recordSessionLoginServer({
+            id: currentSessionId,
+            user_id: profile.id,
+            username: profile.full_name,
+            email: profile.email || `${profile.id}@moe.gov.lk`,
+            login_time: new Date().toISOString(),
+          });
+        }
+
         // 1. Check if session was forced logout by admin
         const isForced = await checkSessionStatus(profile.id);
         if (isForced) {
