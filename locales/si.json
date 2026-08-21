@@ -497,6 +497,8 @@
   "subjectWorkload": "විෂයභාර වැඩ ප්‍රමාණය",
   "investigationWorkload": "විමර්ශන වැඩ ප්‍රමාණය",
   "dailyMailWorkload": "දෛනික තැපැල් වැඩ ප්‍රමාණය",
+  "assignedSubjectOfficer": "පවරන ලද විෂය භාර නිලධාරී",
+  "inquiryRole": "පරීක්ෂණ භූමිකාව",
   "exportWorkloadSummary": "සාරාංශය බාගත කරන්න",
   "caseDossier": "විමර්ශන නඩු ගොනුව",
   "caseDossierTitle": "විමර්ශන නඩු ගොනුව සහ කාලරේඛාව",

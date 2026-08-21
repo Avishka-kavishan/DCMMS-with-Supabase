@@ -495,6 +495,8 @@
   "subjectWorkload": "விடய பணிச்சுமை",
   "investigationWorkload": "விசாரணை பணிச்சுமை",
   "dailyMailWorkload": "அஞ்சல் பணிச்சுமை",
+  "assignedSubjectOfficer": "ஒதுக்கப்பட்ட பாடம் அதிகாரி",
+  "inquiryRole": "விசாரணை பங்கு",
   "exportWorkloadSummary": "சுருக்கத்தை பதிவிறக்குக",
   "caseDossier": "வழக்கு ஆவணம்",
   "caseDossierTitle": "வழக்கு ஆவணம் & விசாரணை காலவரிசை",

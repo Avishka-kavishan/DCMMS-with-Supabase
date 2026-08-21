@@ -499,6 +499,8 @@
   "subjectWorkload": "Subject Workload",
   "investigationWorkload": "Investigation Workload",
   "dailyMailWorkload": "Daily Mail Workload",
+  "assignedSubjectOfficer": "Assigned Subject Officer",
+  "inquiryRole": "Inquiry Role",
   "exportWorkloadSummary": "Export Summary",
   "caseDossier": "Case Dossier",
   "caseDossierTitle": "Case Dossier & Investigation Timeline",

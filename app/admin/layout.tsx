@@ -16,9 +16,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const { t, i18n } = useTranslation();
   const pathname = usePathname();
   
+  const [mounted, setMounted] = React.useState(false);
   const [fontScale, setFontScale] = useState<"small" | "medium" | "large">("medium");
   const lang = i18n.language;
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const getPageTitleAndSubtitle = () => {
     const cleanPath = (pathname || "").replace(/\/$/, "");
@@ -90,10 +95,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   };
 
   return (
-    <div className="dashboard-container" data-font-scale={fontScale}>
+    <div className="dashboard-container" data-font-scale={fontScale} suppressHydrationWarning>
       {/* ── Skip Link (A11y) ── */}
-      <a href="#dashboard-main-content" className="skip-link">
-        {t("skipLink")}
+      <a href="#dashboard-main-content" className="skip-link" suppressHydrationWarning>
+        {t("skipLink", "Skip to main content")}
       </a>
 
       <Sidebar
@@ -120,8 +125,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 </svg>
               </button>
               <div className="dashboard-title-area">
-                <h2 className="dashboard-main-title">{title}</h2>
-                <p className="dashboard-main-subtitle">{subtitle}</p>
+                <h2 className="dashboard-main-title" suppressHydrationWarning>{title}</h2>
+                <p className="dashboard-main-subtitle" suppressHydrationWarning>{subtitle}</p>
               </div>
             </div>
 

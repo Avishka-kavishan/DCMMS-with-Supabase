@@ -264,7 +264,20 @@ function AdminViewCaseInner() {
         // A. DAILY MAIL REPORTER TIMELINE ENTRIES
         // ============================================================
         if (Array.isArray(dailyMailRows) && dailyMailRows.length > 0) {
-          dailyMailRows.forEach((mail: any, idx: number) => {
+          // Deduplicate rows by (letter_number, ref_number, subject_of_letter) to prevent duplicate timeline steps
+          const seenMailKeys = new Set<string>();
+          const uniqueMails: any[] = [];
+          dailyMailRows.forEach((mail: any) => {
+            const key = `${(mail.letter_number || "").trim().toLowerCase()}|${(mail.ref_number || "").trim().toLowerCase()}|${(mail.subject_of_letter || "").trim().toLowerCase()}`;
+            if (!seenMailKeys.has(key)) {
+              seenMailKeys.add(key);
+              uniqueMails.push(mail);
+            }
+          });
+
+          const subjOfficerName = subjectForm?.name_of_the_presenting_the_complain || "Subject Officer";
+
+          uniqueMails.forEach((mail: any, idx: number) => {
             const recDate = mail.date_received_by_add_secretary ? new Date(mail.date_received_by_add_secretary).toISOString().split("T")[0] : "";
             const subDate = mail.date_letter_handover_discipline ? new Date(mail.date_letter_handover_discipline).toISOString().split("T")[0] : "";
             const ts = recDate ? new Date(recDate).getTime() : Date.now() - 86400000 * 10;
@@ -287,7 +300,7 @@ function AdminViewCaseInner() {
                 ? `Initial Complaint Registered: Letter No. ${mail.letter_number || "N/A"}`
                 : `Subsequent Letter Registered: Letter No. ${mail.letter_number || "N/A"}`,
               category: "daily-mail",
-              details: `Received via ${mail.mode_of_receipt || "Post"} from "${mail.senders_party || "Complainant"}". Subject: ${mail.subject_of_letter || "Inquiry complaint"}. Category: ${mail.subject_category || mail.nature_of_letter || "General"}`,
+              details: `Received via ${mail.mode_of_receipt || "Post"} from "${mail.senders_party || "Complainant"}". Subject: ${mail.subject_of_letter || "Inquiry complaint"}. Category: ${mail.subject_category || mail.nature_of_letter || "General"}. Assigned to Subject Officer: ${subjOfficerName}.`,
               date: recDate || "Registered Date",
               sortTs: ts,
               metaInfo: {
@@ -295,19 +308,20 @@ function AdminViewCaseInner() {
                 sender: mail.senders_party,
                 receiptMode: mail.mode_of_receipt,
                 category: mail.subject_category,
+                assignedSubjectOfficer: subjOfficerName,
               }
             });
 
-            // Entry 2: Handover to Discipline Branch
+            // Entry 2: Handover to Discipline Branch & Subject Officer
             if (subDate) {
               const handoverTs = new Date(subDate).getTime();
               raw.push({
                 id: `dm-handover-${mail.id || idx}`,
                 role: "Daily Reporter",
                 officerName: mailOfficerName,
-                action: `Letter Handed Over to Discipline Branch`,
+                action: `Letter Handed Over to Discipline Branch & Subject Officer`,
                 category: "daily-mail",
-                details: `Physical and system records transferred to the Discipline Branch Investigation Administrator for formal action.`,
+                details: `Physical and system records routed to the Discipline Branch and assigned to Subject Officer (${subjOfficerName}) for formal inquiry processing.`,
                 date: subDate,
                 sortTs: handoverTs >= ts ? handoverTs : ts + 3600000,
               });

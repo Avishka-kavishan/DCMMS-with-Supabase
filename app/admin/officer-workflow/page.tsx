@@ -42,7 +42,7 @@ import {
   Legend
 } from "recharts";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
-import { getRegisterOfficersServer, getDailyMailRecordsServer } from "@/lib/db-actions";
+import { getRegisterOfficersServer, getDailyMailRecordsServer, getOfficerWorkflowDataServer } from "@/lib/db-actions";
 import "../admin.css";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
@@ -69,6 +69,8 @@ interface AssignedCaseItem {
   status: "Under Investigation" | "Under Subject Officer" | "Closed" | "Registered" | "Pending";
   classification: string;
   method: string;
+  assignedSubjectOfficer?: string;
+  investigationRole?: string;
 }
 
 interface OfficerWorkloadSummary extends RegisteredOfficer {
@@ -99,6 +101,18 @@ export default function OfficerWorkflowPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [officers, setOfficers] = useState<RegisteredOfficer[]>([]);
   const [lettersData, setLettersData] = useState<any[]>([]);
+  const [workloadSummariesState, setWorkloadSummariesState] = useState<OfficerWorkloadSummary[]>([]);
+  const [systemMetrics, setSystemMetrics] = useState<{
+    totalOfficers: number;
+    activeOfficers: number;
+    subjectOfficersCount: number;
+    subjectTotalAssigned: number;
+    investigationOfficersCount: number;
+    investigationTotalAssigned: number;
+    dailyMailOfficersCount: number;
+    dailyMailTotalLetters: number;
+  } | null>(null);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -123,10 +137,25 @@ export default function OfficerWorkflowPage() {
   const fetchData = async (isSilent = false) => {
     if (!isSilent) setIsLoading(true);
 
+    try {
+      // 1. Fetch live comprehensive data from PostgreSQL Server Action
+      const wfRes = await getOfficerWorkflowDataServer();
+      if (wfRes && wfRes.success && wfRes.data) {
+        setOfficers(wfRes.data.officers || []);
+        setLettersData(wfRes.data.lettersData || []);
+        setWorkloadSummariesState(wfRes.data.workloadSummaries || []);
+        setSystemMetrics(wfRes.data.metrics || null);
+        setIsLoading(false);
+        return;
+      }
+    } catch (e) {
+      console.warn("getOfficerWorkflowDataServer warning in workflow, trying fallbacks:", e);
+    }
+
     let officerList: RegisteredOfficer[] = [];
     let lettersList: any[] = [];
 
-    // 1. Fetch Registered Officers from PostgreSQL
+    // Fallback 1. Fetch Registered Officers from PostgreSQL
     try {
       const regRes = await getRegisterOfficersServer();
       if (regRes && regRes.success && Array.isArray(regRes.data) && regRes.data.length > 0) {
@@ -144,7 +173,7 @@ export default function OfficerWorkflowPage() {
       console.warn("getRegisterOfficersServer warning in workflow:", e);
     }
 
-    // 2. Fetch Officers via API route fallback
+    // Fallback 2. Fetch Officers via API route fallback
     if (officerList.length === 0) {
       try {
         const apiRes = await fetch(`${basePath}/api/officers`).then((r) => r.json()).catch(() => null);
@@ -164,7 +193,7 @@ export default function OfficerWorkflowPage() {
       }
     }
 
-    // 3. Fallback: Supabase direct query
+    // Fallback 3: Supabase direct query
     if (officerList.length === 0 && isSupabaseConfigured) {
       try {
         const { data: regData } = await supabase.from("register_officer_table").select("*");
@@ -178,59 +207,17 @@ export default function OfficerWorkflowPage() {
             status: p.is_active === false ? "Inactive" : "Active",
             createdAt: (p.created_at || "").slice(0, 10),
           }));
-        } else {
-          const { data: profs } = await supabase.from("dcmms_profiles").select("*");
-          if (profs && profs.length > 0) {
-            officerList = profs.map((p: any) => ({
-              id: String(p.id),
-              employeeNo: p.employee_no || "",
-              fullName: p.full_name || "",
-              email: p.email || "",
-              role: p.role || "subject_officer",
-              status: "Active",
-              createdAt: (p.created_at || "").slice(0, 10),
-            }));
-          }
         }
       } catch (e) {
         console.warn("Supabase direct query warning:", e);
       }
     }
 
-    // 4. Fallback: LocalStorage profiles if any
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("dcmms_custom_profiles");
-      if (stored) {
-        try {
-          const list = JSON.parse(stored);
-          const seenNames = new Set(officerList.map((p) => p.fullName.toLowerCase()));
-          list.forEach((o: any) => {
-            const name = o.fullName || o.full_name || "";
-            if (name && !seenNames.has(name.toLowerCase())) {
-              officerList.push({
-                id: o.id || `local-${Math.random()}`,
-                employeeNo: o.employeeNo || o.employee_no || "",
-                fullName: name,
-                email: o.email || "",
-                role: o.role || "subject_officer",
-                status: o.status || "Active",
-                createdAt: o.createdAt || new Date().toISOString().slice(0, 10),
-              });
-              seenNames.add(name.toLowerCase());
-            }
-          });
-        } catch (e) {
-          console.error("Local profiles parse error", e);
-        }
-      }
-    }
-
-    // 5. Final fallback if database is empty
     if (officerList.length === 0) {
       officerList = DEFAULT_OFFICERS;
     }
 
-    // 6. Fetch Daily Mail Records / Cases to calculate workload
+    // Fetch Daily Mail Records / Cases
     try {
       const mailRes = await getDailyMailRecordsServer();
       if (mailRes && mailRes.success && Array.isArray(mailRes.data)) {
@@ -238,17 +225,6 @@ export default function OfficerWorkflowPage() {
       }
     } catch (e) {
       console.warn("getDailyMailRecordsServer in workflow warning:", e);
-    }
-
-    if (lettersList.length === 0) {
-      try {
-        const mailApiRes = await fetch(`${basePath}/api/daily-mail`).then((r) => r.json()).catch(() => null);
-        if (mailApiRes && mailApiRes.success && Array.isArray(mailApiRes.data)) {
-          lettersList = mailApiRes.data;
-        }
-      } catch (e) {
-        console.warn("/api/daily-mail fallback in workflow warning:", e);
-      }
     }
 
     setOfficers(officerList);
@@ -267,6 +243,9 @@ export default function OfficerWorkflowPage() {
         .on("postgres_changes", { event: "*", schema: "public", table: "register_officer_table" }, () => fetchData(true))
         .on("postgres_changes", { event: "*", schema: "public", table: "daily_mail_letter_table" }, () => fetchData(true))
         .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_daily_mail" }, () => fetchData(true))
+        .on("postgres_changes", { event: "*", schema: "public", table: "subject_officer_form_table" }, () => fetchData(true))
+        .on("postgres_changes", { event: "*", schema: "public", table: "chairment_by_case" }, () => fetchData(true))
+        .on("postgres_changes", { event: "*", schema: "public", table: "members_by_case" }, () => fetchData(true))
         .subscribe();
     }
 
@@ -286,19 +265,21 @@ export default function OfficerWorkflowPage() {
     };
   }, []);
 
-  // ── Calculate Workload Summaries and Individual Assigned Cases for Each Officer ──
+  // ── Calculate Workload Summaries if not already loaded from server ──────────
   const workloadSummaries: OfficerWorkloadSummary[] = useMemo(() => {
-    const subjectOfficers = officers.filter((o) => getNormalizedRole(o.role) === "Subject Officer");
-    const investigationOfficers = officers.filter((o) => getNormalizedRole(o.role) === "Investigation Officer");
+    if (workloadSummariesState.length > 0) {
+      return workloadSummariesState;
+    }
+
+    const dailyMailOfficers = officers.filter((o) => getNormalizedRole(o.role) === "Daily Mail Officer");
 
     return officers
       .filter((o) => !o.role.toLowerCase().includes("admin"))
-      .map((officer, officerIdx) => {
+      .map((officer) => {
         const normRole = getNormalizedRole(officer.role);
         const nameLower = officer.fullName.toLowerCase().trim();
         let assignedItems: AssignedCaseItem[] = [];
 
-        // Helper to format any letter item to AssignedCaseItem
         const mapToCaseItem = (l: any, idx: number, forceStatus?: string): AssignedCaseItem => {
           const rawStatus = (l.status || "").toLowerCase();
           let derivedStatus: "Under Investigation" | "Under Subject Officer" | "Closed" | "Registered" | "Pending" = "Registered";
@@ -332,51 +313,43 @@ export default function OfficerWorkflowPage() {
             status: derivedStatus,
             classification: l.classification || l.subject_category || l.nature_of_letter || "General Disciplinary",
             method: l.method || l.mode_of_receipt || "Post",
+            assignedSubjectOfficer: l.assigned_subject_officer || l.action_officer || "",
           };
         };
 
+        const subjectOfficers = officers.filter((o) => getNormalizedRole(o.role) === "Subject Officer");
+        const investigationOfficers = officers.filter((o) => getNormalizedRole(o.role) === "Investigation Officer");
+        const subIdx = Math.max(0, subjectOfficers.findIndex((s) => s.id === officer.id || s.fullName.toLowerCase() === nameLower));
+        const invIdx = Math.max(0, investigationOfficers.findIndex((i) => i.id === officer.id || i.fullName.toLowerCase() === nameLower));
+
         if (normRole === "Subject Officer") {
-          // Direct matches by officer name
-          const directAssigned = lettersData.filter((l: any) => {
-            const actOff = (l.action_officer || "").toLowerCase().trim();
+          // Direct matches or distributed daily mail letters to this Subject Officer
+          const directAssigned = lettersData.filter((l: any, idx: number) => {
+            const actOff = (l.action_officer || l.assigned_subject_officer || "").toLowerCase().trim();
             const offName = (l.officer_name || "").toLowerCase().trim();
-            return (actOff && actOff === nameLower) || (offName && offName === nameLower);
+            const isDirect = (actOff && actOff === nameLower) || (offName && offName === nameLower);
+            const isDistributed = (!actOff && !offName) && (subjectOfficers.length === 1 || idx % subjectOfficers.length === subIdx);
+            return isDirect || isDistributed;
           });
-
-          if (directAssigned.length > 0) {
-            assignedItems = directAssigned.map((l, i) => mapToCaseItem(l, i));
-          } else if (lettersData.length > 0) {
-            // Slice items for fair distribution so every officer has realistic assigned cases
-            const chunkSize = Math.max(1, Math.ceil(lettersData.length / Math.max(1, subjectOfficers.length)));
-            const subIdx = subjectOfficers.findIndex((s) => s.id === officer.id);
-            const start = Math.max(0, subIdx) * chunkSize;
-            const officerSlice = lettersData.slice(start, start + chunkSize);
-            assignedItems = (officerSlice.length > 0 ? officerSlice : lettersData.slice(0, 2)).map((l, i) =>
-              mapToCaseItem(l, i, "Under Subject Officer")
-            );
-          }
+          assignedItems = directAssigned.map((l, i) => mapToCaseItem(l, i, "Under Subject Officer"));
         } else if (normRole === "Investigation Officer") {
-          const directAssigned = lettersData.filter((l: any) => {
+          // Direct matches or active inquiries for Investigation Officer
+          const directAssigned = lettersData.filter((l: any, idx: number) => {
             const actOff = (l.action_officer || l.assigned_to || "").toLowerCase().trim();
-            return actOff && actOff === nameLower;
+            const isDirect = actOff && actOff === nameLower;
+            const isInvCase = (l.serial_no || l.ref_number || "").includes("INQ/") || (l.status || "").toLowerCase().includes("investig") || (invIdx === 0 && idx === 0);
+            return isDirect || isInvCase;
           });
-
-          if (directAssigned.length > 0) {
-            assignedItems = directAssigned.map((l, i) => mapToCaseItem(l, i, "Under Investigation"));
-          } else if (lettersData.length > 0) {
-            const invIdx = investigationOfficers.findIndex((s) => s.id === officer.id);
-            const sliceStart = Math.max(0, invIdx) * 2;
-            const slice = lettersData.slice(sliceStart, sliceStart + 2);
-            assignedItems = (slice.length > 0 ? slice : lettersData.slice(0, 2)).map((l, i) =>
-              mapToCaseItem(l, i, "Under Investigation")
-            );
-          }
+          assignedItems = (directAssigned.length > 0 ? directAssigned : lettersData.slice(0, 1)).map((l, i) => mapToCaseItem(l, i, "Under Investigation"));
         } else if (normRole === "Daily Mail Officer") {
-          // Daily mail officer processes all incoming daily mail entries
-          assignedItems = lettersData.map((l, i) => mapToCaseItem(l, i));
+          // Daily Mail Officer: logs intake letters and assigns to Subject Officers
+          const dmIdx = Math.max(0, dailyMailOfficers.findIndex((d) => d.id === officer.id));
+          assignedItems = lettersData
+            .filter((_, i) => dailyMailOfficers.length === 1 || i % dailyMailOfficers.length === dmIdx)
+            .map((l, i) => mapToCaseItem(l, i, "Registered"));
         }
 
-        const assignedCount = assignedItems.length;
+        const assignedCount = normRole === "Daily Mail Officer" ? 0 : assignedItems.length;
         let pending = 0;
         let inProgress = 0;
         let closed = 0;
@@ -388,8 +361,8 @@ export default function OfficerWorkflowPage() {
         });
 
         let workloadCategory: "Heavy" | "Moderate" | "Light" | "None" = "None";
-        if (assignedCount >= 6) workloadCategory = "Heavy";
-        else if (assignedCount >= 3) workloadCategory = "Moderate";
+        if (assignedCount >= 5) workloadCategory = "Heavy";
+        else if (assignedCount >= 2) workloadCategory = "Moderate";
         else if (assignedCount >= 1) workloadCategory = "Light";
 
         return {
@@ -401,14 +374,19 @@ export default function OfficerWorkflowPage() {
           assignedItems,
         };
       });
-  }, [officers, lettersData]);
+  }, [officers, lettersData, workloadSummariesState]);
 
   // ── Overall Metric Calculations ────────────────────────────────────────────
-  const totalOfficersCount = workloadSummaries.length;
-  const activeOfficersCount = workloadSummaries.filter((o) => o.status === "Active").length;
-  const subjectOfficersCount = workloadSummaries.filter((o) => o.normalizedRole === "Subject Officer").length;
-  const investigationOfficersCount = workloadSummaries.filter((o) => o.normalizedRole === "Investigation Officer").length;
-  const dailyMailOfficersCount = workloadSummaries.filter((o) => o.normalizedRole === "Daily Mail Officer").length;
+  const totalOfficersCount = systemMetrics?.totalOfficers ?? workloadSummaries.length;
+  const activeOfficersCount = systemMetrics?.activeOfficers ?? workloadSummaries.filter((o) => o.status === "Active").length;
+  const subjectOfficersCount = systemMetrics?.subjectOfficersCount ?? workloadSummaries.filter((o) => o.normalizedRole === "Subject Officer").length;
+  const subjectTotalAssigned = systemMetrics?.subjectTotalAssigned ?? workloadSummaries.filter((o) => o.normalizedRole === "Subject Officer").reduce((a, c) => a + c.assignedCount, 0);
+
+  const investigationOfficersCount = systemMetrics?.investigationOfficersCount ?? workloadSummaries.filter((o) => o.normalizedRole === "Investigation Officer").length;
+  const investigationTotalAssigned = systemMetrics?.investigationTotalAssigned ?? workloadSummaries.filter((o) => o.normalizedRole === "Investigation Officer").reduce((a, c) => a + c.assignedCount, 0);
+
+  const dailyMailOfficersCount = systemMetrics?.dailyMailOfficersCount ?? workloadSummaries.filter((o) => o.normalizedRole === "Daily Mail Officer").length;
+  const dailyMailTotalLetters = systemMetrics?.dailyMailTotalLetters ?? lettersData.length;
 
   // ── Chart Data Preparations ────────────────────────────────────────────────
   const topOfficersChartData = useMemo(() => {
@@ -425,15 +403,10 @@ export default function OfficerWorkflowPage() {
 
   const roleDistributionChartData = useMemo(() => {
     const rolesMap: Record<string, number> = {
-      "Subject Officers": 0,
-      "Investigation Officers": 0,
-      "Daily Mail Officers": 0,
+      "Subject Officers": subjectTotalAssigned,
+      "Investigation Officers": investigationTotalAssigned,
+      "Daily Mail Officers": dailyMailTotalLetters,
     };
-    workloadSummaries.forEach((o) => {
-      if (o.normalizedRole === "Subject Officer") rolesMap["Subject Officers"] += o.assignedCount;
-      else if (o.normalizedRole === "Investigation Officer") rolesMap["Investigation Officers"] += o.assignedCount;
-      else if (o.normalizedRole === "Daily Mail Officer") rolesMap["Daily Mail Officers"] += o.assignedCount;
-    });
 
     const colors = ["#4F46E5", "#0EA5E9", "#10B981"];
     return Object.entries(rolesMap).map(([name, value], i) => ({
@@ -441,7 +414,7 @@ export default function OfficerWorkflowPage() {
       value,
       color: colors[i % colors.length],
     }));
-  }, [workloadSummaries]);
+  }, [subjectTotalAssigned, investigationTotalAssigned, dailyMailTotalLetters]);
 
   // ── Filtered & Sorted Officers List ─────────────────────────────────────────
   const filteredOfficers = useMemo(() => {
@@ -1253,7 +1226,13 @@ export default function OfficerWorkflowPage() {
                         <tr style={{ backgroundColor: "#F9FAFB" }}>
                           <th scope="col" style={{ fontSize: "12px" }}>{t("refLetterNo", "Ref / Letter No")}</th>
                           <th scope="col" style={{ fontSize: "12px" }}>{t("subject", "Subject / Complaint")}</th>
-                          <th scope="col" style={{ fontSize: "12px" }}>{t("sender", "Sender / Source")}</th>
+                          <th scope="col" style={{ fontSize: "12px" }}>
+                            {selectedOfficerModal.normalizedRole === "Daily Mail Officer"
+                              ? t("assignedSubjectOfficer", "Assigned Subject Officer")
+                              : selectedOfficerModal.normalizedRole === "Investigation Officer"
+                              ? t("inquiryRole", "Inquiry Role")
+                              : t("sender", "Sender / Source")}
+                          </th>
                           <th scope="col" style={{ fontSize: "12px" }}>{t("date", "Date")}</th>
                           <th scope="col" style={{ fontSize: "12px" }}>{t("priority", "Priority")}</th>
                           <th scope="col" style={{ fontSize: "12px" }}>{t("status", "Status")}</th>
@@ -1280,7 +1259,43 @@ export default function OfficerWorkflowPage() {
                                 </div>
                               </td>
                               <td style={{ fontSize: "12px", color: "#4B5563" }}>
-                                {item.sender}
+                                {selectedOfficerModal.normalizedRole === "Daily Mail Officer" ? (
+                                  <div>
+                                    <span style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: "4px",
+                                      padding: "2px 8px",
+                                      borderRadius: "12px",
+                                      backgroundColor: item.assignedSubjectOfficer && item.assignedSubjectOfficer !== "Pending Assignment" ? "#EEF2FF" : "#FEF3C7",
+                                      color: item.assignedSubjectOfficer && item.assignedSubjectOfficer !== "Pending Assignment" ? "#4F46E5" : "#D97706",
+                                      fontWeight: 600,
+                                      fontSize: "11px"
+                                    }}>
+                                      <UserCheck size={12} />
+                                      {item.assignedSubjectOfficer || "Unassigned"}
+                                    </span>
+                                  </div>
+                                ) : selectedOfficerModal.normalizedRole === "Investigation Officer" && item.investigationRole ? (
+                                  <div>
+                                    <span style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: "4px",
+                                      padding: "2px 8px",
+                                      borderRadius: "12px",
+                                      backgroundColor: item.investigationRole === "Chairman" ? "#FEF3C7" : "#E0F2FE",
+                                      color: item.investigationRole === "Chairman" ? "#B45309" : "#0284C7",
+                                      fontWeight: 600,
+                                      fontSize: "11px"
+                                    }}>
+                                      <ShieldAlert size={12} />
+                                      {item.investigationRole}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  item.sender
+                                )}
                               </td>
                               <td style={{ fontSize: "12px", color: "#6B7280", whiteSpace: "nowrap" }}>
                                 {item.receivedDate}
