@@ -2622,6 +2622,202 @@ export async function getCaseByAppointmentAndReportDueDateServer(subjectFileNo: 
   }
 }
 
+export async function getCaseFullTimelineServer(caseNo: string) {
+  try {
+    if (!caseNo || !caseNo.trim()) {
+      return serializeForServerAction({ success: false, error: "caseNo is required", data: null });
+    }
+
+    const clean = caseNo.trim();
+    const resolved = await resolveSubjectFileDetails(clean);
+    const actualSubNo = resolved.subjectFileNo;
+    const refNum = resolved.refNumber;
+    const formId = resolved.formId;
+
+    // 1. Fetch Daily Mail Records
+    let dailyMailRows: any[] = [];
+    try {
+      dailyMailRows = await prisma.$queryRaw`
+        SELECT 
+          id::text as id,
+          letter_number,
+          ref_number,
+          mode_of_receipt,
+          senders_party,
+          nature_of_letter,
+          subject_category,
+          subject_of_letter,
+          date_received_by_add_secretary,
+          date_letter_handover_discipline,
+          created_at,
+          updated_at
+        FROM public.daily_mail_letter_table
+        WHERE LOWER(ref_number) = LOWER(${clean})
+           OR LOWER(ref_number) = LOWER(${actualSubNo})
+           OR LOWER(ref_number) = LOWER(${refNum})
+           OR LOWER(letter_number) = LOWER(${clean})
+           OR LOWER(letter_number) = LOWER(${actualSubNo})
+           OR LOWER(letter_number) = LOWER(${refNum})
+        ORDER BY created_at ASC;
+      `;
+    } catch (e) {}
+
+    // Fallback: daily_mail table
+    if (!dailyMailRows || dailyMailRows.length === 0) {
+      try {
+        dailyMailRows = await prisma.$queryRaw`
+          SELECT 
+            daily_mail_id::text as id,
+            letter_number,
+            received_letter_number as ref_number,
+            mode_of_receipt,
+            sender_party as senders_party,
+            nature_of_letter,
+            subject_category,
+            subject_of_letter,
+            date_received_by_additional_secretary as date_received_by_add_secretary,
+            date_letter_handed_over_to_dicipline_branch as date_letter_handover_discipline,
+            created_at,
+            updated_at
+          FROM daily_mail
+          WHERE LOWER(received_letter_number) = LOWER(${clean})
+             OR LOWER(received_letter_number) = LOWER(${actualSubNo})
+             OR LOWER(received_letter_number) = LOWER(${refNum})
+             OR LOWER(letter_number) = LOWER(${clean})
+             OR LOWER(letter_number) = LOWER(${actualSubNo})
+             OR LOWER(letter_number) = LOWER(${refNum})
+          ORDER BY created_at ASC;
+        `;
+      } catch (e) {}
+    }
+
+    // 2. Fetch Subject Officer Form & Accused Officers
+    let subjectForm: any = null;
+    let accusedOfficersList: any[] = [];
+    try {
+      const formRes = await getAccusedOfficerByRefServer(clean);
+      if (formRes && formRes.success && formRes.data) {
+        subjectForm = formRes.data;
+        if (Array.isArray(formRes.data.accused_officers)) {
+          accusedOfficersList = formRes.data.accused_officers;
+        }
+      }
+    } catch (e) {}
+
+    // 3. Fetch Chairman & Committee Members
+    let chairmanData: any = null;
+    let membersData: any[] = [];
+    try {
+      const chairRes = await getChairmanByCaseServer(clean);
+      if (chairRes && chairRes.success && chairRes.data) {
+        chairmanData = chairRes.data;
+      }
+    } catch (e) {}
+    try {
+      const membRes = await getMembersByCaseServer(clean);
+      if (membRes && membRes.success && Array.isArray(membRes.data)) {
+        membersData = membRes.data;
+      }
+    } catch (e) {}
+
+    // 4. Fetch Appointment & Report Due Dates
+    let datesData: any = null;
+    try {
+      const dRes = await getCaseByAppointmentAndReportDueDateServer(clean);
+      if (dRes && dRes.success && dRes.data) {
+        datesData = dRes.data;
+      }
+    } catch (e) {}
+
+    // 5. Fetch Date Extension
+    let extData: any = null;
+    try {
+      const extRes = await getCaseByDateExtensionServer(clean);
+      if (extRes && extRes.success && extRes.data) {
+        extData = extRes.data;
+      }
+    } catch (e) {}
+
+    // 6. Fetch Subject Details Action Logs
+    let subjectDetailsLogs: any[] = [];
+    try {
+      subjectDetailsLogs = await prisma.$queryRaw`
+        SELECT 
+          id::text as id,
+          case_no,
+          ref_no,
+          received_date,
+          report_state,
+          special_notes,
+          subject_officer_name,
+          officer_name,
+          step_taken,
+          created_at
+        FROM public.dcmms_subject_details
+        WHERE LOWER(case_no) = LOWER(${clean})
+           OR LOWER(case_no) = LOWER(${actualSubNo})
+           OR LOWER(case_no) = LOWER(${refNum})
+           OR LOWER(ref_no) = LOWER(${clean})
+           OR LOWER(ref_no) = LOWER(${actualSubNo})
+           OR LOWER(ref_no) = LOWER(${refNum})
+        ORDER BY received_date ASC, created_at ASC;
+      `;
+    } catch (e) {}
+
+    // 7. Fetch Subject Assignments (Investigation Admin decisions)
+    let assignmentData: any = null;
+    try {
+      const asgnRows: any[] = await prisma.$queryRaw`
+        SELECT * FROM public.dcmms_subject_assignments
+        WHERE LOWER(case_no) = LOWER(${clean})
+           OR LOWER(case_no) = LOWER(${actualSubNo})
+           OR LOWER(case_no) = LOWER(${refNum})
+        LIMIT 1;
+      `;
+      if (asgnRows && asgnRows.length > 0) {
+        assignmentData = asgnRows[0];
+      }
+    } catch (e) {}
+
+    // 8. Fetch Preliminary Investigation details
+    let prelimData: any = null;
+    try {
+      const prelimRows: any[] = await prisma.$queryRaw`
+        SELECT * FROM public.dcmms_preliminary_investigations
+        WHERE LOWER(case_no) = LOWER(${clean})
+           OR LOWER(case_no) = LOWER(${actualSubNo})
+           OR LOWER(case_no) = LOWER(${refNum})
+        LIMIT 1;
+      `;
+      if (prelimRows && prelimRows.length > 0) {
+        prelimData = prelimRows[0];
+      }
+    } catch (e) {}
+
+    return serializeForServerAction({
+      success: true,
+      data: {
+        caseNo: clean,
+        subjectFileNo: actualSubNo,
+        refNumber: refNum,
+        dailyMailRows: dailyMailRows || [],
+        subjectForm: subjectForm || null,
+        accusedOfficers: accusedOfficersList || [],
+        chairman: chairmanData || null,
+        members: membersData || [],
+        appointmentDates: datesData || null,
+        extension: extData || null,
+        subjectDetailsLogs: subjectDetailsLogs || [],
+        assignment: assignmentData || null,
+        preliminaryInvestigation: prelimData || null,
+      },
+    });
+  } catch (error: any) {
+    console.error("Error fetching full case timeline from server:", error);
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to fetch timeline", data: null });
+  }
+}
+
 
 
 

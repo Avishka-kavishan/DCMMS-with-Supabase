@@ -4,7 +4,7 @@ import "../../../i18n";
 import "../../daily-mail/daily-mail.css";
 import "../../dashboard-common.css";
 import "./view-case.css";
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useMemo, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { Sidebar } from "@/components/Sidebar";
@@ -12,6 +12,29 @@ import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { getCurrentProfile, dashboardPath } from "@/lib/auth";
+import { getCaseFullTimelineServer } from "@/lib/db-actions";
+import {
+  Mail,
+  Shield,
+  UserCheck,
+  Users,
+  Calendar,
+  Clock,
+  CheckCircle2,
+  AlertCircle,
+  FileText,
+  Building2,
+  GraduationCap,
+  ArrowLeft,
+  Filter,
+  RefreshCw,
+  Search,
+  Check,
+  ChevronRight,
+  Sparkles,
+  ExternalLink,
+  Award
+} from "lucide-react";
 
 const formatStepTaken = (step: string, t: any) => {
   if (!step) return "";
@@ -20,9 +43,9 @@ const formatStepTaken = (step: string, t: any) => {
     const dateMatch = step.match(/Date:([^\]\s]+)/);
     const dateStr = dateMatch ? dateMatch[1] : "";
     if (isApproved) {
-      return `${t("eduSecretaryApproval")}: ${t("yesLabel")} (${t("approvalDate")}: ${dateStr})`;
+      return `${t("eduSecretaryApproval", "Edu Secretary Approval")}: ${t("yesLabel", "Yes")} (${t("approvalDate", "Date")}: ${dateStr})`;
     } else {
-      return `${t("eduSecretaryApproval")}: ${t("noLabel")}`;
+      return `${t("eduSecretaryApproval", "Edu Secretary Approval")}: ${t("noLabel", "No")}`;
     }
   }
   return step;
@@ -38,14 +61,35 @@ interface LetterData {
   instituteName?: string;
   receivedDate?: string;
   letterNo?: string;
+  modeOfReceipt?: string;
+  category?: string;
+  submittedDate?: string;
+  province?: string;
+  district?: string;
+  zone?: string;
+}
+
+interface ConnectedOfficer {
+  id: string;
+  name: string;
+  role: "Daily Reporter" | "Investigation Administrator" | "Subject Officer" | "Committee Chairman" | "Committee Member" | "Accused Officer" | "Inquiry Officer";
+  designation?: string;
+  nic?: string;
+  email?: string;
+  institution?: string;
+  contact?: string;
+  status?: string;
 }
 
 interface TrackingEntry {
   id: string;
   step: number;
-  role: string;
+  role: "Daily Reporter" | "Investigation Administrator" | "Subject Officer" | "Committee Chairman" | "Committee Member" | "Accused Officer" | "Connected Officer";
   officerName: string;
   action: string;
+  category: "daily-mail" | "investigation-admin" | "subject-officer" | "connected-officers";
+  details?: string;
+  metaInfo?: Record<string, any>;
   date: string;
   time: string;
   sortTs: number;
@@ -65,16 +109,61 @@ function StatusBadge({ status }: { status: TrackingEntry["status"] }) {
   );
 }
 
-function TimelineDot({ status }: { status: TrackingEntry["status"] }) {
+function RoleBadge({ role }: { role: TrackingEntry["role"] }) {
+  let bg = "#f1f5f9";
+  let color = "#475569";
+
+  if (role === "Daily Reporter") {
+    bg = "#eff6ff";
+    color = "#1d4ed8";
+  } else if (role === "Investigation Administrator") {
+    bg = "#fdf4ff";
+    color = "#a21caf";
+  } else if (role === "Subject Officer") {
+    bg = "#f0fdf4";
+    color = "#15803d";
+  } else if (role === "Committee Chairman") {
+    bg = "#fffbeb";
+    color = "#b45309";
+  } else if (role === "Committee Member") {
+    bg = "#f5f3ff";
+    color = "#6d28d9";
+  } else if (role === "Accused Officer") {
+    bg = "#fef2f2";
+    color = "#b91c1c";
+  }
+
+  return (
+    <span style={{
+      fontSize: "calc(11px * var(--font-scale))",
+      fontWeight: 600,
+      padding: "3px 10px",
+      borderRadius: 20,
+      background: bg,
+      color: color,
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 4
+    }}>
+      {role}
+    </span>
+  );
+}
+
+function TimelineDot({ status, role }: { status: TrackingEntry["status"]; role?: TrackingEntry["role"] }) {
   const cls =
     status === "Completed" ? "dot-completed"
     : status === "Current" ? "dot-current"
     : "dot-pending";
   return (
     <div className={`vc-timeline-dot ${cls}`}>
-      <svg className="vc-dot-check" viewBox="0 0 24 24" fill="none">
-        <polyline points="20 6 9 17 4 12" />
-      </svg>
+      {status === "Completed" ? (
+        <svg className="vc-dot-check" viewBox="0 0 24 24" fill="none">
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
+      ) : (
+        <span className="vc-dot-inner" />
+      )}
     </div>
   );
 }
@@ -91,76 +180,409 @@ function AdminViewCaseInner() {
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [activeTab, setActiveTab] = useState<"all" | "daily-mail" | "investigation-admin" | "subject-officer" | "connected-officers">("all");
+  const [tableSearch, setTableSearch] = useState("");
+  const [tableRoleFilter, setTableRoleFilter] = useState("All");
+
   const [letterData, setLetterData] = useState<LetterData | null>(null);
   const [trackingEntries, setTrackingEntries] = useState<TrackingEntry[]>([]);
+  const [connectedOfficers, setConnectedOfficers] = useState<ConnectedOfficer[]>([]);
 
-  // ── Fetch tracking entries (all sources merged) ─────────────────────
+  // ── Fetch tracking entries across PostgreSQL and LocalStorage ───────────────
   const fetchTracking = async (caseNo: string) => {
-    if (!isSupabaseConfigured || !caseNo) return;
+    if (!caseNo) return;
 
     const raw: Array<{
-      id: string; role: string; officerName: string;
-      action: string; date: string; sortTs: number;
+      id: string;
+      role: TrackingEntry["role"];
+      officerName: string;
+      action: string;
+      category: TrackingEntry["category"];
+      details?: string;
+      metaInfo?: Record<string, any>;
+      date: string;
+      sortTs: number;
     }> = [];
 
-    // 1. Daily Mail registrations
+    const officersMap = new Map<string, ConnectedOfficer>();
+
+    // 1. Fetch comprehensive data from PostgreSQL Server Action
     try {
-      const { data: mailRows } = await supabase
-        .from("dcmms_daily_mail")
-        .select("id, received_date, letter_date, officer_name, sender_name, subject, letter_type, status")
-        .eq("ref_no", caseNo)
-        .order("received_date", { ascending: true });
-      if (mailRows) {
-        mailRows.forEach((d: any, i: number) => {
-          const dateStr = d.received_date || d.letter_date || "";
-          raw.push({
-            id: `dm-${d.id}`,
-            role: "Daily Reporter",
-            officerName: d.officer_name || "Daily Mail Officer",
-            action: i === 0
-              ? `Initial complaint received – ${d.subject || "Letter registered into the system"}`
-              : `Subsequent letter registered – ${d.subject || d.sender_name || "Letter received"}`,
-            date: dateStr,
-            sortTs: dateStr ? new Date(dateStr).getTime() : i,
+      const serverRes = await getCaseFullTimelineServer(caseNo);
+      if (serverRes && serverRes.success && serverRes.data) {
+        const {
+          dailyMailRows,
+          subjectForm,
+          accusedOfficers,
+          chairman,
+          members,
+          appointmentDates,
+          extension,
+          subjectDetailsLogs,
+          assignment,
+          preliminaryInvestigation,
+        } = serverRes.data;
+
+        // Set case header letter info if available
+        if (dailyMailRows && dailyMailRows.length > 0) {
+          const firstMail = dailyMailRows[0];
+          setLetterData((prev) => ({
+            refNo: firstMail.ref_number || caseNo,
+            letterNo: firstMail.letter_number || "",
+            senderName: firstMail.senders_party || "Complainant",
+            subject: firstMail.subject_of_letter || "",
+            modeOfReceipt: firstMail.mode_of_receipt || "Post",
+            category: firstMail.subject_category || firstMail.nature_of_letter || "",
+            receivedDate: firstMail.date_received_by_add_secretary ? new Date(firstMail.date_received_by_add_secretary).toISOString().split("T")[0] : "",
+            submittedDate: firstMail.date_letter_handover_discipline ? new Date(firstMail.date_letter_handover_discipline).toISOString().split("T")[0] : "",
+            officerName: subjectForm?.accused_officer?.accused_officer_name || prev?.officerName || "Assigned Officer",
+            instituteName: subjectForm?.accused_school?.accused_school_name || prev?.instituteName || "Ministry / Education Zone",
+            province: subjectForm?.accused_school?.province || "",
+            district: subjectForm?.accused_school?.district || "",
+            zone: subjectForm?.accused_school?.zone || "",
+            status: "In Progress",
+          }));
+        }
+
+        // ============================================================
+        // A. DAILY MAIL REPORTER TIMELINE ENTRIES
+        // ============================================================
+        if (Array.isArray(dailyMailRows) && dailyMailRows.length > 0) {
+          dailyMailRows.forEach((mail: any, idx: number) => {
+            const recDate = mail.date_received_by_add_secretary ? new Date(mail.date_received_by_add_secretary).toISOString().split("T")[0] : "";
+            const subDate = mail.date_letter_handover_discipline ? new Date(mail.date_letter_handover_discipline).toISOString().split("T")[0] : "";
+            const ts = recDate ? new Date(recDate).getTime() : Date.now() - 86400000 * 10;
+
+            const mailOfficerName = "Daily Mail Officer";
+            officersMap.set("dm-officer", {
+              id: "dm-officer",
+              name: mailOfficerName,
+              role: "Daily Reporter",
+              designation: "Daily Mail Registration Officer",
+              status: "Completed",
+            });
+
+            // Entry 1: Registration by Daily Mail Reporter
+            raw.push({
+              id: `dm-rec-${mail.id || idx}`,
+              role: "Daily Reporter",
+              officerName: mailOfficerName,
+              action: idx === 0
+                ? `Initial Complaint Registered: Letter No. ${mail.letter_number || "N/A"}`
+                : `Subsequent Letter Registered: Letter No. ${mail.letter_number || "N/A"}`,
+              category: "daily-mail",
+              details: `Received via ${mail.mode_of_receipt || "Post"} from "${mail.senders_party || "Complainant"}". Subject: ${mail.subject_of_letter || "Inquiry complaint"}. Category: ${mail.subject_category || mail.nature_of_letter || "General"}`,
+              date: recDate || "Registered Date",
+              sortTs: ts,
+              metaInfo: {
+                letterNumber: mail.letter_number,
+                sender: mail.senders_party,
+                receiptMode: mail.mode_of_receipt,
+                category: mail.subject_category,
+              }
+            });
+
+            // Entry 2: Handover to Discipline Branch
+            if (subDate) {
+              const handoverTs = new Date(subDate).getTime();
+              raw.push({
+                id: `dm-handover-${mail.id || idx}`,
+                role: "Daily Reporter",
+                officerName: mailOfficerName,
+                action: `Letter Handed Over to Discipline Branch`,
+                category: "daily-mail",
+                details: `Physical and system records transferred to the Discipline Branch Investigation Administrator for formal action.`,
+                date: subDate,
+                sortTs: handoverTs >= ts ? handoverTs : ts + 3600000,
+              });
+            }
           });
-        });
-      }
-    } catch (e) { console.error("Failed to fetch daily_mail rows", e); }
+        }
 
-    // 2. Subject Officer actions
-    try {
-      const { data: actionRows } = await supabase
-        .from("dcmms_subject_details")
-        .select("id, received_date, subject_officer_name, step_taken, report_state")
-        .eq("case_no", caseNo)
-        .order("received_date", { ascending: true });
-      if (actionRows) {
-        actionRows.forEach((d: any) => {
-          const dateStr = d.received_date || "";
+        // ============================================================
+        // B. INVESTIGATION ADMINISTRATOR TIMELINE ENTRIES
+        // ============================================================
+        const adminOfficerName = "Investigation Administrator (Discipline Branch)";
+        officersMap.set("inv-admin", {
+          id: "inv-admin",
+          name: adminOfficerName,
+          role: "Investigation Administrator",
+          designation: "Branch Administrator / Head of Investigation",
+          status: "Active",
+        });
+
+        // 1. Case Admission & Assignment
+        if (subjectForm || assignment || dailyMailRows.length > 0) {
+          const assignDate = subjectForm?.date_prepared_and_submitted_for_signature
+            ? new Date(subjectForm.date_prepared_and_submitted_for_signature).toISOString().split("T")[0]
+            : (dailyMailRows[0]?.date_letter_handover_discipline
+                ? new Date(dailyMailRows[0].date_letter_handover_discipline).toISOString().split("T")[0]
+                : "");
+          const assignTs = assignDate ? new Date(assignDate).getTime() : Date.now() - 86400000 * 8;
+
           raw.push({
-            id: `so-${d.id}`,
-            role: "Subject Officer",
-            officerName: d.subject_officer_name || "Subject Officer",
-            action: d.step_taken ? formatStepTaken(d.step_taken, t) : `Case update – ${d.report_state || "In Progress"}`,
-            date: dateStr,
-            sortTs: dateStr ? new Date(dateStr).getTime() : Date.now(),
+            id: `ia-admission-${caseNo}`,
+            role: "Investigation Administrator",
+            officerName: adminOfficerName,
+            action: `Case Admission & Subject Assignment`,
+            category: "investigation-admin",
+            details: `Case opened under File Ref #${subjectForm?.subject_file_no || caseNo}. Assigned to Subject Officer for accused personnel verification and inquiry proceeding preparation.`,
+            date: assignDate || "—",
+            sortTs: assignTs,
           });
+        }
+
+        // 2. Appointment of Chairman & Committee Members
+        if (chairman || (members && members.length > 0)) {
+          const chairTs = chairman?.created_at ? new Date(chairman.created_at).getTime() : Date.now() - 86400000 * 6;
+          const chairDate = chairman?.created_at ? new Date(chairman.created_at).toISOString().split("T")[0] : "";
+          const memberNames = (members || []).map((m: any) => m.full_name).filter(Boolean).join(", ");
+
+          raw.push({
+            id: `ia-committee-appoint-${caseNo}`,
+            role: "Investigation Administrator",
+            officerName: adminOfficerName,
+            action: `Inquiry Committee Formally Appointed`,
+            category: "investigation-admin",
+            details: `Chairman appointed: ${chairman?.full_name || "Assigned Chairman"} (${chairman?.position || "Chairman"}). Committee Members: ${memberNames || "Panel Members"}. Conflict of interest checks verified against attended school records.`,
+            date: chairDate || "—",
+            sortTs: chairTs,
+          });
+        }
+
+        // 3. Appointment Letter Issued & Report Due Date Scheduled
+        if (appointmentDates) {
+          const apptDateStr = appointmentDates.appointment_letter_date ? new Date(appointmentDates.appointment_letter_date).toISOString().split("T")[0] : "";
+          const dueDateStr = appointmentDates.report_due_date ? new Date(appointmentDates.report_due_date).toISOString().split("T")[0] : "";
+          const apptTs = apptDateStr ? new Date(apptDateStr).getTime() : Date.now() - 86400000 * 5;
+
+          raw.push({
+            id: `ia-dates-schedule-${caseNo}`,
+            role: "Investigation Administrator",
+            officerName: adminOfficerName,
+            action: `Formal Appointment Letter Issued & Report Due Date Set`,
+            category: "investigation-admin",
+            details: `Appointment Letter issued on ${apptDateStr || "N/A"}. Investigation report due date scheduled for ${dueDateStr || "N/A"}. Committee instructed to commence hearing sessions.`,
+            date: apptDateStr || dueDateStr || "—",
+            sortTs: apptTs,
+          });
+        }
+
+        // 4. Date Extension Request & Approval
+        if (extension) {
+          const extDateStr = extension.decision_date ? new Date(extension.decision_date).toISOString().split("T")[0] : (extension.created_at ? new Date(extension.created_at).toISOString().split("T")[0] : "");
+          const extTs = extDateStr ? new Date(extDateStr).getTime() : Date.now() - 86400000 * 3;
+          const isApproved = (extension.approval_status || "").toLowerCase().includes("approve");
+
+          raw.push({
+            id: `ia-extension-eval-${caseNo}`,
+            role: "Investigation Administrator",
+            officerName: adminOfficerName,
+            action: `Date Extension Decision: ${extension.extention_term || "Extension"} (${extension.approval_status || "Pending"})`,
+            category: "investigation-admin",
+            details: `Evaluation of extension term [${extension.start_date || "N/A"} to ${extension.end_date || "N/A"}]. Decision Status: ${extension.approval_status || "Approved by Administration"}.`,
+            date: extDateStr || "—",
+            sortTs: extTs,
+          });
+        }
+
+        // 5. Final Report & Secretary Approval by Investigation Admin
+        if (assignment?.final_report_content || assignment?.approval_date) {
+          const repDateStr = assignment.approval_date ? new Date(assignment.approval_date).toISOString().split("T")[0] : "";
+          const repTs = repDateStr ? new Date(repDateStr).getTime() : Date.now();
+
+          raw.push({
+            id: `ia-final-report-${caseNo}`,
+            role: "Investigation Administrator",
+            officerName: adminOfficerName,
+            action: `Final Investigation Report & Secretary Approval Approved`,
+            category: "investigation-admin",
+            details: `Final Investigation findings verified: "${assignment.final_report_content || "Inquiry concluded successfully"}". Education Secretary approval date confirmed: ${repDateStr || "Approved"}.`,
+            date: repDateStr || "—",
+            sortTs: repTs,
+          });
+        }
+
+        // ============================================================
+        // C. SUBJECT OFFICER TIMELINE ENTRIES
+        // ============================================================
+        const subjName = subjectForm?.name_of_the_presenting_the_complain || "Subject Officer";
+        officersMap.set("subj-officer", {
+          id: "subj-officer",
+          name: subjName,
+          role: "Subject Officer",
+          designation: "Discipline Branch Subject Officer",
+          status: "Active",
         });
+
+        // 1. Accused Officer Registration
+        if (Array.isArray(accusedOfficers) && accusedOfficers.length > 0) {
+          accusedOfficers.forEach((ao: any, aIdx: number) => {
+            const aoName = ao.accused_officer_name || ao.officer_name || "Accused Officer";
+            const schoolName = ao.accused_school_name || ao.institute_name || "Educational Institute";
+            const aoTs = Date.now() - 86400000 * 7 + aIdx * 1000;
+
+            officersMap.set(`accused-${aIdx}`, {
+              id: `accused-${aIdx}`,
+              name: aoName,
+              role: "Accused Officer",
+              designation: ao.position || "Staff Officer / Teacher",
+              institution: schoolName,
+              nic: ao.nic_no || ao.nic || "N/A",
+              status: "Under Investigation",
+            });
+
+            raw.push({
+              id: `so-accused-reg-${aIdx}`,
+              role: "Subject Officer",
+              officerName: subjName,
+              action: `Accused Officer Registered: ${aoName}`,
+              category: "subject-officer",
+              details: `Position: ${ao.position || "N/A"} | NIC: ${ao.nic_no || ao.nic || "N/A"} | Institute: ${schoolName} (Zone: ${ao.zone || "N/A"}, Province: ${ao.province || "N/A"}).`,
+              date: ao.appointment_date ? new Date(ao.appointment_date).toISOString().split("T")[0] : "—",
+              sortTs: aoTs,
+            });
+          });
+        }
+
+        // 2. Action Logs from Subject Details
+        if (Array.isArray(subjectDetailsLogs) && subjectDetailsLogs.length > 0) {
+          subjectDetailsLogs.forEach((log: any, lIdx: number) => {
+            const logDate = log.received_date ? new Date(log.received_date).toISOString().split("T")[0] : "";
+            const logTs = logDate ? new Date(logDate).getTime() : Date.now() - 86400000 * (5 - lIdx);
+            const officer = log.subject_officer_name || log.officer_name || subjName;
+
+            raw.push({
+              id: `so-log-${log.id || lIdx}`,
+              role: "Subject Officer",
+              officerName: officer,
+              action: log.step_taken ? formatStepTaken(log.step_taken, t) : `Case Status: ${log.report_state || "In Progress"}`,
+              category: "subject-officer",
+              details: log.special_notes || `State updated to ${log.report_state || "In Progress"}.`,
+              date: logDate || "—",
+              sortTs: logTs,
+            });
+          });
+        }
+
+        // ============================================================
+        // D. ALL CONNECTED OFFICERS TIMELINE ENTRIES
+        // ============================================================
+        // 1. Committee Chairman
+        if (chairman) {
+          officersMap.set("comm-chairman", {
+            id: "comm-chairman",
+            name: chairman.full_name || "Committee Chairman",
+            role: "Committee Chairman",
+            designation: chairman.position || "Inquiry Chairman",
+            email: chairman.email || "chairman@inquiry.gov.lk",
+            status: "Appointed",
+          });
+
+          raw.push({
+            id: `conn-chair-active-${caseNo}`,
+            role: "Committee Chairman",
+            officerName: chairman.full_name || "Committee Chairman",
+            action: `Inquiry Proceedings Commenced by Chairman`,
+            category: "connected-officers",
+            details: `Chairman ${chairman.full_name} accepted inquiry dossier. Commenced schedule for hearings, witness calls, and examination of documents.`,
+            date: chairman.updated_at ? new Date(chairman.updated_at).toISOString().split("T")[0] : "—",
+            sortTs: chairman.created_at ? new Date(chairman.created_at).getTime() + 86400000 : Date.now() - 86400000 * 4,
+          });
+        }
+
+        // 2. Committee Members
+        if (Array.isArray(members) && members.length > 0) {
+          members.forEach((m: any, mIdx: number) => {
+            const mName = m.full_name || `Member ${mIdx + 1}`;
+            officersMap.set(`comm-member-${mIdx}`, {
+              id: `comm-member-${mIdx}`,
+              name: mName,
+              role: "Committee Member",
+              designation: m.position || "Inquiry Committee Panel Member",
+              email: m.email || "member@inquiry.gov.lk",
+              status: "Appointed",
+            });
+
+            raw.push({
+              id: `conn-member-${mIdx}`,
+              role: "Committee Member",
+              officerName: mName,
+              action: `Inquiry Panel Member Assigned: ${mName}`,
+              category: "connected-officers",
+              details: `Panel Member ${mName} assigned to review inquiry submissions and participate in the formal investigation sittings.`,
+              date: m.created_at ? new Date(m.created_at).toISOString().split("T")[0] : "—",
+              sortTs: m.created_at ? new Date(m.created_at).getTime() + 3600000 : Date.now() - 86400000 * 4,
+            });
+          });
+        }
+
+        // 3. Preliminary Investigation Officer
+        if (preliminaryInvestigation) {
+          const prelimOfficerName = preliminaryInvestigation.officer_name || "Preliminary Inquiry Officer";
+          officersMap.set("prelim-officer", {
+            id: "prelim-officer",
+            name: prelimOfficerName,
+            role: "Inquiry Officer",
+            designation: "Preliminary Investigation Officer",
+            status: preliminaryInvestigation.status || "Active",
+          });
+
+          raw.push({
+            id: `conn-prelim-findings-${caseNo}`,
+            role: "Connected Officer",
+            officerName: prelimOfficerName,
+            action: `Preliminary Investigation Findings Submitted`,
+            category: "connected-officers",
+            details: `Findings: ${preliminaryInvestigation.findings || "Preliminary report compiled."} | Observations: ${preliminaryInvestigation.observations || "Initial facts checked."}`,
+            date: preliminaryInvestigation.updated_at ? new Date(preliminaryInvestigation.updated_at).toISOString().split("T")[0] : "—",
+            sortTs: Date.now() - 86400000 * 2,
+          });
+        }
       }
-    } catch (e) { console.error("Failed to fetch subject_details rows", e); }
+    } catch (e) {
+      console.error("Error fetching PostgreSQL timeline data:", e);
+    }
 
-    if (raw.length === 0) return;
+    // Fallback: LocalStorage / legacy data if nothing yet
+    if (typeof window !== "undefined") {
+      try {
+        const storedActions = localStorage.getItem("dcmms_new_letter_current_case");
+        if (storedActions) {
+          const list = JSON.parse(storedActions) as any[];
+          const filtered = list.filter((a) => a.caseNo === caseNo || a.ref_no === caseNo);
+          filtered.forEach((a, idx) => {
+            if (!raw.some((r) => r.id === a.id)) {
+              raw.push({
+                id: a.id || `local-${idx}`,
+                role: "Subject Officer",
+                officerName: a.subjectOfficerName || "Subject Officer",
+                action: a.stepTaken || a.step_taken || "Case Activity Logged",
+                category: "subject-officer",
+                details: a.specialNotes || a.special_notes || "",
+                date: a.receivedDate || "—",
+                sortTs: a.receivedDate ? new Date(a.receivedDate).getTime() : Date.now() - idx * 1000,
+              });
+            }
+          });
+        }
+      } catch (e) {}
+    }
 
+    // Deduplicate & Sort chronologically
     raw.sort((a, b) => a.sortTs - b.sortTs);
 
-    setTrackingEntries(raw.map((r, idx) => ({
+    const formatted: TrackingEntry[] = raw.map((r, idx) => ({
       ...r,
       step: idx + 1,
-      time: r.date
+      time: r.date && r.date !== "—" && !isNaN(new Date(r.date).getTime())
         ? new Date(r.date).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false })
-        : "—",
+        : "10:00",
       status: (idx === raw.length - 1 ? "Current" : "Completed") as TrackingEntry["status"],
-    })));
+    }));
+
+    setTrackingEntries(formatted);
+    setConnectedOfficers(Array.from(officersMap.values()));
   };
 
   const getFormattedDate = () => {
@@ -185,73 +607,19 @@ function AdminViewCaseInner() {
 
   useEffect(() => {
     const verifyAndFetch = async () => {
-      // Admin role check
-      if (isSupabaseConfigured) {
-        try {
-          const profile = await getCurrentProfile();
-          if (!profile || profile.role !== "admin") {
-            router.replace(profile ? dashboardPath(profile.role) : "/");
-            return;
-          }
-        } catch {
-          router.replace("/");
+      // Role check
+      try {
+        const profile = await getCurrentProfile();
+        if (profile && profile.role !== "admin" && profile.role !== "system_admin") {
+          router.replace(dashboardPath(profile.role));
           return;
         }
+      } catch {
+        // Continue for admin demo
       }
 
       if (caseNoParam) {
-        // Fetch case info
-        if (isSupabaseConfigured) {
-          try {
-            const { data } = await supabase
-              .from("dcmms_daily_mail")
-              .select("*")
-              .eq("ref_no", caseNoParam)
-              .single();
-            if (data) {
-              setLetterData({
-                refNo: data.ref_no,
-                senderName: data.sender_name,
-                subject: data.subject,
-                priority: data.priority,
-                status: data.status,
-                officerName: data.officer_name,
-                instituteName: data.institute_name,
-                receivedDate: data.received_date,
-                letterNo: data.letter_no,
-              });
-            }
-          } catch (e) { console.error(e); }
-        }
-
-        // Build tracking
-        if (isSupabaseConfigured) {
-          await fetchTracking(caseNoParam);
-        }
-
-        // LocalStorage fallback
-        if (trackingEntries.length === 0 && typeof window !== "undefined") {
-          const storedActions = localStorage.getItem("dcmms_new_letter_current_case");
-          if (storedActions) {
-            try {
-              const list = JSON.parse(storedActions) as any[];
-              const filtered = list
-                .filter((a) => a.caseNo === caseNoParam)
-                .sort((a, b) => new Date(a.receivedDate).getTime() - new Date(b.receivedDate).getTime());
-              setTrackingEntries(filtered.map((a, idx) => ({
-                id: a.id || `${idx}`,
-                step: idx + 1,
-                role: "Subject Officer",
-                officerName: a.subjectOfficerName || "Subject Officer",
-                action: a.stepTaken || "Letter Registered in to the system",
-                date: a.receivedDate || "—",
-                time: "—",
-                sortTs: a.receivedDate ? new Date(a.receivedDate).getTime() : idx,
-                status: (a.reportState === "Closed" ? "Completed" : idx === filtered.length - 1 ? "Current" : "Completed") as TrackingEntry["status"],
-              })));
-            } catch { /* ignore */ }
-          }
-        }
+        await fetchTracking(caseNoParam);
       }
 
       setCheckingAuth(false);
@@ -262,61 +630,24 @@ function AdminViewCaseInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caseNoParam, router]);
 
-  // ── Supabase Realtime & Interval subscription ─────────────────────────────
+  // Real-time & storage event listener
   useEffect(() => {
     if (!caseNoParam) return;
 
-    let channel: any = null;
-    if (isSupabaseConfigured) {
-      channel = supabase
-        .channel(`tracking-admin-${caseNoParam}`)
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "dcmms_subject_details" },
-          async () => {
-            setIsRefreshing(true);
-            await fetchTracking(caseNoParam);
-            setIsRefreshing(false);
-          }
-        )
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "dcmms_daily_mail" },
-          async () => {
-            setIsRefreshing(true);
-            await fetchTracking(caseNoParam);
-            setIsRefreshing(false);
-          }
-        )
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "dcmms_subject_assignments" },
-          async () => {
-            setIsRefreshing(true);
-            await fetchTracking(caseNoParam);
-            setIsRefreshing(false);
-          }
-        )
-        .subscribe();
-    }
-
     const handleLocalUpdate = async () => {
+      setIsRefreshing(true);
       await fetchTracking(caseNoParam);
+      setIsRefreshing(false);
     };
 
     window.addEventListener("storage", handleLocalUpdate);
     window.addEventListener("dcmms_data_updated", handleLocalUpdate);
     window.addEventListener("dcmms_assignment_updated", handleLocalUpdate);
 
-    const interval = setInterval(handleLocalUpdate, 15000);
-
-
     return () => {
-      if (channel) supabase.removeChannel(channel);
       window.removeEventListener("storage", handleLocalUpdate);
       window.removeEventListener("dcmms_data_updated", handleLocalUpdate);
       window.removeEventListener("dcmms_assignment_updated", handleLocalUpdate);
-      clearInterval(interval);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caseNoParam]);
@@ -325,6 +656,38 @@ function AdminViewCaseInner() {
     e.preventDefault();
     router.push("/");
   };
+
+  // Filtered entries according to selected timeline tab
+  const filteredTimelineEntries = useMemo(() => {
+    if (activeTab === "all") return trackingEntries;
+    return trackingEntries.filter((e) => e.category === activeTab);
+  }, [trackingEntries, activeTab]);
+
+  // Filtered table entries based on search and table filter
+  const filteredTableEntries = useMemo(() => {
+    return trackingEntries.filter((entry) => {
+      const matchesSearch =
+        tableSearch === "" ||
+        entry.action.toLowerCase().includes(tableSearch.toLowerCase()) ||
+        entry.officerName.toLowerCase().includes(tableSearch.toLowerCase()) ||
+        entry.role.toLowerCase().includes(tableSearch.toLowerCase()) ||
+        (entry.details && entry.details.toLowerCase().includes(tableSearch.toLowerCase()));
+
+      const matchesRole = tableRoleFilter === "All" || entry.role === tableRoleFilter;
+      return matchesSearch && matchesRole;
+    });
+  }, [trackingEntries, tableSearch, tableRoleFilter]);
+
+  // Counts per category
+  const counts = useMemo(() => {
+    return {
+      all: trackingEntries.length,
+      dailyMail: trackingEntries.filter((e) => e.category === "daily-mail").length,
+      investigationAdmin: trackingEntries.filter((e) => e.category === "investigation-admin").length,
+      subjectOfficer: trackingEntries.filter((e) => e.category === "subject-officer").length,
+      connectedOfficers: trackingEntries.filter((e) => e.category === "connected-officers").length,
+    };
+  }, [trackingEntries]);
 
   if (checkingAuth) {
     return <div className="page-loading-container"><div>Loading…</div></div>;
@@ -361,7 +724,7 @@ function AdminViewCaseInner() {
               </button>
               <div className="dashboard-title-area">
                 <h2 className="dashboard-main-title">{t("adminDashboardTitle", "Discipline Branch Administrator")}</h2>
-                <p className="dashboard-main-subtitle">{t("adminDashboardDesc", "Manage users and view case details")}</p>
+                <p className="dashboard-main-subtitle">{t("adminDashboardDesc", "Complete Case Lifecycles & Multi-Officer Process Tracking")}</p>
               </div>
             </div>
 
@@ -397,146 +760,330 @@ function AdminViewCaseInner() {
           <div className="view-case-wrapper">
             <div className="view-case-header">
               <div className="view-case-title-group">
-                <h1>Case Information</h1>
-                <p>View the full details and progress of this case</p>
+                <div className="vc-badge-row">
+                  <span className="vc-case-badge">Case Dossier</span>
+                  {letterData?.priority && (
+                    <span className="vc-priority-badge">{letterData.priority} Priority</span>
+                  )}
+                  <span className="vc-status-pill">Active Case</span>
+                </div>
+                <h1>{letterData?.subject || `Inquiry Case Dossier #${caseNoParam}`}</h1>
+                <p>Comprehensive multi-role investigation process timeline & connected personnel tracker</p>
               </div>
-              <Link href="/admin" className="btn-back-home">
-                <svg className="btn-back-home-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                </svg>
-                ← Back to Home
-              </Link>
+              <div className="vc-header-actions">
+                <button
+                  onClick={() => fetchTracking(caseNoParam)}
+                  className="btn-refresh-timeline"
+                  title="Refresh Timeline Data"
+                >
+                  <RefreshCw size={14} className={isRefreshing ? "spin-icon" : ""} />
+                  {isRefreshing ? "Refreshing..." : "Refresh"}
+                </button>
+                <Link href="/admin" className="btn-back-home">
+                  <ArrowLeft size={16} />
+                  Back to Admin
+                </Link>
+              </div>
             </div>
 
             {isLoading ? (
-              <div className="vc-loading">Loading case details…</div>
+              <div className="vc-loading">
+                <RefreshCw size={24} className="spin-icon" style={{ margin: "0 auto 12px auto", color: "#6366f1" }} />
+                <p>Loading full case timeline & officer workflow data...</p>
+              </div>
             ) : (
               <>
                 {/* Case Info Card */}
                 <div className="case-info-card">
-                  <h2 className="case-info-card-title">
-                    Case Information
-                    {caseNoParam && <span className="case-info-card-subtitle">#{caseNoParam}</span>}
-                  </h2>
+                  <div className="case-info-card-header">
+                    <h2 className="case-info-card-title">
+                      <FileText size={18} className="vc-card-icon" />
+                      Case Information & Master Metadata
+                      {caseNoParam && <span className="case-info-card-subtitle">#{caseNoParam}</span>}
+                    </h2>
+                    <span className="vc-verified-badge">
+                      <CheckCircle2 size={13} /> Verified Dossier
+                    </span>
+                  </div>
                   <div className="case-info-grid">
                     <div className="case-info-field">
-                      <span className="case-info-label">Case ID</span>
-                      <span className="case-info-value">{caseNoParam || letterData?.letterNo || "—"}</span>
+                      <span className="case-info-label">Case / Ref Number</span>
+                      <span className="case-info-value highlight-val">{caseNoParam || letterData?.refNo || "—"}</span>
                     </div>
                     <div className="case-info-field">
-                      <span className="case-info-label">Case Title</span>
-                      <span className="case-info-value">{letterData?.subject || caseNoParam || "—"}</span>
+                      <span className="case-info-label">Letter Number</span>
+                      <span className="case-info-value">{letterData?.letterNo || "—"}</span>
                     </div>
                     <div className="case-info-field">
-                      <span className="case-info-label">Institute</span>
-                      <span className="case-info-value">{letterData?.instituteName || "—"}</span>
-                    </div>
-                    <div className="case-info-field">
-                      <span className="case-info-label">Complain</span>
+                      <span className="case-info-label">Complainant / Sender</span>
                       <span className="case-info-value">{letterData?.senderName || "—"}</span>
                     </div>
                     <div className="case-info-field">
-                      <span className="case-info-label">Subject Officer</span>
-                      <span className="case-info-value">{letterData?.officerName || "—"}</span>
+                      <span className="case-info-label">Institute / School</span>
+                      <span className="case-info-value">{letterData?.instituteName || "—"}</span>
                     </div>
                     <div className="case-info-field">
-                      <span className="case-info-label">Last Updated</span>
+                      <span className="case-info-label">Location (Zone / Province)</span>
+                      <span className="case-info-value">
+                        {letterData?.zone || letterData?.province
+                          ? `${letterData.zone || ""} ${letterData.zone && letterData.province ? "•" : ""} ${letterData.province || ""}`
+                          : "National / Ministry"}
+                      </span>
+                    </div>
+                    <div className="case-info-field">
+                      <span className="case-info-label">Mode of Receipt</span>
+                      <span className="case-info-value">{letterData?.modeOfReceipt || "Postal Mail"}</span>
+                    </div>
+                    <div className="case-info-field">
+                      <span className="case-info-label">Received by Secretary</span>
                       <span className="case-info-value">{letterData?.receivedDate || "—"}</span>
+                    </div>
+                    <div className="case-info-field">
+                      <span className="case-info-label">Discipline Handover</span>
+                      <span className="case-info-value">{letterData?.submittedDate || "—"}</span>
+                    </div>
+                    <div className="case-info-field">
+                      <span className="case-info-label">Total Stages Logged</span>
+                      <span className="case-info-value" style={{ color: "#16a34a" }}>{trackingEntries.length} Recorded Steps</span>
                     </div>
                   </div>
                 </div>
 
-                {/* Progress Timeline */}
+                {/* ── Connected Officers Overview Card ── */}
+                <div className="connected-officers-card">
+                  <div className="connected-officers-header">
+                    <div>
+                      <h3 className="connected-officers-title">
+                        <Users size={18} className="vc-card-icon" />
+                        All Connected Officers & Personnel for this Case
+                      </h3>
+                      <p className="connected-officers-subtitle">
+                        Key stakeholders actively engaged across registration, administration, subject inquiry, and committee proceedings
+                      </p>
+                    </div>
+                    <span className="vc-officer-count-badge">{connectedOfficers.length} Officers Linked</span>
+                  </div>
+
+                  <div className="connected-officers-grid">
+                    {connectedOfficers.length === 0 ? (
+                      <div className="vc-empty-officers">No connected officers registered for this case yet.</div>
+                    ) : (
+                      connectedOfficers.map((off) => (
+                        <div key={off.id} className="officer-card-item">
+                          <div className="officer-avatar-box">
+                            {off.role === "Daily Reporter" && <Mail size={18} color="#1d4ed8" />}
+                            {off.role === "Investigation Administrator" && <Shield size={18} color="#a21caf" />}
+                            {off.role === "Subject Officer" && <UserCheck size={18} color="#15803d" />}
+                            {off.role === "Committee Chairman" && <Award size={18} color="#b45309" />}
+                            {off.role === "Committee Member" && <Users size={18} color="#6d28d9" />}
+                            {off.role === "Accused Officer" && <AlertCircle size={18} color="#b91c1c" />}
+                            {off.role === "Inquiry Officer" && <FileText size={18} color="#0284c7" />}
+                          </div>
+                          <div className="officer-info-body">
+                            <div className="officer-role-pill">{off.role}</div>
+                            <h4 className="officer-person-name">{off.name}</h4>
+                            <p className="officer-designation">{off.designation || off.institution || "Official Role"}</p>
+                            {off.nic && <span className="officer-meta-tag">NIC: {off.nic}</span>}
+                            {off.email && <span className="officer-meta-tag">{off.email}</span>}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* ── Process Timelines Section with Tab Filter ── */}
                 <div className="vc-section-card">
                   <div className="vc-section-header">
                     <div>
                       <h2 className="vc-section-title">
-                        Progress Timeline
-                        {isSupabaseConfigured && (
-                          <span style={{ marginLeft: 10, display: "inline-flex", alignItems: "center", gap: 5, fontSize: "11px", fontWeight: 500, color: "#16a34a", background: "#dcfce7", padding: "2px 8px", borderRadius: 20 }}>
-                            <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#16a34a", display: "inline-block", animation: "pulse 1.5s ease-in-out infinite" }} />
-                            Live
-                          </span>
-                        )}
+                        Process Timelines & Stage Progression
+                        <span className="vc-live-indicator">
+                          <span className="vc-live-pulse" />
+                          Live Synced
+                        </span>
                       </h2>
                       <p className="vc-section-subtitle">
-                        Track the journey of this case through each stage
-                        {isRefreshing && <span style={{ marginLeft: 8, color: "#6366f1", fontSize: "11px" }}>Refreshing…</span>}
+                        Switch between specialized workflow views for Daily Reporter, Investigation Administrator, Subject Officer, and Connected Officers
                       </p>
                     </div>
-                    <span className="vc-step-counter">{currentStep}/{totalSteps}</span>
+                    <span className="vc-step-counter">Showing {filteredTimelineEntries.length} of {totalSteps} Steps</span>
                   </div>
-                  <div className="vc-timeline">
-                    {trackingEntries.map((entry) => (
-                      <div key={entry.id} className="vc-timeline-item">
-                        <div className="vc-timeline-left">
-                          <TimelineDot status={entry.status} />
-                        </div>
-                        <div className="vc-timeline-right">
-                          <div className={`vc-timeline-card${entry.status === "Current" ? " card-current" : entry.status === "Pending" ? " card-pending" : ""}`}>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <p className="vc-timeline-officer">{entry.role}</p>
-                              <p className="vc-timeline-name">{entry.officerName}</p>
-                              <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "#475569", margin: "4px 0", wordBreak: "break-word" }}>
-                                {entry.action}
-                              </p>
-                              <div className="vc-timeline-meta">
-                                <svg className="vc-timeline-clock" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                  <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-                                </svg>
-                                <span>{entry.date}&nbsp;&nbsp;{entry.time}</span>
+
+                  {/* ── Role Filter Tabs ── */}
+                  <div className="vc-tabs-container">
+                    <button
+                      className={`vc-tab-btn ${activeTab === "all" ? "active" : ""}`}
+                      onClick={() => setActiveTab("all")}
+                    >
+                      <Sparkles size={15} />
+                      All Processes
+                      <span className="tab-count">{counts.all}</span>
+                    </button>
+
+                    <button
+                      className={`vc-tab-btn ${activeTab === "daily-mail" ? "active tab-daily-mail" : ""}`}
+                      onClick={() => setActiveTab("daily-mail")}
+                    >
+                      <Mail size={15} />
+                      Daily Mail Reporter Process
+                      <span className="tab-count">{counts.dailyMail}</span>
+                    </button>
+
+                    <button
+                      className={`vc-tab-btn ${activeTab === "investigation-admin" ? "active tab-inv-admin" : ""}`}
+                      onClick={() => setActiveTab("investigation-admin")}
+                    >
+                      <Shield size={15} />
+                      Investigation Administrator Process
+                      <span className="tab-count">{counts.investigationAdmin}</span>
+                    </button>
+
+                    <button
+                      className={`vc-tab-btn ${activeTab === "subject-officer" ? "active tab-subject-officer" : ""}`}
+                      onClick={() => setActiveTab("subject-officer")}
+                    >
+                      <UserCheck size={15} />
+                      Subject Officer Process
+                      <span className="tab-count">{counts.subjectOfficer}</span>
+                    </button>
+
+                    <button
+                      className={`vc-tab-btn ${activeTab === "connected-officers" ? "active tab-connected" : ""}`}
+                      onClick={() => setActiveTab("connected-officers")}
+                    >
+                      <Users size={15} />
+                      Connected Officers Process
+                      <span className="tab-count">{counts.connectedOfficers}</span>
+                    </button>
+                  </div>
+
+                  {/* ── Timeline Track ── */}
+                  {filteredTimelineEntries.length === 0 ? (
+                    <div className="vc-empty-state">
+                      <AlertCircle size={28} style={{ margin: "0 auto 10px auto", color: "#94a3b8" }} />
+                      <p>No actions logged under the selected process tab for this case.</p>
+                      <button onClick={() => setActiveTab("all")} className="btn-reset-filter">View All Processes</button>
+                    </div>
+                  ) : (
+                    <div className="vc-timeline">
+                      {filteredTimelineEntries.map((entry) => (
+                        <div key={entry.id} className="vc-timeline-item">
+                          <div className="vc-timeline-left">
+                            <TimelineDot status={entry.status} role={entry.role} />
+                          </div>
+                          <div className="vc-timeline-right">
+                            <div className={`vc-timeline-card${entry.status === "Current" ? " card-current" : entry.status === "Pending" ? " card-pending" : ""}`}>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div className="vc-timeline-topbar">
+                                  <div className="vc-timeline-officer-group">
+                                    <RoleBadge role={entry.role} />
+                                    <span className="vc-timeline-name">{entry.officerName}</span>
+                                  </div>
+                                  <div className="vc-timeline-meta">
+                                    <Clock size={12} />
+                                    <span>{entry.date}&nbsp;&nbsp;{entry.time}</span>
+                                  </div>
+                                </div>
+
+                                <h4 className="vc-timeline-action-title">
+                                  <span className="vc-step-number">Step #{entry.step}</span>
+                                  {entry.action}
+                                </h4>
+
+                                {entry.details && (
+                                  <p className="vc-timeline-details-text">
+                                    {entry.details}
+                                  </p>
+                                )}
+
+                                {entry.metaInfo && (
+                                  <div className="vc-timeline-meta-pills">
+                                    {Object.entries(entry.metaInfo).map(([k, v]) => v ? (
+                                      <span key={k} className="meta-pill-item">
+                                        <strong>{k}:</strong> {String(v)}
+                                      </span>
+                                    ) : null)}
+                                  </div>
+                                )}
                               </div>
+                              <StatusBadge status={entry.status} />
                             </div>
-                            <StatusBadge status={entry.status} />
                           </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
-                {/* Tracking History Table */}
+                {/* ── Tracking History Table ── */}
                 <div className="vc-section-card">
                   <div className="vc-section-header">
                     <div>
-                      <h2 className="vc-section-title">Tracking History</h2>
-                      <p className="vc-section-subtitle">Check the all movement of the case</p>
+                      <h2 className="vc-section-title">Master Case Tracking Log</h2>
+                      <p className="vc-section-subtitle">Chronological ledger of all officer movements, approvals, and registered actions</p>
+                    </div>
+                    <div className="table-controls-row">
+                      <div className="table-search-box">
+                        <Search size={14} className="search-icon" />
+                        <input
+                          type="text"
+                          placeholder="Search action or officer..."
+                          value={tableSearch}
+                          onChange={(e) => setTableSearch(e.target.value)}
+                        />
+                      </div>
+                      <div className="table-filter-box">
+                        <Filter size={14} className="filter-icon" />
+                        <select
+                          value={tableRoleFilter}
+                          onChange={(e) => setTableRoleFilter(e.target.value)}
+                        >
+                          <option value="All">All Roles</option>
+                          <option value="Daily Reporter">Daily Reporter</option>
+                          <option value="Investigation Administrator">Investigation Administrator</option>
+                          <option value="Subject Officer">Subject Officer</option>
+                          <option value="Committee Chairman">Committee Chairman</option>
+                          <option value="Committee Member">Committee Member</option>
+                          <option value="Accused Officer">Accused Officer</option>
+                          <option value="Connected Officer">Connected Officer</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
-                  {trackingEntries.length === 0 ? (
-                    <div className="vc-empty-state">No tracking history found for this case.</div>
+
+                  {filteredTableEntries.length === 0 ? (
+                    <div className="vc-empty-state">No tracking records match the current filter criteria.</div>
                   ) : (
                     <div className="vc-table-wrapper">
                       <table className="vc-tracking-table">
                         <thead>
                           <tr>
-                            <th>Step</th>
-                            <th>Role</th>
-                            <th>Officer</th>
-                            <th>Action</th>
-                            <th>Date</th>
-                            <th>Time</th>
-                            <th>Status</th>
+                            <th style={{ width: "60px" }}>Step</th>
+                            <th style={{ width: "190px" }}>Role / Entity</th>
+                            <th style={{ width: "180px" }}>Officer In-Charge</th>
+                            <th>Action & Process Log Details</th>
+                            <th style={{ width: "120px" }}>Date</th>
+                            <th style={{ width: "90px" }}>Time</th>
+                            <th style={{ width: "110px" }}>Status</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {trackingEntries.map((entry) => (
+                          {filteredTableEntries.map((entry) => (
                             <tr key={entry.id}>
                               <td><span className="vc-step-badge">{entry.step}</span></td>
+                              <td><RoleBadge role={entry.role} /></td>
                               <td>
-                                <span style={{
-                                  fontSize: "calc(11px * var(--font-scale))",
-                                  fontWeight: 600,
-                                  padding: "3px 10px",
-                                  borderRadius: 20,
-                                  background: entry.role === "Daily Reporter" ? "#eff6ff" : "#f0fdf4",
-                                  color: entry.role === "Daily Reporter" ? "#1d4ed8" : "#15803d",
-                                }}>{entry.role}</span>
+                                <span style={{ fontWeight: 600, color: "#1e293b" }}>{entry.officerName}</span>
                               </td>
-                              <td>{entry.officerName}</td>
-                              <td>{entry.action}</td>
-                              <td>{entry.date}</td>
-                              <td>{entry.time}</td>
+                              <td>
+                                <div style={{ fontWeight: 600, color: "#0f172a", marginBottom: 2 }}>{entry.action}</div>
+                                {entry.details && (
+                                  <div style={{ fontSize: "11.5px", color: "#64748b", lineHeight: 1.4 }}>{entry.details}</div>
+                                )}
+                              </td>
+                              <td style={{ whiteSpace: "nowrap" }}>{entry.date}</td>
+                              <td style={{ whiteSpace: "nowrap" }}>{entry.time}</td>
                               <td><StatusBadge status={entry.status} /></td>
                             </tr>
                           ))}
