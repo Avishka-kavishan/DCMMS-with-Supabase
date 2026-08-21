@@ -156,10 +156,10 @@ export default function InvestigationOfficersPage() {
   // ── Validation ─────────────────────────────────────────────────────────────
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
-    if (!formEmployeeNo.trim()) newErrors.employeeNo = "Employee Number / Staff ID is required.";
-    if (!formName.trim()) newErrors.name = t("pleaseFillAllFields", "Admin Name is required.");
+    if (!formEmployeeNo.trim()) newErrors.employeeNo = t("pleaseFillAllFields", "Employee Number / Staff ID is required.");
+    if (!formName.trim()) newErrors.name = t("pleaseFillAllFields", "Administrator Full Name is required.");
     if (!formEmail.trim()) {
-      newErrors.email = t("pleaseFillAllFields", "Email is required.");
+      newErrors.email = t("pleaseFillAllFields", "Email address is required.");
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formEmail.trim())) {
       newErrors.email = "Please enter a valid email address.";
     }
@@ -420,7 +420,7 @@ export default function InvestigationOfficersPage() {
           </svg>
           <input
             type="text"
-            placeholder="Search by admin name, email, employee no..."
+            placeholder={t("searchInvestigationAdmin", "Search by name, employee no, email…")}
             className="search-input"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -428,7 +428,7 @@ export default function InvestigationOfficersPage() {
         </div>
         <button className="btn-admin-add" onClick={openAddModal}>
           <UserPlus size={18} />
-          <span>Add Investigation Admin</span>
+          <span>{t("addInvestigationAdmin", "Register Investigation Administrator")}</span>
         </button>
       </div>
 
@@ -438,19 +438,19 @@ export default function InvestigationOfficersPage() {
           <table className="letters-data-table">
             <thead>
               <tr>
-                <th scope="col">Employee No</th>
-                <th scope="col">Administrator Name</th>
-                <th scope="col">E-mail Address</th>
-                <th scope="col">Role</th>
-                <th scope="col">Account Status</th>
-                <th scope="col" className="admin-table-header-center">Actions</th>
+                <th scope="col">{t("employeeNo", "Employee No")}</th>
+                <th scope="col">{t("officerFullName", "Administrator Full Name")}</th>
+                <th scope="col">{t("emailAddress", "E-mail Address")}</th>
+                <th scope="col">{t("assignedSystemRole", "Role")}</th>
+                <th scope="col">{t("accountStatus", "Account Status")}</th>
+                <th scope="col" className="admin-table-header-center">{t("actions", "Actions")}</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
                   <td colSpan={6} className="admin-table-no-data table-no-data-padding">
-                    Loading investigation administrators from database…
+                    {t("loadingData", "Loading investigation administrators from database…")}
                   </td>
                 </tr>
               ) : filteredOfficers.length > 0 ? (
@@ -473,7 +473,7 @@ export default function InvestigationOfficersPage() {
                     <td>
                       <span style={{ fontSize: "11px", backgroundColor: "#e0e7ff", color: "#3730a3", padding: "3px 10px", borderRadius: "12px", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "4px" }}>
                         <ShieldCheck size={12} />
-                        Investigation Admin
+                        {t("roleInvestigation", "Investigation Administrator")}
                       </span>
                     </td>
                     <td>
@@ -500,8 +500,8 @@ export default function InvestigationOfficersPage() {
                 <tr>
                   <td colSpan={6} className="admin-table-no-data table-no-data-padding">
                     {officers.length === 0
-                      ? "No investigation administrators registered yet."
-                      : "No entries found matching search."}
+                      ? t("noOfficersInDatabase", "No investigation administrators registered yet.")
+                      : t("noLettersFound", "No entries found matching search.")}
                   </td>
                 </tr>
               )}
@@ -515,102 +515,106 @@ export default function InvestigationOfficersPage() {
         <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title">
           <div className="modal-card">
             <header className="modal-header">
-              <div className="modal-title-group">
-                <UserPlus className="modal-title-icon" size={24} />
-                <div>
-                  <h2 id="modal-title" className="modal-main-title">
-                    {isEditMode ? "Edit Investigation Administrator" : "Register Investigation Administrator"}
-                  </h2>
-                  <p className="modal-subtitle">
-                    Manage branch access credentials for the investigation administrator
-                  </p>
-                </div>
+              <div>
+                <h2 id="modal-title" className="modal-title">
+                  {isEditMode 
+                    ? t("editInvestigationAdmin", "Edit Investigation Administrator") 
+                    : t("addInvestigationAdmin", "Register Investigation Administrator")}
+                </h2>
+                <p className="modal-subtitle">
+                  {t("investigationAdminSubtitle", "Manage branch access credentials for the investigation administrator")}
+                </p>
               </div>
               <button className="btn-modal-close" onClick={() => setIsModalOpen(false)} aria-label="Close modal">
                 <X size={20} />
               </button>
             </header>
 
-            <form onSubmit={handleSave} className="modal-form-content">
-              {/* Employee No */}
-              <div className="form-field-group">
-                <label htmlFor="employeeNo" className="field-label">
-                  Employee Number / Staff ID <span className="required-star">*</span>
-                </label>
-                <input
-                  id="employeeNo"
-                  type="text"
-                  placeholder="e.g. EMP-100204"
-                  value={formEmployeeNo}
-                  onChange={(e) => setFormEmployeeNo(e.target.value)}
-                  className={`field-input ${errors.employeeNo ? "field-input-invalid" : ""}`}
-                />
-                {errors.employeeNo && <span className="field-error-text">{errors.employeeNo}</span>}
-              </div>
-
-              {/* Full Name */}
-              <div className="form-field-group">
-                <label htmlFor="name" className="field-label">
-                  Full Name <span className="required-star">*</span>
-                </label>
-                <input
-                  id="name"
-                  type="text"
-                  placeholder="e.g. Sunil Fernando"
-                  value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
-                  className={`field-input ${errors.name ? "field-input-invalid" : ""}`}
-                />
-                {errors.name && <span className="field-error-text">{errors.name}</span>}
-              </div>
-
-              {/* Email */}
-              <div className="form-field-group">
-                <label htmlFor="email" className="field-label">
-                  {t("emailAddress", "Email Address")} <span className="required-star">*</span>
-                </label>
-                <input
-                  id="email"
-                  type="email"
-                  placeholder="e.g. sunil.f@discipline.gov.lk"
-                  value={formEmail}
-                  onChange={(e) => setFormEmail(e.target.value)}
-                  className={`field-input ${errors.email ? "field-input-invalid" : ""}`}
-                />
-                {errors.email && <span className="field-error-text">{errors.email}</span>}
-              </div>
-
-              {/* Fixed Role & Status */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+            <form onSubmit={handleSave}>
+              <div className="modal-body">
+                {/* Employee No */}
                 <div className="form-field-group">
-                  <label className="field-label">Assigned Role</label>
-                  <div style={{ padding: "9px 12px", backgroundColor: "#f1f5f9", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "13px", fontWeight: 600, color: "#334155", display: "flex", alignItems: "center", gap: "6px" }}>
-                    <ShieldCheck size={16} color="#4f46e5" />
-                    Investigation Administrator
-                  </div>
+                  <label htmlFor="employeeNo" className="field-label">
+                    {t("employeeNo", "Employee No / Staff ID")} <span className="required-star">*</span>
+                  </label>
+                  <input
+                    id="employeeNo"
+                    type="text"
+                    placeholder="e.g. 200399100204"
+                    value={formEmployeeNo}
+                    onChange={(e) => setFormEmployeeNo(e.target.value)}
+                    className={`field-input ${errors.employeeNo ? "field-input-invalid" : ""}`}
+                  />
+                  {errors.employeeNo && <span className="field-error-text">{errors.employeeNo}</span>}
                 </div>
 
+                {/* Full Name */}
                 <div className="form-field-group">
-                  <label htmlFor="status" className="field-label">{t("status", "Account Status")}</label>
-                  <select
-                    id="status"
-                    value={formStatus}
-                    onChange={(e) => setFormStatus(e.target.value as "Active" | "Inactive")}
-                    className="field-select"
-                  >
-                    <option value="Active">{t("active", "Active")}</option>
-                    <option value="Inactive">{t("inactive", "Inactive")}</option>
-                  </select>
+                  <label htmlFor="name" className="field-label">
+                    {t("officerFullName", "Officer Full Name")} <span className="required-star">*</span>
+                  </label>
+                  <input
+                    id="name"
+                    type="text"
+                    placeholder={t("placeholderOfficerNameExample", "e.g. Sunil Fernando")}
+                    value={formName}
+                    onChange={(e) => setFormName(e.target.value)}
+                    className={`field-input ${errors.name ? "field-input-invalid" : ""}`}
+                  />
+                  {errors.name && <span className="field-error-text">{errors.name}</span>}
+                </div>
+
+                {/* Email */}
+                <div className="form-field-group">
+                  <label htmlFor="email" className="field-label">
+                    {t("emailAddress", "Email Address")} <span className="required-star">*</span>
+                  </label>
+                  <input
+                    id="email"
+                    type="email"
+                    placeholder={t("placeholderEmailExample", "e.g. sunil.f@discipline.gov.lk")}
+                    value={formEmail}
+                    onChange={(e) => setFormEmail(e.target.value)}
+                    className={`field-input ${errors.email ? "field-input-invalid" : ""}`}
+                  />
+                  {errors.email && <span className="field-error-text">{errors.email}</span>}
+                </div>
+
+                {/* Fixed Role & Status */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", alignItems: "start" }}>
+                  <div className="form-field-group">
+                    <label htmlFor="assignedRole" className="field-label">
+                      {t("assignedSystemRole", "Assigned System Role")}
+                    </label>
+                    <div style={{ height: "42px", padding: "0 12px", backgroundColor: "#f8fafc", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13px", fontWeight: 600, color: "#334155", display: "flex", alignItems: "center", gap: "6px" }}>
+                      <ShieldCheck size={16} color="#4f46e5" />
+                      <span>{t("roleInvestigation", "Investigation Administrator")}</span>
+                    </div>
+                  </div>
+
+                  <div className="form-field-group">
+                    <label htmlFor="status" className="field-label">{t("status", "Account Status")}</label>
+                    <select
+                      id="status"
+                      value={formStatus}
+                      onChange={(e) => setFormStatus(e.target.value as "Active" | "Inactive")}
+                      className="field-select"
+                      style={{ height: "42px" }}
+                    >
+                      <option value="Active">{t("active", "Active")}</option>
+                      <option value="Inactive">{t("inactive", "Inactive")}</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
               {/* Modal Actions */}
-              <footer className="modal-action-footer">
+              <footer className="modal-footer">
                 <button type="button" className="btn-modal-cancel" onClick={() => setIsModalOpen(false)}>
-                  {t("cancel", "Cancel")}
+                  {t("cancelBtn", "Cancel")}
                 </button>
-                <button type="submit" className="btn-modal-submit" disabled={isSaving}>
-                  {isSaving ? t("saving", "Saving...") : (isEditMode ? "Update Administrator" : "Save Administrator")}
+                <button type="submit" className="btn-modal-save" disabled={isSaving}>
+                  {isSaving ? t("saving", "Saving...") : t("saveAccountBtn", "Save Account")}
                 </button>
               </footer>
             </form>

@@ -616,7 +616,14 @@
   border-color: #cbd5e1;
 }
 
-.btn-modal-save {
+.modal-subtitle {
+  font-size: calc(13px * var(--font-scale, 1));
+  color: #64748b;
+  margin: 4px 0 0 0;
+  line-height: 1.4;
+}
+
+.btn-modal-save, .btn-modal-submit {
   background-color: #4f46e5;
   border: none;
   color: #ffffff;
@@ -626,11 +633,21 @@
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.15s;
-  box-shadow: 0 2px 4px rgba(79, 70, 229, 0.1);
+  box-shadow: 0 2px 4px rgba(79, 70, 229, 0.15);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
-.btn-modal-save:hover {
+.btn-modal-save:hover, .btn-modal-submit:hover {
   background-color: #4338ca;
+  box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.25);
+}
+
+.btn-modal-save:disabled, .btn-modal-submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .action-btn-row {
