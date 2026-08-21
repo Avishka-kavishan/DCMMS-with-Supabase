@@ -108,7 +108,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   } else if (activeRole === "admin") {
     quickActionButton = (
       <Link href={`${basePath}/admin`} className="btn-sidebar-action" style={{ textDecoration: 'none', justifyContent: 'center' }}>
-        Dashboard
+        {t("dashboard", "Dashboard")}
       </Link>
     );
   } else if (activeRole === "investigation") {
@@ -126,7 +126,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           }
         }}
       >
-        <span className="plus-icon">+</span> Register Officer
+        <span className="plus-icon">+</span> {t("registerOfficer", "Register Officer")}
       </button>
     );
   }
@@ -139,7 +139,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     admin: [
       {
         id: "subject-officers",
-        label: "Subject Officers",
+        label: t("subjectOfficers", "Subject Officers"),
         href: `${basePath}/admin/subject-officers`,
         icon: (
           <svg className="menu-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -150,7 +150,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       },
       {
         id: "investigation-officers",
-        label: "Investigation Admins",
+        label: t("investigationAdmins", "Investigation Admins"),
         href: `${basePath}/admin/investigation-officers`,
         icon: (
           <svg className="menu-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -161,7 +161,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       },
       {
         id: "daily-mail-officers",
-        label: "Daily Mail Officers",
+        label: t("dailyMailOfficers", "Daily Mail Officers"),
         href: `${basePath}/admin/daily-mail-officers`,
         icon: (
           <svg className="menu-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -172,7 +172,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       },
       {
         id: "institutes",
-        label: "Institutes",
+        label: t("institutes", "Institutes"),
         href: `${basePath}/admin/institutes`,
         icon: (
           <svg className="menu-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -196,7 +196,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     subject: [
       {
         id: "dashboard",
-        label: "Home",
+        label: t("home", "Home"),
         href: `${basePath}/subject`,
         icon: (
           <svg className="menu-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -207,7 +207,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       },
       {
         id: "recommendations",
-        label: "Recommendation",
+        label: t("recommendations", "Recommendations"),
         href: `${basePath}/subject/recommendation`,
         icon: (
           <svg className="menu-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -218,7 +218,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       },
       {
         id: "reports",
-        label: "Reports",
+        label: t("reports", "Reports"),
         href: `${basePath}/subject/reports`,
         icon: (
           <svg className="menu-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -231,7 +231,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     investigation: [
       {
         id: "dashboard",
-        label: "Dashboard",
+        label: t("dashboard", "Dashboard"),
         href: `${basePath}/investigation`,
         icon: (
           <svg className="menu-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -244,7 +244,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     system_admin: [
       {
         id: "dashboard",
-        label: "Dashboard",
+        label: t("dashboard", "Dashboard"),
         href: `${basePath}/system-admin`,
         icon: (
           <svg className="menu-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">

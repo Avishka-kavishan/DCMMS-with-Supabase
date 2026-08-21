@@ -52,6 +52,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         subtitle: t("officerWorkflowDesc", "Workload summary and case distribution for all registered officers")
       };
     }
+    if (cleanPath === "/admin/view-case") {
+      return {
+        title: t("caseDossierTitle", "Case Dossier & Investigation Timeline"),
+        subtitle: t("caseDossierDesc", "Multi-role process tracking & officer workflow details")
+      };
+    }
     return {
       title: t("adminDashboardTitle", "Discipline Branch Administrator"),
       subtitle: t("adminDashboardDesc", "Manage cases and user access")

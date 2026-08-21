@@ -7,9 +7,7 @@ import "./view-case.css";
 import { useState, useEffect, useMemo, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslation } from "react-i18next";
-import { Sidebar } from "@/components/Sidebar";
 import Link from "next/link";
-import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { getCurrentProfile, dashboardPath } from "@/lib/auth";
 import { getCaseFullTimelineServer } from "@/lib/db-actions";
@@ -84,7 +82,7 @@ interface ConnectedOfficer {
 interface TrackingEntry {
   id: string;
   step: number;
-  role: "Daily Reporter" | "Investigation Administrator" | "Subject Officer" | "Committee Chairman" | "Committee Member" | "Accused Officer" | "Connected Officer";
+  role: "Daily Reporter" | "Investigation Administrator" | "Subject Officer" | "Committee Chairman" | "Committee Member" | "Accused Officer" | "Inquiry Officer" | "Connected Officer";
   officerName: string;
   action: string;
   category: "daily-mail" | "investigation-admin" | "subject-officer" | "connected-officers";
@@ -97,40 +95,61 @@ interface TrackingEntry {
 }
 
 function StatusBadge({ status }: { status: TrackingEntry["status"] }) {
+  const { t } = useTranslation();
   const cls =
     status === "Completed" ? "badge-completed"
     : status === "Current" ? "badge-current"
     : "badge-pending";
+  const label =
+    status === "Completed" ? t("statusCompleted", "Completed")
+    : status === "Current" ? t("statusCurrent", "Current")
+    : t("statusPending", "Pending");
   return (
     <span className={`vc-status-badge ${cls}`}>
       <span className="vc-status-dot" />
-      {status}
+      {label}
     </span>
   );
 }
 
-function RoleBadge({ role }: { role: TrackingEntry["role"] }) {
+function RoleBadge({ role }: { role: string }) {
+  const { t } = useTranslation();
   let bg = "#f1f5f9";
   let color = "#475569";
+  let label: string = role;
 
   if (role === "Daily Reporter") {
     bg = "#eff6ff";
     color = "#1d4ed8";
+    label = t("roleDailyReporter", "Daily Reporter");
   } else if (role === "Investigation Administrator") {
     bg = "#fdf4ff";
     color = "#a21caf";
+    label = t("roleInvestigationAdmin", "Investigation Administrator");
   } else if (role === "Subject Officer") {
     bg = "#f0fdf4";
     color = "#15803d";
+    label = t("roleSubjectOfficer", "Subject Officer");
   } else if (role === "Committee Chairman") {
     bg = "#fffbeb";
     color = "#b45309";
+    label = t("roleCommitteeChairman", "Committee Chairman");
   } else if (role === "Committee Member") {
     bg = "#f5f3ff";
     color = "#6d28d9";
+    label = t("roleCommitteeMember", "Committee Member");
   } else if (role === "Accused Officer") {
     bg = "#fef2f2";
     color = "#b91c1c";
+    label = t("roleAccusedOfficer", "Accused Officer");
+  } else if (role === "Inquiry Officer") {
+    bg = "#f0f9ff";
+    color = "#0284c7";
+    label = t("roleInquiryOfficer", "Inquiry Officer");
+  } else if (role === "Connected Officer") {
+    bg = "#f8fafc";
+    color = "#475569";
+    label = t("roleConnectedOfficer", "Connected Officer");
   }
 
   return (
@@ -145,7 +164,7 @@ function RoleBadge({ role }: { role: TrackingEntry["role"] }) {
       alignItems: "center",
       gap: 4
     }}>
-      {role}
+      {label}
     </span>
   );
 }
@@ -174,9 +193,6 @@ function AdminViewCaseInner() {
   const searchParams = useSearchParams();
   const caseNoParam = searchParams?.get("caseNo") || "";
 
-  const lang = i18n.language;
-  const [fontScale, setFontScale] = useState<"small" | "medium" | "large">("medium");
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -585,25 +601,11 @@ function AdminViewCaseInner() {
     setConnectedOfficers(Array.from(officersMap.values()));
   };
 
-  const getFormattedDate = () => {
-    const date = new Date();
-    if (lang === "si") return date.toLocaleDateString("si-LK", { day: "numeric", month: "long", year: "numeric" });
-    if (lang === "ta") return date.toLocaleDateString("ta-LK", { day: "numeric", month: "long", year: "numeric" });
-    return date.toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" });
-  };
-
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => { if (e.key === "Escape") setIsSidebarOpen(false); };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
-
-  useEffect(() => {
-    document.documentElement.lang = lang;
-    document.title = `View Case ${caseNoParam} | DCMMS Admin`;
-  }, [lang, caseNoParam]);
-
-  const changeLanguage = (lng: string) => i18n.changeLanguage(lng);
+    if (caseNoParam) {
+      document.title = `View Case ${caseNoParam} | DCMMS Admin`;
+    }
+  }, [caseNoParam]);
 
   useEffect(() => {
     const verifyAndFetch = async () => {
@@ -652,10 +654,7 @@ function AdminViewCaseInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caseNoParam]);
 
-  const handleLogout = (e: React.MouseEvent) => {
-    e.preventDefault();
-    router.push("/");
-  };
+
 
   // Filtered entries according to selected timeline tab
   const filteredTimelineEntries = useMemo(() => {
@@ -697,407 +696,344 @@ function AdminViewCaseInner() {
   const currentStep = trackingEntries.filter((e) => e.status !== "Pending").length;
 
   return (
-    <div className="dashboard-container" data-font-scale={fontScale}>
-      <a href="#dashboard-main-content" className="skip-link">{t("skipLink")}</a>
-
-      <Sidebar
-        isSidebarOpen={isSidebarOpen}
-        setIsSidebarOpen={setIsSidebarOpen}
-        handleLogout={handleLogout}
-        role="admin"
-      />
-
-      <div className="dashboard-layout">
-        <main id="dashboard-main-content" className="dashboard-content">
-          {/* ── Header ── */}
-          <header className="dashboard-header">
-            <div className="dashboard-header-left">
-              <button
-                className="menu-toggle-btn"
-                aria-label="Toggle Sidebar Menu"
-                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                aria-expanded={isSidebarOpen}
-              >
-                <svg className="hamburger-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-              </button>
-              <div className="dashboard-title-area">
-                <h2 className="dashboard-main-title">{t("adminDashboardTitle", "Discipline Branch Administrator")}</h2>
-                <p className="dashboard-main-subtitle">{t("adminDashboardDesc", "Complete Case Lifecycles & Multi-Officer Process Tracking")}</p>
-              </div>
+    <div className="admin-dashboard-container">
+      <div className="view-case-wrapper">
+        <div className="view-case-header">
+          <div className="view-case-title-group">
+            <div className="vc-badge-row">
+              <span className="vc-case-badge">{t("caseDossier", "Case Dossier")}</span>
+              {letterData?.priority && (
+                <span className="vc-priority-badge">{letterData.priority} {t("priorityLabel", "Priority")}</span>
+              )}
+              <span className="vc-status-pill">{t("activeCase", "Active Case")}</span>
             </div>
-
-            <div className="dashboard-header-right">
-              <div className="date-badge">
-                <span suppressHydrationWarning>{getFormattedDate()}</span>
-                <svg className="date-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-              </div>
-              <div className="divider-line" aria-hidden="true" />
-              <div className="accessibility-adjuster-bar" role="radiogroup">
-                {(["small", "medium", "large"] as const).map((s) => (
-                  <label key={s} className={`size-btn size-btn-${s}${fontScale === s ? " active" : ""}`}>
-                    <input type="radio" name="adminVcFontScale" value={s} checked={fontScale === s} onChange={() => setFontScale(s)} className="sr-only" />
-                    A
-                  </label>
-                ))}
-              </div>
-              <div className="divider-line" aria-hidden="true" />
-              <div className="trilingual-language-selector" role="radiogroup">
-                {[["si", "සිංහල"], ["ta", "தமிழ்"], ["en", "English"]].map(([code, label]) => (
-                  <label key={code} className={`lang-btn${lang === code ? " active" : ""}`}>
-                    <input type="radio" name="adminVcLang" value={code} checked={lang === code} onChange={() => changeLanguage(code)} className="sr-only" />
-                    {label}
-                  </label>
-                ))}
-              </div>
-            </div>
-          </header>
-
-          {/* ── Body ── */}
-          <div className="view-case-wrapper">
-            <div className="view-case-header">
-              <div className="view-case-title-group">
-                <div className="vc-badge-row">
-                  <span className="vc-case-badge">Case Dossier</span>
-                  {letterData?.priority && (
-                    <span className="vc-priority-badge">{letterData.priority} Priority</span>
-                  )}
-                  <span className="vc-status-pill">Active Case</span>
-                </div>
-                <h1>{letterData?.subject || `Inquiry Case Dossier #${caseNoParam}`}</h1>
-                <p>Comprehensive multi-role investigation process timeline & connected personnel tracker</p>
-              </div>
-              <div className="vc-header-actions">
-                <button
-                  onClick={() => fetchTracking(caseNoParam)}
-                  className="btn-refresh-timeline"
-                  title="Refresh Timeline Data"
-                >
-                  <RefreshCw size={14} className={isRefreshing ? "spin-icon" : ""} />
-                  {isRefreshing ? "Refreshing..." : "Refresh"}
-                </button>
-                <Link href="/admin" className="btn-back-home">
-                  <ArrowLeft size={16} />
-                  Back to Admin
-                </Link>
-              </div>
-            </div>
-
-            {isLoading ? (
-              <div className="vc-loading">
-                <RefreshCw size={24} className="spin-icon" style={{ margin: "0 auto 12px auto", color: "#6366f1" }} />
-                <p>Loading full case timeline & officer workflow data...</p>
-              </div>
-            ) : (
-              <>
-                {/* Case Info Card */}
-                <div className="case-info-card">
-                  <div className="case-info-card-header">
-                    <h2 className="case-info-card-title">
-                      <FileText size={18} className="vc-card-icon" />
-                      Case Information & Master Metadata
-                      {caseNoParam && <span className="case-info-card-subtitle">#{caseNoParam}</span>}
-                    </h2>
-                    <span className="vc-verified-badge">
-                      <CheckCircle2 size={13} /> Verified Dossier
-                    </span>
-                  </div>
-                  <div className="case-info-grid">
-                    <div className="case-info-field">
-                      <span className="case-info-label">Case / Ref Number</span>
-                      <span className="case-info-value highlight-val">{caseNoParam || letterData?.refNo || "—"}</span>
-                    </div>
-                    <div className="case-info-field">
-                      <span className="case-info-label">Letter Number</span>
-                      <span className="case-info-value">{letterData?.letterNo || "—"}</span>
-                    </div>
-                    <div className="case-info-field">
-                      <span className="case-info-label">Complainant / Sender</span>
-                      <span className="case-info-value">{letterData?.senderName || "—"}</span>
-                    </div>
-                    <div className="case-info-field">
-                      <span className="case-info-label">Institute / School</span>
-                      <span className="case-info-value">{letterData?.instituteName || "—"}</span>
-                    </div>
-                    <div className="case-info-field">
-                      <span className="case-info-label">Location (Zone / Province)</span>
-                      <span className="case-info-value">
-                        {letterData?.zone || letterData?.province
-                          ? `${letterData.zone || ""} ${letterData.zone && letterData.province ? "•" : ""} ${letterData.province || ""}`
-                          : "National / Ministry"}
-                      </span>
-                    </div>
-                    <div className="case-info-field">
-                      <span className="case-info-label">Mode of Receipt</span>
-                      <span className="case-info-value">{letterData?.modeOfReceipt || "Postal Mail"}</span>
-                    </div>
-                    <div className="case-info-field">
-                      <span className="case-info-label">Received by Secretary</span>
-                      <span className="case-info-value">{letterData?.receivedDate || "—"}</span>
-                    </div>
-                    <div className="case-info-field">
-                      <span className="case-info-label">Discipline Handover</span>
-                      <span className="case-info-value">{letterData?.submittedDate || "—"}</span>
-                    </div>
-                    <div className="case-info-field">
-                      <span className="case-info-label">Total Stages Logged</span>
-                      <span className="case-info-value" style={{ color: "#16a34a" }}>{trackingEntries.length} Recorded Steps</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* ── Connected Officers Overview Card ── */}
-                <div className="connected-officers-card">
-                  <div className="connected-officers-header">
-                    <div>
-                      <h3 className="connected-officers-title">
-                        <Users size={18} className="vc-card-icon" />
-                        All Connected Officers & Personnel for this Case
-                      </h3>
-                      <p className="connected-officers-subtitle">
-                        Key stakeholders actively engaged across registration, administration, subject inquiry, and committee proceedings
-                      </p>
-                    </div>
-                    <span className="vc-officer-count-badge">{connectedOfficers.length} Officers Linked</span>
-                  </div>
-
-                  <div className="connected-officers-grid">
-                    {connectedOfficers.length === 0 ? (
-                      <div className="vc-empty-officers">No connected officers registered for this case yet.</div>
-                    ) : (
-                      connectedOfficers.map((off) => (
-                        <div key={off.id} className="officer-card-item">
-                          <div className="officer-avatar-box">
-                            {off.role === "Daily Reporter" && <Mail size={18} color="#1d4ed8" />}
-                            {off.role === "Investigation Administrator" && <Shield size={18} color="#a21caf" />}
-                            {off.role === "Subject Officer" && <UserCheck size={18} color="#15803d" />}
-                            {off.role === "Committee Chairman" && <Award size={18} color="#b45309" />}
-                            {off.role === "Committee Member" && <Users size={18} color="#6d28d9" />}
-                            {off.role === "Accused Officer" && <AlertCircle size={18} color="#b91c1c" />}
-                            {off.role === "Inquiry Officer" && <FileText size={18} color="#0284c7" />}
-                          </div>
-                          <div className="officer-info-body">
-                            <div className="officer-role-pill">{off.role}</div>
-                            <h4 className="officer-person-name">{off.name}</h4>
-                            <p className="officer-designation">{off.designation || off.institution || "Official Role"}</p>
-                            {off.nic && <span className="officer-meta-tag">NIC: {off.nic}</span>}
-                            {off.email && <span className="officer-meta-tag">{off.email}</span>}
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-
-                {/* ── Process Timelines Section with Tab Filter ── */}
-                <div className="vc-section-card">
-                  <div className="vc-section-header">
-                    <div>
-                      <h2 className="vc-section-title">
-                        Process Timelines & Stage Progression
-                        <span className="vc-live-indicator">
-                          <span className="vc-live-pulse" />
-                          Live Synced
-                        </span>
-                      </h2>
-                      <p className="vc-section-subtitle">
-                        Switch between specialized workflow views for Daily Reporter, Investigation Administrator, Subject Officer, and Connected Officers
-                      </p>
-                    </div>
-                    <span className="vc-step-counter">Showing {filteredTimelineEntries.length} of {totalSteps} Steps</span>
-                  </div>
-
-                  {/* ── Role Filter Tabs ── */}
-                  <div className="vc-tabs-container">
-                    <button
-                      className={`vc-tab-btn ${activeTab === "all" ? "active" : ""}`}
-                      onClick={() => setActiveTab("all")}
-                    >
-                      <Sparkles size={15} />
-                      All Processes
-                      <span className="tab-count">{counts.all}</span>
-                    </button>
-
-                    <button
-                      className={`vc-tab-btn ${activeTab === "daily-mail" ? "active tab-daily-mail" : ""}`}
-                      onClick={() => setActiveTab("daily-mail")}
-                    >
-                      <Mail size={15} />
-                      Daily Mail Reporter Process
-                      <span className="tab-count">{counts.dailyMail}</span>
-                    </button>
-
-                    <button
-                      className={`vc-tab-btn ${activeTab === "investigation-admin" ? "active tab-inv-admin" : ""}`}
-                      onClick={() => setActiveTab("investigation-admin")}
-                    >
-                      <Shield size={15} />
-                      Investigation Administrator Process
-                      <span className="tab-count">{counts.investigationAdmin}</span>
-                    </button>
-
-                    <button
-                      className={`vc-tab-btn ${activeTab === "subject-officer" ? "active tab-subject-officer" : ""}`}
-                      onClick={() => setActiveTab("subject-officer")}
-                    >
-                      <UserCheck size={15} />
-                      Subject Officer Process
-                      <span className="tab-count">{counts.subjectOfficer}</span>
-                    </button>
-
-                    <button
-                      className={`vc-tab-btn ${activeTab === "connected-officers" ? "active tab-connected" : ""}`}
-                      onClick={() => setActiveTab("connected-officers")}
-                    >
-                      <Users size={15} />
-                      Connected Officers Process
-                      <span className="tab-count">{counts.connectedOfficers}</span>
-                    </button>
-                  </div>
-
-                  {/* ── Timeline Track ── */}
-                  {filteredTimelineEntries.length === 0 ? (
-                    <div className="vc-empty-state">
-                      <AlertCircle size={28} style={{ margin: "0 auto 10px auto", color: "#94a3b8" }} />
-                      <p>No actions logged under the selected process tab for this case.</p>
-                      <button onClick={() => setActiveTab("all")} className="btn-reset-filter">View All Processes</button>
-                    </div>
-                  ) : (
-                    <div className="vc-timeline">
-                      {filteredTimelineEntries.map((entry) => (
-                        <div key={entry.id} className="vc-timeline-item">
-                          <div className="vc-timeline-left">
-                            <TimelineDot status={entry.status} role={entry.role} />
-                          </div>
-                          <div className="vc-timeline-right">
-                            <div className={`vc-timeline-card${entry.status === "Current" ? " card-current" : entry.status === "Pending" ? " card-pending" : ""}`}>
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div className="vc-timeline-topbar">
-                                  <div className="vc-timeline-officer-group">
-                                    <RoleBadge role={entry.role} />
-                                    <span className="vc-timeline-name">{entry.officerName}</span>
-                                  </div>
-                                  <div className="vc-timeline-meta">
-                                    <Clock size={12} />
-                                    <span>{entry.date}&nbsp;&nbsp;{entry.time}</span>
-                                  </div>
-                                </div>
-
-                                <h4 className="vc-timeline-action-title">
-                                  <span className="vc-step-number">Step #{entry.step}</span>
-                                  {entry.action}
-                                </h4>
-
-                                {entry.details && (
-                                  <p className="vc-timeline-details-text">
-                                    {entry.details}
-                                  </p>
-                                )}
-
-                                {entry.metaInfo && (
-                                  <div className="vc-timeline-meta-pills">
-                                    {Object.entries(entry.metaInfo).map(([k, v]) => v ? (
-                                      <span key={k} className="meta-pill-item">
-                                        <strong>{k}:</strong> {String(v)}
-                                      </span>
-                                    ) : null)}
-                                  </div>
-                                )}
-                              </div>
-                              <StatusBadge status={entry.status} />
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* ── Tracking History Table ── */}
-                <div className="vc-section-card">
-                  <div className="vc-section-header">
-                    <div>
-                      <h2 className="vc-section-title">Master Case Tracking Log</h2>
-                      <p className="vc-section-subtitle">Chronological ledger of all officer movements, approvals, and registered actions</p>
-                    </div>
-                    <div className="table-controls-row">
-                      <div className="table-search-box">
-                        <Search size={14} className="search-icon" />
-                        <input
-                          type="text"
-                          placeholder="Search action or officer..."
-                          value={tableSearch}
-                          onChange={(e) => setTableSearch(e.target.value)}
-                        />
-                      </div>
-                      <div className="table-filter-box">
-                        <Filter size={14} className="filter-icon" />
-                        <select
-                          value={tableRoleFilter}
-                          onChange={(e) => setTableRoleFilter(e.target.value)}
-                        >
-                          <option value="All">All Roles</option>
-                          <option value="Daily Reporter">Daily Reporter</option>
-                          <option value="Investigation Administrator">Investigation Administrator</option>
-                          <option value="Subject Officer">Subject Officer</option>
-                          <option value="Committee Chairman">Committee Chairman</option>
-                          <option value="Committee Member">Committee Member</option>
-                          <option value="Accused Officer">Accused Officer</option>
-                          <option value="Connected Officer">Connected Officer</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-
-                  {filteredTableEntries.length === 0 ? (
-                    <div className="vc-empty-state">No tracking records match the current filter criteria.</div>
-                  ) : (
-                    <div className="vc-table-wrapper">
-                      <table className="vc-tracking-table">
-                        <thead>
-                          <tr>
-                            <th style={{ width: "60px" }}>Step</th>
-                            <th style={{ width: "190px" }}>Role / Entity</th>
-                            <th style={{ width: "180px" }}>Officer In-Charge</th>
-                            <th>Action & Process Log Details</th>
-                            <th style={{ width: "120px" }}>Date</th>
-                            <th style={{ width: "90px" }}>Time</th>
-                            <th style={{ width: "110px" }}>Status</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {filteredTableEntries.map((entry) => (
-                            <tr key={entry.id}>
-                              <td><span className="vc-step-badge">{entry.step}</span></td>
-                              <td><RoleBadge role={entry.role} /></td>
-                              <td>
-                                <span style={{ fontWeight: 600, color: "#1e293b" }}>{entry.officerName}</span>
-                              </td>
-                              <td>
-                                <div style={{ fontWeight: 600, color: "#0f172a", marginBottom: 2 }}>{entry.action}</div>
-                                {entry.details && (
-                                  <div style={{ fontSize: "11.5px", color: "#64748b", lineHeight: 1.4 }}>{entry.details}</div>
-                                )}
-                              </td>
-                              <td style={{ whiteSpace: "nowrap" }}>{entry.date}</td>
-                              <td style={{ whiteSpace: "nowrap" }}>{entry.time}</td>
-                              <td><StatusBadge status={entry.status} /></td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
+            <h1>{letterData?.subject || t("inquiryCaseDossier", "Inquiry Case Dossier #{{caseNo}}", { caseNo: caseNoParam })}</h1>
+            <p>{t("viewCaseSubTitle", "Comprehensive multi-role investigation process timeline & connected personnel tracker")}</p>
           </div>
+          <div className="vc-header-actions">
+            <button
+              onClick={() => fetchTracking(caseNoParam)}
+              className="btn-refresh-timeline"
+              title="Refresh Timeline Data"
+            >
+              <RefreshCw size={14} className={isRefreshing ? "spin-icon" : ""} />
+              {isRefreshing ? t("refreshing", "Refreshing...") : t("refresh", "Refresh")}
+            </button>
+            <Link href="/admin" className="btn-back-home">
+              <ArrowLeft size={16} />
+              {t("backToAdmin", "Back to Admin")}
+            </Link>
+          </div>
+        </div>
 
-          <SiteFooter />
-        </main>
+        {isLoading ? (
+          <div className="vc-loading">
+            <RefreshCw size={24} className="spin-icon" style={{ margin: "0 auto 12px auto", color: "#6366f1" }} />
+            <p>{t("loadingTimeline", "Loading full case timeline & officer workflow data...")}</p>
+          </div>
+        ) : (
+          <>
+            {/* Case Info Card */}
+            <div className="case-info-card">
+              <div className="case-info-card-header">
+                <h2 className="case-info-card-title">
+                  <FileText size={18} className="vc-card-icon" />
+                  {t("caseInfoMaster", "Case Information & Master Metadata")}
+                  {caseNoParam && <span className="case-info-card-subtitle">#{caseNoParam}</span>}
+                </h2>
+                <span className="vc-verified-badge">
+                  <CheckCircle2 size={13} /> {t("verifiedDossier", "Verified Dossier")}
+                </span>
+              </div>
+              <div className="case-info-grid">
+                <div className="case-info-field">
+                  <span className="case-info-label">{t("caseRefNumber", "Case / Ref Number")}</span>
+                  <span className="case-info-value highlight-val">{caseNoParam || letterData?.refNo || "—"}</span>
+                </div>
+                <div className="case-info-field">
+                  <span className="case-info-label">{t("letterNumber", "Letter Number")}</span>
+                  <span className="case-info-value">{letterData?.letterNo || "—"}</span>
+                </div>
+                <div className="case-info-field">
+                  <span className="case-info-label">{t("complainantSender", "Complainant / Sender")}</span>
+                  <span className="case-info-value">{letterData?.senderName || "—"}</span>
+                </div>
+                <div className="case-info-field">
+                  <span className="case-info-label">{t("instituteSchool", "Institute / School")}</span>
+                  <span className="case-info-value">{letterData?.instituteName || "—"}</span>
+                </div>
+                <div className="case-info-field">
+                  <span className="case-info-label">{t("locationZoneProvince", "Location (Zone / Province)")}</span>
+                  <span className="case-info-value">
+                    {letterData?.zone || letterData?.province
+                      ? `${letterData.zone || ""} ${letterData.zone && letterData.province ? "•" : ""} ${letterData.province || ""}`
+                      : t("nationalMinistry", "National / Ministry")}
+                  </span>
+                </div>
+                <div className="case-info-field">
+                  <span className="case-info-label">{t("modeOfReceipt", "Mode of Receipt")}</span>
+                  <span className="case-info-value">{letterData?.modeOfReceipt || t("postalMail", "Postal Mail")}</span>
+                </div>
+                <div className="case-info-field">
+                  <span className="case-info-label">{t("receivedBySec", "Received by Secretary")}</span>
+                  <span className="case-info-value">{letterData?.receivedDate || "—"}</span>
+                </div>
+                <div className="case-info-field">
+                  <span className="case-info-label">{t("disciplineHandover", "Discipline Handover")}</span>
+                  <span className="case-info-value">{letterData?.submittedDate || "—"}</span>
+                </div>
+                <div className="case-info-field">
+                  <span className="case-info-label">{t("totalStagesLogged", "Total Stages Logged")}</span>
+                  <span className="case-info-value" style={{ color: "#16a34a" }}>{trackingEntries.length} {t("recordedSteps", "Recorded Steps")}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* ── Connected Officers Overview Card ── */}
+            <div className="connected-officers-card">
+              <div className="connected-officers-header">
+                <div>
+                  <h3 className="connected-officers-title">
+                    <Users size={18} className="vc-card-icon" />
+                    {t("connectedOfficersTitle", "All Connected Officers & Personnel for this Case")}
+                  </h3>
+                  <p className="connected-officers-subtitle">
+                    {t("connectedOfficersSubtitle", "Key stakeholders actively engaged across registration, administration, subject inquiry, and committee proceedings")}
+                  </p>
+                </div>
+                <span className="vc-officer-count-badge">{connectedOfficers.length} {t("officersLinked", "Officers Linked")}</span>
+              </div>
+
+              <div className="connected-officers-grid">
+                {connectedOfficers.length === 0 ? (
+                  <div className="vc-empty-officers">{t("noConnectedOfficers", "No connected officers registered for this case yet.")}</div>
+                ) : (
+                  connectedOfficers.map((off) => (
+                    <div key={off.id} className="officer-card-item">
+                      <div className="officer-avatar-box">
+                        {off.role === "Daily Reporter" && <Mail size={18} color="#1d4ed8" />}
+                        {off.role === "Investigation Administrator" && <Shield size={18} color="#a21caf" />}
+                        {off.role === "Subject Officer" && <UserCheck size={18} color="#15803d" />}
+                        {off.role === "Committee Chairman" && <Award size={18} color="#b45309" />}
+                        {off.role === "Committee Member" && <Users size={18} color="#6d28d9" />}
+                        {off.role === "Accused Officer" && <AlertCircle size={18} color="#b91c1c" />}
+                        {off.role === "Inquiry Officer" && <FileText size={18} color="#0284c7" />}
+                      </div>
+                      <div className="officer-info-body">
+                        <div className="officer-role-pill"><RoleBadge role={off.role as any} /></div>
+                        <h4 className="officer-person-name">{off.name}</h4>
+                        <p className="officer-designation">{off.designation || off.institution || t("officialRole", "Official Role")}</p>
+                        {off.nic && <span className="officer-meta-tag">{t("nicLabel", "NIC")}: {off.nic}</span>}
+                        {off.email && <span className="officer-meta-tag">{off.email}</span>}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* ── Process Timelines Section with Tab Filter ── */}
+            <div className="vc-section-card">
+              <div className="vc-section-header">
+                <div>
+                  <h2 className="vc-section-title">
+                    {t("processTimelinesTitle", "Process Timelines & Stage Progression")}
+                    <span className="vc-live-indicator">
+                      <span className="vc-live-pulse" />
+                      {t("liveSynced", "Live Synced")}
+                    </span>
+                  </h2>
+                  <p className="vc-section-subtitle">
+                    {t("processTimelinesSubtitle", "Switch between specialized workflow views for Daily Reporter, Investigation Administrator, Subject Officer, and Connected Officers")}
+                  </p>
+                </div>
+                <span className="vc-step-counter">{t("showingSteps", "Showing {{current}} of {{total}} Steps", { current: filteredTimelineEntries.length, total: totalSteps })}</span>
+              </div>
+
+              {/* ── Role Filter Tabs ── */}
+              <div className="vc-tabs-container">
+                <button
+                  className={`vc-tab-btn ${activeTab === "all" ? "active" : ""}`}
+                  onClick={() => setActiveTab("all")}
+                >
+                  <Sparkles size={15} />
+                  {t("allProcesses", "All Processes")}
+                  <span className="tab-count">{counts.all}</span>
+                </button>
+
+                <button
+                  className={`vc-tab-btn ${activeTab === "daily-mail" ? "active tab-daily-mail" : ""}`}
+                  onClick={() => setActiveTab("daily-mail")}
+                >
+                  <Mail size={15} />
+                  {t("dailyMailReporterProcess", "Daily Mail Reporter Process")}
+                  <span className="tab-count">{counts.dailyMail}</span>
+                </button>
+
+                <button
+                  className={`vc-tab-btn ${activeTab === "investigation-admin" ? "active tab-inv-admin" : ""}`}
+                  onClick={() => setActiveTab("investigation-admin")}
+                >
+                  <Shield size={15} />
+                  {t("investigationAdminProcess", "Investigation Administrator Process")}
+                  <span className="tab-count">{counts.investigationAdmin}</span>
+                </button>
+
+                <button
+                  className={`vc-tab-btn ${activeTab === "subject-officer" ? "active tab-subject-officer" : ""}`}
+                  onClick={() => setActiveTab("subject-officer")}
+                >
+                  <UserCheck size={15} />
+                  {t("subjectOfficerProcess", "Subject Officer Process")}
+                  <span className="tab-count">{counts.subjectOfficer}</span>
+                </button>
+
+                <button
+                  className={`vc-tab-btn ${activeTab === "connected-officers" ? "active tab-connected" : ""}`}
+                  onClick={() => setActiveTab("connected-officers")}
+                >
+                  <Users size={15} />
+                  {t("connectedOfficersProcess", "Connected Officers Process")}
+                  <span className="tab-count">{counts.connectedOfficers}</span>
+                </button>
+              </div>
+
+              {/* ── Timeline Track ── */}
+              {filteredTimelineEntries.length === 0 ? (
+                <div className="vc-empty-state">
+                  <AlertCircle size={28} style={{ margin: "0 auto 10px auto", color: "#94a3b8" }} />
+                  <p>{t("noTimelineActions", "No actions logged under the selected process tab for this case.")}</p>
+                  <button onClick={() => setActiveTab("all")} className="btn-reset-filter">{t("viewAllProcesses", "View All Processes")}</button>
+                </div>
+              ) : (
+                <div className="vc-timeline">
+                  {filteredTimelineEntries.map((entry) => (
+                    <div key={entry.id} className="vc-timeline-item">
+                      <div className="vc-timeline-left">
+                        <TimelineDot status={entry.status} role={entry.role} />
+                      </div>
+                      <div className="vc-timeline-right">
+                        <div className={`vc-timeline-card${entry.status === "Current" ? " card-current" : entry.status === "Pending" ? " card-pending" : ""}`}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div className="vc-timeline-topbar">
+                              <div className="vc-timeline-officer-group">
+                                <RoleBadge role={entry.role} />
+                                <span className="vc-timeline-name">{entry.officerName}</span>
+                              </div>
+                              <div className="vc-timeline-meta">
+                                <Clock size={12} />
+                                <span>{entry.date}&nbsp;&nbsp;{entry.time}</span>
+                              </div>
+                            </div>
+
+                            <h4 className="vc-timeline-action-title">
+                              <span className="vc-step-number">{t("stepNumber", "Step #{{step}}", { step: entry.step })}</span>
+                              {entry.action}
+                            </h4>
+
+                            {entry.details && (
+                              <p className="vc-timeline-details-text">
+                                {entry.details}
+                              </p>
+                            )}
+
+                            {entry.metaInfo && (
+                              <div className="vc-timeline-meta-pills">
+                                {Object.entries(entry.metaInfo).map(([k, v]) => v ? (
+                                  <span key={k} className="meta-pill-item">
+                                    <strong>{k}:</strong> {String(v)}
+                                  </span>
+                                ) : null)}
+                              </div>
+                            )}
+                          </div>
+                          <StatusBadge status={entry.status} />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* ── Tracking History Table ── */}
+            <div className="vc-section-card">
+              <div className="vc-section-header">
+                <div>
+                  <h2 className="vc-section-title">{t("masterTrackingLog", "Master Case Tracking Log")}</h2>
+                  <p className="vc-section-subtitle">{t("masterTrackingSubtitle", "Chronological ledger of all officer movements, approvals, and registered actions")}</p>
+                </div>
+                <div className="table-controls-row">
+                  <div className="table-search-box">
+                    <Search size={14} className="search-icon" />
+                    <input
+                      type="text"
+                      placeholder={t("searchActionOfficer", "Search action or officer...")}
+                      value={tableSearch}
+                      onChange={(e) => setTableSearch(e.target.value)}
+                    />
+                  </div>
+                  <div className="table-filter-box">
+                    <Filter size={14} className="filter-icon" />
+                    <select
+                      value={tableRoleFilter}
+                      onChange={(e) => setTableRoleFilter(e.target.value)}
+                    >
+                      <option value="All">{t("allRoles", "All Roles")}</option>
+                      <option value="Daily Reporter">{t("roleDailyReporter", "Daily Reporter")}</option>
+                      <option value="Investigation Administrator">{t("roleInvestigationAdmin", "Investigation Administrator")}</option>
+                      <option value="Subject Officer">{t("roleSubjectOfficer", "Subject Officer")}</option>
+                      <option value="Committee Chairman">{t("roleCommitteeChairman", "Committee Chairman")}</option>
+                      <option value="Committee Member">{t("roleCommitteeMember", "Committee Member")}</option>
+                      <option value="Accused Officer">{t("roleAccusedOfficer", "Accused Officer")}</option>
+                      <option value="Connected Officer">{t("roleConnectedOfficer", "Connected Officer")}</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {filteredTableEntries.length === 0 ? (
+                <div className="vc-empty-state">{t("noTrackingRecords", "No tracking records match the current filter criteria.")}</div>
+              ) : (
+                <div className="vc-table-wrapper">
+                  <table className="vc-tracking-table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: "60px" }}>{t("stepCol", "Step")}</th>
+                        <th style={{ width: "190px" }}>{t("roleEntityCol", "Role / Entity")}</th>
+                        <th style={{ width: "180px" }}>{t("officerInChargeCol", "Officer In-Charge")}</th>
+                        <th>{t("actionDetailsCol", "Action & Process Log Details")}</th>
+                        <th style={{ width: "120px" }}>{t("dateCol", "Date")}</th>
+                        <th style={{ width: "90px" }}>{t("timeCol", "Time")}</th>
+                        <th style={{ width: "110px" }}>{t("statusCol", "Status")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredTableEntries.map((entry) => (
+                        <tr key={entry.id}>
+                          <td><span className="vc-step-badge">{entry.step}</span></td>
+                          <td><RoleBadge role={entry.role} /></td>
+                          <td>
+                            <span style={{ fontWeight: 600, color: "#1e293b" }}>{entry.officerName}</span>
+                          </td>
+                          <td>
+                            <div style={{ fontWeight: 600, color: "#0f172a", marginBottom: 2 }}>{entry.action}</div>
+                            {entry.details && (
+                              <div style={{ fontSize: "11.5px", color: "#64748b", lineHeight: 1.4 }}>{entry.details}</div>
+                            )}
+                          </td>
+                          <td style={{ whiteSpace: "nowrap" }}>{entry.date}</td>
+                          <td style={{ whiteSpace: "nowrap" }}>{entry.time}</td>
+                          <td><StatusBadge status={entry.status} /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

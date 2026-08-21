@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import "../../i18n";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Folder, Search, CheckCircle2, User, ChevronDown } from "lucide-react";
 import {
   AreaChart,
@@ -563,7 +564,14 @@ export default function AdminDashboard() {
               ) : filteredRecentCases.length > 0 ? (
                 filteredRecentCases.map((item) => (
                   <tr key={item.id} className="letter-table-row">
-                    <td className="admin-table-case-no">{item.caseNo}</td>
+                    <td className="admin-table-case-no">
+                      <Link
+                        href={`/admin/view-case?caseNo=${encodeURIComponent(item.caseNo)}`}
+                        style={{ color: "inherit", textDecoration: "none" }}
+                      >
+                        {item.caseNo}
+                      </Link>
+                    </td>
                     <td>{item.dateFiled}</td>
                     <td className="subject-cell">{item.subject}</td>
                     <td>{item.assignedTo}</td>
@@ -600,7 +608,12 @@ export default function AdminDashboard() {
                       </span>
                     </td>
                     <td className="admin-table-cell-center">
-                      <a href="#" className="add-details-link">{t("view", "View")}</a>
+                      <Link
+                        href={`/admin/view-case?caseNo=${encodeURIComponent(item.caseNo)}`}
+                        className="add-details-link"
+                      >
+                        {t("view", "View")}
+                      </Link>
                     </td>
                   </tr>
                 ))
