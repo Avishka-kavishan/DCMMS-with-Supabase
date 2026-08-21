@@ -100,8 +100,16 @@ export default function SubjectOfficersPage() {
           const list = JSON.parse(stored) as Officer[];
           const localSubject = list.filter((o) => o.role === "subject_officer" || o.role === "Subject officer");
           const dbIds = new Set(result.map((o) => o.id));
+          const dbEmails = new Set(result.map((o) => o.email.toLowerCase()).filter(Boolean));
+          const dbEmpNos = new Set(result.map((o) => o.employeeNo).filter(Boolean));
           localSubject.forEach((lo) => {
-            if (!dbIds.has(lo.id)) result.push(lo);
+            if (
+              !dbIds.has(lo.id) &&
+              (!lo.email || !dbEmails.has(lo.email.toLowerCase())) &&
+              (!lo.employeeNo || !dbEmpNos.has(lo.employeeNo))
+            ) {
+              result.push(lo);
+            }
           });
         } catch (e) {
           console.error("Failed to parse local profiles:", e);
@@ -270,19 +278,74 @@ export default function SubjectOfficersPage() {
 
   // ── Delete ─────────────────────────────────────────────────────────────────
   const handleDelete = async (officer: Officer) => {
-    if (!confirm("Are you sure you want to delete this officer?")) return;
+    if (!confirm(t("confirmDeleteOfficer", "Are you sure you want to delete this officer?"))) return;
 
+    let deleteSuccess = false;
+    let errorMsg = "";
+
+    // 1. Delete via server action (PostgreSQL)
     try {
-      await deleteRegisterOfficerServer(officer.id);
-    } catch (e) {}
+      const res = await deleteRegisterOfficerServer(officer.id);
+      if (res.success) {
+        deleteSuccess = true;
+      } else {
+        errorMsg = res.error || "Failed to delete";
+      }
+    } catch (e: any) {
+      errorMsg = e?.message || "Server error";
+    }
 
-    if (isSupabaseConfigured && !officer.id.startsWith("sub-")) {
+    // 2. Delete via Supabase if configured
+    if (isSupabaseConfigured) {
       try {
-        await supabase.from("register_officer_table").delete().eq("id", officer.id);
+        if (!officer.id.startsWith("sub-")) {
+          await supabase.from("register_officer_table").delete().eq("id", officer.id);
+        }
+        if (officer.employeeNo) {
+          await supabase.from("register_officer_table").delete().eq("employee_no", officer.employeeNo);
+        }
+        if (officer.email) {
+          await supabase.from("register_officer_table").delete().eq("email", officer.email);
+        }
+        deleteSuccess = true;
       } catch (err) {}
     }
 
-    showToast("Officer deleted successfully.");
+    // 3. Clean up from localStorage
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("dcmms_custom_profiles");
+      if (stored) {
+        try {
+          let list = JSON.parse(stored) as any[];
+          list = list.filter(
+            (o) =>
+              o.id !== officer.id &&
+              (!officer.employeeNo || o.employeeNo !== officer.employeeNo) &&
+              (!officer.email || o.email?.toLowerCase() !== officer.email?.toLowerCase())
+          );
+          localStorage.setItem("dcmms_custom_profiles", JSON.stringify(list));
+          deleteSuccess = true;
+        } catch (e) {}
+      }
+      window.dispatchEvent(new Event("dcmms_data_updated"));
+    }
+
+    // Optimistically remove from state right away
+    setOfficers((prev) =>
+      prev.filter(
+        (o) =>
+          o.id !== officer.id &&
+          (!officer.employeeNo || o.employeeNo !== officer.employeeNo) &&
+          (!officer.email || o.email?.toLowerCase() !== officer.email?.toLowerCase())
+      )
+    );
+
+    if (deleteSuccess) {
+      showToast(t("officerDeletedSuccess", "Officer deleted successfully."));
+    } else {
+      showToast(`Error: ${errorMsg || "Could not delete officer"}`);
+    }
+
     fetchOfficers();
   };
 
@@ -295,13 +358,43 @@ export default function SubjectOfficersPage() {
       await toggleRegisterOfficerStatusServer(officer.id, newActive);
     } catch (e) {}
 
-    if (isSupabaseConfigured && !officer.id.startsWith("sub-")) {
+    if (isSupabaseConfigured) {
       try {
-        await supabase
-          .from("register_officer_table")
-          .update({ is_active: newActive })
-          .eq("id", officer.id);
+        if (!officer.id.startsWith("sub-")) {
+          await supabase
+            .from("register_officer_table")
+            .update({ is_active: newActive })
+            .eq("id", officer.id);
+        }
+        if (officer.employeeNo) {
+          await supabase
+            .from("register_officer_table")
+            .update({ is_active: newActive })
+            .eq("employee_no", officer.employeeNo);
+        }
       } catch (e) {}
+    }
+
+    // Update in localStorage as well
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("dcmms_custom_profiles");
+      if (stored) {
+        try {
+          let list = JSON.parse(stored) as any[];
+          list = list.map((o) => {
+            if (
+              o.id === officer.id ||
+              (officer.employeeNo && o.employeeNo === officer.employeeNo) ||
+              (officer.email && o.email?.toLowerCase() === officer.email?.toLowerCase())
+            ) {
+              return { ...o, status: newStatusStr };
+            }
+            return o;
+          });
+          localStorage.setItem("dcmms_custom_profiles", JSON.stringify(list));
+        } catch (e) {}
+      }
+      window.dispatchEvent(new Event("dcmms_data_updated"));
     }
 
     showToast(`Status of ${officer.fullName} updated to ${newStatusStr}.`);

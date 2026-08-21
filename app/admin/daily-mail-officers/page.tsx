@@ -273,19 +273,70 @@ export default function DailyMailOfficersPage() {
 
   // ── Delete ─────────────────────────────────────────────────────────────────
   const handleDelete = async (officer: Officer) => {
-    if (!confirm("Are you sure you want to delete this officer?")) return;
+    if (!confirm(t("confirmDeleteOfficer", "Are you sure you want to delete this officer?"))) return;
+
+    let deleteSuccess = false;
+    let errorMsg = "";
 
     try {
-      await deleteRegisterOfficerServer(officer.id);
-    } catch (e) {}
+      const res = await deleteRegisterOfficerServer(officer.id);
+      if (res.success) {
+        deleteSuccess = true;
+      } else {
+        errorMsg = res.error || "Failed to delete";
+      }
+    } catch (e: any) {
+      errorMsg = e?.message || "Server error";
+    }
 
-    if (isSupabaseConfigured && !officer.id.startsWith("dm-")) {
+    if (isSupabaseConfigured) {
       try {
-        await supabase.from("register_officer_table").delete().eq("id", officer.id);
+        if (!officer.id.startsWith("dm-")) {
+          await supabase.from("register_officer_table").delete().eq("id", officer.id);
+        }
+        if (officer.employeeNo) {
+          await supabase.from("register_officer_table").delete().eq("employee_no", officer.employeeNo);
+        }
+        if (officer.email) {
+          await supabase.from("register_officer_table").delete().eq("email", officer.email);
+        }
+        deleteSuccess = true;
       } catch (err) {}
     }
 
-    showToast("Officer deleted successfully.");
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("dcmms_custom_profiles");
+      if (stored) {
+        try {
+          let list = JSON.parse(stored) as any[];
+          list = list.filter(
+            (o) =>
+              o.id !== officer.id &&
+              (!officer.employeeNo || o.employeeNo !== officer.employeeNo) &&
+              (!officer.email || o.email?.toLowerCase() !== officer.email?.toLowerCase())
+          );
+          localStorage.setItem("dcmms_custom_profiles", JSON.stringify(list));
+          deleteSuccess = true;
+        } catch (e) {}
+      }
+      window.dispatchEvent(new Event("dcmms_data_updated"));
+    }
+
+    setOfficers((prev) =>
+      prev.filter(
+        (o) =>
+          o.id !== officer.id &&
+          (!officer.employeeNo || o.employeeNo !== officer.employeeNo) &&
+          (!officer.email || o.email?.toLowerCase() !== officer.email?.toLowerCase())
+      )
+    );
+
+    if (deleteSuccess) {
+      showToast(t("officerDeletedSuccess", "Officer deleted successfully."));
+    } else {
+      showToast(`Error: ${errorMsg || "Could not delete officer"}`);
+    }
+
     fetchOfficers();
   };
 
@@ -298,13 +349,42 @@ export default function DailyMailOfficersPage() {
       await toggleRegisterOfficerStatusServer(officer.id, newActive);
     } catch (e) {}
 
-    if (isSupabaseConfigured && !officer.id.startsWith("dm-")) {
+    if (isSupabaseConfigured) {
       try {
-        await supabase
-          .from("register_officer_table")
-          .update({ is_active: newActive })
-          .eq("id", officer.id);
+        if (!officer.id.startsWith("dm-")) {
+          await supabase
+            .from("register_officer_table")
+            .update({ is_active: newActive })
+            .eq("id", officer.id);
+        }
+        if (officer.employeeNo) {
+          await supabase
+            .from("register_officer_table")
+            .update({ is_active: newActive })
+            .eq("employee_no", officer.employeeNo);
+        }
       } catch (e) {}
+    }
+
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("dcmms_custom_profiles");
+      if (stored) {
+        try {
+          let list = JSON.parse(stored) as any[];
+          list = list.map((o) => {
+            if (
+              o.id === officer.id ||
+              (officer.employeeNo && o.employeeNo === officer.employeeNo) ||
+              (officer.email && o.email?.toLowerCase() === officer.email?.toLowerCase())
+            ) {
+              return { ...o, status: newStatusStr };
+            }
+            return o;
+          });
+          localStorage.setItem("dcmms_custom_profiles", JSON.stringify(list));
+        } catch (e) {}
+      }
+      window.dispatchEvent(new Event("dcmms_data_updated"));
     }
 
     showToast(`Status of ${officer.fullName} updated to ${newStatusStr}.`);

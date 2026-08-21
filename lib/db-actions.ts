@@ -763,7 +763,7 @@ export async function saveRegisterOfficerServer(officerData: {
       employeeNo = `EMP-${Date.now().toString().slice(-6)}`;
     }
 
-    // 1. Update existing record by ID if valid UUID provided
+    // 1. Update existing record by ID if valid ID provided
     if (officerData.id && !officerData.id.startsWith("temp-") && !officerData.id.startsWith("sub-") && !officerData.id.startsWith("dm-") && !officerData.id.startsWith("inv-")) {
       const updated: any[] = await prisma.$queryRaw`
         UPDATE register_officer_table
@@ -773,7 +773,7 @@ export async function saveRegisterOfficerServer(officerData: {
             role = ${officerData.role},
             is_active = ${isActive},
             updated_at = NOW()
-        WHERE id = ${officerData.id}::uuid
+        WHERE id = ${officerData.id} OR employee_no = ${employeeNo} OR email = ${email}
         RETURNING *;
       `;
       if (updated && updated.length > 0) {
@@ -800,15 +800,16 @@ export async function saveRegisterOfficerServer(officerData: {
             role = ${officerData.role},
             is_active = ${isActive},
             updated_at = NOW()
-        WHERE id = ${existingId}::uuid
+        WHERE id = ${existingId}
         RETURNING *;
       `;
       resultRecord = updated[0];
     } else {
       // 3. Insert new record into register_officer_table
+      const targetId = (officerData.id && !officerData.id.startsWith("sub-") && !officerData.id.startsWith("dm-") && !officerData.id.startsWith("inv-")) ? officerData.id : null;
       const inserted: any[] = await prisma.$queryRaw`
-        INSERT INTO register_officer_table (employee_no, full_name, email, password, role, is_active)
-        VALUES (${employeeNo}, ${fullName}, ${email}, ${password}, ${officerData.role}, ${isActive})
+        INSERT INTO register_officer_table (id, employee_no, full_name, email, password, role, is_active)
+        VALUES (COALESCE(${targetId}, gen_random_uuid()::text), ${employeeNo}, ${fullName}, ${email}, ${password}, ${officerData.role}, ${isActive})
         RETURNING *;
       `;
       resultRecord = inserted[0];
@@ -823,7 +824,11 @@ export async function saveRegisterOfficerServer(officerData: {
 
 export async function deleteRegisterOfficerServer(id: string) {
   try {
-    await prisma.$queryRaw`DELETE FROM register_officer_table WHERE id = ${id}::uuid`;
+    if (!id || !String(id).trim()) {
+      return serializeForServerAction({ success: false, error: "Officer identifier is required" });
+    }
+    const cleanId = String(id).trim();
+    await prisma.$executeRaw`DELETE FROM register_officer_table WHERE id = ${cleanId} OR employee_no = ${cleanId} OR email = ${cleanId}`;
     return serializeForServerAction({ success: true });
   } catch (error: any) {
     console.error("Error deleting register officer:", error);
@@ -833,13 +838,17 @@ export async function deleteRegisterOfficerServer(id: string) {
 
 export async function toggleRegisterOfficerStatusServer(id: string, is_active: boolean) {
   try {
+    if (!id || !String(id).trim()) {
+      return serializeForServerAction({ success: false, error: "Officer identifier is required" });
+    }
+    const cleanId = String(id).trim();
     const updated: any[] = await prisma.$queryRaw`
       UPDATE register_officer_table
       SET is_active = ${is_active}, updated_at = NOW()
-      WHERE id = ${id}::uuid
+      WHERE id = ${cleanId} OR employee_no = ${cleanId} OR email = ${cleanId}
       RETURNING *;
     `;
-    return serializeForServerAction({ success: true, data: updated[0] });
+    return serializeForServerAction({ success: true, data: updated[0] || null });
   } catch (error: any) {
     console.error("Error toggling officer status:", error);
     return serializeForServerAction({ success: false, error: error?.message || "Failed to toggle officer status" });
