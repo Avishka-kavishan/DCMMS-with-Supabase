@@ -1,4 +1,5 @@
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { exportToExcel, DEFAULT_EXCEL_PASSWORD } from "@/lib/export-excel";
 import { 
   getAccusedOfficerByRefServer, 
   getChairmanByCaseServer, 
@@ -193,9 +194,14 @@ export async function fetchFullInvestigationDetailsForCase(rawCase: any): Promis
 }
 
 /**
- * Generates and downloads an Excel CSV file (with UTF-8 BOM for full MS Excel compatibility)
+ * Generates and downloads a Password-Protected Excel (.xlsx) file
  */
-export function exportToExcelFile(dataRows: InvestigationExportRow[], filenamePrefix: string = "Investigation_Details_By_Case", lang: string = "en") {
+export function exportToExcelFile(
+  dataRows: InvestigationExportRow[],
+  filenamePrefix: string = "Investigation_Details_By_Case",
+  lang: string = "en",
+  password?: string
+) {
   const headersEn = [
     "Case Reference No",
     "Subject / Inquiry Title",
@@ -246,48 +252,35 @@ export function exportToExcelFile(dataRows: InvestigationExportRow[], filenamePr
 
   const headers = lang === "si" ? headersSi : headersEn;
 
-  const csvRows: string[] = [];
-  csvRows.push(headers.map((h) => `"${h.replace(/"/g, '""')}"`).join(","));
+  const rows = dataRows.map((row) => [
+    row.caseNo,
+    row.subject,
+    row.status,
+    row.assignedDate,
+    row.accusedOfficerName,
+    row.accusedOfficerDesignation,
+    row.accusedOfficerInstitute,
+    row.accusedOfficerNic,
+    row.chairmanName,
+    row.chairmanPosition,
+    row.chairmanEmail,
+    row.committeeMembers,
+    row.subjectOfficerName,
+    row.appointmentDate,
+    row.reportDueDate,
+    row.extensionTerm,
+    row.extensionStartDate,
+    row.extensionEndDate,
+    row.extensionApprovalStatus,
+    row.reportSubmitDate,
+    row.notes
+  ]);
 
-  dataRows.forEach((row) => {
-    const values = [
-      row.caseNo,
-      row.subject,
-      row.status,
-      row.assignedDate,
-      row.accusedOfficerName,
-      row.accusedOfficerDesignation,
-      row.accusedOfficerInstitute,
-      row.accusedOfficerNic,
-      row.chairmanName,
-      row.chairmanPosition,
-      row.chairmanEmail,
-      row.committeeMembers,
-      row.subjectOfficerName,
-      row.appointmentDate,
-      row.reportDueDate,
-      row.extensionTerm,
-      row.extensionStartDate,
-      row.extensionEndDate,
-      row.extensionApprovalStatus,
-      row.reportSubmitDate,
-      row.notes
-    ];
-    csvRows.push(values.map((v) => `"${(v || "").toString().replace(/"/g, '""')}"`).join(","));
-  });
-
-  // Include UTF-8 Byte Order Mark (BOM) for Excel
-  const bom = "\uFEFF";
-  const csvContent = bom + csvRows.join("\r\n");
-
-  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
   const todayStr = new Date().toISOString().split("T")[0];
-  link.setAttribute("href", url);
-  link.setAttribute("download", `${filenamePrefix}_${todayStr}.csv`);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  const sheetTitle = lang === "si" ? "පරීක්ෂණ වාර්තාව" : "Investigation Dossier";
+
+  exportToExcel(`${filenamePrefix}_${todayStr}`, headers, rows, {
+    sheetName: sheetTitle,
+    password: password,
+  });
 }

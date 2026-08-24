@@ -5,12 +5,19 @@ import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { Sidebar } from "@/components/Sidebar";
 import { getCurrentProfile, signOut } from "@/lib/auth";
+import { 
+  exportToExcel, 
+  getActiveExcelPassword, 
+  setActiveExcelPassword, 
+  DEFAULT_EXCEL_PASSWORD 
+} from "@/lib/export-excel";
 import { supabase } from "@/lib/supabase";
 import { 
   getActiveSessions, 
   getSessionHistory, 
   getAuditLogs, 
   forceLogoutUser,
+  logAuditEvent,
   UserSession,
   AuditLog
 } from "@/lib/security";
@@ -64,6 +71,16 @@ export default function SystemAdminDashboard() {
   const [accounts, setAccounts] = useState<RegisteredAccount[]>([]);
   const [adminName, setAdminName] = useState("System Admin");
 
+  // Excel Export Password Management State
+  const [currentExcelPassword, setCurrentExcelPassword] = useState(DEFAULT_EXCEL_PASSWORD);
+  const [isPwdVisible, setIsPwdVisible] = useState(false);
+  const [newExcelPassword, setNewExcelPassword] = useState("");
+  const [confirmExcelPassword, setConfirmExcelPassword] = useState("");
+  const [isNewPwdVisible, setIsNewPwdVisible] = useState(false);
+  const [isSavingExcelPwd, setIsSavingExcelPwd] = useState(false);
+  const [excelStatusMsg, setExcelStatusMsg] = useState<{ text: string; type: "success" | "error" | "" }>({ text: "", type: "" });
+  const [isCopiedPwd, setIsCopiedPwd] = useState(false);
+
   // Search & Filter State
   const [activeLogTab, setActiveLogTab] = useState<"audit" | "sessions">("audit");
   const [logSearchQuery, setLogSearchQuery] = useState("");
@@ -76,6 +93,15 @@ export default function SystemAdminDashboard() {
 
   useEffect(() => {
     setMounted(true);
+    setCurrentExcelPassword(getActiveExcelPassword());
+
+    const handlePwdChange = () => {
+      setCurrentExcelPassword(getActiveExcelPassword());
+    };
+    window.addEventListener("dcmms_excel_password_changed", handlePwdChange);
+    return () => {
+      window.removeEventListener("dcmms_excel_password_changed", handlePwdChange);
+    };
   }, []);
 
   const loadData = async () => {
@@ -258,7 +284,7 @@ export default function SystemAdminDashboard() {
 
   const chartData = getChartData();
 
-  // Export Sessions to Excel / CSV
+  // Export Sessions to Excel (.xlsx with sheet protection)
   const exportSessionsToExcel = () => {
     const dataToExport = filteredSessions.length > 0 ? filteredSessions : sessionHistory;
     if (!dataToExport || dataToExport.length === 0) {
@@ -278,7 +304,7 @@ export default function SystemAdminDashboard() {
       "IP Address",
     ];
 
-    const rows = sessionHistory.map((s) => {
+    const rows = dataToExport.map((s) => {
       const durFormatted = s.duration
         ? `${Math.floor(s.duration / 60)}m ${s.duration % 60}s`
         : s.status === "active"
@@ -286,30 +312,27 @@ export default function SystemAdminDashboard() {
         : "—";
 
       return [
-        `"${s.id}"`,
-        `"${(s.username || "").replace(/"/g, '""')}"`,
-        `"${(s.email || "").replace(/"/g, '""')}"`,
-        `"${new Date(s.login_time).toLocaleString()}"`,
-        `"${s.logout_time ? new Date(s.logout_time).toLocaleString() : "—"}"`,
-        `"${s.duration ?? ""}"`,
-        `"${durFormatted}"`,
-        `"${s.status}"`,
-        `"${s.ip_address || "127.0.0.1"}"`,
+        s.id,
+        s.username || "—",
+        s.email || "—",
+        new Date(s.login_time).toLocaleString(),
+        s.logout_time ? new Date(s.logout_time).toLocaleString() : "—",
+        s.duration ?? "",
+        durFormatted,
+        s.status,
+        s.ip_address || "127.0.0.1",
       ];
     });
 
-    const csvContent = "\uFEFF" + [headers.join(","), ...rows.map((r) => r.join(","))].join("\r\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `DCMMS_User_Sessions_${new Date().toISOString().split("T")[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    exportToExcel(
+      `DCMMS_User_Sessions_${new Date().toISOString().split("T")[0]}`,
+      headers,
+      rows,
+      { sheetName: "Session History" }
+    );
   };
 
-  // Export Audit Logs to Excel / CSV
+  // Export Audit Logs to Excel (.xlsx with sheet protection)
   const exportAuditLogsToExcel = () => {
     const dataToExport = filteredLogs.length > 0 ? filteredLogs : auditLogs;
     if (!dataToExport || dataToExport.length === 0) {
@@ -328,27 +351,24 @@ export default function SystemAdminDashboard() {
     ];
 
     const rows = dataToExport.map((log) => [
-      `"${log.id}"`,
-      `"${new Date(log.timestamp).toLocaleString()}"`,
-      `"${log.user_id || "N/A"}"`,
-      `"${(log.username || "").replace(/"/g, '""')}"`,
-      `"${(log.email || "").replace(/"/g, '""')}"`,
-      `"${(log.action || "").replace(/"/g, '""')}"`,
-      `"${(log.details || "").replace(/"/g, '""').replace(/\r?\n/g, ' ')}"`,
+      log.id,
+      new Date(log.timestamp).toLocaleString(),
+      log.user_id || "N/A",
+      log.username || "—",
+      log.email || "—",
+      log.action || "—",
+      (log.details || "").replace(/[\r\n]+/g, " "),
     ]);
 
-    const csvContent = "\uFEFF" + [headers.join(","), ...rows.map((r) => r.join(","))].join("\r\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `DCMMS_Audit_Logs_${new Date().toISOString().split("T")[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    exportToExcel(
+      `DCMMS_Audit_Logs_${new Date().toISOString().split("T")[0]}`,
+      headers,
+      rows,
+      { sheetName: "Audit Trail" }
+    );
   };
 
-  // Export Accounts to Excel / CSV
+  // Export Accounts to Excel (.xlsx with sheet protection)
   const exportAccountsToExcel = () => {
     const dataToExport = filteredAccounts.length > 0 ? filteredAccounts : accounts;
     if (!dataToExport || dataToExport.length === 0) {
@@ -367,30 +387,137 @@ export default function SystemAdminDashboard() {
     ];
 
     const rows = dataToExport.map((a) => [
-      `"${a.employee_no || ""}"`,
-      `"${(a.full_name || "").replace(/"/g, '""')}"`,
-      `"${(a.email || "").replace(/"/g, '""')}"`,
-      `"${(a.role || "").replace(/"/g, '""')}"`,
-      `"${a.is_active ? "Active" : "Inactive"}"`,
-      `"${(a.created_by_name || (a.created_by ? "System Admin" : "System Root")).replace(/"/g, '""')}"`,
-      `"${a.created_at ? new Date(a.created_at).toLocaleString() : "—"}"`,
+      a.employee_no || "",
+      a.full_name || "",
+      a.email || "",
+      a.role || "",
+      a.is_active ? "Active" : "Inactive",
+      a.created_by_name || (a.created_by ? "System Admin" : "System Root"),
+      a.created_at ? new Date(a.created_at).toLocaleString() : "—",
     ]);
 
-    const csvContent = "\uFEFF" + [headers.join(","), ...rows.map((r) => r.join(","))].join("\r\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `DCMMS_Register_Officer_Accounts_${new Date().toISOString().split("T")[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    exportToExcel(
+      `DCMMS_Register_Officer_Accounts_${new Date().toISOString().split("T")[0]}`,
+      headers,
+      rows,
+      { sheetName: "Officer Accounts" }
+    );
   };
 
   const handleToggleAccountStatus = async (account: RegisteredAccount) => {
     const newStatus = !account.is_active;
     await toggleRegisterOfficerStatusServer(account.id, newStatus);
     loadData();
+  };
+
+  const handleCopyExcelPassword = () => {
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(currentExcelPassword);
+      setIsCopiedPwd(true);
+      setTimeout(() => setIsCopiedPwd(false), 2000);
+    }
+  };
+
+  const handleUpdateExcelPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setExcelStatusMsg({ text: "", type: "" });
+
+    if (!newExcelPassword || newExcelPassword.trim().length < 4) {
+      setExcelStatusMsg({
+        text: "Password must be at least 4 characters long.",
+        type: "error",
+      });
+      return;
+    }
+
+    if (newExcelPassword !== confirmExcelPassword) {
+      setExcelStatusMsg({
+        text: "New password and confirmation password do not match.",
+        type: "error",
+      });
+      return;
+    }
+
+    setIsSavingExcelPwd(true);
+    try {
+      setActiveExcelPassword(newExcelPassword.trim());
+      setCurrentExcelPassword(newExcelPassword.trim());
+
+      await logAuditEvent(
+        null,
+        adminName,
+        "",
+        "EXCEL_PASSWORD_UPDATED",
+        `Excel sheet protection password was updated to a custom key by System Admin ${adminName}`
+      );
+
+      setNewExcelPassword("");
+      setConfirmExcelPassword("");
+      setExcelStatusMsg({
+        text: "Excel sheet protection password updated successfully! All future exports will use this new unlock key.",
+        type: "success",
+      });
+
+      // Reload audit logs to show the new event
+      const logs = await getAuditLogs();
+      setAuditLogs(logs);
+    } catch (err: any) {
+      setExcelStatusMsg({
+        text: err?.message || "Failed to update password.",
+        type: "error",
+      });
+    } finally {
+      setIsSavingExcelPwd(false);
+    }
+  };
+
+  const handleResetExcelPasswordToDefault = async () => {
+    if (!confirm("Are you sure you want to reset the Excel sheet protection password to system default (DCMMS@Secure2026)?")) {
+      return;
+    }
+
+    setIsSavingExcelPwd(true);
+    try {
+      setActiveExcelPassword(DEFAULT_EXCEL_PASSWORD);
+      setCurrentExcelPassword(DEFAULT_EXCEL_PASSWORD);
+      setNewExcelPassword("");
+      setConfirmExcelPassword("");
+
+      await logAuditEvent(
+        null,
+        adminName,
+        "",
+        "EXCEL_PASSWORD_RESET",
+        `Excel sheet protection password was reset to system default by System Admin ${adminName}`
+      );
+
+      setExcelStatusMsg({
+        text: "Excel password reset to system default (DCMMS@Secure2026).",
+        type: "success",
+      });
+
+      const logs = await getAuditLogs();
+      setAuditLogs(logs);
+    } catch (err: any) {
+      setExcelStatusMsg({
+        text: err?.message || "Failed to reset password.",
+        type: "error",
+      });
+    } finally {
+      setIsSavingExcelPwd(false);
+    }
+  };
+
+  const handleTestExcelExport = () => {
+    const testHeaders = ["System Ref", "Verification Module", "Timestamp", "Security State"];
+    const testRows = [
+      ["DCMMS-SEC-01", "Sheet Protection Test", new Date().toLocaleString(), "LOCKED (Read-Only)"],
+      ["DCMMS-SEC-02", "Password Verification", new Date().toISOString(), `Protected with Key: ${currentExcelPassword}`],
+    ];
+    exportToExcel(`DCMMS_Password_Verification_Sample_${new Date().toISOString().split("T")[0]}`, testHeaders, testRows, {
+      sheetName: "Security Test",
+      password: currentExcelPassword,
+    });
   };
 
   const filteredAccounts = accounts.filter((a) => {
@@ -737,6 +864,196 @@ export default function SystemAdminDashboard() {
             ) : (
               <p className="empty-state-text">{t("sysAdminNoActiveSessions")}</p>
             )}
+          </div>
+
+          {/* ── Excel Export Sheet Protection & Password Reset ── */}
+          <div className="excel-security-card">
+            <div className="sysadmin-card-header-flex">
+              <div>
+                <h3 className="card-title-header" style={{ marginBottom: 4, display: "flex", alignItems: "center", gap: 8 }}>
+                  <svg className="card-title-icon" fill="none" viewBox="0 0 24 24" stroke="#1e3a8a" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                  {t("excelSecurityTitle", "Excel Export Sheet Protection & Unlock Password")}
+                </h3>
+                <p style={{ margin: 0, fontSize: "0.825rem", color: "#64748b" }}>
+                  {t("excelSecurityDesc", "All spreadsheet exports (.xlsx) are locked against tampering. Configure or reset the administrative unprotect password below.")}
+                </p>
+              </div>
+
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <span style={{ 
+                  background: "#dcfce7", 
+                  color: "#15803d", 
+                  padding: "4px 10px", 
+                  borderRadius: 20, 
+                  fontSize: "0.75rem", 
+                  fontWeight: 700,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6
+                }}>
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#10b981", display: "inline-block" }}></span>
+                  {t("protectionActive", "Active Protection Enforced")}
+                </span>
+                <button
+                  type="button"
+                  className="btn-icon-action"
+                  onClick={handleTestExcelExport}
+                  title="Download a test .xlsx sheet to verify unlock in Excel"
+                >
+                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  {t("testExport", "Test Sample Export")}
+                </button>
+                <button
+                  type="button"
+                  className="btn-icon-action"
+                  style={{ background: "#1e40af", color: "#ffffff", borderColor: "#1e3a8a" }}
+                  onClick={() => router.push("/system-admin/excel-security")}
+                  title="Open dedicated Excel security management page"
+                >
+                  <span>Open Full Page &rarr;</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="excel-security-grid">
+              {/* Left Column: Current Password Details */}
+              <div className="excel-current-box">
+                <div>
+                  <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    {t("currentUnlockPassword", "Current Unlock Password")}
+                  </span>
+                  <div className="excel-pwd-display-row">
+                    <span>
+                      {isPwdVisible ? currentExcelPassword : "•".repeat(Math.max(currentExcelPassword.length, 8))}
+                    </span>
+                    <button
+                      type="button"
+                      className="excel-toggle-btn"
+                      style={{ position: "static" }}
+                      onClick={() => setIsPwdVisible(!isPwdVisible)}
+                      title={isPwdVisible ? "Hide password" : "Show password"}
+                    >
+                      {isPwdVisible ? (
+                        <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                        </svg>
+                      ) : (
+                        <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                  <p style={{ margin: "4px 0 0 0", fontSize: "0.8rem", color: "#64748b" }}>
+                    {t("excelUnlockTip", "To unprotect in MS Excel: Go to Review tab > Unprotect Sheet > Enter this password.")}
+                  </p>
+                </div>
+
+                <div className="excel-pwd-actions" style={{ marginTop: 16 }}>
+                  <button
+                    type="button"
+                    className="btn-icon-action"
+                    onClick={handleCopyExcelPassword}
+                  >
+                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    {isCopiedPwd ? t("copied", "Copied!") : t("copyPassword", "Copy Password")}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-reset-default"
+                    style={{ padding: "6px 12px", fontSize: "0.8rem" }}
+                    onClick={handleResetExcelPasswordToDefault}
+                    disabled={isSavingExcelPwd}
+                  >
+                    {t("resetToDefault", "Reset to Default")}
+                  </button>
+                </div>
+              </div>
+
+              {/* Right Column: Reset & Change Password Form */}
+              <div className="excel-form-box">
+                <form onSubmit={handleUpdateExcelPassword}>
+                  <div className="excel-input-group">
+                    <label htmlFor="new-excel-pwd">{t("newExcelPassword", "Set New Excel Unlock Password")}</label>
+                    <div className="excel-input-wrapper">
+                      <input
+                        id="new-excel-pwd"
+                        type={isNewPwdVisible ? "text" : "password"}
+                        placeholder="Enter new password (min. 4 chars)..."
+                        value={newExcelPassword}
+                        onChange={(e) => setNewExcelPassword(e.target.value)}
+                        autoComplete="new-password"
+                      />
+                      <button
+                        type="button"
+                        className="excel-toggle-btn"
+                        onClick={() => setIsNewPwdVisible(!isNewPwdVisible)}
+                      >
+                        {isNewPwdVisible ? (
+                          <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                          </svg>
+                        ) : (
+                          <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="excel-input-group">
+                    <label htmlFor="confirm-excel-pwd">{t("confirmExcelPassword", "Confirm New Password")}</label>
+                    <div className="excel-input-wrapper">
+                      <input
+                        id="confirm-excel-pwd"
+                        type={isNewPwdVisible ? "text" : "password"}
+                        placeholder="Re-type new password to confirm..."
+                        value={confirmExcelPassword}
+                        onChange={(e) => setConfirmExcelPassword(e.target.value)}
+                        autoComplete="new-password"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="excel-btn-group">
+                    <button
+                      type="submit"
+                      className="btn-save-pwd"
+                      disabled={isSavingExcelPwd || !newExcelPassword}
+                    >
+                      <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                      {isSavingExcelPwd ? t("saving", "Saving...") : t("savePassword", "Update Protection Password")}
+                    </button>
+                  </div>
+
+                  {excelStatusMsg.text && (
+                    <div className={`excel-msg-badge ${excelStatusMsg.type}`}>
+                      {excelStatusMsg.type === "success" ? (
+                        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      ) : (
+                        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      )}
+                      <span>{excelStatusMsg.text}</span>
+                    </div>
+                  )}
+                </form>
+              </div>
+            </div>
           </div>
 
           {/* ── Combined System Audit Trail & User Session History ── */}

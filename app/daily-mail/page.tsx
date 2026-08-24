@@ -12,6 +12,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { signOut, getCurrentProfile } from "@/lib/auth";
 import { getDailyMailRecordsServer } from "@/lib/db-actions";
+import { exportToExcel } from "@/lib/export-excel";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
@@ -327,8 +328,58 @@ export default function DailyMailPage() {
       const isSi = lang === "si";
       const isTa = lang === "ta";
 
-      // Map all letter fields into structured tabular data matching the updated form cards
-      const exportRows: Record<string, string>[] = exportDataList.map((l, index) => {
+      const headersEn = [
+        "S/N",
+        "Reference No",
+        "Letter No",
+        "Mode of Receipt",
+        "Sender's Party",
+        "Nature of Letter",
+        "Letter Classification",
+        "Subject / Matter of Letter",
+        "Date Received by Addl. Sec.",
+        "Date Handed to Subject Branch",
+        "Subject Officer Name",
+        "Priority",
+        "Status",
+      ];
+
+      const headersSi = [
+        "අනු අංකය (S/N)",
+        "ලිපි අංකය",
+        "අනු අංකය",
+        "ලිපිය ලද ආකාරය",
+        "ලිපිය එවන ලද පාර්ශ්වය",
+        "ලිපියේ ස්වභාවය",
+        "ලිපි වර්ග කිරීම",
+        "ලිපිය අදාළ කාරණය/ මාතෘකාව",
+        "අති.ලේ වෙත ලද දිනය",
+        "විෂය ශාඛාවට ලිපිය භාරදුන් දිනය",
+        "විෂය ලිපිකරුගේ නම",
+        "ප්‍රමුඛතාවය",
+        "තත්ත්වය",
+      ];
+
+      const headersTa = [
+        "வரிசை எண் (S/N)",
+        "குறிப்பு எண்",
+        "கடித எண்",
+        "கடிதம் பெறப்பட்ட முறை",
+        "கடிதம் அனுப்பிய தரப்பு",
+        "கடிதத்தின் தன்மை",
+        "விடயப் பிரிவு",
+        "கடிதத்தின் பொருள் / தலைப்பு",
+        "கூடுதல் செயலாளரால் பெறப்பட்ட தேதி",
+        "ஒழுக்காற்று பிரிவுக்கு கடிதம் ஒப்படைக்கப்பட்ட தேதி",
+        "விடய உத்தியோகத்தர் பெயர்",
+        "முன்னுரிமை",
+        "நிலை",
+      ];
+
+      const headers = isSi ? headersSi : isTa ? headersTa : headersEn;
+
+      // Map all letter fields into structured 2D array matching the headers
+      const exportRows: (string | number)[][] = exportDataList.map((l, index) => {
         const priorityText =
           l.priority === "high"
             ? t("priorityHigh")
@@ -341,128 +392,28 @@ export default function DailyMailPage() {
             ? t("submitted", "Submitted")
             : t("pendingDetails", "Pending");
 
-        if (isSi) {
-          const row: Record<string, string> = {
-            "අනු අංකය (S/N)": String(index + 1),
-            "ලිපි අංකය": l.refNo || "",
-            "අනු අංකය": l.letterNo || "",
-            "ලිපිය ලද ආකාරය": l.letterType || "",
-            "ලිපිය එවන ලද පාර්ශ්වය": l.senderName || "",
-            "ලිපියේ ස්වභාවය": l.regionProvince || "",
-            "ලිපි වර්ග කිරීම": l.subjectCategory ? t(`opt${l.subjectCategory.replace(/\s+/g, "")}`, l.subjectCategory) : "",
-            "ලිපිය අදාළ කාරණය/ මාතෘකාව": l.subject || "",
-            "අති.ලේ වෙත ලද දිනය": l.receivedDate || "",
-            "විෂය ශාඛාවට ලිපිය භාරදුන් දිනය": l.letterDate || "",
-            "විෂය ලිපිකරුගේ නම": getValidSubjectOfficerName(l.officerName),
-            "ප්‍රමුඛතාවය": priorityText,
-            "තත්ත්වය": statusText,
-          };
-          return row;
-        }
-
-        if (isTa) {
-          const row: Record<string, string> = {
-            "வரிசை எண் (S/N)": String(index + 1),
-            "குறிப்பு எண்": l.refNo || "",
-            "கடித எண்": l.letterNo || "",
-            "கடிதம் பெறப்பட்ட முறை": l.letterType || "",
-            "கடிதம் அனுப்பிய தரப்பு": l.senderName || "",
-            "கடிதத்தின் தன்மை": l.regionProvince || "",
-            "விடயப் பிரிவு": l.subjectCategory ? t(`opt${l.subjectCategory.replace(/\s+/g, "")}`, l.subjectCategory) : "",
-            "கடிதத்தின் பொருள் / தலைப்பு": l.subject || "",
-            "கூடுதல் செயலாளரால் பெறப்பட்ட தேதி": l.receivedDate || "",
-            "ஒழுக்காற்று பிரிவுக்கு கடிதம் ஒப்படைக்கப்பட்ட தேதி": l.letterDate || "",
-            "விடய உத்தியோகத்தர் பெயர்": getValidSubjectOfficerName(l.officerName),
-            "முன்னுரிமை": priorityText,
-            "நிலை": statusText,
-          };
-          return row;
-        }
-
-        const row: Record<string, string> = {
-          "S/N": String(index + 1),
-          "Reference No": l.refNo || "",
-          "Letter No": l.letterNo || "",
-          "Mode of Receipt": l.letterType || "",
-          "Sender's Party": l.senderName || "",
-          "Nature of Letter": l.regionProvince || "",
-          "Letter Classification": l.subjectCategory ? t(`opt${l.subjectCategory.replace(/\s+/g, "")}`, l.subjectCategory) : "",
-          "Subject / Matter of Letter": l.subject || "",
-          "Date Received by Addl. Sec.": l.receivedDate || "",
-          "Date Handed to Subject Branch": l.letterDate || "",
-          "Subject Officer Name": getValidSubjectOfficerName(l.officerName),
-          "Priority": priorityText,
-          "Status": statusText,
-        };
-        return row;
+        return [
+          index + 1,
+          l.refNo || "—",
+          l.letterNo || "—",
+          l.letterType || "—",
+          l.senderName || "—",
+          l.regionProvince || "—",
+          l.subjectCategory ? t(`opt${l.subjectCategory.replace(/\s+/g, "")}`, l.subjectCategory) : "—",
+          l.subject || "—",
+          l.receivedDate || "—",
+          l.letterDate || "—",
+          getValidSubjectOfficerName(l.officerName),
+          priorityText,
+          statusText,
+        ];
       });
 
-      const headers = Object.keys(exportRows[0]);
-      const escapeXml = (str: string) =>
-        str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
-
-      // Generate Microsoft Excel XML 2003 Spreadsheet format with styled header & cells
-      let xmlContent = `<?xml version="1.0" encoding="UTF-8"?>
-<?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:o="urn:schemas-microsoft-com:office:office"
- xmlns:x="urn:schemas-microsoft-com:office:excel"
- xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
- <Styles>
-  <Style ss:ID="HeaderStyle">
-   <Font ss:Bold="1" ss:Color="#FFFFFF" ss:Size="11"/>
-   <Interior ss:Color="#107C41" ss:Pattern="Solid"/>
-   <Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/>
-   <Borders>
-    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#0D6334"/>
-   </Borders>
-  </Style>
-  <Style ss:ID="DataStyle">
-   <Font ss:Size="10" ss:Color="#1E293B"/>
-   <Alignment ss:Vertical="Center" ss:WrapText="1"/>
-   <Borders>
-    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-   </Borders>
-  </Style>
- </Styles>
- <Worksheet ss:Name="Daily Mail Report">
-  <Table ss:DefaultRowHeight="22">
-   <Column ss:Width="50"/>
-   <Column ss:Width="140"/>
-   <Column ss:Width="110"/>
-   <Column ss:Width="120"/>
-   <Column ss:Width="170"/>
-   <Column ss:Width="140"/>
-   <Column ss:Width="170"/>
-   <Column ss:Width="260"/>
-   <Column ss:Width="130"/>
-   <Column ss:Width="160"/>
-   <Column ss:Width="160"/>
-   <Column ss:Width="180"/>
-   <Column ss:Width="100"/>
-   <Row ss:Height="28">
-${headers.map((h) => `    <Cell ss:StyleID="HeaderStyle"><Data ss:Type="String">${escapeXml(h)}</Data></Cell>`).join("\n")}
-   </Row>
-${exportRows
-  .map(
-    (row) => `   <Row ss:Height="22">
-${headers.map((h) => `    <Cell ss:StyleID="DataStyle"><Data ss:Type="String">${escapeXml((row as Record<string, string>)[h] || "")}</Data></Cell>`).join("\n")}
-   </Row>`
-  )
-  .join("\n")}
-  </Table>
- </Worksheet>
-</Workbook>`;
-
-      const blob = new Blob([xmlContent], { type: "application/vnd.ms-excel;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
       const todayStr = getTodayString();
-      link.setAttribute("href", url);
-      link.setAttribute("download", `Daily_Mail_Full_Report_${todayStr}.xls`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      const sheetName = isSi ? "දෛනික තැපැල් වාර්තාව" : isTa ? "தினசரி அஞ்சல் அறிக்கை" : "Daily Mail Report";
+      exportToExcel(`Daily_Mail_Full_Report_${todayStr}`, headers, exportRows, {
+        sheetName,
+      });
 
       triggerToast(t("exportExcelSuccess", "Daily Mail report exported to Excel successfully!"));
     } catch (err) {
