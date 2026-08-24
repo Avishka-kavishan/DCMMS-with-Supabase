@@ -5,7 +5,7 @@
   "warningCreds": "Credentials are confidential — do not share your account.",
   "warningAuth": "Unauthorized access is prohibited and subject to disciplinary action.",
   "cardTitle": "Account Access",
-  "cardSubtitle": "Sign in to your account or register a new one.",
+  "cardSubtitle": "Sign in to your account.",
   "emailLabel": "E-mail:",
   "passwordLabel": "Password:",
   "roleLabel": "Role:",

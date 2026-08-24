@@ -4,7 +4,6 @@ import "../i18n";
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { useTranslation } from "react-i18next";
 import { TextInput } from "@/components/TextInput";
 import { Button } from "@/components/Button";
@@ -472,12 +471,6 @@ export default function Home() {
                     {isLoading ? "Signing in…" : t("loginBtn")}
                   </Button>
                 </div>
-
-                {/* Register link */}
-                <p className="login-register-hint">
-                  Don&apos;t have an account?{" "}
-                  <Link href="/register">Register here</Link>
-                </p>
               </form>
             </div>
           </div>
