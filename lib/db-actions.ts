@@ -730,8 +730,13 @@ export async function getRegisterOfficersServer(roleFilter?: string) {
     let query = `SELECT id, employee_no, full_name, email, role, is_active, created_at, updated_at FROM register_officer_table`;
     let params: any[] = [];
     if (roleFilter) {
-      query += ` WHERE role ILIKE $1`;
-      params.push(`%${roleFilter}%`);
+      const lowerFilter = roleFilter.toLowerCase();
+      if (lowerFilter.includes("branch")) {
+        query += ` WHERE (role ILIKE '%branch%' OR (role ILIKE '%admin%' AND role NOT ILIKE '%system%'))`;
+      } else {
+        query += ` WHERE role ILIKE $1`;
+        params.push(`%${roleFilter}%`);
+      }
     }
     query += ` ORDER BY created_at DESC`;
     
@@ -764,7 +769,7 @@ export async function saveRegisterOfficerServer(officerData: {
     }
 
     // 1. Update existing record by ID if valid ID provided
-    if (officerData.id && !officerData.id.startsWith("temp-") && !officerData.id.startsWith("sub-") && !officerData.id.startsWith("dm-") && !officerData.id.startsWith("inv-")) {
+    if (officerData.id && !officerData.id.startsWith("temp-") && !officerData.id.startsWith("sub-") && !officerData.id.startsWith("dm-") && !officerData.id.startsWith("inv-") && !officerData.id.startsWith("ba-")) {
       const updated: any[] = await prisma.$queryRaw`
         UPDATE register_officer_table
         SET employee_no = ${employeeNo},
@@ -772,6 +777,7 @@ export async function saveRegisterOfficerServer(officerData: {
             email = ${email},
             role = ${officerData.role},
             is_active = ${isActive},
+            password = COALESCE(${officerData.password || null}, password),
             updated_at = NOW()
         WHERE id = ${officerData.id} OR employee_no = ${employeeNo} OR email = ${email}
         RETURNING *;
@@ -799,6 +805,7 @@ export async function saveRegisterOfficerServer(officerData: {
             email = ${email},
             role = ${officerData.role},
             is_active = ${isActive},
+            password = COALESCE(${officerData.password || null}, password),
             updated_at = NOW()
         WHERE id = ${existingId}
         RETURNING *;
@@ -806,7 +813,7 @@ export async function saveRegisterOfficerServer(officerData: {
       resultRecord = updated[0];
     } else {
       // 3. Insert new record into register_officer_table
-      const targetId = (officerData.id && !officerData.id.startsWith("sub-") && !officerData.id.startsWith("dm-") && !officerData.id.startsWith("inv-")) ? officerData.id : null;
+      const targetId = (officerData.id && !officerData.id.startsWith("sub-") && !officerData.id.startsWith("dm-") && !officerData.id.startsWith("inv-") && !officerData.id.startsWith("ba-")) ? officerData.id : null;
       const inserted: any[] = await prisma.$queryRaw`
         INSERT INTO register_officer_table (id, employee_no, full_name, email, password, role, is_active)
         VALUES (COALESCE(${targetId}, gen_random_uuid()::text), ${employeeNo}, ${fullName}, ${email}, ${password}, ${officerData.role}, ${isActive})
