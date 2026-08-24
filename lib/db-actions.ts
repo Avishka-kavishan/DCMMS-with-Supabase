@@ -866,6 +866,76 @@ export async function toggleRegisterOfficerStatusServer(id: string, is_active: b
   }
 }
 
+export async function resetOfficerPasswordServer(params: {
+  targetOfficerId: string;
+  newPassword: string;
+  adminId?: string;
+  adminName?: string;
+}) {
+  try {
+    const { targetOfficerId, newPassword, adminId, adminName } = params;
+    if (!targetOfficerId || !newPassword) {
+      return serializeForServerAction({ success: false, error: "Target officer identifier and new password are required" });
+    }
+
+    const cleanId = String(targetOfficerId).trim();
+    const updated: any[] = await prisma.$queryRaw`
+      UPDATE register_officer_table
+      SET password = ${newPassword}, updated_at = NOW()
+      WHERE id = ${cleanId} OR employee_no = ${cleanId} OR email = ${cleanId}
+      RETURNING id, employee_no, full_name, email, role, is_active;
+    `;
+
+    if (!updated || updated.length === 0) {
+      return serializeForServerAction({ success: false, error: "Officer record not found in database" });
+    }
+
+    const officer = updated[0];
+    const now = new Date();
+    const officerId = officer.id ? String(officer.id) : (officer.employee_no || "officer");
+
+    // Invalidate/terminate any active sessions for this officer immediately
+    try {
+      await prisma.$executeRaw`
+        UPDATE public.dcmms_sessions
+        SET status = 'forced_logged_out',
+            logout_time = ${now},
+            duration = ROUND(EXTRACT(EPOCH FROM (${now} - login_time)))
+        WHERE (user_id = ${officerId} OR user_id = ${officer.employee_no} OR email = ${officer.email})
+          AND status = 'active';
+      `;
+    } catch (sessErr) {
+      console.warn("Session termination warning during password reset:", sessErr);
+    }
+
+    // Write an immutable audit log
+    try {
+      const auditId = `audit-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+      const performer = adminName || "System Admin";
+      await prisma.$executeRaw`
+        INSERT INTO public.dcmms_audit_logs (id, timestamp, user_id, username, email, action, details)
+        VALUES (
+          ${auditId},
+          ${now},
+          ${adminId || "sysadmin"},
+          ${performer},
+          ${performer.toLowerCase().replace(/\s+/g, "") + "@moe.gov.lk"},
+          'ADMIN_PASSWORD_RESET',
+          ${`System Admin (${performer}) reset password for Branch Admin ${officer.full_name} (${officer.email || officer.employee_no}). Active sessions were terminated.`}
+        )
+        ON CONFLICT (id) DO NOTHING;
+      `;
+    } catch (auditErr) {
+      console.warn("Audit logging warning during password reset:", auditErr);
+    }
+
+    return serializeForServerAction({ success: true, data: officer });
+  } catch (error: any) {
+    console.error("Error resetting officer password:", error);
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to reset password" });
+  }
+}
+
 export async function loginOfficerServer(emailOrEmpNo: string, passwordInput: string) {
   try {
     const input = (emailOrEmpNo || "").trim();

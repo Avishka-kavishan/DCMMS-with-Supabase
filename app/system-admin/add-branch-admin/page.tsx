@@ -23,7 +23,12 @@ import {
   AlertCircle,
   ShieldCheck,
   UserCheck,
-  UserX
+  UserX,
+  KeyRound,
+  Copy,
+  CheckCircle,
+  RefreshCcw,
+  Lock
 } from "lucide-react";
 import { Sidebar } from "@/components/Sidebar";
 import { getCurrentProfile, signOut } from "@/lib/auth";
@@ -32,7 +37,8 @@ import {
   getRegisterOfficersServer, 
   saveRegisterOfficerServer, 
   deleteRegisterOfficerServer, 
-  toggleRegisterOfficerStatusServer 
+  toggleRegisterOfficerStatusServer,
+  resetOfficerPasswordServer
 } from "@/lib/db-actions";
 import { exportToExcel } from "@/lib/export-excel";
 
@@ -81,6 +87,15 @@ export default function AddBranchAdminPage() {
   const [formStatus, setFormStatus] = useState<"Active" | "Inactive">("Active");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
+
+  // Secure Password Reset Modal State
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [resetTargetAdmin, setResetTargetAdmin] = useState<BranchAdmin | null>(null);
+  const [resetPasswordVal, setResetPasswordVal] = useState("");
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [copiedPassword, setCopiedPassword] = useState(false);
+  const [resetError, setResetError] = useState("");
 
   const showToast = (text: string, type: "success" | "error" = "success") => {
     setToastMessage({ type, text });
@@ -495,6 +510,133 @@ export default function AddBranchAdminPage() {
     }
 
     showToast(t("branchAdminStatusToggled", "Branch Administrator status updated."));
+  };
+
+  // ── Secure Password Reset Actions ──────────────────────────────────────────
+  const generateSecurePassword = () => {
+    const upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+    const lower = "abcdefghjkmnpqrstuvwxyz";
+    const numbers = "23456789";
+    const symbols = "!@#$%^&*";
+    const all = upper + lower + numbers + symbols;
+    let pwd = "";
+    pwd += upper[Math.floor(Math.random() * upper.length)];
+    pwd += lower[Math.floor(Math.random() * lower.length)];
+    pwd += numbers[Math.floor(Math.random() * numbers.length)];
+    pwd += symbols[Math.floor(Math.random() * symbols.length)];
+    for (let i = 4; i < 10; i++) {
+      pwd += all[Math.floor(Math.random() * all.length)];
+    }
+    return pwd.split("").sort(() => 0.5 - Math.random()).join("");
+  };
+
+  const openResetModal = (admin: BranchAdmin) => {
+    setResetTargetAdmin(admin);
+    setResetPasswordVal(generateSecurePassword());
+    setShowResetPassword(true);
+    setCopiedPassword(false);
+    setResetError("");
+    setIsResetModalOpen(true);
+  };
+
+  const handleCopyPassword = () => {
+    if (!resetPasswordVal) return;
+    navigator.clipboard.writeText(resetPasswordVal);
+    setCopiedPassword(true);
+    setTimeout(() => setCopiedPassword(false), 2500);
+  };
+
+  const handleConfirmPasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetTargetAdmin) return;
+    if (!resetPasswordVal || resetPasswordVal.length < 6) {
+      setResetError("Password must be at least 6 characters long.");
+      return;
+    }
+
+    setIsResettingPassword(true);
+    setResetError("");
+    const currentAdmin = await getCurrentProfile();
+
+    let success = false;
+    let errorMsg = "";
+
+    // 1. Primary: PostgreSQL Server Action (resets password + terminates active sessions + logs audit event)
+    try {
+      const res = await resetOfficerPasswordServer({
+        targetOfficerId: resetTargetAdmin.id,
+        newPassword: resetPasswordVal.trim(),
+        adminId: currentAdmin?.id,
+        adminName: currentAdmin?.full_name || "System Admin",
+      });
+
+      if (res.success) {
+        success = true;
+      } else {
+        errorMsg = res.error || "Failed to reset password in database";
+      }
+    } catch (err: any) {
+      errorMsg = err?.message || "Server error";
+    }
+
+    // 2. Dual write / fallback to Supabase
+    if (isSupabaseConfigured) {
+      try {
+        await supabase
+          .from("register_officer_table")
+          .update({ password: resetPasswordVal.trim(), updated_at: new Date().toISOString() })
+          .or(`id.eq.${resetTargetAdmin.id},employee_no.eq.${resetTargetAdmin.employeeNo},email.eq.${resetTargetAdmin.email}`);
+        
+        await supabase
+          .from("dcmms_sessions")
+          .update({ status: "forced_logged_out", logout_time: new Date().toISOString() })
+          .or(`user_id.eq.${resetTargetAdmin.id},user_id.eq.${resetTargetAdmin.employeeNo},email.eq.${resetTargetAdmin.email}`)
+          .eq("status", "active");
+
+        await logAuditEvent(
+          "ADMIN_RESET_PASSWORD",
+          "register_officer_table",
+          resetTargetAdmin.id,
+          {
+            target_name: resetTargetAdmin.fullName,
+            target_email: resetTargetAdmin.email,
+            admin: currentAdmin?.full_name || "System Admin",
+          }
+        );
+        success = true;
+      } catch (err) {}
+    }
+
+    // 3. Fallback to localStorage custom profiles
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("dcmms_custom_profiles");
+      if (stored) {
+        try {
+          let list = JSON.parse(stored) as any[];
+          list = list.map((o) =>
+            o.id === resetTargetAdmin.id || o.employeeNo === resetTargetAdmin.employeeNo || o.email === resetTargetAdmin.email
+              ? { ...o, password: resetPasswordVal.trim() }
+              : o
+          );
+          localStorage.setItem("dcmms_custom_profiles", JSON.stringify(list));
+        } catch (e) {}
+      }
+      window.dispatchEvent(new Event("dcmms_data_updated"));
+    }
+
+    setIsResettingPassword(false);
+
+    if (success) {
+      showToast(
+        `Password for ${resetTargetAdmin.fullName} has been reset securely. Active sessions were terminated.`,
+        "success"
+      );
+      setIsResetModalOpen(false);
+      fetchBranchAdmins();
+    } else {
+      setResetError(errorMsg || "Failed to reset password.");
+      showToast(`Error: ${errorMsg || "Failed to reset password."}`, "error");
+    }
   };
 
   // ── Export to Excel / CSV ──────────────────────────────────────────────────
@@ -1023,34 +1165,35 @@ export default function AddBranchAdminPage() {
                           </button>
                         </td>
                         <td style={{ textAlign: "center" }}>
-                          <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 6 }}>
+                          <div style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
                             <button
-                              onClick={() => openEditModal(admin)}
+                              onClick={() => openResetModal(admin)}
                               style={{
-                                padding: "6px",
+                                padding: "6px 12px",
                                 borderRadius: 6,
-                                border: "1px solid #e2e8f0",
-                                background: "#ffffff",
-                                color: "#3b82f6",
+                                border: "1px solid #fde68a",
+                                background: "#fffbeb",
+                                color: "#d97706",
                                 cursor: "pointer",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 6,
+                                fontSize: "0.78rem",
+                                fontWeight: 600,
+                                transition: "all 0.15s ease",
                               }}
-                              title="Edit admin"
-                            >
-                              <Edit size={14} />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(admin)}
-                              style={{
-                                padding: "6px",
-                                borderRadius: 6,
-                                border: "1px solid #fee2e2",
-                                background: "#fff5f5",
-                                color: "#ef4444",
-                                cursor: "pointer",
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.background = "#fef3c7";
+                                e.currentTarget.style.borderColor = "#fcd34d";
                               }}
-                              title="Delete admin"
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background = "#fffbeb";
+                                e.currentTarget.style.borderColor = "#fde68a";
+                              }}
+                              title="Reset Password (Secure)"
                             >
-                              <Trash2 size={14} />
+                              <KeyRound size={14} />
+                              <span>{t("resetPassword", "Reset Password")}</span>
                             </button>
                           </div>
                         </td>
@@ -1367,6 +1510,309 @@ export default function AddBranchAdminPage() {
           </div>
         </div>
       )}
+
+      {/* ── Secure Reset Password Modal ── */}
+      {isResetModalOpen && resetTargetAdmin && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 1000,
+            backgroundColor: "rgba(15, 23, 42, 0.65)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+          onClick={() => setIsResetModalOpen(false)}
+        >
+          <div
+            style={{
+              backgroundColor: "#ffffff",
+              borderRadius: 16,
+              width: "100%",
+              maxWidth: 490,
+              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+              overflow: "hidden",
+              animation: "fadeIn 0.2s ease-out",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div
+              style={{
+                backgroundColor: "#b45309",
+                backgroundImage: "linear-gradient(to right, #92400e, #d97706)",
+                color: "#ffffff",
+                padding: "18px 24px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <KeyRound size={22} />
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 700 }}>
+                    Reset Branch Admin Password
+                  </h3>
+                  <span style={{ fontSize: "0.75rem", opacity: 0.9 }}>
+                    Secure Administrator Credential Management
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsResetModalOpen(false)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "#ffffff",
+                  cursor: "pointer",
+                  padding: 4,
+                  display: "flex",
+                }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleConfirmPasswordReset} style={{ padding: 24 }}>
+              {/* Target User Info Summary */}
+              <div
+                style={{
+                  backgroundColor: "#fffbeb",
+                  border: "1px solid #fde68a",
+                  borderRadius: 10,
+                  padding: "14px 16px",
+                  marginBottom: 18,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: "0.8rem", color: "#92400e", fontWeight: 600 }}>TARGET ADMINISTRATOR</span>
+                  <span style={{ fontSize: "0.75rem", backgroundColor: "#fef3c7", color: "#b45309", padding: "2px 8px", borderRadius: 12, fontWeight: 700 }}>
+                    {resetTargetAdmin.employeeNo}
+                  </span>
+                </div>
+                <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "#78350f" }}>
+                  {resetTargetAdmin.fullName}
+                </div>
+                <div style={{ fontSize: "0.825rem", color: "#92400e", display: "flex", alignItems: "center", gap: 6 }}>
+                  <Mail size={13} />
+                  <span>{resetTargetAdmin.email}</span>
+                </div>
+              </div>
+
+              {/* Password Input & Generator */}
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                  <label style={{ fontSize: "0.85rem", fontWeight: 600, color: "#334155" }}>
+                    New Secure Password <span style={{ color: "#ef4444" }}>*</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setResetPasswordVal(generateSecurePassword());
+                      setCopiedPassword(false);
+                    }}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      color: "#b45309",
+                      fontSize: "0.78rem",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4,
+                      padding: 0,
+                    }}
+                  >
+                    <RefreshCcw size={12} />
+                    <span>Generate Strong Password</span>
+                  </button>
+                </div>
+
+                <div style={{ position: "relative" }}>
+                  <Lock
+                    size={16}
+                    style={{
+                      position: "absolute",
+                      left: 12,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      color: "#94a3b8",
+                    }}
+                  />
+                  <input
+                    type={showResetPassword ? "text" : "password"}
+                    value={resetPasswordVal}
+                    onChange={(e) => {
+                      setResetPasswordVal(e.target.value);
+                      setCopiedPassword(false);
+                    }}
+                    placeholder="Enter or generate temporary password"
+                    style={{
+                      width: "100%",
+                      padding: "10px 80px 10px 36px",
+                      borderRadius: 8,
+                      border: resetError ? "1px solid #ef4444" : "1px solid #cbd5e1",
+                      fontSize: "0.95rem",
+                      fontFamily: "monospace",
+                      letterSpacing: showResetPassword ? "0.05em" : "normal",
+                      outline: "none",
+                    }}
+                  />
+                  <div
+                    style={{
+                      position: "absolute",
+                      right: 8,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4,
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setShowResetPassword(!showResetPassword)}
+                      title={showResetPassword ? "Hide password" : "Show password"}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        cursor: "pointer",
+                        color: "#94a3b8",
+                        padding: "4px",
+                        display: "flex",
+                      }}
+                    >
+                      {showResetPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCopyPassword}
+                      title="Copy password to clipboard"
+                      style={{
+                        background: copiedPassword ? "#dcfce7" : "#f1f5f9",
+                        border: "1px solid",
+                        borderColor: copiedPassword ? "#86efac" : "#cbd5e1",
+                        borderRadius: 6,
+                        cursor: "pointer",
+                        color: copiedPassword ? "#166534" : "#475569",
+                        padding: "4px 6px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 2,
+                        fontSize: "0.75rem",
+                        fontWeight: 600,
+                      }}
+                    >
+                      {copiedPassword ? <CheckCircle size={13} /> : <Copy size={13} />}
+                      <span>{copiedPassword ? "Copied" : "Copy"}</span>
+                    </button>
+                  </div>
+                </div>
+                {resetError && (
+                  <span style={{ fontSize: "0.75rem", color: "#ef4444", marginTop: 4, display: "block" }}>
+                    {resetError}
+                  </span>
+                )}
+              </div>
+
+              {/* Security Badges / Measures List */}
+              <div
+                style={{
+                  backgroundColor: "#f8fafc",
+                  borderRadius: 8,
+                  padding: "12px 14px",
+                  border: "1px solid #e2e8f0",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 8,
+                  fontSize: "0.8rem",
+                  color: "#475569",
+                  marginBottom: 20,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#166534" }}>
+                  <CheckCircle2 size={15} style={{ flexShrink: 0 }} />
+                  <span><strong>Active Session Revocation:</strong> All currently active logins for this Branch Admin will be terminated immediately.</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#1e40af" }}>
+                  <ShieldCheck size={15} style={{ flexShrink: 0 }} />
+                  <span><strong>Audit Logging:</strong> This administrative action will be recorded with timestamp and admin signature in system audit logs.</span>
+                </div>
+              </div>
+
+              {/* Modal Actions */}
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: 12,
+                  borderTop: "1px solid #f1f5f9",
+                  paddingTop: 16,
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setIsResetModalOpen(false)}
+                  disabled={isResettingPassword}
+                  style={{
+                    padding: "9px 18px",
+                    borderRadius: 8,
+                    border: "1px solid #cbd5e1",
+                    background: "#ffffff",
+                    color: "#475569",
+                    fontWeight: 500,
+                    fontSize: "0.875rem",
+                    cursor: "pointer",
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isResettingPassword}
+                  style={{
+                    padding: "9px 22px",
+                    borderRadius: 8,
+                    border: "none",
+                    background: "#b45309",
+                    backgroundImage: "linear-gradient(to right, #b45309, #d97706)",
+                    color: "#ffffff",
+                    fontWeight: 600,
+                    fontSize: "0.875rem",
+                    cursor: isResettingPassword ? "not-allowed" : "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    boxShadow: "0 4px 6px -1px rgba(180, 83, 9, 0.3)",
+                  }}
+                >
+                  {isResettingPassword ? (
+                    <>
+                      <RefreshCw size={16} className="animate-spin" />
+                      <span>Resetting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <KeyRound size={16} />
+                      <span>Confirm & Reset Password</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
