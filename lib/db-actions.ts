@@ -756,6 +756,7 @@ export async function saveRegisterOfficerServer(officerData: {
   role: string;
   is_active?: boolean;
   password?: string;
+  created_by?: string | null;
 }) {
   try {
     const isActive = officerData.is_active !== undefined ? officerData.is_active : true;
@@ -763,6 +764,7 @@ export async function saveRegisterOfficerServer(officerData: {
     let employeeNo = officerData.employee_no?.trim();
     const email = officerData.email.trim().toLowerCase();
     const fullName = officerData.full_name.trim();
+    const createdBy = officerData.created_by || null;
 
     if (!employeeNo) {
       employeeNo = `EMP-${Date.now().toString().slice(-6)}`;
@@ -778,6 +780,7 @@ export async function saveRegisterOfficerServer(officerData: {
             role = ${officerData.role},
             is_active = ${isActive},
             password = COALESCE(${officerData.password || null}, password),
+            created_by = COALESCE(${createdBy}, created_by),
             updated_at = NOW()
         WHERE id = ${officerData.id} OR employee_no = ${employeeNo} OR email = ${email}
         RETURNING *;
@@ -806,6 +809,7 @@ export async function saveRegisterOfficerServer(officerData: {
             role = ${officerData.role},
             is_active = ${isActive},
             password = COALESCE(${officerData.password || null}, password),
+            created_by = COALESCE(${createdBy}, created_by),
             updated_at = NOW()
         WHERE id = ${existingId}
         RETURNING *;
@@ -815,8 +819,8 @@ export async function saveRegisterOfficerServer(officerData: {
       // 3. Insert new record into register_officer_table
       const targetId = (officerData.id && !officerData.id.startsWith("sub-") && !officerData.id.startsWith("dm-") && !officerData.id.startsWith("inv-") && !officerData.id.startsWith("ba-")) ? officerData.id : null;
       const inserted: any[] = await prisma.$queryRaw`
-        INSERT INTO register_officer_table (id, employee_no, full_name, email, password, role, is_active)
-        VALUES (COALESCE(${targetId}, gen_random_uuid()::text), ${employeeNo}, ${fullName}, ${email}, ${password}, ${officerData.role}, ${isActive})
+        INSERT INTO register_officer_table (id, employee_no, full_name, email, password, role, is_active, created_by)
+        VALUES (COALESCE(${targetId}, gen_random_uuid()::text), ${employeeNo}, ${fullName}, ${email}, ${password}, ${officerData.role}, ${isActive}, ${createdBy})
         RETURNING *;
       `;
       resultRecord = inserted[0];

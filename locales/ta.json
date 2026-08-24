@@ -72,14 +72,14 @@
   "searchLettersPlaceholder": "கடிதங்களைத் தேடு...",
   "viewAll": "அனைத்தையும் காட்டு",
   "logout": "வெளியேறு",
-  "welcomeUser": "நடாஷா சத்ஸரணி",
-  "profileEmail": "nathashasathsarani209@gmail.com",
-  "adminName": "அருணி ராஜபக்ஷ",
-  "adminEmail": "arunirajapaksha@gmail.com",
-  "subjectName": "நடாஷா சத்ஸரணி",
-  "subjectEmail": "nathashasathsarani209@gmail.com",
-  "investigationName": "சுரேஷ் சில்வா",
-  "investigationEmail": "sureshsilva@gmail.com",
+  "welcomeUser": "உத்தியோகத்தர்",
+  "profileEmail": "officer@dcmms.gov.lk",
+  "adminName": "கிளை நிர்வாகி",
+  "adminEmail": "admin@dcmms.gov.lk",
+  "subjectName": "விடய உத்தியோகத்தர்",
+  "subjectEmail": "subject@dcmms.gov.lk",
+  "investigationName": "விசாரணை உத்தியோகத்தர்",
+  "investigationEmail": "investigation@dcmms.gov.lk",
   "newLetterModalTitle": "புதிய கடிதம் / புகார் பதிவுசெய்க",
   "refNo": "கடிதத்தின் குறிப்பு எண்",
   "senderName": "கடிதம் அனுப்பிய தரப்பு",
@@ -597,6 +597,9 @@
   "branchAdminDeleteConfirm": "இந்த கிளை நிர்வாகியை நிச்சயமாக நீக்க விரும்புகிறீர்களா?",
   "branchAdminStatusToggled": "கிளை நிர்வாகி நிலை புதுப்பிக்கப்பட்டது.",
   "exportBranchAdmins": "கிளை நிர்வாகிகளை ஏற்றுமதி செய்க",
-  "noBranchAdminsFound": "பொருந்தக்கூடிய கிளை நிர்வாகிகள் எவரும் காணப்படவில்லை."
+  "noBranchAdminsFound": "பொருந்தக்கூடிய கிளை நிர்வாகிகள் எவரும் காணப்படவில்லை.",
+  "officerRegistration": "உத்தியோகத்தர் பதிவு",
+  "secureRegistrationPortal": "பாதுகாப்பான உத்தியோகத்தர் பதிவு நுழைவாயில்",
+  "secureRegistrationPortalSubtitle": "அனைத்து பொறுப்புகளிலும் அங்கீகரிக்கப்பட்ட அமைச்சு அதிகாரிகளைப் பதிவுசெய்து நற்சான்றிதழ்களை நிர்வகிக்கவும்."
 }
 

@@ -61,40 +61,54 @@ export const Sidebar: React.FC<SidebarProps> = ({
       }
     };
     loadProfile();
+
+    const handleSessionUpdate = () => {
+      loadProfile();
+    };
+
+    window.addEventListener("storage", handleSessionUpdate);
+    window.addEventListener("dcmms_session_updated", handleSessionUpdate);
+    window.addEventListener("dcmms_data_updated", handleSessionUpdate);
+
+    return () => {
+      window.removeEventListener("storage", handleSessionUpdate);
+      window.removeEventListener("dcmms_session_updated", handleSessionUpdate);
+      window.removeEventListener("dcmms_data_updated", handleSessionUpdate);
+    };
   }, []);
 
-  // Determine user information based on active role & live profile session
-  let userName = profile?.full_name || t("welcomeUser");
-  let userEmail = profile?.email || t("profileEmail");
-  let userInitials = "U";
+  // Determine user information dynamically from the logged-in profile session
+  const userName = profile?.full_name || (
+    activeRole === "system_admin"
+      ? "System Administrator"
+      : activeRole === "admin"
+      ? t("adminName", "Branch Administrator")
+      : activeRole === "subject"
+      ? t("subjectName", "Subject Officer")
+      : activeRole === "investigation"
+      ? t("investigationName", "Investigation Officer")
+      : t("roleDailyMail", "Daily Mail Officer")
+  );
 
-  // If live profile session is not available, default back to localized role fallbacks
-  if (!profile) {
-    if (activeRole === "admin") {
-      userName = t("adminName");
-      userEmail = t("adminEmail");
-      userInitials = "AR";
-    } else if (activeRole === "subject") {
-      userName = t("subjectName");
-      userEmail = t("subjectEmail");
-      userInitials = "NS";
-    } else if (activeRole === "investigation") {
-      userName = t("investigationName");
-      userEmail = t("investigationEmail");
-      userInitials = "SS";
-    } else if (activeRole === "system_admin") {
-      userName = "System Admin";
-      userEmail = "sysadmin@moe.gov.lk";
-      userInitials = "SA";
-    }
-  } else {
-    // Generate initials dynamically from the user's name
-    const parts = userName.trim().split(/\s+/);
-    if (parts.length >= 2) {
-      userInitials = (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-    } else if (parts.length === 1 && parts[0]) {
-      userInitials = parts[0].slice(0, 2).toUpperCase();
-    }
+  const userEmail = profile?.email || (
+    activeRole === "system_admin"
+      ? "sysadmin@dcmms.gov.lk"
+      : activeRole === "admin"
+      ? "admin@dcmms.gov.lk"
+      : activeRole === "subject"
+      ? "subject@dcmms.gov.lk"
+      : activeRole === "investigation"
+      ? "investigation@dcmms.gov.lk"
+      : "dailymail@dcmms.gov.lk"
+  );
+
+  // Generate initials dynamically from the actual user's name
+  let userInitials = "U";
+  const nameParts = (userName || "").trim().split(/\s+/).filter(Boolean);
+  if (nameParts.length >= 2) {
+    userInitials = (nameParts[0][0] + nameParts[nameParts.length - 1][0]).toUpperCase();
+  } else if (nameParts.length === 1 && nameParts[0]) {
+    userInitials = nameParts[0].slice(0, 2).toUpperCase();
   }
 
   // Quick Action button based on active role

@@ -11,6 +11,7 @@ import {
   toggleRegisterOfficerStatusServer 
 } from "@/lib/db-actions";
 import { exportToExcel } from "@/lib/export-excel";
+import { getCurrentProfile } from "@/lib/auth";
 
 interface Officer {
   id: string;
@@ -192,6 +193,8 @@ export default function DailyMailOfficersPage() {
     const isNew = !isEditMode || !editingId;
     const targetId = isNew ? undefined : editingId!;
 
+    const currentAdmin = await getCurrentProfile();
+
     const payload = {
       id: targetId,
       employee_no: formEmployeeNo.trim() || `EMP-${Date.now().toString().slice(-6)}`,
@@ -199,6 +202,7 @@ export default function DailyMailOfficersPage() {
       email: formEmail.trim().toLowerCase(),
       role: "Daily mail officer",
       is_active: formStatus === "Active",
+      created_by: currentAdmin?.id || undefined,
     };
 
     let saveSuccess = false;

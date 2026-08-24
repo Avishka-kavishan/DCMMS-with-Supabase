@@ -122,7 +122,11 @@ export default function Home() {
 
         if (typeof window !== "undefined") {
           localStorage.setItem("dcmms_simulated_session", JSON.stringify(sessionUser));
+          localStorage.setItem("dcmms_username", res.data.full_name || sessionUser.full_name);
+          localStorage.setItem("dcmms_user_role", userRole);
           localStorage.setItem("dcmms_current_session_id", activeSessionId);
+          window.dispatchEvent(new Event("dcmms_session_updated"));
+          window.dispatchEvent(new Event("storage"));
         }
 
         router.push(dashboardPath(userRole));
@@ -135,7 +139,11 @@ export default function Home() {
         const simSession = await logLogin(simUser.id, simUser.full_name, email);
         if (typeof window !== "undefined") {
           localStorage.setItem("dcmms_simulated_session", JSON.stringify(simUser));
+          localStorage.setItem("dcmms_username", simUser.full_name);
+          localStorage.setItem("dcmms_user_role", simUser.role);
           localStorage.setItem("dcmms_current_session_id", simSession.id);
+          window.dispatchEvent(new Event("dcmms_session_updated"));
+          window.dispatchEvent(new Event("storage"));
         }
         router.push(dashboardPath(simUser.role as UserRole));
         return;

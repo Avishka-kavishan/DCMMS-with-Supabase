@@ -278,6 +278,8 @@ export default function AddBranchAdminPage() {
     const isNew = !isEditMode || !editingId;
     const targetId = isNew ? undefined : editingId!;
 
+    const currentAdmin = await getCurrentProfile();
+
     const payload = {
       id: targetId,
       employee_no: formEmployeeNo.trim(),
@@ -286,6 +288,7 @@ export default function AddBranchAdminPage() {
       role: "Branch admin",
       is_active: formStatus === "Active",
       password: formPassword.trim() || undefined,
+      created_by: currentAdmin?.id || undefined,
     };
 
     let saveSuccess = false;

@@ -71,14 +71,14 @@
   "searchLettersPlaceholder": "Search Letters...",
   "viewAll": "View all",
   "logout": "Log out",
-  "welcomeUser": "Nathasha Sathsarani",
-  "profileEmail": "nathashasathsarani209@gmail.com",
-  "adminName": "Aruni Rajapaksha",
-  "adminEmail": "arunirajapaksha@gmail.com",
-  "subjectName": "Nathasha Sathsarani",
-  "subjectEmail": "nathashasathsarani209@gmail.com",
-  "investigationName": "Suresh Silva",
-  "investigationEmail": "sureshsilva@gmail.com",
+  "welcomeUser": "Officer",
+  "profileEmail": "officer@dcmms.gov.lk",
+  "adminName": "Branch Administrator",
+  "adminEmail": "admin@dcmms.gov.lk",
+  "subjectName": "Subject Officer",
+  "subjectEmail": "subject@dcmms.gov.lk",
+  "investigationName": "Investigation Officer",
+  "investigationEmail": "investigation@dcmms.gov.lk",
   "newLetterModalTitle": "Register New Letter / Complaint",
   "refNo": "Reference number of the letter",
   "senderName": "Sender's party",
@@ -601,7 +601,10 @@
   "branchAdminDeleteConfirm": "Are you sure you want to delete this Branch Administrator?",
   "branchAdminStatusToggled": "Branch Administrator status updated.",
   "exportBranchAdmins": "Export Branch Admins",
-  "noBranchAdminsFound": "No branch administrators found matching your criteria."
+  "noBranchAdminsFound": "No branch administrators found matching your criteria.",
+  "officerRegistration": "Officer Registration",
+  "secureRegistrationPortal": "Secure Officer Registration Portal",
+  "secureRegistrationPortalSubtitle": "Provision and manage system access credentials for authorized ministry officers across all roles."
 }
 
 

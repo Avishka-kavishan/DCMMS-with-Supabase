@@ -11,6 +11,7 @@ import {
   toggleRegisterOfficerStatusServer 
 } from "@/lib/db-actions";
 import { exportToExcel } from "@/lib/export-excel";
+import { getCurrentProfile } from "@/lib/auth";
 
 interface Officer {
   id: string;
@@ -199,6 +200,7 @@ export default function InvestigationOfficersPage() {
     setIsSaving(true);
     const isNew = !isEditMode || !editingId;
     const targetId = isNew ? undefined : editingId!;
+    const currentAdmin = await getCurrentProfile();
 
     const payload = {
       id: targetId,
@@ -207,6 +209,7 @@ export default function InvestigationOfficersPage() {
       email: formEmail.trim().toLowerCase(),
       role: "Investigation officer",
       is_active: formStatus === "Active",
+      created_by: currentAdmin?.id || undefined,
     };
 
     let saveSuccess = false;
