@@ -12,6 +12,7 @@ import {
 } from "@/lib/db-actions";
 import { exportToExcel } from "@/lib/export-excel";
 import { getCurrentProfile } from "@/lib/auth";
+import { SUBJECT_TYPE_OPTIONS, getSubjectTypeLabel } from "@/lib/subject-types";
 
 interface Officer {
   id: string;
@@ -19,6 +20,7 @@ interface Officer {
   fullName: string;
   email: string;
   role: string;
+  subjectType?: string;
   status: "Active" | "Inactive";
   createdAt: string;
 }
@@ -38,6 +40,7 @@ export default function SubjectOfficersPage() {
   const [formEmployeeNo, setFormEmployeeNo] = useState("");
   const [formName, setFormName] = useState("");
   const [formEmail, setFormEmail] = useState("");
+  const [formSubjectType, setFormSubjectType] = useState(SUBJECT_TYPE_OPTIONS[0].value);
   const [formStatus, setFormStatus] = useState<"Active" | "Inactive">("Active");
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -61,6 +64,7 @@ export default function SubjectOfficersPage() {
           fullName: p.full_name || "",
           email: p.email || "",
           role: "subject_officer",
+          subjectType: p.subject_type || SUBJECT_TYPE_OPTIONS[0].value,
           status: p.is_active === false ? "Inactive" : "Active",
           createdAt: p.created_at ? new Date(p.created_at).toISOString().slice(0, 10) : "",
         }));
@@ -85,6 +89,7 @@ export default function SubjectOfficersPage() {
             fullName: p.full_name || "",
             email: p.email || "",
             role: "subject_officer",
+            subjectType: p.subject_type || SUBJECT_TYPE_OPTIONS[0].value,
             status: p.is_active === false ? "Inactive" : "Active",
             createdAt: (p.created_at || "").slice(0, 10),
           }));
@@ -110,7 +115,10 @@ export default function SubjectOfficersPage() {
               (!lo.email || !dbEmails.has(lo.email.toLowerCase())) &&
               (!lo.employeeNo || !dbEmpNos.has(lo.employeeNo))
             ) {
-              result.push(lo);
+              result.push({
+                ...lo,
+                subjectType: lo.subjectType || SUBJECT_TYPE_OPTIONS[0].value
+              });
             }
           });
         } catch (e) {
@@ -174,6 +182,7 @@ export default function SubjectOfficersPage() {
     setFormEmployeeNo(""); 
     setFormName(""); 
     setFormEmail(""); 
+    setFormSubjectType(SUBJECT_TYPE_OPTIONS[0].value);
     setFormStatus("Active");
     setErrors({}); 
     setIsModalOpen(true);
@@ -185,6 +194,7 @@ export default function SubjectOfficersPage() {
     setFormEmployeeNo(o.employeeNo);
     setFormName(o.fullName); 
     setFormEmail(o.email); 
+    setFormSubjectType(o.subjectType || SUBJECT_TYPE_OPTIONS[0].value);
     setFormStatus(o.status);
     setErrors({}); 
     setIsModalOpen(true);
@@ -206,6 +216,7 @@ export default function SubjectOfficersPage() {
       full_name: formName.trim(),
       email: formEmail.trim().toLowerCase(),
       role: "Subject officer",
+      subject_type: formSubjectType.trim() || SUBJECT_TYPE_OPTIONS[0].value,
       is_active: formStatus === "Active",
       created_by: currentAdmin?.id || undefined,
     };
@@ -222,7 +233,7 @@ export default function SubjectOfficersPage() {
           isEditMode ? "UPDATE_SUBJECT_OFFICER" : "REGISTER_SUBJECT_OFFICER",
           "register_officer_table",
           res.data?.id || editingId || "new",
-          { name: payload.full_name, email: payload.email, employee_no: payload.employee_no }
+          { name: payload.full_name, email: payload.email, employee_no: payload.employee_no, subject_type: payload.subject_type }
         );
       } else {
         errorMsg = res.error || "Failed to save officer in PostgreSQL";
@@ -240,6 +251,7 @@ export default function SubjectOfficersPage() {
           full_name: payload.full_name,
           email: payload.email,
           role: "Subject officer",
+          subject_type: payload.subject_type,
           is_active: payload.is_active,
         };
         if (payload.id && !payload.id.startsWith("sub-")) {
@@ -263,6 +275,7 @@ export default function SubjectOfficersPage() {
         fullName: payload.full_name,
         email: payload.email,
         role: "subject_officer",
+        subjectType: payload.subject_type,
         status: formStatus,
         createdAt: new Date().toISOString().slice(0, 10),
       };
@@ -410,7 +423,8 @@ export default function SubjectOfficersPage() {
     (o) =>
       o.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       o.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      o.employeeNo.toLowerCase().includes(searchQuery.toLowerCase())
+      o.employeeNo.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (o.subjectType || "").toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -435,12 +449,13 @@ export default function SubjectOfficersPage() {
             className="btn-export-excel"
             onClick={() => {
               const dataToExport = filteredOfficers.length > 0 ? filteredOfficers : officers;
-              const headers = ["Employee No", "Full Name", "Email Address", "Assigned Role", "Status", "Date Created"];
+              const headers = ["Employee No", "Full Name", "Email Address", "Assigned Role", "Subject Type", "Status", "Date Created"];
               const rows = dataToExport.map((o) => [
                 o.employeeNo || "",
                 o.fullName,
                 o.email,
                 "Subject Officer",
+                getSubjectTypeLabel(o.subjectType),
                 o.status,
                 o.createdAt || ""
               ]);
@@ -470,6 +485,7 @@ export default function SubjectOfficersPage() {
                 <th scope="col">{t("officerFullName", "Officer Full Name")}</th>
                 <th scope="col">{t("emailAddress", "E-mail Address")}</th>
                 <th scope="col">{t("assignedSystemRole", "Assigned System Role")}</th>
+                <th scope="col">{t("subjectType", "Subject Type")}</th>
                 <th scope="col">{t("accountStatus", "Account Status")}</th>
                 <th scope="col" className="admin-table-header-center">{t("actions", "Actions")}</th>
               </tr>
@@ -477,7 +493,7 @@ export default function SubjectOfficersPage() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="admin-table-no-data table-no-data-padding">
+                  <td colSpan={7} className="admin-table-no-data table-no-data-padding">
                     {t("loadingData", "Loading officers from database…")}
                   </td>
                 </tr>
@@ -488,6 +504,11 @@ export default function SubjectOfficersPage() {
                     <td className="admin-table-case-no font-semibold">{item.fullName}</td>
                     <td>{item.email || "—"}</td>
                     <td>{t("roleSubject", "Subject Officer")}</td>
+                    <td>
+                      <span className="subject-type-badge" title={item.subjectType || ""}>
+                        {getSubjectTypeLabel(item.subjectType)}
+                      </span>
+                    </td>
                     <td>
                       <span className={item.status === "Active" ? "status-badge-active" : "status-badge-inactive"}>
                         {item.status === "Active" ? t("active", "Active") : t("inactive", "Inactive")}
@@ -510,7 +531,7 @@ export default function SubjectOfficersPage() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={6} className="admin-table-no-data table-no-data-padding">
+                  <td colSpan={7} className="admin-table-no-data table-no-data-padding">
                     {officers.length === 0
                       ? t("noOfficersInDatabase", "No subject officers found in register_officer_table.")
                       : t("noLettersFound", "No entries found matching search.")}
@@ -591,6 +612,24 @@ export default function SubjectOfficersPage() {
                     value={t("roleSubject", "Subject Officer")}
                     className="field-input disabled-input-custom"
                   />
+                </div>
+
+                <div className="form-field-group">
+                  <label htmlFor="subjectType" className="field-label">
+                    {t("subjectType", "Subject Type")} <span className="required-star">*</span>
+                  </label>
+                  <select
+                    id="subjectType"
+                    value={formSubjectType}
+                    onChange={(e) => setFormSubjectType(e.target.value)}
+                    className="field-select"
+                  >
+                    {SUBJECT_TYPE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="form-field-group">

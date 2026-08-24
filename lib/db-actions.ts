@@ -744,6 +744,7 @@ export async function getRegisterOfficersServer(roleFilter?: string) {
         r.full_name, 
         r.email, 
         r.role, 
+        r.subject_type,
         r.is_active, 
         r.created_by,
         r.created_at, 
@@ -779,6 +780,7 @@ export async function saveRegisterOfficerServer(officerData: {
   full_name: string;
   email: string;
   role: string;
+  subject_type?: string | null;
   is_active?: boolean;
   password?: string;
   created_by?: string | null;
@@ -790,6 +792,7 @@ export async function saveRegisterOfficerServer(officerData: {
     const email = officerData.email.trim().toLowerCase();
     const fullName = officerData.full_name.trim();
     const createdBy = officerData.created_by || null;
+    const subjectType = officerData.subject_type !== undefined ? (officerData.subject_type ? officerData.subject_type.trim() : null) : null;
 
     if (!employeeNo) {
       employeeNo = `EMP-${Date.now().toString().slice(-6)}`;
@@ -803,6 +806,7 @@ export async function saveRegisterOfficerServer(officerData: {
             full_name = ${fullName},
             email = ${email},
             role = ${officerData.role},
+            subject_type = ${subjectType},
             is_active = ${isActive},
             password = COALESCE(${officerData.password || null}, password),
             created_by = COALESCE(${createdBy}, created_by),
@@ -832,6 +836,7 @@ export async function saveRegisterOfficerServer(officerData: {
             full_name = ${fullName},
             email = ${email},
             role = ${officerData.role},
+            subject_type = ${subjectType},
             is_active = ${isActive},
             password = COALESCE(${officerData.password || null}, password),
             created_by = COALESCE(${createdBy}, created_by),
@@ -844,8 +849,8 @@ export async function saveRegisterOfficerServer(officerData: {
       // 3. Insert new record into register_officer_table
       const targetId = (officerData.id && !officerData.id.startsWith("sub-") && !officerData.id.startsWith("dm-") && !officerData.id.startsWith("inv-") && !officerData.id.startsWith("ba-")) ? officerData.id : null;
       const inserted: any[] = await prisma.$queryRaw`
-        INSERT INTO register_officer_table (id, employee_no, full_name, email, password, role, is_active, created_by)
-        VALUES (COALESCE(${targetId}, gen_random_uuid()::text), ${employeeNo}, ${fullName}, ${email}, ${password}, ${officerData.role}, ${isActive}, ${createdBy})
+        INSERT INTO register_officer_table (id, employee_no, full_name, email, password, role, subject_type, is_active, created_by)
+        VALUES (COALESCE(${targetId}, gen_random_uuid()::text), ${employeeNo}, ${fullName}, ${email}, ${password}, ${officerData.role}, ${subjectType}, ${isActive}, ${createdBy})
         RETURNING *;
       `;
       resultRecord = inserted[0];
