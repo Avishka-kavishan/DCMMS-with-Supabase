@@ -360,13 +360,13 @@ export default function ExcelSecurityPage() {
             <div style={{ maxWidth: 720 }}>
               <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.15)", padding: "4px 12px", borderRadius: 20, fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.5px", marginBottom: 10 }}>
                 <ShieldCheck size={14} />
-                SYSTEM PROTECTION LAYER ACTIVE
+                {t("excelBannerLayerBadge", "SYSTEM PROTECTION LAYER ACTIVE")}
               </div>
               <h3 style={{ margin: "0 0 8px 0", fontSize: "1.3rem", fontWeight: 700 }}>
-                Tamper-Proof Spreadsheet Protection
+                {t("excelBannerTitle", "Tamper-Proof Spreadsheet Protection")}
               </h3>
               <p style={{ margin: 0, fontSize: "0.875rem", opacity: 0.9, lineHeight: 1.5 }}>
-                When users download spreadsheets across Investigation Dossiers, Daily Mail Reports, Session Trails, and Branch Accounts, all data cells are automatically marked as <strong>Read-Only</strong>. Unauthorized editing is blocked unless this administrative unlock password is provided.
+                {t("excelBannerDesc", "When users download spreadsheets across Investigation Dossiers, Daily Mail Reports, Session Trails, and Branch Accounts, all data cells are automatically marked as Read-Only. Unauthorized editing is blocked unless this administrative unlock password is provided.")}
               </p>
             </div>
 
@@ -416,12 +416,14 @@ export default function ExcelSecurityPage() {
                       <h4 style={{ margin: 0, fontSize: "1rem", fontWeight: 700, color: "#1e293b" }}>
                         {t("currentUnlockPassword", "Current Unlock Password")}
                       </h4>
-                      <span style={{ fontSize: "0.75rem", color: "#64748b" }}>Active key enforced on exports</span>
+                      <span style={{ fontSize: "0.75rem", color: "#64748b" }}>
+                        {t("activeKeyEnforced", "Active key enforced on exports")}
+                      </span>
                     </div>
                   </div>
 
                   <span style={{ background: "#dcfce7", color: "#15803d", padding: "3px 8px", borderRadius: 6, fontSize: "0.725rem", fontWeight: 700 }}>
-                    ENFORCED
+                    {t("enforcedBadge", "ENFORCED")}
                   </span>
                 </div>
 
@@ -437,7 +439,9 @@ export default function ExcelSecurityPage() {
                   margin: "18px 0"
                 }}>
                   <div>
-                    <span style={{ fontSize: "0.75rem", color: "#64748b", textTransform: "uppercase", fontWeight: 600 }}>Active Password</span>
+                    <span style={{ fontSize: "0.75rem", color: "#64748b", textTransform: "uppercase", fontWeight: 600 }}>
+                      {t("activePasswordLabel", "Active Password")}
+                    </span>
                     <div style={{ fontFamily: "monospace", fontSize: "1.35rem", fontWeight: 700, color: "#0f172a", letterSpacing: "1.5px", marginTop: 4 }}>
                       {isPasswordVisible ? currentPassword : "•".repeat(Math.max(currentPassword.length, 10))}
                     </div>
@@ -461,12 +465,12 @@ export default function ExcelSecurityPage() {
                     }}
                   >
                     {isPasswordVisible ? <EyeOff size={16} /> : <Eye size={16} />}
-                    {isPasswordVisible ? "Hide" : "Show"}
+                    {isPasswordVisible ? t("hide", "Hide") : t("show", "Show")}
                   </button>
                 </div>
 
                 <div style={{ background: "#eff6ff", borderLeft: "4px solid #3b82f6", padding: "12px 16px", borderRadius: 8, fontSize: "0.825rem", color: "#1e40af", lineHeight: 1.5 }}>
-                  <strong>How to unlock in Excel:</strong> Open downloaded file &rarr; click <strong>Review</strong> tab &rarr; click <strong>Unprotect Sheet</strong> &rarr; type this password.
+                  <strong>{t("howToUnlockTitle", "How to unlock in Excel:")}</strong> {t("howToUnlockDesc", "Open downloaded file → click Review tab → click Unprotect Sheet → type this password.")}
                 </div>
               </div>
 
@@ -535,7 +539,9 @@ export default function ExcelSecurityPage() {
                     <h4 style={{ margin: 0, fontSize: "1rem", fontWeight: 700, color: "#1e293b" }}>
                       {t("newExcelPassword", "Set New Excel Unlock Password")}
                     </h4>
-                    <span style={{ fontSize: "0.75rem", color: "#64748b" }}>Update the administrative password for future exports</span>
+                    <span style={{ fontSize: "0.75rem", color: "#64748b" }}>
+                      {t("updateFutureDesc", "Update the administrative password for future exports")}
+                    </span>
                   </div>
                 </div>
 
@@ -557,7 +563,7 @@ export default function ExcelSecurityPage() {
                   }}
                 >
                   <Sparkles size={13} />
-                  Generate Strong
+                  {t("generateStrong", "Generate Strong")}
                 </button>
               </div>
 
@@ -602,8 +608,10 @@ export default function ExcelSecurityPage() {
                   {newPassword && (
                     <div style={{ marginTop: 8 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", color: "#64748b", marginBottom: 3 }}>
-                        <span>Password Strength:</span>
-                        <span style={{ fontWeight: 700, color: strength.color }}>{strength.text}</span>
+                        <span>{t("passwordStrength", "Password Strength:")}</span>
+                        <span style={{ fontWeight: 700, color: strength.color }}>
+                          {strength.text === "Weak" ? t("weak", "Weak") : strength.text === "Good" ? t("good", "Good") : t("strong", "Strong")}
+                        </span>
                       </div>
                       <div style={{ display: "flex", gap: 4, height: 4, borderRadius: 2, overflow: "hidden" }}>
                         {[1, 2, 3, 4, 5].map((i) => (
@@ -664,7 +672,7 @@ export default function ExcelSecurityPage() {
                   }}
                 >
                   <ShieldCheck size={18} />
-                  {isSaving ? t("saving", "Updating Security Key...") : t("savePassword", "Update Protection Password")}
+                  {isSaving ? t("updatingSecurityKey", "Updating Security Key...") : t("savePassword", "Update Protection Password")}
                 </button>
               </form>
             </div>
@@ -676,10 +684,10 @@ export default function ExcelSecurityPage() {
               <div>
                 <h3 className="card-title-header" style={{ marginBottom: 4, display: "flex", alignItems: "center", gap: 8 }}>
                   <Clock size={20} color="#1e3a8a" />
-                  Excel Security Event History
+                  {t("excelAuditHistoryTitle", "Excel Security Event History")}
                 </h3>
                 <p style={{ margin: 0, fontSize: "0.825rem", color: "#64748b" }}>
-                  Immutable audit records of all Excel export password modifications and reset operations.
+                  {t("excelAuditHistoryDesc", "Immutable audit records of all Excel export password modifications and reset operations.")}
                 </p>
               </div>
             </div>
@@ -689,10 +697,10 @@ export default function ExcelSecurityPage() {
                 <table className="sysadmin-data-table">
                   <thead>
                     <tr>
-                      <th>Event Timestamp</th>
-                      <th>Admin User</th>
-                      <th>Action</th>
-                      <th>Audit Details</th>
+                      <th>{t("eventTimestamp", "Event Timestamp")}</th>
+                      <th>{t("adminUser", "Admin User")}</th>
+                      <th>{t("action", "Action")}</th>
+                      <th>{t("auditDetails", "Audit Details")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -724,7 +732,7 @@ export default function ExcelSecurityPage() {
             ) : (
               <div style={{ textAlign: "center", padding: "32px 16px", color: "#94a3b8" }}>
                 <FileSpreadsheet size={36} style={{ margin: "0 auto 8px auto", opacity: 0.5 }} />
-                <p style={{ margin: 0, fontSize: "0.875rem" }}>No password change events recorded yet.</p>
+                <p style={{ margin: 0, fontSize: "0.875rem" }}>{t("noEventsRecorded", "No password change events recorded yet.")}</p>
               </div>
             )}
           </div>
