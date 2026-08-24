@@ -727,18 +727,33 @@ export async function recordSessionServer(userId: string, role?: string) {
 // -------------------------------------------------------------
 export async function getRegisterOfficersServer(roleFilter?: string) {
   try {
-    let query = `SELECT id, employee_no, full_name, email, role, is_active, created_at, updated_at FROM register_officer_table`;
+    let query = `
+      SELECT 
+        r.id, 
+        r.employee_no, 
+        r.full_name, 
+        r.email, 
+        r.role, 
+        r.is_active, 
+        r.created_by,
+        r.created_at, 
+        r.updated_at,
+        COALESCE(c.full_name, 'System') AS created_by_name,
+        c.role AS created_by_role
+      FROM register_officer_table r
+      LEFT JOIN register_officer_table c ON r.created_by::text = c.id::text
+    `;
     let params: any[] = [];
-    if (roleFilter) {
+    if (roleFilter && roleFilter !== "all") {
       const lowerFilter = roleFilter.toLowerCase();
       if (lowerFilter.includes("branch")) {
-        query += ` WHERE (role ILIKE '%branch%' OR (role ILIKE '%admin%' AND role NOT ILIKE '%system%'))`;
+        query += ` WHERE (r.role ILIKE '%branch%' OR (r.role ILIKE '%admin%' AND r.role NOT ILIKE '%system%'))`;
       } else {
-        query += ` WHERE role ILIKE $1`;
+        query += ` WHERE r.role ILIKE $1`;
         params.push(`%${roleFilter}%`);
       }
     }
-    query += ` ORDER BY created_at DESC`;
+    query += ` ORDER BY r.created_at DESC`;
     
     const records: any[] = await prisma.$queryRawUnsafe(query, ...params);
     return serializeForServerAction({ success: true, data: records });

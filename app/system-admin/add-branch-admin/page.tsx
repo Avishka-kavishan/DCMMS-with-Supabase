@@ -55,6 +55,7 @@ interface BranchAdmin {
   email: string;
   role: string;
   status: "Active" | "Inactive";
+  createdBy: string;
   createdAt: string;
 }
 
@@ -130,7 +131,8 @@ export default function AddBranchAdminPage() {
           email: p.email || "",
           role: p.role || "Branch admin",
           status: p.is_active === false ? "Inactive" : "Active",
-          createdAt: p.created_at ? new Date(p.created_at).toISOString().slice(0, 10) : "",
+          createdBy: p.created_by_name || (p.created_by ? "System Admin" : "System Root"),
+          createdAt: p.created_at ? new Date(p.created_at).toLocaleString() : "—",
         }));
       }
     } catch (err) {
@@ -156,7 +158,8 @@ export default function AddBranchAdminPage() {
               email: p.email || "",
               role: p.role || "Branch admin",
               status: p.is_active === false ? "Inactive" : "Active",
-              createdAt: (p.created_at || "").slice(0, 10),
+              createdBy: p.created_by || "System Root",
+              createdAt: p.created_at ? new Date(p.created_at).toLocaleString() : "—",
             }));
         }
       } catch (err) {
@@ -184,7 +187,8 @@ export default function AddBranchAdminPage() {
                 email: lo.email || "",
                 role: "Branch admin",
                 status: lo.status || "Active",
-                createdAt: lo.createdAt || new Date().toISOString().slice(0, 10),
+                createdBy: lo.createdBy || "System Root",
+                createdAt: lo.createdAt || new Date().toLocaleString(),
               });
             }
           });
@@ -648,21 +652,23 @@ export default function AddBranchAdminPage() {
     }
 
     const headers = [
-      "Staff / Employee ID",
+      "Employee No",
       "Full Name",
-      "Email Address",
-      "Assigned Role",
-      "Account Status",
-      "Registered Date",
+      "E-mail",
+      "Role",
+      "Account State",
+      "Created By",
+      "Created At",
     ];
 
     const rows = dataToExport.map((a) => [
       a.employeeNo,
       a.fullName,
       a.email,
-      "Discipline Branch Administrator",
+      a.role || "Branch admin",
       a.status,
-      a.createdAt || "N/A",
+      a.createdBy || "System Admin",
+      a.createdAt || "—",
     ]);
 
     exportToExcel(`DCMMS_Branch_Administrators_${new Date().toISOString().split("T")[0]}`, headers, rows);
@@ -673,7 +679,8 @@ export default function AddBranchAdminPage() {
     const matchesSearch =
       a.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       a.employeeNo.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      a.email.toLowerCase().includes(searchQuery.toLowerCase());
+      a.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (a.createdBy && a.createdBy.toLowerCase().includes(searchQuery.toLowerCase()));
 
     if (statusFilter === "all") return matchesSearch;
     return matchesSearch && a.status === statusFilter;
@@ -751,48 +758,6 @@ export default function AddBranchAdminPage() {
             </div>
 
             <div className="dashboard-header-right">
-              {/* Accessibility Font Resizer */}
-              <div className="accessibility-adjuster-bar" role="radiogroup" aria-label="Font Sizing Adjustment">
-                <label className={`size-btn size-btn-small${fontScale === "small" ? " active" : ""}`}>
-                  <input
-                    type="radio"
-                    name="dashboardFontScale"
-                    value="small"
-                    checked={fontScale === "small"}
-                    onChange={() => setFontScale("small")}
-                    aria-label={t("fontSmall", "Small Font")}
-                    className="sr-only"
-                  />
-                  A
-                </label>
-                <label className={`size-btn size-btn-medium${fontScale === "medium" ? " active" : ""}`}>
-                  <input
-                    type="radio"
-                    name="dashboardFontScale"
-                    value="medium"
-                    checked={fontScale === "medium"}
-                    onChange={() => setFontScale("medium")}
-                    aria-label={t("fontMedium", "Medium Font")}
-                    className="sr-only"
-                  />
-                  A
-                </label>
-                <label className={`size-btn size-btn-large${fontScale === "large" ? " active" : ""}`}>
-                  <input
-                    type="radio"
-                    name="dashboardFontScale"
-                    value="large"
-                    checked={fontScale === "large"}
-                    onChange={() => setFontScale("large")}
-                    aria-label={t("fontLarge", "Large Font")}
-                    className="sr-only"
-                  />
-                  A
-                </label>
-              </div>
-
-              <div className="divider-line" aria-hidden="true" />
-
               {/* Language Switcher */}
               <div className="trilingual-language-selector">
                 <button
@@ -817,57 +782,80 @@ export default function AddBranchAdminPage() {
             </div>
           </header>
 
-          {/* Stats Grid */}
-          <div className="sysadmin-stats-grid">
+          {/* Quick Stats Grid */}
+          <div className="sysadmin-stats-grid" style={{ marginBottom: 24 }}>
             <div className="sysadmin-stat-card">
               <div className="stat-card-header">
                 <div className="stat-icon-wrapper active-users">
-                  <Shield className="stat-icon" />
+                  <Shield size={20} />
                 </div>
                 <h3 className="stat-card-title">{t("totalBranchAdmins", "Total Branch Admins")}</h3>
               </div>
               <div className="stat-card-value">{totalCount}</div>
-              <p className="stat-card-desc">Connected to register_officer_table</p>
+              <p className="stat-card-desc">{t("registeredAdminsDesc", "Registered in register_officer_table")}</p>
             </div>
 
             <div className="sysadmin-stat-card">
               <div className="stat-card-header">
                 <div className="stat-icon-wrapper logins-today">
-                  <UserCheck className="stat-icon" />
+                  <UserCheck size={20} />
                 </div>
-                <h3 className="stat-card-title">{t("activeBranchAdmins", "Active Branch Admins")}</h3>
+                <h3 className="stat-card-title">{t("activeAdmins", "Active Status")}</h3>
               </div>
-              <div className="stat-card-value">{activeCount}</div>
-              <p className="stat-card-desc">Authorized to access /admin portal</p>
+              <div className="stat-card-value" style={{ color: "#10b981" }}>
+                {activeCount}
+              </div>
+              <p className="stat-card-desc">{t("activeAdminsDesc", "Authorized branch administrators")}</p>
             </div>
 
             <div className="sysadmin-stat-card">
               <div className="stat-card-header">
                 <div className="stat-icon-wrapper failures-today">
-                  <UserX className="stat-icon" />
+                  <UserX size={20} />
                 </div>
-                <h3 className="stat-card-title">{t("inactiveBranchAdmins", "Inactive Branch Admins")}</h3>
+                <h3 className="stat-card-title">{t("inactiveAdmins", "Inactive / Suspended")}</h3>
               </div>
-              <div className="stat-card-value">{inactiveCount}</div>
-              <p className="stat-card-desc">Disabled or locked accounts</p>
+              <div className="stat-card-value" style={{ color: "#ef4444" }}>
+                {inactiveCount}
+              </div>
+              <p className="stat-card-desc">{t("inactiveAdminsDesc", "Access temporarily revoked")}</p>
             </div>
 
             <div className="sysadmin-stat-card">
               <div className="stat-card-header">
                 <div className="stat-icon-wrapper logouts-today">
-                  <ShieldCheck className="stat-icon" />
+                  <UserPlus size={20} />
                 </div>
-                <h3 className="stat-card-title">{t("latestBranchAdmin", "Latest Registered")}</h3>
+                <h3 className="stat-card-title">{t("latestRegistration", "Recent Entry")}</h3>
               </div>
-              <div className="stat-card-value" style={{ fontSize: "1.1rem", marginTop: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              <div
+                className="stat-card-value"
+                style={{
+                  fontSize: "1.1rem",
+                  fontWeight: 600,
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+              >
                 {latestAdmin}
               </div>
-              <p className="stat-card-desc">Discipline Branch Administrator</p>
+              <p className="stat-card-desc">{t("latestRegistrationDesc", "Latest administrator onboarded")}</p>
             </div>
           </div>
 
-          {/* Main Card: Directory & Registration */}
-          <div className="sysadmin-card-section">
+          {/* Table Container Card */}
+          <div
+            className="sysadmin-card-section"
+            style={{
+              background: "#ffffff",
+              borderRadius: 12,
+              border: "1px solid #e2e8f0",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+              padding: "24px",
+            }}
+          >
+            {/* Header of Section */}
             <div
               style={{
                 display: "flex",
@@ -876,27 +864,31 @@ export default function AddBranchAdminPage() {
                 justifyContent: "space-between",
                 gap: 16,
                 marginBottom: 20,
-                borderBottom: "1px solid #f1f5f9",
-                paddingBottom: 16,
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <Shield className="card-title-icon" style={{ color: "#3b82f6" }} />
-                <div>
-                  <h3 style={{ margin: 0, fontSize: "1.15rem", fontWeight: 600, color: "#1e293b" }}>
-                    {t("branchAdminList", "Branch Administrators Directory")}
-                  </h3>
-                  <span style={{ fontSize: "0.8rem", color: "#64748b" }}>
-                    Database: public.register_officer_table (PostgreSQL & Supabase)
-                  </span>
-                </div>
+              <div>
+                <h3
+                  style={{
+                    margin: 0,
+                    fontSize: "1.15rem",
+                    fontWeight: 700,
+                    color: "#0f172a",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                  }}
+                >
+                  <ShieldCheck size={20} style={{ color: "#1e40af" }} />
+                  {t("branchAdminListHeader", "Branch Administrator Accounts")}
+                </h3>
+                <p style={{ margin: "4px 0 0", fontSize: "0.85rem", color: "#64748b" }}>
+                  {t("branchAdminListSubheader", "Live records linked directly with public.register_officer_table")}
+                </p>
               </div>
 
-              {/* Action Buttons */}
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                 <button
                   onClick={fetchBranchAdmins}
-                  className="btn-export"
                   style={{
                     display: "flex",
                     alignItems: "center",
@@ -989,7 +981,7 @@ export default function AddBranchAdminPage() {
                 />
                 <input
                   type="text"
-                  placeholder={t("branchAdminSearchPlaceholder", "Search by name, employee ID, or email...")}
+                  placeholder={t("branchAdminSearchPlaceholder", "Search by name, employee ID, email, or creator...")}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   style={{
@@ -1036,18 +1028,20 @@ export default function AddBranchAdminPage() {
               <table className="sysadmin-data-table">
                 <thead>
                   <tr>
-                    <th style={{ width: "16%" }}>{t("branchAdminEmployeeNo", "Staff / Employee ID")}</th>
-                    <th style={{ width: "24%" }}>{t("branchAdminFullName", "Full Name")}</th>
-                    <th style={{ width: "24%" }}>{t("branchAdminEmail", "Email Address")}</th>
-                    <th style={{ width: "16%" }}>{t("branchAdminRole", "System Role")}</th>
-                    <th style={{ width: "10%" }}>{t("branchAdminStatus", "Status")}</th>
+                    <th style={{ width: "13%" }}>{t("branchAdminEmployeeNo", "Employee No")}</th>
+                    <th style={{ width: "18%" }}>{t("branchAdminFullName", "Full Name")}</th>
+                    <th style={{ width: "18%" }}>{t("branchAdminEmail", "E-mail")}</th>
+                    <th style={{ width: "12%" }}>{t("branchAdminRole", "Role")}</th>
+                    <th style={{ width: "10%" }}>{t("branchAdminStatus", "Account state")}</th>
+                    <th style={{ width: "14%" }}>{t("branchAdminCreatedBy", "Created by")}</th>
+                    <th style={{ width: "15%" }}>{t("branchAdminCreatedAt", "Created at")}</th>
                     <th style={{ width: "10%", textAlign: "center" }}>{t("actions", "Actions")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {isLoading ? (
                     <tr>
-                      <td colSpan={6} style={{ textAlign: "center", padding: "40px 16px", color: "#94a3b8" }}>
+                      <td colSpan={8} style={{ textAlign: "center", padding: "40px 16px", color: "#94a3b8" }}>
                         <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 10 }}>
                           <RefreshCw size={18} className="animate-spin" />
                           <span>Loading Branch Administrators...</span>
@@ -1056,7 +1050,7 @@ export default function AddBranchAdminPage() {
                     </tr>
                   ) : filteredAdmins.length === 0 ? (
                     <tr>
-                      <td colSpan={6} style={{ textAlign: "center", padding: "40px 16px", color: "#94a3b8" }}>
+                      <td colSpan={8} style={{ textAlign: "center", padding: "40px 16px", color: "#94a3b8" }}>
                         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
                           <Shield size={32} style={{ color: "#cbd5e1" }} />
                           <p style={{ margin: 0, fontWeight: 500 }}>
@@ -1131,7 +1125,7 @@ export default function AddBranchAdminPage() {
                             }}
                           >
                             <Shield size={12} />
-                            Discipline Branch Admin
+                            {admin.role || "Branch admin"}
                           </span>
                         </td>
                         <td>
@@ -1164,12 +1158,41 @@ export default function AddBranchAdminPage() {
                             {admin.status}
                           </button>
                         </td>
+                        <td>
+                          <div style={{ fontSize: "0.825rem", color: "#475569", fontWeight: 500 }}>
+                            {admin.createdBy || "System Admin"}
+                          </div>
+                        </td>
+                        <td>
+                          <div style={{ fontSize: "0.8rem", color: "#64748b" }}>
+                            {admin.createdAt || "—"}
+                          </div>
+                        </td>
                         <td style={{ textAlign: "center" }}>
-                          <div style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
+                          <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 6 }}>
+                            <button
+                              onClick={() => openEditModal(admin)}
+                              style={{
+                                padding: "6px 8px",
+                                borderRadius: 6,
+                                border: "1px solid #e2e8f0",
+                                background: "#f8fafc",
+                                color: "#334155",
+                                cursor: "pointer",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 4,
+                                fontSize: "0.75rem",
+                                fontWeight: 500,
+                              }}
+                              title="Edit Details"
+                            >
+                              <Edit size={13} />
+                            </button>
                             <button
                               onClick={() => openResetModal(admin)}
                               style={{
-                                padding: "6px 12px",
+                                padding: "6px 10px",
                                 borderRadius: 6,
                                 border: "1px solid #fde68a",
                                 background: "#fffbeb",
@@ -1177,8 +1200,8 @@ export default function AddBranchAdminPage() {
                                 cursor: "pointer",
                                 display: "inline-flex",
                                 alignItems: "center",
-                                gap: 6,
-                                fontSize: "0.78rem",
+                                gap: 4,
+                                fontSize: "0.75rem",
                                 fontWeight: 600,
                                 transition: "all 0.15s ease",
                               }}
@@ -1192,8 +1215,8 @@ export default function AddBranchAdminPage() {
                               }}
                               title="Reset Password (Secure)"
                             >
-                              <KeyRound size={14} />
-                              <span>{t("resetPassword", "Reset Password")}</span>
+                              <KeyRound size={13} />
+                              <span>{t("resetPassword", "Reset")}</span>
                             </button>
                           </div>
                         </td>

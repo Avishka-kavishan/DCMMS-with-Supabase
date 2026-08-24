@@ -14,6 +14,10 @@ import {
   UserSession,
   AuditLog
 } from "@/lib/security";
+import { 
+  getRegisterOfficersServer, 
+  toggleRegisterOfficerStatusServer 
+} from "@/lib/db-actions";
 import {
   AreaChart,
   Area,
@@ -32,6 +36,19 @@ import "../dashboard-common.css";
 import "../daily-mail/daily-mail.css";
 import "./system-admin.css";
 
+interface RegisteredAccount {
+  id: string;
+  employee_no: string;
+  full_name: string;
+  email: string;
+  role: string;
+  is_active: boolean;
+  created_by?: string;
+  created_by_name?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export default function SystemAdminDashboard() {
   const { t, i18n } = useTranslation();
   const router = useRouter();
@@ -44,10 +61,13 @@ export default function SystemAdminDashboard() {
   const [activeSessions, setActiveSessions] = useState<UserSession[]>([]);
   const [sessionHistory, setSessionHistory] = useState<UserSession[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [accounts, setAccounts] = useState<RegisteredAccount[]>([]);
   const [adminName, setAdminName] = useState("System Admin");
 
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState("");
+  const [accountSearchQuery, setAccountSearchQuery] = useState("");
+  const [accountRoleFilter, setAccountRoleFilter] = useState("all");
   const [logTypeFilter, setLogTypeFilter] = useState("all");
 
   const [mounted, setMounted] = useState(false);
@@ -78,6 +98,16 @@ export default function SystemAdminDashboard() {
     setActiveSessions(active);
     setSessionHistory(history);
     setAuditLogs(logs);
+
+    // Load registered officer accounts from register_officer_table
+    try {
+      const regRes = await getRegisterOfficersServer();
+      if (regRes.success && regRes.data) {
+        setAccounts(regRes.data);
+      }
+    } catch (e) {
+      console.error("Failed to load accounts:", e);
+    }
   };
 
   useEffect(() => {
@@ -102,6 +132,13 @@ export default function SystemAdminDashboard() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "dcmms_profiles" },
+        () => {
+          loadData();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "register_officer_table" },
         () => {
           loadData();
         }
@@ -294,6 +331,62 @@ export default function SystemAdminDashboard() {
     document.body.removeChild(link);
   };
 
+  // Export Accounts to Excel / CSV
+  const exportAccountsToExcel = () => {
+    const dataToExport = filteredAccounts.length > 0 ? filteredAccounts : accounts;
+    if (!dataToExport || dataToExport.length === 0) {
+      alert("No accounts available to export.");
+      return;
+    }
+
+    const headers = [
+      "Employee No",
+      "Full Name",
+      "E-mail",
+      "Role",
+      "Account state",
+      "Created by",
+      "Created at",
+    ];
+
+    const rows = dataToExport.map((a) => [
+      `"${a.employee_no || ""}"`,
+      `"${(a.full_name || "").replace(/"/g, '""')}"`,
+      `"${(a.email || "").replace(/"/g, '""')}"`,
+      `"${(a.role || "").replace(/"/g, '""')}"`,
+      `"${a.is_active ? "Active" : "Inactive"}"`,
+      `"${(a.created_by_name || (a.created_by ? "System Admin" : "System Root")).replace(/"/g, '""')}"`,
+      `"${a.created_at ? new Date(a.created_at).toLocaleString() : "—"}"`,
+    ]);
+
+    const csvContent = "\uFEFF" + [headers.join(","), ...rows.map((r) => r.join(","))].join("\r\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `DCMMS_Register_Officer_Accounts_${new Date().toISOString().split("T")[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleToggleAccountStatus = async (account: RegisteredAccount) => {
+    const newStatus = !account.is_active;
+    await toggleRegisterOfficerStatusServer(account.id, newStatus);
+    loadData();
+  };
+
+  const filteredAccounts = accounts.filter((a) => {
+    const matchesSearch =
+      (a.full_name || "").toLowerCase().includes(accountSearchQuery.toLowerCase()) ||
+      (a.employee_no || "").toLowerCase().includes(accountSearchQuery.toLowerCase()) ||
+      (a.email || "").toLowerCase().includes(accountSearchQuery.toLowerCase()) ||
+      (a.created_by_name || "").toLowerCase().includes(accountSearchQuery.toLowerCase());
+
+    if (accountRoleFilter === "all") return matchesSearch;
+    return matchesSearch && (a.role || "").toLowerCase().includes(accountRoleFilter.toLowerCase());
+  });
+
   if (!mounted) {
     return <div className="system-admin-container" style={{ minHeight: "100vh", opacity: 0 }}></div>;
   }
@@ -422,6 +515,165 @@ export default function SystemAdminDashboard() {
                 </AreaChart>
               </ResponsiveContainer>
             </div>
+          </div>
+
+          {/* ── Registered Accounts & Role Privileges (register_officer_table) ── */}
+          <div className="sysadmin-card-section">
+            <div className="sysadmin-card-header-flex">
+              <div>
+                <h3 className="card-title-header" style={{ marginBottom: 4 }}>
+                  <svg className="card-title-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                  {t("sysAdminRegisteredAccounts", "System Accounts & Role Privileges")}
+                </h3>
+                <p style={{ margin: 0, fontSize: "0.825rem", color: "#64748b" }}>
+                  Live synchronized directory from <code style={{ background: "#f1f5f9", padding: "2px 6px", borderRadius: 4 }}>public.register_officer_table</code>
+                </p>
+              </div>
+
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                <button 
+                  className="btn-export-excel" 
+                  onClick={exportAccountsToExcel}
+                  title="Export accounts to Excel / CSV"
+                >
+                  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  {t("exportExcel", "Export to Excel")}
+                </button>
+                <button
+                  onClick={() => router.push("/system-admin/add-branch-admin")}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "8px 14px",
+                    borderRadius: 8,
+                    fontSize: "0.85rem",
+                    fontWeight: 600,
+                    backgroundColor: "#1e40af",
+                    color: "#ffffff",
+                    border: "none",
+                    cursor: "pointer",
+                  }}
+                >
+                  + {t("addBranchAdmin", "Add Branch Admin")}
+                </button>
+              </div>
+            </div>
+
+            {/* Filters Bar for Accounts */}
+            <div className="sysadmin-filter-bar" style={{ marginTop: 16 }}>
+              <input
+                type="text"
+                className="filter-input-search"
+                placeholder={t("searchAccountsPlaceholder", "Search by Employee No, Full Name, Email, or Creator...")}
+                value={accountSearchQuery}
+                onChange={(e) => setAccountSearchQuery(e.target.value)}
+              />
+              <select 
+                className="filter-select-type"
+                value={accountRoleFilter}
+                onChange={(e) => setAccountRoleFilter(e.target.value)}
+              >
+                <option value="all">All Roles</option>
+                <option value="system">System admin</option>
+                <option value="branch">Branch admin</option>
+                <option value="subject">Subject officer</option>
+                <option value="daily">Daily mail officer</option>
+                <option value="investigation">Investigation officer</option>
+              </select>
+            </div>
+
+            {filteredAccounts.length > 0 ? (
+              <div className="table-responsive-container">
+                <table className="sysadmin-data-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: "14%" }}>Employee No</th>
+                      <th style={{ width: "18%" }}>Full Name</th>
+                      <th style={{ width: "18%" }}>E-mail</th>
+                      <th style={{ width: "14%" }}>Role</th>
+                      <th style={{ width: "10%" }}>Account state</th>
+                      <th style={{ width: "13%" }}>Created by</th>
+                      <th style={{ width: "13%" }}>Created at</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredAccounts.map((acc) => (
+                      <tr key={acc.id} className="sysadmin-table-row">
+                        <td className="font-semibold text-primary font-mono">{acc.employee_no || "—"}</td>
+                        <td className="font-medium text-gray-900">{acc.full_name}</td>
+                        <td className="text-gray-600">{acc.email}</td>
+                        <td>
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              padding: "3px 8px",
+                              borderRadius: 6,
+                              fontSize: "0.75rem",
+                              fontWeight: 600,
+                              backgroundColor: acc.role?.toLowerCase().includes("system")
+                                ? "#fee2e2"
+                                : acc.role?.toLowerCase().includes("branch")
+                                ? "#ede9fe"
+                                : "#e0f2fe",
+                              color: acc.role?.toLowerCase().includes("system")
+                                ? "#b91c1c"
+                                : acc.role?.toLowerCase().includes("branch")
+                                ? "#6d28d9"
+                                : "#0369a1",
+                            }}
+                          >
+                            {acc.role || "User"}
+                          </span>
+                        </td>
+                        <td>
+                          <button
+                            onClick={() => handleToggleAccountStatus(acc)}
+                            title={`Click to ${acc.is_active ? "deactivate" : "activate"}`}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 4,
+                              padding: "3px 8px",
+                              borderRadius: 12,
+                              fontSize: "0.725rem",
+                              fontWeight: 600,
+                              border: "none",
+                              cursor: "pointer",
+                              backgroundColor: acc.is_active ? "#dcfce7" : "#fee2e2",
+                              color: acc.is_active ? "#166534" : "#991b1b",
+                            }}
+                          >
+                            <span
+                              style={{
+                                width: 6,
+                                height: 6,
+                                borderRadius: "50%",
+                                backgroundColor: acc.is_active ? "#16a34a" : "#dc2626",
+                              }}
+                            />
+                            {acc.is_active ? "Active" : "Inactive"}
+                          </button>
+                        </td>
+                        <td className="text-xs text-gray-600">
+                          {acc.created_by_name || (acc.created_by ? "System Admin" : "System Root")}
+                        </td>
+                        <td className="text-xs text-gray-500">
+                          {acc.created_at ? new Date(acc.created_at).toLocaleString() : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="empty-state-text">No registered accounts found in register_officer_table.</p>
+            )}
           </div>
 
           {/* Active Sessions Control Panel */}
