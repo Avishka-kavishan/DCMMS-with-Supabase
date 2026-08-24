@@ -2,12 +2,11 @@
 import React, { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import "../../../i18n";
-import { UserPlus, X, Edit, Trash2, Check } from "lucide-react";
+import { UserPlus, X, ToggleLeft, ToggleRight, Check } from "lucide-react";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 import { 
   getRegisterOfficersServer, 
   saveRegisterOfficerServer, 
-  deleteRegisterOfficerServer, 
   toggleRegisterOfficerStatusServer 
 } from "@/lib/db-actions";
 import { exportToExcel } from "@/lib/export-excel";
@@ -32,8 +31,6 @@ export default function DailyMailOfficersPage() {
   const [toastMessage, setToastMessage] = useState("");
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
 
   const [formEmployeeNo, setFormEmployeeNo] = useState("");
   const [formName, setFormName] = useState("");
@@ -164,8 +161,6 @@ export default function DailyMailOfficersPage() {
 
   // ── Modal helpers ──────────────────────────────────────────────────────────
   const openAddModal = () => {
-    setIsEditMode(false); 
-    setEditingId(null);
     setFormEmployeeNo(""); 
     setFormName(""); 
     setFormEmail(""); 
@@ -174,29 +169,14 @@ export default function DailyMailOfficersPage() {
     setIsModalOpen(true);
   };
 
-  const openEditModal = (o: Officer) => {
-    setIsEditMode(true); 
-    setEditingId(o.id);
-    setFormEmployeeNo(o.employeeNo);
-    setFormName(o.fullName); 
-    setFormEmail(o.email); 
-    setFormStatus(o.status);
-    setErrors({}); 
-    setIsModalOpen(true);
-  };
-
-  // ── Save (Add / Edit) to register_officer_table ──────────────────────────────
+  // ── Save (Add) to register_officer_table ───────────────────────────────────
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
 
-    const isNew = !isEditMode || !editingId;
-    const targetId = isNew ? undefined : editingId!;
-
     const currentAdmin = await getCurrentProfile();
 
     const payload = {
-      id: targetId,
       employee_no: formEmployeeNo.trim() || `EMP-${Date.now().toString().slice(-6)}`,
       full_name: formName.trim(),
       email: formEmail.trim().toLowerCase(),
@@ -214,9 +194,9 @@ export default function DailyMailOfficersPage() {
       if (res.success) {
         saveSuccess = true;
         await logAuditEvent(
-          isEditMode ? "UPDATE_DAILY_MAIL_OFFICER" : "REGISTER_DAILY_MAIL_OFFICER",
+          "REGISTER_DAILY_MAIL_OFFICER",
           "register_officer_table",
-          res.data?.id || editingId || "new",
+          res.data?.id || "new",
           { name: payload.full_name, email: payload.email, employee_no: payload.employee_no }
         );
       } else {
@@ -237,9 +217,6 @@ export default function DailyMailOfficersPage() {
           role: "Daily mail officer",
           is_active: payload.is_active,
         };
-        if (payload.id && !payload.id.startsWith("dm-")) {
-          supaPayload.id = payload.id;
-        }
         const { error } = await supabase.from("register_officer_table").upsert(supaPayload);
         if (!error) saveSuccess = true;
       } catch (e) {
@@ -253,7 +230,7 @@ export default function DailyMailOfficersPage() {
       let list: any[] = [];
       try { list = stored ? JSON.parse(stored) : []; } catch { list = []; }
       const newObj = {
-        id: payload.id || `dm-${Date.now()}`,
+        id: `dm-${Date.now()}`,
         employeeNo: payload.employee_no,
         fullName: payload.full_name,
         email: payload.email,
@@ -261,88 +238,19 @@ export default function DailyMailOfficersPage() {
         status: formStatus,
         createdAt: new Date().toISOString().slice(0, 10),
       };
-      list = list.filter((o: any) => o.id !== newObj.id);
+      list = list.filter((o: any) => o.employeeNo !== newObj.employeeNo && o.email !== newObj.email);
       list.push(newObj);
       localStorage.setItem("dcmms_custom_profiles", JSON.stringify(list));
       saveSuccess = true;
     }
 
     if (saveSuccess) {
-      showToast(isEditMode ? "Officer updated successfully!" : t("officerAddedSuccess", "Officer registered successfully!"));
+      showToast(t("officerAddedSuccess", "Officer registered successfully!"));
       setIsModalOpen(false);
       fetchOfficers();
     } else {
       showToast(`Error: ${errorMsg || "Failed to save officer"}`);
     }
-  };
-
-  // ── Delete ─────────────────────────────────────────────────────────────────
-  const handleDelete = async (officer: Officer) => {
-    if (!confirm(t("confirmDeleteOfficer", "Are you sure you want to delete this officer?"))) return;
-
-    let deleteSuccess = false;
-    let errorMsg = "";
-
-    try {
-      const res = await deleteRegisterOfficerServer(officer.id);
-      if (res.success) {
-        deleteSuccess = true;
-      } else {
-        errorMsg = res.error || "Failed to delete";
-      }
-    } catch (e: any) {
-      errorMsg = e?.message || "Server error";
-    }
-
-    if (isSupabaseConfigured) {
-      try {
-        if (!officer.id.startsWith("dm-")) {
-          await supabase.from("register_officer_table").delete().eq("id", officer.id);
-        }
-        if (officer.employeeNo) {
-          await supabase.from("register_officer_table").delete().eq("employee_no", officer.employeeNo);
-        }
-        if (officer.email) {
-          await supabase.from("register_officer_table").delete().eq("email", officer.email);
-        }
-        deleteSuccess = true;
-      } catch (err) {}
-    }
-
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("dcmms_custom_profiles");
-      if (stored) {
-        try {
-          let list = JSON.parse(stored) as any[];
-          list = list.filter(
-            (o) =>
-              o.id !== officer.id &&
-              (!officer.employeeNo || o.employeeNo !== officer.employeeNo) &&
-              (!officer.email || o.email?.toLowerCase() !== officer.email?.toLowerCase())
-          );
-          localStorage.setItem("dcmms_custom_profiles", JSON.stringify(list));
-          deleteSuccess = true;
-        } catch (e) {}
-      }
-      window.dispatchEvent(new Event("dcmms_data_updated"));
-    }
-
-    setOfficers((prev) =>
-      prev.filter(
-        (o) =>
-          o.id !== officer.id &&
-          (!officer.employeeNo || o.employeeNo !== officer.employeeNo) &&
-          (!officer.email || o.email?.toLowerCase() !== officer.email?.toLowerCase())
-      )
-    );
-
-    if (deleteSuccess) {
-      showToast(t("officerDeletedSuccess", "Officer deleted successfully."));
-    } else {
-      showToast(`Error: ${errorMsg || "Could not delete officer"}`);
-    }
-
-    fetchOfficers();
   };
 
   // ── Toggle Status ──────────────────────────────────────────────────────────
@@ -484,17 +392,24 @@ export default function DailyMailOfficersPage() {
                       </span>
                     </td>
                     <td className="admin-table-cell-center">
-                      <div className="action-btn-row">
-                        <button className="btn-table-edit" onClick={() => openEditModal(item)} title={t("edit", "Edit")}>
-                          <Edit size={16} />
-                        </button>
-                        <button className="btn-table-toggle" onClick={() => handleToggleStatus(item)} title="Toggle Status">
-                          <Check size={16} />
-                        </button>
-                        <button className="btn-table-delete" onClick={() => handleDelete(item)} title="Delete">
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        className={`btn-status-toggle ${item.status === "Active" ? "is-active" : "is-inactive"}`}
+                        onClick={() => handleToggleStatus(item)}
+                        title={item.status === "Active" ? t("clickToDeactivate", "Click to Deactivate") : t("clickToActivate", "Click to Activate")}
+                      >
+                        {item.status === "Active" ? (
+                          <>
+                            <ToggleRight size={18} className="status-toggle-icon" />
+                            <span>{t("active", "Active")}</span>
+                          </>
+                        ) : (
+                          <>
+                            <ToggleLeft size={18} className="status-toggle-icon" />
+                            <span>{t("inactive", "Inactive")}</span>
+                          </>
+                        )}
+                      </button>
                     </td>
                   </tr>
                 ))
@@ -512,13 +427,13 @@ export default function DailyMailOfficersPage() {
         </div>
       </section>
 
-      {/* Add/Edit Modal */}
+      {/* Add Modal */}
       {isModalOpen && (
         <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title">
           <div className="modal-card">
             <header className="modal-header">
               <h2 id="modal-title" className="modal-title">
-                {isEditMode ? "Edit Daily Mail Officer Account" : t("addStaffAccountTitle", "Add Disciplinary Staff Account")}
+                {t("addDailyMailOfficerTitle", "Add Daily Mail Officer Account")}
               </h2>
               <button className="btn-modal-close" onClick={() => setIsModalOpen(false)} aria-label="Close modal">
                 <X size={20} />

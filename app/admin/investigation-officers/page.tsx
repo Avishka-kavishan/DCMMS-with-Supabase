@@ -2,12 +2,11 @@
 import React, { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import "../../../i18n";
-import { UserPlus, X, Edit, Trash2, Check, ShieldCheck } from "lucide-react";
+import { UserPlus, X, ToggleLeft, ToggleRight, Check, ShieldCheck } from "lucide-react";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 import { 
   getRegisterOfficersServer, 
   saveRegisterOfficerServer, 
-  deleteRegisterOfficerServer, 
   toggleRegisterOfficerStatusServer 
 } from "@/lib/db-actions";
 import { exportToExcel } from "@/lib/export-excel";
@@ -32,8 +31,6 @@ export default function InvestigationOfficersPage() {
   const [toastMessage, setToastMessage] = useState("");
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
 
   const [formEmployeeNo, setFormEmployeeNo] = useState("");
   const [formName, setFormName] = useState("");
@@ -171,8 +168,6 @@ export default function InvestigationOfficersPage() {
 
   // ── Modal helpers ──────────────────────────────────────────────────────────
   const openAddModal = () => {
-    setIsEditMode(false);
-    setEditingId(null);
     setFormEmployeeNo("");
     setFormName("");
     setFormEmail("");
@@ -181,29 +176,15 @@ export default function InvestigationOfficersPage() {
     setIsModalOpen(true);
   };
 
-  const openEditModal = (o: Officer) => {
-    setIsEditMode(true);
-    setEditingId(o.id);
-    setFormEmployeeNo(o.employeeNo);
-    setFormName(o.fullName);
-    setFormEmail(o.email);
-    setFormStatus(o.status);
-    setErrors({});
-    setIsModalOpen(true);
-  };
-
-  // ── Save (Add / Edit) to register_officer_table ──────────────────────────────
+  // ── Save (Add) to register_officer_table ───────────────────────────────────
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
 
     setIsSaving(true);
-    const isNew = !isEditMode || !editingId;
-    const targetId = isNew ? undefined : editingId!;
     const currentAdmin = await getCurrentProfile();
 
     const payload = {
-      id: targetId,
       employee_no: formEmployeeNo.trim() || `EMP-${Date.now().toString().slice(-6)}`,
       full_name: formName.trim(),
       email: formEmail.trim().toLowerCase(),
@@ -221,9 +202,9 @@ export default function InvestigationOfficersPage() {
       if (res.success) {
         saveSuccess = true;
         await logAuditEvent(
-          isEditMode ? "UPDATE_INVESTIGATION_ADMIN" : "REGISTER_INVESTIGATION_ADMIN",
+          "REGISTER_INVESTIGATION_ADMIN",
           "register_officer_table",
-          res.data?.id || editingId || "new",
+          res.data?.id || "new",
           { name: payload.full_name, email: payload.email, employee_no: payload.employee_no }
         );
       } else {
@@ -244,9 +225,6 @@ export default function InvestigationOfficersPage() {
           role: "Investigation officer",
           is_active: payload.is_active,
         };
-        if (payload.id && !payload.id.startsWith("inv-")) {
-          supaPayload.id = payload.id;
-        }
         const { error } = await supabase.from("register_officer_table").upsert(supaPayload);
         if (!error) saveSuccess = true;
       } catch (e) {
@@ -254,106 +232,34 @@ export default function InvestigationOfficersPage() {
       }
     }
 
-    // 3. Fallback / Sync locally
+    // 3. Fallback: Save locally if DB operations failed
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("dcmms_custom_profiles");
       let list: any[] = [];
-      if (stored) {
-        try {
-          list = JSON.parse(stored);
-        } catch (e) {}
-      }
-
-      if (isEditMode && editingId) {
-        list = list.map((o) => (o.id === editingId ? { ...o, ...payload, fullName: payload.full_name, employeeNo: payload.employee_no, status: formStatus } : o));
-      } else {
-        list.push({
-          id: `inv-${Date.now()}`,
-          employeeNo: payload.employee_no,
-          fullName: payload.full_name,
-          email: payload.email,
-          role: "investigation_officer",
-          status: formStatus,
-          createdAt: new Date().toISOString().slice(0, 10),
-        });
-      }
+      try { list = stored ? JSON.parse(stored) : []; } catch { list = []; }
+      const newObj = {
+        id: `inv-${Date.now()}`,
+        employeeNo: payload.employee_no,
+        fullName: payload.full_name,
+        email: payload.email,
+        role: "investigation_admin",
+        status: formStatus,
+        createdAt: new Date().toISOString().slice(0, 10),
+      };
+      list = list.filter((o: any) => o.employeeNo !== newObj.employeeNo && o.email !== newObj.email);
+      list.push(newObj);
       localStorage.setItem("dcmms_custom_profiles", JSON.stringify(list));
-      window.dispatchEvent(new Event("dcmms_data_updated"));
+      saveSuccess = true;
     }
 
     setIsSaving(false);
-    showToast(isEditMode ? "Investigation Administrator updated successfully!" : "Investigation Administrator registered successfully!");
-    setIsModalOpen(false);
-    fetchOfficers();
-  };
-
-  // ── Delete ─────────────────────────────────────────────────────────────────
-  const handleDelete = async (officer: Officer) => {
-    if (!confirm(`Are you sure you want to remove ${officer.fullName}?`)) return;
-
-    let deleteSuccess = false;
-    let errorMsg = "";
-
-    try {
-      const res = await deleteRegisterOfficerServer(officer.id);
-      if (res.success) {
-        deleteSuccess = true;
-      } else {
-        errorMsg = res.error || "Failed to delete";
-      }
-    } catch (e: any) {
-      errorMsg = e?.message || "Server error";
-    }
-
-    if (isSupabaseConfigured) {
-      try {
-        if (!officer.id.startsWith("inv-")) {
-          await supabase.from("register_officer_table").delete().eq("id", officer.id);
-        }
-        if (officer.employeeNo) {
-          await supabase.from("register_officer_table").delete().eq("employee_no", officer.employeeNo);
-        }
-        if (officer.email) {
-          await supabase.from("register_officer_table").delete().eq("email", officer.email);
-        }
-        deleteSuccess = true;
-      } catch (err) {}
-    }
-
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("dcmms_custom_profiles");
-      if (stored) {
-        try {
-          let list = JSON.parse(stored) as any[];
-          list = list.filter(
-            (o) =>
-              o.id !== officer.id &&
-              (!officer.employeeNo || o.employeeNo !== officer.employeeNo) &&
-              (!officer.email || o.email?.toLowerCase() !== officer.email?.toLowerCase())
-          );
-          localStorage.setItem("dcmms_custom_profiles", JSON.stringify(list));
-          deleteSuccess = true;
-        } catch (e) {}
-      }
-      window.dispatchEvent(new Event("dcmms_data_updated"));
-    }
-
-    setOfficers((prev) =>
-      prev.filter(
-        (o) =>
-          o.id !== officer.id &&
-          (!officer.employeeNo || o.employeeNo !== officer.employeeNo) &&
-          (!officer.email || o.email?.toLowerCase() !== officer.email?.toLowerCase())
-      )
-    );
-
-    if (deleteSuccess) {
-      showToast("Investigation Administrator removed successfully.");
+    if (saveSuccess) {
+      showToast(t("officerAddedSuccess", "Investigation Administrator registered successfully!"));
+      setIsModalOpen(false);
+      fetchOfficers();
     } else {
-      showToast(`Error: ${errorMsg || "Could not delete administrator"}`);
+      showToast(`Error: ${errorMsg || "Failed to save officer"}`);
     }
-
-    fetchOfficers();
   };
 
   // ── Toggle Status ──────────────────────────────────────────────────────────
@@ -510,17 +416,24 @@ export default function InvestigationOfficersPage() {
                       </span>
                     </td>
                     <td className="admin-table-cell-center">
-                      <div className="action-btn-row">
-                        <button className="btn-table-edit" onClick={() => openEditModal(item)} title={t("edit", "Edit")}>
-                          <Edit size={16} />
-                        </button>
-                        <button className="btn-table-toggle" onClick={() => handleToggleStatus(item)} title="Toggle Status">
-                          <Check size={16} />
-                        </button>
-                        <button className="btn-table-delete" onClick={() => handleDelete(item)} title="Delete">
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        className={`btn-status-toggle ${item.status === "Active" ? "is-active" : "is-inactive"}`}
+                        onClick={() => handleToggleStatus(item)}
+                        title={item.status === "Active" ? t("clickToDeactivate", "Click to Deactivate") : t("clickToActivate", "Click to Activate")}
+                      >
+                        {item.status === "Active" ? (
+                          <>
+                            <ToggleRight size={18} className="status-toggle-icon" />
+                            <span>{t("active", "Active")}</span>
+                          </>
+                        ) : (
+                          <>
+                            <ToggleLeft size={18} className="status-toggle-icon" />
+                            <span>{t("inactive", "Inactive")}</span>
+                          </>
+                        )}
+                      </button>
                     </td>
                   </tr>
                 ))
@@ -538,16 +451,14 @@ export default function InvestigationOfficersPage() {
         </div>
       </section>
 
-      {/* Add / Edit Modal */}
+      {/* Add Modal */}
       {isModalOpen && (
         <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title">
           <div className="modal-card">
             <header className="modal-header">
               <div>
                 <h2 id="modal-title" className="modal-title">
-                  {isEditMode 
-                    ? t("editInvestigationAdmin", "Edit Investigation Administrator") 
-                    : t("addInvestigationAdmin", "Register Investigation Administrator")}
+                  {t("addInvestigationAdmin", "Register Investigation Administrator")}
                 </h2>
                 <p className="modal-subtitle">
                   {t("investigationAdminSubtitle", "Manage branch access credentials for the investigation administrator")}
