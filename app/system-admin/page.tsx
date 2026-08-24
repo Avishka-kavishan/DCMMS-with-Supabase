@@ -65,10 +65,12 @@ export default function SystemAdminDashboard() {
   const [adminName, setAdminName] = useState("System Admin");
 
   // Search & Filter State
-  const [searchQuery, setSearchQuery] = useState("");
+  const [activeLogTab, setActiveLogTab] = useState<"audit" | "sessions">("audit");
+  const [logSearchQuery, setLogSearchQuery] = useState("");
+  const [logTypeFilter, setLogTypeFilter] = useState("all");
+  const [sessionStatusFilter, setSessionStatusFilter] = useState("all");
   const [accountSearchQuery, setAccountSearchQuery] = useState("");
   const [accountRoleFilter, setAccountRoleFilter] = useState("all");
-  const [logTypeFilter, setLogTypeFilter] = useState("all");
 
   const [mounted, setMounted] = useState(false);
 
@@ -190,15 +192,29 @@ export default function SystemAdminDashboard() {
   // Filtered Audit Logs
   const filteredLogs = auditLogs.filter(log => {
     const matchesSearch = 
-      log.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      log.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      log.action.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      log.details.toLowerCase().includes(searchQuery.toLowerCase());
+      (log.username || "").toLowerCase().includes(logSearchQuery.toLowerCase()) ||
+      (log.email || "").toLowerCase().includes(logSearchQuery.toLowerCase()) ||
+      (log.action || "").toLowerCase().includes(logSearchQuery.toLowerCase()) ||
+      (log.details || "").toLowerCase().includes(logSearchQuery.toLowerCase());
     
     if (logTypeFilter === "all") return matchesSearch;
-    if (logTypeFilter === "failures") return matchesSearch && log.action === "Failed Login Attempt";
-    if (logTypeFilter === "sessions") return matchesSearch && (log.action.includes("Login") || log.action.includes("Logout"));
+    if (logTypeFilter === "officers") return matchesSearch && (log.action.toLowerCase().includes("letter") || log.action.toLowerCase().includes("case") || log.action.toLowerCase().includes("inquiry") || log.action.toLowerCase().includes("investigation") || log.action.toLowerCase().includes("scheduled") || log.action.toLowerCase().includes("extension") || log.action.toLowerCase().includes("stage"));
+    if (logTypeFilter === "failures") return matchesSearch && log.action.toLowerCase().includes("fail");
+    if (logTypeFilter === "sessions") return matchesSearch && (log.action.toLowerCase().includes("login") || log.action.toLowerCase().includes("logout"));
+    if (logTypeFilter === "admin") return matchesSearch && (log.action.toLowerCase().includes("force") || log.action.toLowerCase().includes("admin") || log.action.toLowerCase().includes("status") || log.action.toLowerCase().includes("register") || log.action.toLowerCase().includes("password"));
     return matchesSearch;
+  });
+
+  // Filtered Sessions
+  const filteredSessions = sessionHistory.filter(s => {
+    const matchesSearch =
+      (s.username || "").toLowerCase().includes(logSearchQuery.toLowerCase()) ||
+      (s.email || "").toLowerCase().includes(logSearchQuery.toLowerCase()) ||
+      (s.ip_address || "").toLowerCase().includes(logSearchQuery.toLowerCase()) ||
+      (s.status || "").toLowerCase().includes(logSearchQuery.toLowerCase());
+
+    if (sessionStatusFilter === "all") return matchesSearch;
+    return matchesSearch && s.status === sessionStatusFilter;
   });
 
   // Chart Data preparation
@@ -244,7 +260,8 @@ export default function SystemAdminDashboard() {
 
   // Export Sessions to Excel / CSV
   const exportSessionsToExcel = () => {
-    if (!sessionHistory || sessionHistory.length === 0) {
+    const dataToExport = filteredSessions.length > 0 ? filteredSessions : sessionHistory;
+    if (!dataToExport || dataToExport.length === 0) {
       alert("No session history available to export.");
       return;
     }
@@ -722,136 +739,206 @@ export default function SystemAdminDashboard() {
             )}
           </div>
 
-          {/* User Session History */}
+          {/* ── Combined System Audit Trail & User Session History ── */}
           <div className="sysadmin-card-section">
             <div className="sysadmin-card-header-flex">
-              <h3 className="card-title-header">
-                <svg className="card-title-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                {t("sysAdminHistoryTitle")}
-              </h3>
-              <button 
-                className="btn-export-excel" 
-                onClick={exportSessionsToExcel}
-                title="Export user session history to Excel"
-              >
-                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                {t("exportExcel", "Export to Excel")}
-              </button>
-            </div>
-            {sessionHistory.length > 0 ? (
-              <div className="table-responsive-container">
-                <table className="sysadmin-data-table">
-                  <thead>
-                    <tr>
-                      <th>{t("sysAdminUserName")}</th>
-                      <th>{t("sysAdminEmail")}</th>
-                      <th>{t("sysAdminLoginTime")}</th>
-                      <th>{t("sysAdminLogoutTime")}</th>
-                      <th>{t("sysAdminDuration")}</th>
-                      <th>{t("sysAdminStatus")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sessionHistory.slice(0, 10).map((history) => {
-                      const duration = history.duration 
-                        ? `${Math.floor(history.duration / 60)}m ${history.duration % 60}s`
-                        : history.status === "active" ? "Active" : "Unknown";
-                      return (
-                        <tr key={history.id} className="sysadmin-table-row">
-                          <td className="font-semibold">{history.username}</td>
-                          <td>{history.email}</td>
-                          <td>{new Date(history.login_time).toLocaleString()}</td>
-                          <td>{history.logout_time ? new Date(history.logout_time).toLocaleString() : "—"}</td>
-                          <td>{duration}</td>
-                          <td>
-                            <span className={`badge-status ${history.status}`}>
-                              {history.status === "active" ? "Active" : history.status === "forced_logged_out" ? "Forced Out" : "Logged Out"}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+              <div>
+                <h3 className="card-title-header" style={{ marginBottom: 4 }}>
+                  <svg className="card-title-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  {t("sysAdminCombinedTitle", "User Session History & System Audit Trail")}
+                </h3>
+                <p style={{ margin: 0, fontSize: "0.825rem", color: "#64748b" }}>
+                  {t("sysAdminCombinedSubtitle", "Integrated monitoring of system event logs, security actions, and user session lifecycles.")}
+                </p>
               </div>
-            ) : (
-              <p className="empty-state-text">{t("sysAdminNoHistory")}</p>
-            )}
-          </div>
 
-          {/* Audit Logs & Trail */}
-          <div className="sysadmin-card-section">
-            <div className="sysadmin-card-header-flex">
-              <h3 className="card-title-header">
-                <svg className="card-title-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                {t("sysAdminAuditTitle")}
-              </h3>
-              <button 
-                className="btn-export-excel" 
-                onClick={exportAuditLogsToExcel}
-                title="Export system audit logs to Excel"
-              >
-                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                {t("exportExcel", "Export to Excel")}
-              </button>
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                <button 
+                  className="btn-export-excel" 
+                  onClick={activeLogTab === "audit" ? exportAuditLogsToExcel : exportSessionsToExcel}
+                  title={`Export ${activeLogTab === "audit" ? "Audit Trail" : "Session History"} to Excel / CSV`}
+                >
+                  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  {t("exportExcel", "Export to Excel")}
+                </button>
+              </div>
             </div>
 
-            {/* Filters Bar */}
-            <div className="sysadmin-filter-bar">
+            {/* Navigation Tabs Switcher */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginTop: 16, marginBottom: 16 }}>
+              <div className="sysadmin-tabs-nav" role="tablist">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeLogTab === "audit"}
+                  className={`sysadmin-tab-btn ${activeLogTab === "audit" ? "active" : ""}`}
+                  onClick={() => setActiveLogTab("audit")}
+                >
+                  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                  <span>{t("sysAdminTabAudit", "System Audit Trail & Event Logs")}</span>
+                  <span className="sysadmin-tab-badge">{filteredLogs.length}</span>
+                </button>
+
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeLogTab === "sessions"}
+                  className={`sysadmin-tab-btn ${activeLogTab === "sessions" ? "active" : ""}`}
+                  onClick={() => setActiveLogTab("sessions")}
+                >
+                  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>{t("sysAdminTabSessions", "User Session History")}</span>
+                  <span className="sysadmin-tab-badge">{filteredSessions.length}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Filters Bar for Active Tab */}
+            <div className="sysadmin-filter-bar" style={{ marginBottom: 18 }}>
               <input
                 type="text"
                 className="filter-input-search"
-                placeholder={t("sysAdminSearchPlaceholder")}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={
+                  activeLogTab === "audit"
+                    ? t("sysAdminSearchLogsPlaceholder", "Search audit logs by user, email, action, or details...")
+                    : t("sysAdminSearchSessionsPlaceholder", "Search session history by user, email, IP, or status...")
+                }
+                value={logSearchQuery}
+                onChange={(e) => setLogSearchQuery(e.target.value)}
               />
-              <select 
-                className="filter-select-type"
-                value={logTypeFilter}
-                onChange={(e) => setLogTypeFilter(e.target.value)}
-              >
-                <option value="all">{t("sysAdminAllEvents")}</option>
-                <option value="failures">{t("sysAdminFailuresOnly")}</option>
-                <option value="sessions">{t("sysAdminSessionsOnly")}</option>
-              </select>
+
+              {activeLogTab === "audit" ? (
+                <select 
+                  className="filter-select-type"
+                  value={logTypeFilter}
+                  onChange={(e) => setLogTypeFilter(e.target.value)}
+                >
+                  <option value="all">{t("sysAdminAllEvents", "All Events")}</option>
+                  <option value="officers">{t("sysAdminOfficerActionsOnly", "Officer & Case Operations")}</option>
+                  <option value="sessions">{t("sysAdminSessionsOnly", "Session Activities Only")}</option>
+                  <option value="failures">{t("sysAdminFailuresOnly", "Failed Attempts Only")}</option>
+                  <option value="admin">{t("sysAdminAdminActionsOnly", "Admin Actions Only")}</option>
+                </select>
+              ) : (
+                <select 
+                  className="filter-select-type"
+                  value={sessionStatusFilter}
+                  onChange={(e) => setSessionStatusFilter(e.target.value)}
+                >
+                  <option value="all">{t("sysAdminAllStatuses", "All Session Statuses")}</option>
+                  <option value="active">{t("sysAdminStatusActive", "Active Sessions")}</option>
+                  <option value="logged_out">{t("sysAdminStatusLoggedOut", "Logged Out")}</option>
+                  <option value="forced_logged_out">{t("sysAdminStatusForcedOut", "Forced Terminated")}</option>
+                </select>
+              )}
             </div>
 
-            {filteredLogs.length > 0 ? (
-              <div className="table-responsive-container">
-                <table className="sysadmin-data-table font-mono text-xs">
-                  <thead>
-                    <tr>
-                      <th style={{ width: "20%" }}>{t("sysAdminTimestamp")}</th>
-                      <th style={{ width: "15%" }}>{t("sysAdminUser")}</th>
-                      <th style={{ width: "25%" }}>{t("sysAdminAction")}</th>
-                      <th style={{ width: "40%" }}>{t("sysAdminDetails")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredLogs.slice(0, 15).map((log) => (
-                      <tr key={log.id} className={`sysadmin-table-row audit-row ${log.action.includes("Failed") ? "failure-log" : ""}`}>
-                        <td>{new Date(log.timestamp).toLocaleString()}</td>
-                        <td>
-                          <div>{log.username}</div>
-                          <div className="text-[10px] text-gray-500">{log.email}</div>
-                        </td>
-                        <td className="font-semibold">{log.action}</td>
-                        <td className="text-gray-600">{log.details}</td>
+            {/* Tab 1: Audit Trail & Event Logs */}
+            {activeLogTab === "audit" && (
+              filteredLogs.length > 0 ? (
+                <div className="table-responsive-container">
+                  <table className="sysadmin-data-table font-mono text-xs">
+                    <thead>
+                      <tr>
+                        <th style={{ width: "20%" }}>{t("sysAdminTimestamp", "Timestamp")}</th>
+                        <th style={{ width: "18%" }}>{t("sysAdminUser", "User")}</th>
+                        <th style={{ width: "22%" }}>{t("sysAdminAction", "Event Action")}</th>
+                        <th style={{ width: "40%" }}>{t("sysAdminDetails", "Detail Description")}</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <p className="empty-state-text">{t("sysAdminNoAuditMatches")}</p>
+                    </thead>
+                    <tbody>
+                      {filteredLogs.slice(0, 30).map((log) => {
+                        const isFailed = log.action.toLowerCase().includes("fail");
+                        const isForced = log.action.toLowerCase().includes("force");
+                        const isLogin = log.action.toLowerCase().includes("login") && !isFailed;
+                        const isLogout = log.action.toLowerCase().includes("logout") && !isForced;
+                        const isCase = log.action.toLowerCase().includes("letter") || log.action.toLowerCase().includes("case") || log.action.toLowerCase().includes("inquiry") || log.action.toLowerCase().includes("investigation") || log.action.toLowerCase().includes("scheduled") || log.action.toLowerCase().includes("extension") || log.action.toLowerCase().includes("stage");
+                        const isAdmin = log.action.toLowerCase().includes("admin") || log.action.toLowerCase().includes("status") || log.action.toLowerCase().includes("register") || log.action.toLowerCase().includes("password");
+
+                        const pillClass = isFailed ? "failed" : isForced ? "forced" : isLogin ? "login" : isLogout ? "logout" : isCase ? "case" : isAdmin ? "admin" : "default";
+
+                        return (
+                          <tr key={log.id} className={`sysadmin-table-row audit-row ${isFailed ? "failure-log" : ""}`}>
+                            <td className="text-gray-500 font-sans text-xs">
+                              {new Date(log.timestamp).toLocaleString()}
+                            </td>
+                            <td>
+                              <div className="font-semibold text-gray-900 font-sans">{log.username}</div>
+                              <div className="text-[11px] text-gray-500 font-sans">{log.email}</div>
+                            </td>
+                            <td>
+                              <span className={`action-pill ${pillClass} font-sans`}>
+                                {log.action}
+                              </span>
+                            </td>
+                            <td className="text-gray-600 font-sans text-xs">{log.details}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="empty-state-text">{t("sysAdminNoAuditMatches", "No audit log records match the search filter.")}</p>
+              )
+            )}
+
+            {/* Tab 2: User Session History */}
+            {activeLogTab === "sessions" && (
+              filteredSessions.length > 0 ? (
+                <div className="table-responsive-container">
+                  <table className="sysadmin-data-table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: "22%" }}>{t("sysAdminUserName", "User Name")}</th>
+                        <th style={{ width: "20%" }}>{t("sysAdminLoginTime", "Login Time")}</th>
+                        <th style={{ width: "20%" }}>{t("sysAdminLogoutTime", "Logout Date/Time")}</th>
+                        <th style={{ width: "14%" }}>{t("sysAdminDuration", "Session Duration")}</th>
+                        <th style={{ width: "12%" }}>{t("sysAdminStatus", "Status")}</th>
+                        <th style={{ width: "12%" }}>{t("sysAdminIP", "IP Address")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredSessions.slice(0, 30).map((history) => {
+                        const duration = history.duration 
+                          ? `${Math.floor(history.duration / 60)}m ${history.duration % 60}s`
+                          : history.status === "active" ? "Active" : "—";
+                        return (
+                          <tr key={history.id} className="sysadmin-table-row">
+                            <td>
+                              <div className="font-semibold text-gray-900">{history.username}</div>
+                              <div className="text-xs text-gray-500">{history.email}</div>
+                            </td>
+                            <td className="text-xs text-gray-600">{new Date(history.login_time).toLocaleString()}</td>
+                            <td className="text-xs text-gray-600">{history.logout_time ? new Date(history.logout_time).toLocaleString() : "—"}</td>
+                            <td>
+                              <span className="duration-pill">
+                                {duration}
+                              </span>
+                            </td>
+                            <td>
+                              <span className={`badge-status ${history.status}`}>
+                                {history.status === "active" ? "Active" : history.status === "forced_logged_out" ? "Forced Out" : "Logged Out"}
+                              </span>
+                            </td>
+                            <td className="font-mono text-xs text-gray-500">{history.ip_address || "127.0.0.1"}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="empty-state-text">{t("sysAdminNoSessionMatches", "No session history records match the search filter.")}</p>
+              )
             )}
           </div>
 

@@ -311,3 +311,125 @@
   height: 16px;
 }
 
+/* Combined Audit & Session Tabs Navigation */
+.sysadmin-tabs-nav {
+  display: flex;
+  gap: 6px;
+  background-color: #f1f5f9;
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  width: fit-content;
+  flex-wrap: wrap;
+}
+
+.sysadmin-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 0.825rem;
+  font-weight: 600;
+  color: #64748b;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sysadmin-tab-btn:hover {
+  color: #0f172a;
+  background-color: rgba(255, 255, 255, 0.5);
+}
+
+.sysadmin-tab-btn.active {
+  background: #ffffff;
+  color: #1e40af;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.sysadmin-tab-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.sysadmin-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 7px;
+  border-radius: 10px;
+  font-size: 0.725rem;
+  font-weight: 700;
+  background-color: #e2e8f0;
+  color: #475569;
+  transition: all 0.2s ease;
+}
+
+.sysadmin-tab-btn.active .sysadmin-tab-badge {
+  background-color: #dbeafe;
+  color: #1e40af;
+}
+
+/* Action Event Badges */
+.action-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.action-pill.login {
+  background-color: #dcfce7;
+  color: #15803d;
+}
+
+.action-pill.logout {
+  background-color: #f1f5f9;
+  color: #475569;
+}
+
+.action-pill.failed {
+  background-color: #fee2e2;
+  color: #b91c1c;
+}
+
+.action-pill.forced {
+  background-color: #ffe4e6;
+  color: #e11d48;
+}
+
+.action-pill.admin {
+  background-color: #ede9fe;
+  color: #6d28d9;
+}
+
+.action-pill.case {
+  background-color: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
+}
+
+.action-pill.default {
+  background-color: #e0f2fe;
+  color: #0369a1;
+}
+
+.duration-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  font-family: monospace;
+  font-size: 0.8rem;
+  color: #334155;
+}
+

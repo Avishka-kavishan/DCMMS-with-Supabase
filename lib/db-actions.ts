@@ -408,6 +408,16 @@ export async function saveDailyMailToNewTableServer(data: {
       console.warn("Insert into daily_mail warning:", err1);
     }
 
+    // 3. Record business event into system audit logs
+    try {
+      await recordAuditLogServer({
+        username: data.officer_name || "Daily Mail Officer",
+        email: "daily_mail@moe.gov.lk",
+        action: "Letter Intake Registered",
+        details: `Letter #${letterNumber} (${sendersParty ? `Sender: ${sendersParty}` : "General Mail"}) logged into Daily Mail intake registry. Subject: "${subjectOfLetter.substring(0, 80)}"`,
+      });
+    } catch (auditErr) {}
+
     return serializeForServerAction({ success: true });
   } catch (error: any) {
     console.error("Error inserting into daily mail tables:", error);
@@ -841,6 +851,16 @@ export async function saveRegisterOfficerServer(officerData: {
       resultRecord = inserted[0];
     }
 
+    // Record audit log for account creation/update
+    try {
+      await recordAuditLogServer({
+        username: "System Admin",
+        email: "admin@moe.gov.lk",
+        action: existing && existing.length > 0 ? "Officer Account Updated" : "Officer Account Created",
+        details: `Officer account for ${fullName} (${officerData.role}, Emp: ${employeeNo}, Email: ${email}) was ${existing && existing.length > 0 ? "updated" : "created"}.`,
+      });
+    } catch (auditErr) {}
+
     return serializeForServerAction({ success: true, data: resultRecord });
   } catch (error: any) {
     console.error("Error saving register officer:", error);
@@ -874,6 +894,18 @@ export async function toggleRegisterOfficerStatusServer(id: string, is_active: b
       WHERE id = ${cleanId} OR employee_no = ${cleanId} OR email = ${cleanId}
       RETURNING *;
     `;
+
+    // Record audit log for status toggle
+    try {
+      const officerName = updated && updated[0]?.full_name ? updated[0].full_name : cleanId;
+      await recordAuditLogServer({
+        username: "System Admin",
+        email: "admin@moe.gov.lk",
+        action: "Officer Status Toggled",
+        details: `Account status for officer "${officerName}" was changed to ${is_active ? "Active" : "Inactive"}.`,
+      });
+    } catch (auditErr) {}
+
     return serializeForServerAction({ success: true, data: updated[0] || null });
   } catch (error: any) {
     console.error("Error toggling officer status:", error);
@@ -2505,6 +2537,16 @@ export async function updateCaseByDateExtensionApprovalServer(
       `;
     }
 
+    // Record audit log for date extension approval
+    try {
+      await recordAuditLogServer({
+        username: "Discipline Branch Admin",
+        email: "branch_admin@moe.gov.lk",
+        action: "Extension Decision Recorded",
+        details: `Case #${actualSubNo}: Date extension decision '${approvalStatus}' was recorded.`,
+      });
+    } catch (auditErr) {}
+
     return serializeForServerAction({ success: true, message: "Extension approval updated in PostgreSQL" });
   } catch (error: any) {
     console.error("Error updating case_by_date_extention approval:", error);
@@ -2668,6 +2710,16 @@ export async function saveCaseByAppointmentAndReportDueDateServer(payload: {
         );
       `;
     }
+
+    // Record audit log for appointment & due dates
+    try {
+      await recordAuditLogServer({
+        username: "Subject Officer",
+        email: "subject_officer@moe.gov.lk",
+        action: "Inquiry Dates Scheduled",
+        details: `Case #${actualSubNo}: Appointment letter date (${payload.appointment_letter_date || "N/A"}) & report due date (${payload.report_due_date || "N/A"}) saved.`,
+      });
+    } catch (auditErr) {}
 
     return serializeForServerAction({ success: true, message: "Appointment & report due dates saved to PostgreSQL" });
   } catch (error: any) {
