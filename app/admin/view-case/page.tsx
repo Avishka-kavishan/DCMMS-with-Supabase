@@ -718,7 +718,7 @@ function AdminViewCaseInner() {
             <div className="vc-badge-row">
               <span className="vc-case-badge">{t("caseDossier", "Case Dossier")}</span>
               {letterData?.priority && (
-                <span className="vc-priority-badge">{letterData.priority} {t("priorityLabel", "Priority")}</span>
+                <span className="vc-priority-badge">{letterData.priority} {t("priority", "Priority")}</span>
               )}
               <span className="vc-status-pill">{t("activeCase", "Active Case")}</span>
             </div>
