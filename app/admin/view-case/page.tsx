@@ -50,6 +50,55 @@ const formatStepTaken = (step: string, t: any) => {
   return step;
 };
 
+const formatFutureAction = (key: string | null | undefined, t: any) => {
+  if (!key) return t("statusCallingReports", "Calling reports from Principal/Zone/Province/Police");
+  const map: Record<string, string> = {
+    statusCallingReports: t("statusCallingReports", "Calling reports from Principal/Zone/Province/Police"),
+    statusCallingCourtReports: t("statusCallingCourtReports", "Calling court reports"),
+    statusPreliminaryInvestigation: t("statusPreliminaryInvestigation", "Conducting preliminary investigations"),
+    statusInquiry: t("statusInquiry", "Conducting an inquiry"),
+    statusConsultRelevantInstitutes: t("statusConsultRelevantInstitutes", "Taking advice from relevant institutes"),
+    statusObtainStatements: t("statusObtainStatements", "Proceeding by taking statements"),
+    statusUnclearAnonymous: t("statusUnclearAnonymous", "Unclear facts / anonymous letters file"),
+    statusReferOtherInstitute: t("statusReferOtherInstitute", "Referring letters to other institutes"),
+  };
+  return map[key] || key;
+};
+
+const formatEntryDate = (dateVal: any): string => {
+  if (!dateVal) return "—";
+  if (dateVal instanceof Date) {
+    if (isNaN(dateVal.getTime())) return "—";
+    return dateVal.toISOString().split("T")[0];
+  }
+  const str = String(dateVal).trim();
+  if (!str || str === "—" || str.toUpperCase() === "N/A") return "—";
+  if (str.includes("T")) {
+    return str.split("T")[0];
+  }
+  const d = new Date(str);
+  if (!isNaN(d.getTime())) {
+    return d.toISOString().split("T")[0];
+  }
+  return str;
+};
+
+const formatEntryTime = (rawTs?: any, dateStr?: string): string => {
+  if (rawTs) {
+    const d = rawTs instanceof Date ? rawTs : new Date(rawTs);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
+    }
+  }
+  if (dateStr && dateStr.includes("T")) {
+    const d = new Date(dateStr);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
+    }
+  }
+  return "—";
+};
+
 interface LetterData {
   refNo: string;
   senderName?: string;
@@ -71,7 +120,7 @@ interface LetterData {
 interface ConnectedOfficer {
   id: string;
   name: string;
-  role: "Daily Reporter" | "Investigation Administrator" | "Subject Officer" | "Committee Chairman" | "Committee Member" | "Accused Officer" | "Inquiry Officer";
+  role: "Daily Reporter" | "Investigation Administrator" | "Subject Officer" | "Committee Chairman" | "Committee Member" | "Accused Officer" | "Inquiry Officer" | "Connected Officer";
   designation?: string;
   nic?: string;
   email?: string;
@@ -91,6 +140,7 @@ interface TrackingEntry {
   metaInfo?: Record<string, any>;
   date: string;
   time: string;
+  rawTime?: any;
   sortTs: number;
   status: "Completed" | "Current" | "Pending";
 }
@@ -219,9 +269,14 @@ function AdminViewCaseInner() {
       metaInfo?: Record<string, any>;
       date: string;
       sortTs: number;
+      rawTime?: any;
+      status: TrackingEntry["status"];
     }> = [];
 
     const officersMap = new Map<string, ConnectedOfficer>();
+    let dmOfficerName = "Daily Mail Officer";
+    let subjOfficerName = "Subject Officer";
+    let adminOfficerName = "Investigation Administrator";
 
     // 1. Fetch comprehensive data from PostgreSQL Server Action
     try {
@@ -235,37 +290,68 @@ function AdminViewCaseInner() {
           members,
           appointmentDates,
           extension,
+          extensions,
           subjectDetailsLogs,
           assignment,
           preliminaryInvestigation,
+          registeredOfficers,
         } = serverRes.data;
 
-        // Set case header letter info if available
-        if (dailyMailRows && dailyMailRows.length > 0) {
-          const firstMail = dailyMailRows[0];
-          setLetterData((prev) => ({
-            refNo: firstMail.ref_number || caseNo,
-            letterNo: firstMail.letter_number || "",
-            senderName: firstMail.senders_party || "Complainant",
-            subject: firstMail.subject_of_letter || "",
-            modeOfReceipt: firstMail.mode_of_receipt || "Post",
-            category: firstMail.subject_category || firstMail.nature_of_letter || "",
-            receivedDate: firstMail.date_received_by_add_secretary ? new Date(firstMail.date_received_by_add_secretary).toISOString().split("T")[0] : "",
-            submittedDate: firstMail.date_letter_handover_discipline ? new Date(firstMail.date_letter_handover_discipline).toISOString().split("T")[0] : "",
-            officerName: subjectForm?.accused_officer?.accused_officer_name || prev?.officerName || "Assigned Officer",
-            instituteName: subjectForm?.accused_school?.accused_school_name || prev?.instituteName || "Ministry / Education Zone",
-            province: subjectForm?.accused_school?.province || "",
-            district: subjectForm?.accused_school?.district || "",
-            zone: subjectForm?.accused_school?.zone || "",
-            status: "In Progress",
-          }));
-        }
+        // Resolve real officer names from database
+        const regList: any[] = Array.isArray(registeredOfficers) ? registeredOfficers : [];
+        dmOfficerName = regList.find((o) => (o.role || "").toLowerCase().includes("daily mail"))?.full_name || "Daily Mail Officer";
+        subjOfficerName = regList.find((o) => (o.role || "").toLowerCase().includes("subject"))?.full_name || "Subject Officer";
+        adminOfficerName = regList.find((o) => (o.role || "").toLowerCase().includes("investigation") || (o.role || "").toLowerCase().includes("branch admin"))?.full_name || "Investigation Administrator";
+        
+        // Complainant / Senders Party (Separate from Subject Officer!)
+        const complainantName = subjectForm?.name_of_the_presenting_the_complain || (dailyMailRows && dailyMailRows[0]?.senders_party) || "Complainant";
+        const complainantAddress = subjectForm?.address_of_the_person_presenting_the_complaint || "";
+        const classificationLabel = subjectForm?.classification_of_complaint_letter === "anonymous" ? t("anonymous", "Anonymous") : t("nominal", "Nominal");
+
+        // Primary Accused Officer and School
+        const primaryAccused = (Array.isArray(accusedOfficers) && accusedOfficers[0]) ? accusedOfficers[0] : (subjectForm?.accused_officer || null);
+        const primarySchool = primaryAccused?.accused_school_name || primaryAccused?.institute_name || subjectForm?.accused_school?.accused_school_name || "";
+        const primaryZone = primaryAccused?.zone || subjectForm?.accused_school?.zone || "";
+        const primaryProvince = primaryAccused?.province || subjectForm?.accused_school?.province || "";
+        const primaryDistrict = primaryAccused?.district || subjectForm?.accused_school?.district || "";
+
+        // All associated letter numbers
+        const allLetterNos = Array.isArray(dailyMailRows)
+          ? Array.from(new Set(dailyMailRows.map((m: any) => m.letter_number).filter(Boolean))).join(", ")
+          : "";
+
+        // Set case header letter info accurately
+        const firstMail = (Array.isArray(dailyMailRows) && dailyMailRows.length > 0) ? dailyMailRows[0] : null;
+        setLetterData({
+          refNo: subjectForm?.subject_file_no || subjectForm?.ref_number || firstMail?.ref_number || caseNo,
+          letterNo: allLetterNos || firstMail?.letter_number || "—",
+          senderName: complainantName,
+          subject: firstMail?.subject_of_letter || (subjectForm ? `Disciplinary Case File #${subjectForm.subject_file_no || caseNo}` : "Inquiry Dossier"),
+          modeOfReceipt: firstMail?.mode_of_receipt || "Post",
+          category: firstMail?.subject_category || firstMail?.nature_of_letter || classificationLabel,
+          receivedDate: formatEntryDate(firstMail?.date_received_by_add_secretary || firstMail?.created_at),
+          submittedDate: formatEntryDate(firstMail?.date_letter_handover_discipline || subjectForm?.date_prepared_and_submitted_for_signature),
+          officerName: primaryAccused?.accused_officer_name || "—",
+          instituteName: primarySchool || "Ministry / Education Zone",
+          province: primaryProvince,
+          district: primaryDistrict,
+          zone: primaryZone,
+          status: "In Progress",
+        });
 
         // ============================================================
         // A. DAILY MAIL REPORTER TIMELINE ENTRIES
         // ============================================================
         if (Array.isArray(dailyMailRows) && dailyMailRows.length > 0) {
-          // Deduplicate rows by (letter_number, ref_number, subject_of_letter) to prevent duplicate timeline steps
+          officersMap.set("dm-officer", {
+            id: "dm-officer",
+            name: dmOfficerName,
+            role: "Daily Reporter",
+            designation: t("dailyMailRegistrationOfficer", "Daily Mail Registration Officer"),
+            status: "Completed",
+          });
+
+          // Deduplicate rows by (letter_number, ref_number, subject_of_letter)
           const seenMailKeys = new Set<string>();
           const uniqueMails: any[] = [];
           dailyMailRows.forEach((mail: any) => {
@@ -276,224 +362,265 @@ function AdminViewCaseInner() {
             }
           });
 
-          const subjOfficerName = subjectForm?.name_of_the_presenting_the_complain || "Subject Officer";
-
           uniqueMails.forEach((mail: any, idx: number) => {
-            const recDate = mail.date_received_by_add_secretary ? new Date(mail.date_received_by_add_secretary).toISOString().split("T")[0] : "";
-            const subDate = mail.date_letter_handover_discipline ? new Date(mail.date_letter_handover_discipline).toISOString().split("T")[0] : "";
-            const ts = recDate ? new Date(recDate).getTime() : Date.now() - 86400000 * 10;
-
-            const mailOfficerName = "Daily Mail Officer";
-            officersMap.set("dm-officer", {
-              id: "dm-officer",
-              name: mailOfficerName,
-              role: "Daily Reporter",
-              designation: "Daily Mail Registration Officer",
-              status: "Completed",
-            });
+            const recDate = formatEntryDate(mail.date_received_by_add_secretary || mail.created_at);
+            const subDate = formatEntryDate(mail.date_letter_handover_discipline);
+            const ts = mail.created_at ? new Date(mail.created_at).getTime() : (mail.date_received_by_add_secretary ? new Date(mail.date_received_by_add_secretary).getTime() : Date.now());
 
             // Entry 1: Registration by Daily Mail Reporter
             raw.push({
               id: `dm-rec-${mail.id || idx}`,
               role: "Daily Reporter",
-              officerName: mailOfficerName,
+              officerName: dmOfficerName,
               action: idx === 0
-                ? `Initial Complaint Registered: Letter No. ${mail.letter_number || "N/A"}`
-                : `Subsequent Letter Registered: Letter No. ${mail.letter_number || "N/A"}`,
+                ? `${t("initialComplaintRegistered", "Initial Complaint Registered")}: ${t("letterNumber", "Letter No.")} ${mail.letter_number || "N/A"}`
+                : `${t("subsequentLetterRegistered", "Subsequent Letter Registered")}: ${t("letterNumber", "Letter No.")} ${mail.letter_number || "N/A"}`,
               category: "daily-mail",
-              details: `Received via ${mail.mode_of_receipt || "Post"} from "${mail.senders_party || "Complainant"}". Subject: ${mail.subject_of_letter || "Inquiry complaint"}. Category: ${mail.subject_category || mail.nature_of_letter || "General"}. Assigned to Subject Officer: ${subjOfficerName}.`,
-              date: recDate || "Registered Date",
+              details: `${t("receivedVia", "Received via")} ${mail.mode_of_receipt || "Post"} ${t("fromComplainant", "from Complainant")} "${mail.senders_party || "Complainant"}". ${t("subject", "Subject")}: "${mail.subject_of_letter || "Inquiry complaint"}". ${t("category", "Category")}: ${mail.subject_category || mail.nature_of_letter || "General"}.`,
+              date: recDate,
               sortTs: ts,
+              rawTime: mail.created_at,
+              status: "Completed",
               metaInfo: {
                 letterNumber: mail.letter_number,
                 sender: mail.senders_party,
                 receiptMode: mail.mode_of_receipt,
-                category: mail.subject_category,
-                assignedSubjectOfficer: subjOfficerName,
+                category: mail.subject_category || mail.nature_of_letter,
               }
             });
 
-            // Entry 2: Handover to Discipline Branch & Subject Officer
-            if (subDate) {
-              const handoverTs = new Date(subDate).getTime();
+            // Entry 2: Handover to Discipline Branch
+            if (mail.date_letter_handover_discipline) {
+              const handoverTs = mail.date_letter_handover_discipline ? new Date(mail.date_letter_handover_discipline).getTime() : ts + 3600000;
               raw.push({
                 id: `dm-handover-${mail.id || idx}`,
                 role: "Daily Reporter",
-                officerName: mailOfficerName,
-                action: `Letter Handed Over to Discipline Branch & Subject Officer`,
+                officerName: dmOfficerName,
+                action: t("letterHandedOverDiscipline", "Letter Handed Over to Discipline Branch"),
                 category: "daily-mail",
-                details: `Physical and system records routed to the Discipline Branch and assigned to Subject Officer (${subjOfficerName}) for formal inquiry processing.`,
+                details: `${t("letterNumber", "Letter No.")} ${mail.letter_number || "N/A"} ${t("routedHandoverDesc", "forwarded and handed over to Discipline Branch for subject assignment and inquiry evaluation.")}`,
                 date: subDate,
                 sortTs: handoverTs >= ts ? handoverTs : ts + 3600000,
+                rawTime: mail.created_at,
+                status: "Completed",
               });
             }
           });
         }
 
         // ============================================================
-        // B. INVESTIGATION ADMINISTRATOR TIMELINE ENTRIES
+        // B. SUBJECT OFFICER TIMELINE ENTRIES
         // ============================================================
-        const adminOfficerName = "Investigation Administrator (Discipline Branch)";
-        officersMap.set("inv-admin", {
-          id: "inv-admin",
-          name: adminOfficerName,
-          role: "Investigation Administrator",
-          designation: "Branch Administrator / Head of Investigation",
-          status: "Active",
-        });
-
-        // 1. Case Admission & Assignment
-        if (subjectForm || assignment || dailyMailRows.length > 0) {
-          const assignDate = subjectForm?.date_prepared_and_submitted_for_signature
-            ? new Date(subjectForm.date_prepared_and_submitted_for_signature).toISOString().split("T")[0]
-            : (dailyMailRows[0]?.date_letter_handover_discipline
-                ? new Date(dailyMailRows[0].date_letter_handover_discipline).toISOString().split("T")[0]
-                : "");
-          const assignTs = assignDate ? new Date(assignDate).getTime() : Date.now() - 86400000 * 8;
-
-          raw.push({
-            id: `ia-admission-${caseNo}`,
-            role: "Investigation Administrator",
-            officerName: adminOfficerName,
-            action: `Case Admission & Subject Assignment`,
-            category: "investigation-admin",
-            details: `Case opened under File Ref #${subjectForm?.subject_file_no || caseNo}. Assigned to Subject Officer for accused personnel verification and inquiry proceeding preparation.`,
-            date: assignDate || "—",
-            sortTs: assignTs,
+        if (subjectForm) {
+          officersMap.set("subj-officer", {
+            id: "subj-officer",
+            name: subjOfficerName,
+            role: "Subject Officer",
+            designation: t("disciplineSubjectOfficer", "Discipline Branch Subject Officer"),
+            status: "Active",
           });
-        }
 
-        // 2. Appointment of Chairman & Committee Members
-        if (chairman || (members && members.length > 0)) {
-          const chairTs = chairman?.created_at ? new Date(chairman.created_at).getTime() : Date.now() - 86400000 * 6;
-          const chairDate = chairman?.created_at ? new Date(chairman.created_at).toISOString().split("T")[0] : "";
-          const memberNames = (members || []).map((m: any) => m.full_name).filter(Boolean).join(", ");
+          const formTs = subjectForm.created_at
+            ? new Date(subjectForm.created_at).getTime()
+            : (subjectForm.date_prepared_and_submitted_for_signature ? new Date(subjectForm.date_prepared_and_submitted_for_signature).getTime() : Date.now());
 
+          // 1. Subject Officer File Opened & Recommended Action
           raw.push({
-            id: `ia-committee-appoint-${caseNo}`,
-            role: "Investigation Administrator",
-            officerName: adminOfficerName,
-            action: `Inquiry Committee Formally Appointed`,
-            category: "investigation-admin",
-            details: `Chairman appointed: ${chairman?.full_name || "Assigned Chairman"} (${chairman?.position || "Chairman"}). Committee Members: ${memberNames || "Panel Members"}. Conflict of interest checks verified against attended school records.`,
-            date: chairDate || "—",
-            sortTs: chairTs,
+            id: `so-form-${caseNo}`,
+            role: "Subject Officer",
+            officerName: subjOfficerName,
+            action: t("subjectFileOpenedTitle", "Subject Officer File Opened & Complaint Evaluated"),
+            category: "subject-officer",
+            details: `Subject File Ref #${subjectForm.subject_file_no || subjectForm.ref_number || caseNo} opened. Classification: ${classificationLabel} (Complainant: ${subjectForm.name_of_the_presenting_the_complain || "Complainant"}). Recommended Action: ${formatFutureAction(subjectForm.future_action, t)}.`,
+            date: formatEntryDate(subjectForm.date_prepared_and_submitted_for_signature || subjectForm.created_at),
+            sortTs: formTs,
+            rawTime: subjectForm.created_at,
+            status: "Completed",
+            metaInfo: {
+              subjectFileNo: subjectForm.subject_file_no,
+              classification: classificationLabel,
+              complainant: subjectForm.name_of_the_presenting_the_complain,
+              futureAction: formatFutureAction(subjectForm.future_action, t),
+            }
           });
-        }
 
-        // 3. Appointment Letter Issued & Report Due Date Scheduled
-        if (appointmentDates) {
-          const apptDateStr = appointmentDates.appointment_letter_date ? new Date(appointmentDates.appointment_letter_date).toISOString().split("T")[0] : "";
-          const dueDateStr = appointmentDates.report_due_date ? new Date(appointmentDates.report_due_date).toISOString().split("T")[0] : "";
-          const apptTs = apptDateStr ? new Date(apptDateStr).getTime() : Date.now() - 86400000 * 5;
+          // 2. Accused Officer(s) Registration
+          if (Array.isArray(accusedOfficers) && accusedOfficers.length > 0) {
+            accusedOfficers.forEach((ao: any, aIdx: number) => {
+              const aoName = ao.accused_officer_name || ao.officer_name || "Accused Officer";
+              const schoolName = ao.accused_school_name || ao.institute_name || "Educational Institute";
+              const aoRegTs = ao.created_at ? new Date(ao.created_at).getTime() : formTs + 1000 + aIdx * 100;
 
-          raw.push({
-            id: `ia-dates-schedule-${caseNo}`,
-            role: "Investigation Administrator",
-            officerName: adminOfficerName,
-            action: `Formal Appointment Letter Issued & Report Due Date Set`,
-            category: "investigation-admin",
-            details: `Appointment Letter issued on ${apptDateStr || "N/A"}. Investigation report due date scheduled for ${dueDateStr || "N/A"}. Committee instructed to commence hearing sessions.`,
-            date: apptDateStr || dueDateStr || "—",
-            sortTs: apptTs,
-          });
-        }
+              officersMap.set(`accused-${aIdx}`, {
+                id: `accused-${aIdx}`,
+                name: aoName,
+                role: "Accused Officer",
+                designation: ao.position || "Teacher / Staff Officer",
+                institution: schoolName,
+                nic: ao.nic_no || ao.nic || "N/A",
+                status: "Under Investigation",
+              });
 
-        // 4. Date Extension Request & Approval
-        if (extension) {
-          const extDateStr = extension.decision_date ? new Date(extension.decision_date).toISOString().split("T")[0] : (extension.created_at ? new Date(extension.created_at).toISOString().split("T")[0] : "");
-          const extTs = extDateStr ? new Date(extDateStr).getTime() : Date.now() - 86400000 * 3;
-          const isApproved = (extension.approval_status || "").toLowerCase().includes("approve");
-
-          raw.push({
-            id: `ia-extension-eval-${caseNo}`,
-            role: "Investigation Administrator",
-            officerName: adminOfficerName,
-            action: `Date Extension Decision: ${extension.extention_term || "Extension"} (${extension.approval_status || "Pending"})`,
-            category: "investigation-admin",
-            details: `Evaluation of extension term [${extension.start_date || "N/A"} to ${extension.end_date || "N/A"}]. Decision Status: ${extension.approval_status || "Approved by Administration"}.`,
-            date: extDateStr || "—",
-            sortTs: extTs,
-          });
-        }
-
-        // 5. Final Report & Secretary Approval by Investigation Admin
-        if (assignment?.final_report_content || assignment?.approval_date) {
-          const repDateStr = assignment.approval_date ? new Date(assignment.approval_date).toISOString().split("T")[0] : "";
-          const repTs = repDateStr ? new Date(repDateStr).getTime() : Date.now();
-
-          raw.push({
-            id: `ia-final-report-${caseNo}`,
-            role: "Investigation Administrator",
-            officerName: adminOfficerName,
-            action: `Final Investigation Report & Secretary Approval Approved`,
-            category: "investigation-admin",
-            details: `Final Investigation findings verified: "${assignment.final_report_content || "Inquiry concluded successfully"}". Education Secretary approval date confirmed: ${repDateStr || "Approved"}.`,
-            date: repDateStr || "—",
-            sortTs: repTs,
-          });
-        }
-
-        // ============================================================
-        // C. SUBJECT OFFICER TIMELINE ENTRIES
-        // ============================================================
-        const subjName = subjectForm?.name_of_the_presenting_the_complain || "Subject Officer";
-        officersMap.set("subj-officer", {
-          id: "subj-officer",
-          name: subjName,
-          role: "Subject Officer",
-          designation: "Discipline Branch Subject Officer",
-          status: "Active",
-        });
-
-        // 1. Accused Officer Registration
-        if (Array.isArray(accusedOfficers) && accusedOfficers.length > 0) {
-          accusedOfficers.forEach((ao: any, aIdx: number) => {
-            const aoName = ao.accused_officer_name || ao.officer_name || "Accused Officer";
-            const schoolName = ao.accused_school_name || ao.institute_name || "Educational Institute";
-            const aoTs = Date.now() - 86400000 * 7 + aIdx * 1000;
-
-            officersMap.set(`accused-${aIdx}`, {
-              id: `accused-${aIdx}`,
-              name: aoName,
-              role: "Accused Officer",
-              designation: ao.position || "Staff Officer / Teacher",
-              institution: schoolName,
-              nic: ao.nic_no || ao.nic || "N/A",
-              status: "Under Investigation",
+              raw.push({
+                id: `so-accused-${ao.accused_officer_id || aIdx}`,
+                role: "Subject Officer",
+                officerName: subjOfficerName,
+                action: `${t("accusedOfficerRegistered", "Accused Officer Registered")}: ${aoName}`,
+                category: "subject-officer",
+                details: `Position: ${ao.position || "Teacher / Staff"} | NIC: ${ao.nic_no || ao.nic || "N/A"} | Institute: ${schoolName} (Zone: ${ao.zone || "N/A"}, Province: ${ao.province || "N/A"})${ao.appointment_date ? ` | Service Appointment: ${formatEntryDate(ao.appointment_date)}` : ""}.`,
+                date: formatEntryDate(ao.created_at || subjectForm.created_at),
+                sortTs: aoRegTs,
+                rawTime: ao.created_at,
+                status: "Completed",
+                metaInfo: {
+                  accusedOfficer: aoName,
+                  position: ao.position,
+                  school: schoolName,
+                  nic: ao.nic_no,
+                }
+              });
             });
+          }
+
+          // 3. Action Logs from Subject Details
+          if (Array.isArray(subjectDetailsLogs) && subjectDetailsLogs.length > 0) {
+            subjectDetailsLogs.forEach((log: any, lIdx: number) => {
+              const logDate = formatEntryDate(log.received_date || log.created_at);
+              const logTs = log.created_at ? new Date(log.created_at).getTime() : (log.received_date ? new Date(log.received_date).getTime() : formTs + 5000 + lIdx * 1000);
+              const officer = log.subject_officer_name || log.officer_name || subjOfficerName;
+
+              raw.push({
+                id: `so-log-${log.id || lIdx}`,
+                role: "Subject Officer",
+                officerName: officer,
+                action: log.step_taken ? formatStepTaken(log.step_taken, t) : `Case Status: ${log.report_state || "In Progress"}`,
+                category: "subject-officer",
+                details: log.special_notes || `State updated to ${log.report_state || "In Progress"}.`,
+                date: logDate,
+                sortTs: logTs,
+                rawTime: log.created_at,
+                status: "Completed",
+              });
+            });
+          }
+        }
+
+        // ============================================================
+        // C. INVESTIGATION ADMINISTRATOR TIMELINE ENTRIES
+        // ============================================================
+        const extList: any[] = Array.isArray(extensions) && extensions.length > 0 ? extensions : (extension ? [extension] : []);
+        const hasInvAdminActions = Boolean(
+          chairman ||
+          (Array.isArray(members) && members.length > 0) ||
+          appointmentDates ||
+          extList.length > 0 ||
+          assignment?.approval_date ||
+          assignment?.final_report_content
+        );
+
+        if (hasInvAdminActions) {
+          officersMap.set("inv-admin", {
+            id: "inv-admin",
+            name: adminOfficerName,
+            role: "Investigation Administrator",
+            designation: t("investigationAdminRole", "Branch Administrator / Head of Investigation"),
+            status: "Active",
+          });
+
+          // 1. Appointment of Chairman & Committee Members
+          if (chairman || (Array.isArray(members) && members.length > 0)) {
+            const chairTs = chairman?.created_at ? new Date(chairman.created_at).getTime() : (members && members[0]?.created_at ? new Date(members[0].created_at).getTime() : Date.now());
+            const memberNames = (members || []).map((m: any) => m.full_name).filter(Boolean).join(", ");
 
             raw.push({
-              id: `so-accused-reg-${aIdx}`,
-              role: "Subject Officer",
-              officerName: subjName,
-              action: `Accused Officer Registered: ${aoName}`,
-              category: "subject-officer",
-              details: `Position: ${ao.position || "N/A"} | NIC: ${ao.nic_no || ao.nic || "N/A"} | Institute: ${schoolName} (Zone: ${ao.zone || "N/A"}, Province: ${ao.province || "N/A"}).`,
-              date: ao.appointment_date ? new Date(ao.appointment_date).toISOString().split("T")[0] : "—",
-              sortTs: aoTs,
+              id: `ia-committee-appoint-${caseNo}`,
+              role: "Investigation Administrator",
+              officerName: adminOfficerName,
+              action: t("committeeAppointedTitle", "Inquiry Committee Formally Appointed"),
+              category: "investigation-admin",
+              details: `Chairman appointed: ${chairman?.full_name || "Assigned Chairman"}${chairman?.position ? ` (${chairman.position})` : ""}. Committee Members: ${memberNames || "Panel Members"}. Conflict of interest checks verified against attended school records.`,
+              date: formatEntryDate(chairman?.created_at || (members && members[0]?.created_at)),
+              sortTs: chairTs,
+              rawTime: chairman?.created_at || (members && members[0]?.created_at),
+              status: "Completed",
+              metaInfo: {
+                chairman: chairman?.full_name,
+                members: memberNames,
+              }
             });
-          });
-        }
+          }
 
-        // 2. Action Logs from Subject Details
-        if (Array.isArray(subjectDetailsLogs) && subjectDetailsLogs.length > 0) {
-          subjectDetailsLogs.forEach((log: any, lIdx: number) => {
-            const logDate = log.received_date ? new Date(log.received_date).toISOString().split("T")[0] : "";
-            const logTs = logDate ? new Date(logDate).getTime() : Date.now() - 86400000 * (5 - lIdx);
-            const officer = log.subject_officer_name || log.officer_name || subjName;
+          // 2. Appointment Letter Issued & Report Due Date Scheduled
+          if (appointmentDates) {
+            const apptDateStr = formatEntryDate(appointmentDates.appointment_letter_date);
+            const dueDateStr = formatEntryDate(appointmentDates.report_due_date);
+            const apptTs = appointmentDates.created_at ? new Date(appointmentDates.created_at).getTime() : (appointmentDates.appointment_letter_date ? new Date(appointmentDates.appointment_letter_date).getTime() : Date.now());
 
             raw.push({
-              id: `so-log-${log.id || lIdx}`,
-              role: "Subject Officer",
-              officerName: officer,
-              action: log.step_taken ? formatStepTaken(log.step_taken, t) : `Case Status: ${log.report_state || "In Progress"}`,
-              category: "subject-officer",
-              details: log.special_notes || `State updated to ${log.report_state || "In Progress"}.`,
-              date: logDate || "—",
-              sortTs: logTs,
+              id: `ia-dates-schedule-${caseNo}`,
+              role: "Investigation Administrator",
+              officerName: adminOfficerName,
+              action: t("formalApptIssuedTitle", "Formal Appointment Letter Issued & Report Due Date Set"),
+              category: "investigation-admin",
+              details: `Appointment Letter issued on ${apptDateStr}. Investigation report due date scheduled for ${dueDateStr}. Committee instructed to commence hearing sessions.`,
+              date: formatEntryDate(appointmentDates.appointment_letter_date || appointmentDates.created_at),
+              sortTs: apptTs,
+              rawTime: appointmentDates.created_at,
+              status: "Completed",
+              metaInfo: {
+                appointmentLetterDate: apptDateStr,
+                reportDueDate: dueDateStr,
+              }
             });
-          });
+          }
+
+          // 3. Date Extension Requests & Approvals
+          if (extList.length > 0) {
+            extList.forEach((ext: any, eIdx: number) => {
+              const extDateStr = formatEntryDate(ext.decision_date || ext.created_at);
+              const extTs = ext.created_at ? new Date(ext.created_at).getTime() : (ext.decision_date ? new Date(ext.decision_date).getTime() : Date.now());
+              const isApproved = (ext.approval_status || "").toLowerCase() === "approved";
+              const isRejected = (ext.approval_status || "").toLowerCase() === "rejected";
+
+              raw.push({
+                id: `ia-extension-eval-${ext.id || eIdx}`,
+                role: "Investigation Administrator",
+                officerName: adminOfficerName,
+                action: `${t("dateExtensionDecision", "Date Extension Decision")}: ${ext.extention_term || "Extension"} (${ext.approval_status || "Pending"})`,
+                category: "investigation-admin",
+                details: `Evaluation of extension term [${formatEntryDate(ext.start_date)} to ${formatEntryDate(ext.end_date)}]. Decision Status: ${ext.approval_status || "Pending"}${ext.decision_date ? ` on ${formatEntryDate(ext.decision_date)}` : ""}.`,
+                date: extDateStr,
+                sortTs: extTs,
+                rawTime: ext.created_at,
+                status: isApproved || isRejected ? "Completed" : "Pending",
+                metaInfo: {
+                  extensionTerm: ext.extention_term,
+                  startDate: formatEntryDate(ext.start_date),
+                  endDate: formatEntryDate(ext.end_date),
+                  approvalStatus: ext.approval_status,
+                }
+              });
+            });
+          }
+
+          // 4. Final Report & Secretary Approval
+          if (assignment?.final_report_content || assignment?.approval_date) {
+            const repDateStr = formatEntryDate(assignment.approval_date || assignment.updated_at);
+            const repTs = assignment.updated_at ? new Date(assignment.updated_at).getTime() : (assignment.approval_date ? new Date(assignment.approval_date).getTime() : Date.now());
+
+            raw.push({
+              id: `ia-final-report-${caseNo}`,
+              role: "Investigation Administrator",
+              officerName: adminOfficerName,
+              action: t("finalReportSecretaryTitle", "Final Investigation Report & Secretary Approval"),
+              category: "investigation-admin",
+              details: `Final Investigation findings: "${assignment.final_report_content || "Inquiry concluded successfully"}". Education Secretary approval date: ${formatEntryDate(assignment.approval_date) || "Approved"}.`,
+              date: repDateStr,
+              sortTs: repTs,
+              rawTime: assignment.updated_at,
+              status: assignment.approval_date ? "Completed" : "Pending",
+            });
+          }
         }
 
         // ============================================================
@@ -505,7 +632,7 @@ function AdminViewCaseInner() {
             id: "comm-chairman",
             name: chairman.full_name || "Committee Chairman",
             role: "Committee Chairman",
-            designation: chairman.position || "Inquiry Chairman",
+            designation: chairman.position || "Inquiry Committee Chairman",
             email: chairman.email || "chairman@inquiry.gov.lk",
             status: "Appointed",
           });
@@ -514,11 +641,13 @@ function AdminViewCaseInner() {
             id: `conn-chair-active-${caseNo}`,
             role: "Committee Chairman",
             officerName: chairman.full_name || "Committee Chairman",
-            action: `Inquiry Proceedings Commenced by Chairman`,
+            action: `${t("inquiryProceedingsCommenced", "Inquiry Proceedings Initiated by Chairman")}: ${chairman.full_name || ""}`,
             category: "connected-officers",
             details: `Chairman ${chairman.full_name} accepted inquiry dossier. Commenced schedule for hearings, witness calls, and examination of documents.`,
-            date: chairman.updated_at ? new Date(chairman.updated_at).toISOString().split("T")[0] : "—",
-            sortTs: chairman.created_at ? new Date(chairman.created_at).getTime() + 86400000 : Date.now() - 86400000 * 4,
+            date: formatEntryDate(chairman.created_at),
+            sortTs: chairman.created_at ? new Date(chairman.created_at).getTime() + 2000 : Date.now(),
+            rawTime: chairman.created_at,
+            status: "Completed",
           });
         }
 
@@ -536,14 +665,16 @@ function AdminViewCaseInner() {
             });
 
             raw.push({
-              id: `conn-member-${mIdx}`,
+              id: `conn-member-${m.id || mIdx}`,
               role: "Committee Member",
               officerName: mName,
-              action: `Inquiry Panel Member Assigned: ${mName}`,
+              action: `${t("inquiryPanelMemberAssigned", "Inquiry Panel Member Assigned")}: ${mName}`,
               category: "connected-officers",
               details: `Panel Member ${mName} assigned to review inquiry submissions and participate in the formal investigation sittings.`,
-              date: m.created_at ? new Date(m.created_at).toISOString().split("T")[0] : "—",
-              sortTs: m.created_at ? new Date(m.created_at).getTime() + 3600000 : Date.now() - 86400000 * 4,
+              date: formatEntryDate(m.created_at),
+              sortTs: m.created_at ? new Date(m.created_at).getTime() + 3000 : Date.now(),
+              rawTime: m.created_at,
+              status: "Completed",
             });
           });
         }
@@ -561,13 +692,27 @@ function AdminViewCaseInner() {
 
           raw.push({
             id: `conn-prelim-findings-${caseNo}`,
-            role: "Connected Officer",
+            role: "Inquiry Officer",
             officerName: prelimOfficerName,
-            action: `Preliminary Investigation Findings Submitted`,
+            action: t("prelimFindingsSubmitted", "Preliminary Investigation Findings Submitted"),
             category: "connected-officers",
             details: `Findings: ${preliminaryInvestigation.findings || "Preliminary report compiled."} | Observations: ${preliminaryInvestigation.observations || "Initial facts checked."}`,
-            date: preliminaryInvestigation.updated_at ? new Date(preliminaryInvestigation.updated_at).toISOString().split("T")[0] : "—",
-            sortTs: Date.now() - 86400000 * 2,
+            date: formatEntryDate(preliminaryInvestigation.updated_at || preliminaryInvestigation.created_at),
+            sortTs: preliminaryInvestigation.updated_at ? new Date(preliminaryInvestigation.updated_at).getTime() : Date.now(),
+            rawTime: preliminaryInvestigation.updated_at,
+            status: preliminaryInvestigation.status === "Completed" ? "Completed" : "Current",
+          });
+        }
+
+        // 4. Complainant / Senders Party
+        if (complainantName && complainantName !== "—") {
+          officersMap.set("complainant", {
+            id: "complainant",
+            name: complainantName,
+            role: "Connected Officer",
+            designation: subjectForm?.classification_of_complaint_letter === "anonymous" ? t("anonymousComplainant", "Anonymous Complainant") : t("complainantParty", "Complainant / Senders Party"),
+            institution: complainantAddress || "",
+            status: "Active",
           });
         }
       }
@@ -583,16 +728,26 @@ function AdminViewCaseInner() {
           const list = JSON.parse(storedActions) as any[];
           const filtered = list.filter((a) => a.caseNo === caseNo || a.ref_no === caseNo);
           filtered.forEach((a, idx) => {
-            if (!raw.some((r) => r.id === a.id)) {
+            const actName = a.stepTaken || a.step_taken || a.action || "Case Activity Logged";
+            const actDate = formatEntryDate(a.receivedDate);
+            const actDetails = a.specialNotes || a.special_notes || "";
+            const isDuplicate = raw.some(
+              (r) =>
+                r.id === a.id ||
+                (r.action.trim().toLowerCase() === String(actName).trim().toLowerCase() &&
+                  r.date === actDate)
+            );
+            if (!isDuplicate) {
               raw.push({
                 id: a.id || `local-${idx}`,
                 role: "Subject Officer",
-                officerName: a.subjectOfficerName || "Subject Officer",
-                action: a.stepTaken || a.step_taken || "Case Activity Logged",
+                officerName: a.subjectOfficerName || subjOfficerName,
+                action: actName,
                 category: "subject-officer",
-                details: a.specialNotes || a.special_notes || "",
-                date: a.receivedDate || "—",
+                details: actDetails,
+                date: actDate,
                 sortTs: a.receivedDate ? new Date(a.receivedDate).getTime() : Date.now() - idx * 1000,
+                status: "Completed",
               });
             }
           });
@@ -600,16 +755,32 @@ function AdminViewCaseInner() {
       } catch (e) {}
     }
 
-    // Deduplicate & Sort chronologically
+    // Sort chronologically
     raw.sort((a, b) => a.sortTs - b.sortTs);
 
-    const formatted: TrackingEntry[] = raw.map((r, idx) => ({
+    // Deduplicate entries by unique content signature (role + action + date)
+    const uniqueRaw: typeof raw = [];
+    const seenSignatures = new Set<string>();
+
+    for (const item of raw) {
+      const cleanAction = (item.action || "").trim().toLowerCase();
+      const cleanDate = (item.date || "").trim();
+      const sig = `${item.role}|${item.category}|${cleanAction}|${cleanDate}`;
+      const actionSig = `${item.role}|${cleanAction}|${cleanDate}`;
+
+      if (seenSignatures.has(sig) || seenSignatures.has(actionSig)) {
+        continue;
+      }
+      seenSignatures.add(sig);
+      seenSignatures.add(actionSig);
+      uniqueRaw.push(item);
+    }
+
+    const formatted: TrackingEntry[] = uniqueRaw.map((r, idx) => ({
       ...r,
       step: idx + 1,
-      time: r.date && r.date !== "—" && !isNaN(new Date(r.date).getTime())
-        ? new Date(r.date).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false })
-        : "10:00",
-      status: (idx === raw.length - 1 ? "Current" : "Completed") as TrackingEntry["status"],
+      time: formatEntryTime(r.rawTime, r.date),
+      status: r.status,
     }));
 
     setTrackingEntries(formatted);

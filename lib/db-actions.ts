@@ -2977,12 +2977,52 @@ export async function getCaseFullTimelineServer(caseNo: string) {
       }
     } catch (e) {}
 
-    // 5. Fetch Date Extension
+    // 5. Fetch All Date Extensions
     let extData: any = null;
+    let extensionsList: any[] = [];
     try {
-      const extRes = await getCaseByDateExtensionServer(clean);
-      if (extRes && extRes.success && extRes.data) {
-        extData = extRes.data;
+      extensionsList = formId ? await prisma.$queryRaw`
+        SELECT 
+          id::text as id,
+          subject_file_no,
+          sub_file_no,
+          subject_officer_form_id::text as subject_officer_form_id,
+          extention_term,
+          start_date,
+          end_date,
+          approval_status,
+          decision_date,
+          created_at,
+          updated_at
+        FROM public.case_by_date_extention
+        WHERE LOWER(subject_file_no) = LOWER(${clean})
+           OR LOWER(subject_file_no) = LOWER(${actualSubNo})
+           OR LOWER(subject_file_no) = LOWER(${refNum})
+           OR LOWER(sub_file_no) = LOWER(${clean})
+           OR LOWER(sub_file_no) = LOWER(${actualSubNo})
+           OR LOWER(sub_file_no) = LOWER(${refNum})
+           OR subject_officer_form_id = ${Number(formId)}::bigint
+        ORDER BY created_at ASC;
+      ` : await prisma.$queryRaw`
+        SELECT 
+          id::text as id,
+          subject_file_no,
+          sub_file_no,
+          subject_officer_form_id::text as subject_officer_form_id,
+          extention_term,
+          start_date,
+          end_date,
+          approval_status,
+          decision_date,
+          created_at,
+          updated_at
+        FROM public.case_by_date_extention
+        WHERE LOWER(subject_file_no) = LOWER(${clean})
+           OR LOWER(sub_file_no) = LOWER(${clean})
+        ORDER BY created_at ASC;
+      `;
+      if (extensionsList && extensionsList.length > 0) {
+        extData = extensionsList[extensionsList.length - 1];
       }
     } catch (e) {}
 
@@ -3042,6 +3082,16 @@ export async function getCaseFullTimelineServer(caseNo: string) {
       }
     } catch (e) {}
 
+    // 9. Fetch Registered Officer Profiles
+    let registeredOfficers: any[] = [];
+    try {
+      registeredOfficers = await prisma.$queryRaw`
+        SELECT id, employee_no, full_name, email, role, subject_type
+        FROM public.register_officer_table
+        ORDER BY full_name ASC;
+      `;
+    } catch (e) {}
+
     return serializeForServerAction({
       success: true,
       data: {
@@ -3055,9 +3105,11 @@ export async function getCaseFullTimelineServer(caseNo: string) {
         members: membersData || [],
         appointmentDates: datesData || null,
         extension: extData || null,
+        extensions: extensionsList || [],
         subjectDetailsLogs: subjectDetailsLogs || [],
         assignment: assignmentData || null,
         preliminaryInvestigation: prelimData || null,
+        registeredOfficers: registeredOfficers || [],
       },
     });
   } catch (error: any) {
