@@ -139,7 +139,12 @@ function RegisterComplaintForm() {
     priority: "medium" as "high" | "medium" | "low",
     status: "registered" as "registered" | "assigned" | "pending",
     isAnswerLetter: false as boolean | string,
+    documentUrl: "",
+    documentName: "",
   });
+
+  const [selectedPdf, setSelectedPdf] = useState<File | null>(null);
+  const [isUploadingPdf, setIsUploadingPdf] = useState(false);
 
   const isOfficerLocked = Boolean(isEditMode || initialOfficerName);
 
@@ -549,6 +554,8 @@ function RegisterComplaintForm() {
           priority: validPriority as any,
           status: found.status || "registered",
           isAnswerLetter: found.is_answer_letter === true || String(found.is_answer_letter) === "true",
+          documentUrl: found.document_url || found.documentUrl || "",
+          documentName: found.document_name || found.documentName || "",
         });
       };
 
@@ -627,6 +634,36 @@ function RegisterComplaintForm() {
       return;
     }
 
+    let uploadedUrl = formState.documentUrl || "";
+    let uploadedName = formState.documentName || "";
+
+    // 1. Upload PDF if selected
+    if (selectedPdf) {
+      setIsUploadingPdf(true);
+      try {
+        const uploadData = new FormData();
+        uploadData.append("file", selectedPdf);
+        uploadData.append("refNo", formState.refNo || formState.letterNo || "daily-mail");
+
+        const uploadRes = await fetch("/api/upload", {
+          method: "POST",
+          body: uploadData,
+        });
+
+        const uploadJson = await uploadRes.json();
+        if (uploadJson.success) {
+          uploadedUrl = uploadJson.documentUrl;
+          uploadedName = uploadJson.documentName;
+        } else {
+          alert(`PDF upload warning: ${uploadJson.error || "Failed to upload document"}`);
+        }
+      } catch (err: any) {
+        console.error("PDF upload error:", err);
+      } finally {
+        setIsUploadingPdf(false);
+      }
+    }
+
     const newLetter = {
       id: formState.id || Date.now().toString(),
       refNo: formState.refNo,
@@ -645,9 +682,11 @@ function RegisterComplaintForm() {
       instituteName: formState.instituteName,
       regionProvince: formState.regionProvince,
       isAnswerLetter: formState.isAnswerLetter,
+      documentUrl: uploadedUrl,
+      documentName: uploadedName,
     };
 
-    // Always save directly to PostgreSQL database tables (dcmms_daily_mail, daily_mail, Letter)
+    // Always save directly to PostgreSQL database tables (dcmms_daily_mail, daily_mail, daily_mail_letter_table)
     try {
       await saveDailyMailRecordServer({
         id: newLetter.id,
@@ -662,6 +701,8 @@ function RegisterComplaintForm() {
         classification: newLetter.subjectCategory,
         action_officer: newLetter.officerName,
         status: newLetter.status || "Pending",
+        document_url: uploadedUrl,
+        document_name: uploadedName,
       });
     } catch (pgErr) {
       console.error("Failed to save daily mail to PostgreSQL database:", pgErr);
@@ -1902,6 +1943,138 @@ function RegisterComplaintForm() {
                         </div>
                       </div>
 
+                    </div>
+                  </div>
+
+                  {/* ── Card 5: PDF Document Attachment (ලිපි ගොනුව / ஆவண இணைப்பு) ── */}
+                  <div className="register-step-card" style={{ border: "1.5px dashed #93c5fd", backgroundColor: "#f8fafc" }}>
+                    <h3 className="register-step-title" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <svg style={{ width: "20px", height: "20px", color: "#2563eb" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                      </svg>
+                      {lang === "si" ? "ලිපියේ PDF පිටපත අමුණන්න" : lang === "ta" ? "PDF ஆவணத்தை இணைக்கவும்" : "Attach PDF Document (Complaint / Letter)"}
+                    </h3>
+                    <div style={{ padding: "12px 0" }}>
+                      {/* If existing document exists in edit mode */}
+                      {formState.documentUrl && (
+                        <div style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          padding: "12px 16px",
+                          backgroundColor: "#eff6ff",
+                          border: "1px solid #bfdbfe",
+                          borderRadius: "8px",
+                          marginBottom: "16px"
+                        }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                            <span style={{ fontSize: "24px" }}>📄</span>
+                            <div>
+                              <div style={{ fontWeight: 600, fontSize: "14px", color: "#1e3a8a" }}>
+                                {formState.documentName || "Attached_Document.pdf"}
+                              </div>
+                              <div style={{ fontSize: "12px", color: "#64748b" }}>
+                                {lang === "si" ? "පවතින ලේඛනය සුරක්ෂිතව ගබඩා කර ඇත" : lang === "ta" ? "இணைக்கப்பட்ட ஆவணம் சேமிக்கப்பட்டுள்ளது" : "Attached document stored in PostgreSQL"}
+                              </div>
+                            </div>
+                          </div>
+                          <a
+                            href={formState.documentUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "6px",
+                              padding: "6px 14px",
+                              backgroundColor: "#2563eb",
+                              color: "#ffffff",
+                              borderRadius: "6px",
+                              fontSize: "13px",
+                              fontWeight: 600,
+                              textDecoration: "none"
+                            }}
+                          >
+                            <svg style={{ width: "16px", height: "16px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                            </svg>
+                            {lang === "si" ? "PDF පරීක්ෂා කරන්න" : lang === "ta" ? "PDF ஐப் பார்க்கவும்" : "View PDF"}
+                          </a>
+                        </div>
+                      )}
+
+                      {/* File upload input */}
+                      {!isEditMode && (
+                        <div>
+                          <input
+                            id="pdfUploadInput"
+                            type="file"
+                            accept="application/pdf"
+                            onChange={(e) => {
+                              if (e.target.files && e.target.files[0]) {
+                                const file = e.target.files[0];
+                                if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+                                  alert("Please upload a PDF file only.");
+                                  return;
+                                }
+                                if (file.size > 25 * 1024 * 1024) {
+                                  alert("File size exceeds 25MB limit.");
+                                  return;
+                                }
+                                setSelectedPdf(file);
+                              }
+                            }}
+                            style={{ display: "none" }}
+                          />
+                          <label
+                            htmlFor="pdfUploadInput"
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              padding: "24px",
+                              backgroundColor: "#ffffff",
+                              border: "2px dashed #cbd5e1",
+                              borderRadius: "10px",
+                              cursor: "pointer",
+                              transition: "all 0.2s ease"
+                            }}
+                          >
+                            <svg style={{ width: "36px", height: "36px", color: "#3b82f6", marginBottom: "8px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.75">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                            </svg>
+                            <span style={{ fontSize: "14px", fontWeight: 600, color: "#1e293b" }}>
+                              {selectedPdf ? selectedPdf.name : (lang === "si" ? "PDF ගොනුවක් තෝරන්න (හෝ මෙහි ඇද දමන්න)" : lang === "ta" ? "PDF கோப்பைத் தேர்ந்தெடுக்கவும்" : "Click to select or browse a PDF document")}
+                            </span>
+                            <span style={{ fontSize: "12px", color: "#64748b", marginTop: "4px" }}>
+                              {selectedPdf ? `${(selectedPdf.size / 1024).toFixed(1)} KB — ready to upload` : (lang === "si" ? "උපරිම ප්‍රමාණය: 25MB (PDF පමණි)" : lang === "ta" ? "அதிகபட்ச அளவு: 25MB (PDF மட்டும்)" : "Supports PDF files up to 25MB")}
+                            </span>
+                          </label>
+
+                          {selectedPdf && (
+                            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "8px" }}>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedPdf(null)}
+                                style={{
+                                  background: "none",
+                                  border: "none",
+                                  color: "#ef4444",
+                                  fontSize: "12px",
+                                  fontWeight: 600,
+                                  cursor: "pointer",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "4px"
+                                }}
+                              >
+                                ✕ {lang === "si" ? "ගොනුව ඉවත් කරන්න" : lang === "ta" ? "கோப்பை நீக்கு" : "Remove selected file"}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
 

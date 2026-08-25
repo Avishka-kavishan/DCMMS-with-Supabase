@@ -35,6 +35,16 @@ export async function getDailyMailRecordsServer() {
     let combinedData: any[] = [];
     const idsSeen = new Set<string>();
 
+    // Ensure document columns exist
+    try {
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS document_url TEXT;
+        ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS document_name VARCHAR(255);
+        ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS document_url TEXT;
+        ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS document_name VARCHAR(255);
+      `);
+    } catch (e) {}
+
     // 1. Fetch from daily_mail_letter_table (User's PostgreSQL table)
     try {
       const rawLetterTable: any[] = await prisma.$queryRaw`
@@ -49,6 +59,8 @@ export async function getDailyMailRecordsServer() {
           subject_of_letter as subject,
           date_received_by_add_secretary as received_date,
           date_letter_handover_discipline as submitted_date,
+          document_url,
+          document_name,
           created_at,
           updated_at
         FROM public.daily_mail_letter_table
@@ -71,6 +83,8 @@ export async function getDailyMailRecordsServer() {
             action_officer: "",
             priority: "normal",
             status: "registered",
+            document_url: row.document_url || null,
+            document_name: row.document_name || null,
             created_at: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
             updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString(),
           });
@@ -120,6 +134,8 @@ export async function getDailyMailRecordsServer() {
               action_officer: "",
               priority: row.priority ? row.priority.toLowerCase() : "normal",
               status: "registered",
+              document_url: null,
+              document_name: null,
               created_at: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
               updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString(),
             });
@@ -134,18 +150,44 @@ export async function getDailyMailRecordsServer() {
 
     // 3. Fetch from dcmms_daily_mail as fallback/legacy merge
     try {
-      const legacyRecords = await prisma.dcmmsDailyMail.findMany({
-        orderBy: { created_at: "desc" },
-      });
-      legacyRecords.forEach((rec: any) => {
-        if (!rec.serial_no?.startsWith("__SECURITY_")) {
-          const key = rec.serial_no || rec.letter_no || rec.id;
-          if (!idsSeen.has(key)) {
-            combinedData.push(rec);
-            idsSeen.add(key);
+      const rawDcmmsDailyMail: any[] = await prisma.$queryRaw`
+        SELECT 
+          id::text as id,
+          serial_no,
+          received_date,
+          letter_no,
+          submitted_date,
+          subject,
+          sender,
+          method,
+          type,
+          classification,
+          action_officer,
+          status,
+          document_url,
+          document_name,
+          created_at,
+          updated_at
+        FROM public.dcmms_daily_mail
+        ORDER BY created_at DESC;
+      `;
+      if (rawDcmmsDailyMail && rawDcmmsDailyMail.length > 0) {
+        rawDcmmsDailyMail.forEach((rec: any) => {
+          if (!rec.serial_no?.startsWith("__SECURITY_")) {
+            const key = rec.serial_no || rec.letter_no || rec.id;
+            if (!idsSeen.has(key)) {
+              combinedData.push({
+                ...rec,
+                received_date: rec.received_date ? new Date(rec.received_date).toISOString().split("T")[0] : "",
+                submitted_date: rec.submitted_date ? new Date(rec.submitted_date).toISOString().split("T")[0] : "",
+                created_at: rec.created_at ? new Date(rec.created_at).toISOString() : new Date().toISOString(),
+                updated_at: rec.updated_at ? new Date(rec.updated_at).toISOString() : new Date().toISOString(),
+              });
+              idsSeen.add(key);
+            }
           }
-        }
-      });
+        });
+      }
     } catch (e) {
       console.warn("Could not query dcmms_daily_mail table:", e);
     }
@@ -161,6 +203,18 @@ export async function saveDailyMailRecordServer(mailData: any) {
   try {
     let result;
     const actionOfficer = mailData.action_officer || mailData.officer_name || mailData.officerName || null;
+    const docUrl = mailData.document_url || mailData.documentUrl || null;
+    const docName = mailData.document_name || mailData.documentName || null;
+
+    // Ensure columns exist in PostgreSQL
+    try {
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS document_url TEXT;
+        ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS document_name VARCHAR(255);
+        ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS document_url TEXT;
+        ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS document_name VARCHAR(255);
+      `);
+    } catch (e) {}
 
     // Dual save to daily_mail & daily_mail_letter_table tables
     try {
@@ -179,75 +233,69 @@ export async function saveDailyMailRecordServer(mailData: any) {
         date_letter_handed_over_to_dicipline_branch: mailData.submitted_date || mailData.letterDate,
         date_letter_handover_discipline: mailData.submitted_date || mailData.letterDate,
         priority: mailData.priority || "Normal",
+        document_url: docUrl,
+        document_name: docName,
       });
     } catch (dmErr) {
       console.warn("Save to daily mail tables failed in saveDailyMailRecordServer:", dmErr);
     }
 
-    let existingRecord = null;
+    // Save/Update in dcmms_daily_mail via raw SQL to ensure document_url & document_name are saved cleanly
     const isUuid = typeof mailData.id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(mailData.id);
-    if (isUuid) {
-      try {
-        existingRecord = await prisma.dcmmsDailyMail.findUnique({
-          where: { id: mailData.id },
-        });
-      } catch (e) {}
+    const recId = isUuid ? mailData.id : null;
+    const serialNo = mailData.serial_no || mailData.refNo;
+    const receivedDate = mailData.received_date ? new Date(mailData.received_date) : mailData.receivedDate ? new Date(mailData.receivedDate) : null;
+    const letterNo = mailData.letter_no || mailData.letterNo || null;
+    const submittedDate = mailData.submitted_date ? new Date(mailData.submitted_date) : mailData.letterDate ? new Date(mailData.letterDate) : null;
+    const subject = mailData.subject || "N/A";
+    const sender = mailData.sender || mailData.senderName || "N/A";
+    const method = mailData.method || mailData.letterType || "Post";
+    const lType = mailData.type || mailData.letterType || "Complaint";
+    const classification = mailData.classification || mailData.subjectCategory || null;
+    const status = mailData.status || "Pending";
+
+    try {
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO public.dcmms_daily_mail (
+          id, serial_no, received_date, letter_no, submitted_date, subject, sender, method, type, classification, action_officer, status, document_url, document_name, created_at, updated_at
+        ) VALUES (
+          COALESCE($1::uuid, gen_random_uuid()), $2, $3::date, $4, $5::date, $6, $7, $8, $9, $10, $11, $12, $13, $14, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        )
+        ON CONFLICT (id) DO UPDATE SET
+          serial_no = EXCLUDED.serial_no,
+          received_date = EXCLUDED.received_date,
+          letter_no = EXCLUDED.letter_no,
+          submitted_date = EXCLUDED.submitted_date,
+          subject = EXCLUDED.subject,
+          sender = EXCLUDED.sender,
+          method = EXCLUDED.method,
+          type = EXCLUDED.type,
+          classification = EXCLUDED.classification,
+          action_officer = EXCLUDED.action_officer,
+          status = EXCLUDED.status,
+          document_url = COALESCE(EXCLUDED.document_url, public.dcmms_daily_mail.document_url),
+          document_name = COALESCE(EXCLUDED.document_name, public.dcmms_daily_mail.document_name),
+          updated_at = CURRENT_TIMESTAMP`,
+        recId,
+        serialNo,
+        receivedDate,
+        letterNo,
+        submittedDate,
+        subject,
+        sender,
+        method,
+        lType,
+        classification,
+        actionOfficer,
+        status,
+        docUrl,
+        docName
+      );
+      result = { id: recId, serial_no: serialNo, document_url: docUrl, document_name: docName };
+    } catch (sqlErr) {
+      console.warn("Direct SQL insert to dcmms_daily_mail warning:", sqlErr);
     }
 
-    if (existingRecord) {
-      result = await prisma.dcmmsDailyMail.update({
-        where: { id: mailData.id },
-        data: {
-          serial_no: mailData.serial_no || mailData.refNo,
-          received_date: mailData.received_date ? new Date(mailData.received_date) : mailData.receivedDate ? new Date(mailData.receivedDate) : undefined,
-          letter_no: mailData.letter_no || mailData.letterNo,
-          submitted_date: mailData.submitted_date ? new Date(mailData.submitted_date) : mailData.letterDate ? new Date(mailData.letterDate) : undefined,
-          subject: mailData.subject,
-          sender: mailData.sender || mailData.senderName,
-          method: mailData.method || mailData.letterType,
-          type: mailData.type || mailData.letterType,
-          classification: mailData.classification || mailData.subjectCategory,
-          action_officer: actionOfficer,
-          status: mailData.status || "Pending",
-          updated_at: new Date(),
-        },
-      });
-    } else {
-      result = await prisma.dcmmsDailyMail.create({
-        data: {
-          ...(isUuid ? { id: mailData.id } : {}),
-          serial_no: mailData.serial_no || mailData.refNo,
-          received_date: mailData.received_date ? new Date(mailData.received_date) : mailData.receivedDate ? new Date(mailData.receivedDate) : undefined,
-          letter_no: mailData.letter_no || mailData.letterNo,
-          submitted_date: mailData.submitted_date ? new Date(mailData.submitted_date) : mailData.letterDate ? new Date(mailData.letterDate) : undefined,
-          subject: mailData.subject,
-          sender: mailData.sender || mailData.senderName,
-          method: mailData.method || mailData.letterType,
-          type: mailData.type || mailData.letterType,
-          classification: mailData.classification || mailData.subjectCategory,
-          action_officer: actionOfficer,
-          status: mailData.status || "Pending",
-        },
-      });
-
-      // Also dual-sync to normalized Letter table
-      try {
-        await prisma.letter.create({
-          data: {
-            serial_number: mailData.serial_no || undefined,
-            letter_number: mailData.letter_no || undefined,
-            sender_name: mailData.sender || undefined,
-            received_date: mailData.received_date ? new Date(mailData.received_date) : undefined,
-            received_method: mailData.method || undefined,
-            submission_date: mailData.submitted_date ? new Date(mailData.submitted_date) : undefined,
-            priority: mailData.priority || "medium",
-            description: mailData.subject || undefined,
-          },
-        });
-      } catch (err) {
-        console.warn("Dual-sync to Letter table skipped or failed:", err);
-      }
-    }
     return serializeForServerAction({ success: true, data: result });
   } catch (error: any) {
     console.error("Error saving daily mail record:", error);
@@ -272,6 +320,8 @@ export async function saveDailyMailToNewTableServer(data: {
   subject_officer_id?: number | null;
   officer_name?: string | null;
   priority?: string;
+  document_url?: string | null;
+  document_name?: string | null;
 }) {
   try {
     const pInput = (data.priority || 'Normal').trim();
@@ -289,6 +339,8 @@ export async function saveDailyMailToNewTableServer(data: {
     const subjectOfLetter = data.subject_of_letter?.trim() || 'N/A';
     const rawDateReceived = data.date_received_by_add_secretary || data.date_received_by_additional_secretary || null;
     const rawDateHandover = data.date_letter_handover_discipline || data.date_letter_handed_over_to_dicipline_branch || null;
+    const documentUrl = data.document_url || null;
+    const documentName = data.document_name || null;
 
     const formatDateForSql = (val: any) => {
       if (!val || val === "" || val === "N/A") return null;
@@ -318,6 +370,8 @@ export async function saveDailyMailToNewTableServer(data: {
           subject_of_letter TEXT,
           date_received_by_add_secretary DATE,
           date_letter_handover_discipline DATE,
+          document_url TEXT,
+          document_name VARCHAR(255),
           created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );`
@@ -339,11 +393,14 @@ export async function saveDailyMailToNewTableServer(data: {
           subject_of_letter,
           date_received_by_add_secretary,
           date_letter_handover_discipline,
+          document_url,
+          document_name,
           created_at,
           updated_at
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7,
           $8::date, $9::date,
+          $10, $11,
           CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
         )`,
         letterNumber,
@@ -354,7 +411,9 @@ export async function saveDailyMailToNewTableServer(data: {
         subjectCategory,
         subjectOfLetter,
         dateReceived,
-        dateHandover
+        dateHandover,
+        documentUrl,
+        documentName
       );
     } catch (lTableErr) {
       console.warn("Insert into daily_mail_letter_table warning:", lTableErr);

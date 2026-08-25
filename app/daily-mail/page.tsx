@@ -32,6 +32,8 @@ interface Letter {
   subjectCategory?: string;
   instituteName?: string;
   regionProvince?: string;
+  documentUrl?: string;
+  documentName?: string;
 }
 
 const getValidSubjectOfficerName = (name?: string, fallback = "Subject Officer") => {
@@ -143,6 +145,8 @@ export default function DailyMailPage() {
               subjectCategory: db.classification || "",
               instituteName: "",
               regionProvince: "",
+              documentUrl: db.document_url || "",
+              documentName: db.document_name || "",
             }));
           setLetters(mapped);
           return;
@@ -861,6 +865,21 @@ export default function DailyMailPage() {
                           </span>
                         </td>
                         <td className="text-center actions-cell">
+                          {letter.documentUrl && (
+                            <a
+                              href={letter.documentUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="btn-action-view"
+                              style={{ color: "#dc2626", backgroundColor: "#fef2f2", borderColor: "#fecaca" }}
+                              title={lang === "si" ? "PDF ලේඛනය විවෘත කරන්න" : lang === "ta" ? "PDF ஆவணத்தைத் திறக்கவும்" : "View Attached PDF Document"}
+                              aria-label="View Attached PDF Document"
+                            >
+                              <svg className="action-row-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                              </svg>
+                            </a>
+                          )}
                           <button
                             className="btn-action-view"
                             onClick={() => router.push(`/daily-mail/register?id=${letter.id}`)}
