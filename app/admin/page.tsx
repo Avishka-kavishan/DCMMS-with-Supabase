@@ -23,7 +23,11 @@ import {
 import "./admin.css";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { signOut, getCurrentProfile } from "@/lib/auth";
-import { getDailyMailRecordsServer } from "@/lib/db-actions";
+import {
+  getDailyMailRecordsServer,
+  getLetterEditRequestsServer,
+  updateLetterEditRequestStatusServer,
+} from "@/lib/db-actions";
 import { exportToExcel } from "@/lib/export-excel";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
@@ -133,7 +137,8 @@ function buildYearlyChart(dates: string[]): { name: string; cases: number }[] {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function AdminDashboard() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language;
   const router = useRouter();
 
   const [chartPeriod, setChartPeriod] = useState("Monthly");
@@ -150,13 +155,80 @@ export default function AdminDashboard() {
   const [recentCases, setRecentCases] = useState<CaseRow[]>([]);
   const [caseDates, setCaseDates] = useState<string[]>([]);
 
+  // Pending Letter Edit Approval Requests state
+  const [pendingEditRequests, setPendingEditRequests] = useState<any[]>([]);
+  const [isLoadingRequests, setIsLoadingRequests] = useState(false);
+  const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
+  const [toastMessage, setToastMessage] = useState("");
+  const [showToast, setShowToast] = useState(false);
 
   // ── Session guard ──────────────────────────────────────────────────────────
   useEffect(() => {
     getCurrentProfile().then((profile) => {
       if (!profile || profile.role !== "admin") router.replace("/");
+      setCurrentUserProfile(profile);
     });
   }, [router]);
+
+  // ── Fetch Pending Letter Edit Approval Requests ───────────────────────────
+  const fetchPendingEditRequests = async () => {
+    try {
+      setIsLoadingRequests(true);
+      const res = await getLetterEditRequestsServer({ status: "Pending" });
+      if (res && res.success && Array.isArray(res.data)) {
+        setPendingEditRequests(res.data);
+      }
+    } catch (e) {
+      console.warn("Failed to fetch pending edit requests:", e);
+    } finally {
+      setIsLoadingRequests(false);
+    }
+  };
+
+  const handleApproveRequest = async (requestId: string, refNo: string) => {
+    try {
+      const adminName = currentUserProfile?.full_name || "Branch Administrator";
+      const res = await updateLetterEditRequestStatusServer({
+        requestId,
+        status: "Approved",
+        reviewed_by: adminName,
+        reviewer_comments: "Approved via Admin Dashboard",
+      });
+      if (res && res.success) {
+        setPendingEditRequests((prev) => prev.filter((r) => r.id !== requestId));
+        setToastMessage(`✓ Request for "${refNo}" approved. Officer can now edit the form.`);
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 4000);
+      } else {
+        alert(res?.error || "Failed to approve request");
+      }
+    } catch (e: any) {
+      alert("Error approving request: " + (e?.message || "Server error"));
+    }
+  };
+
+  const handleRejectRequest = async (requestId: string, refNo: string) => {
+    const reason = prompt("Reason for rejection (optional):") || "";
+    try {
+      const adminName = currentUserProfile?.full_name || "Branch Administrator";
+      const res = await updateLetterEditRequestStatusServer({
+        requestId,
+        status: "Rejected",
+        reviewed_by: adminName,
+        reviewer_comments: reason,
+      });
+      if (res && res.success) {
+        setPendingEditRequests((prev) => prev.filter((r) => r.id !== requestId));
+        setToastMessage(`Edit request for "${refNo}" rejected.`);
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 4000);
+      } else {
+        alert(res?.error || "Failed to reject request");
+      }
+    } catch (e: any) {
+      alert("Error rejecting request: " + (e?.message || "Server error"));
+    }
+  };
 
   // ── Greeting ──────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -176,6 +248,7 @@ export default function AdminDashboard() {
       setGreeting(`${timeGreeting}, ${displayName}!`);
     };
     loadGreeting();
+    fetchPendingEditRequests();
   }, [t]);
 
   // ── Fetch live data from Supabase ──────────────────────────────────────────
@@ -424,6 +497,144 @@ export default function AdminDashboard() {
           sparklineD="M 5,15 Q 25,8 45,22 T 75,12 T 95,25"
         />
       </div>
+
+      {/* ── Pending Letter Edit Approval Requests Section ── */}
+      {pendingEditRequests.length > 0 && (
+        <div className="admin-approval-section-card">
+          <div className="admin-approval-header">
+            <div className="admin-approval-title-area">
+              <div className="admin-approval-icon-badge">
+                <svg style={{ width: "22px", height: "22px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="admin-approval-title">
+                  {lang === "si" ? "පොරොත්තු ලිපි සංස්කරණ අනුමැති ඉල්ලීම්" : "Pending Letter Edit Approval Requests"} ({pendingEditRequests.length})
+                </h3>
+                <p className="admin-approval-desc">
+                  {lang === "si"
+                    ? "නිලධාරීන් විසින් යොමු කර ඇති සංස්කරණ ඉල්ලීම් සමාලෝචනය කර අනුමත හෝ ප්‍රතික්ෂේප කරන්න."
+                    : "Officers have requested permission to edit previously submitted letters. Review and approve or reject."}
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={fetchPendingEditRequests}
+              disabled={isLoadingRequests}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                backgroundColor: "#ffffff",
+                color: "#78350f",
+                border: "1px solid #fde68a",
+                borderRadius: "8px",
+                padding: "6px 14px",
+                fontSize: "12.5px",
+                fontWeight: 600,
+                cursor: "pointer"
+              }}
+            >
+              <span style={{ display: "inline-block", transform: isLoadingRequests ? "rotate(360deg)" : "none", transition: "transform 0.5s ease" }}>🔄</span>
+              {lang === "si" ? "යාවත්කාලීන කරන්න" : "Refresh"}
+            </button>
+          </div>
+
+          <div className="admin-approval-table-container">
+            <table className="admin-approval-table">
+              <thead>
+                <tr>
+                  <th>{lang === "si" ? "යොමු / ලිපි අංකය" : "Ref / Letter No"}</th>
+                  <th>{lang === "si" ? "ඉල්ලුම් කළ නිලධාරී" : "Requested By"}</th>
+                  <th>{lang === "si" ? "හේතුව" : "Reason for Edit"}</th>
+                  <th>{lang === "si" ? "දිනය" : "Date Requested"}</th>
+                  <th style={{ textAlign: "right" }}>{lang === "si" ? "ක්‍රියාමාර්ග" : "Actions"}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pendingEditRequests.map((req) => (
+                  <tr key={req.id}>
+                    <td>
+                      <span style={{ fontWeight: 700, color: "#1e3a8a" }}>
+                        {req.ref_no || req.letter_id}
+                      </span>
+                    </td>
+                    <td>
+                      <div>
+                        <strong>{req.requested_by}</strong>
+                        <div style={{ fontSize: "11px", color: "#64748b" }}>
+                          {req.requester_role || "Daily Mail Officer"} {req.requester_email ? `• ${req.requester_email}` : ""}
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <span style={{ fontStyle: "italic", color: "#475569" }}>
+                        "{req.reason || "No reason provided"}"
+                      </span>
+                    </td>
+                    <td>
+                      <span style={{ fontSize: "12px", color: "#64748b" }}>
+                        {req.created_at ? new Date(req.created_at).toLocaleString() : "—"}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", justifyContent: "flex-end" }}>
+                        <button
+                          type="button"
+                          className="btn-notif-approve"
+                          onClick={() => handleApproveRequest(req.id, req.ref_no)}
+                        >
+                          ✓ {lang === "si" ? "අනුමත කරන්න" : "Approve"}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-notif-reject"
+                          onClick={() => handleRejectRequest(req.id, req.ref_no)}
+                        >
+                          ✕ {lang === "si" ? "ප්‍රතික්ෂේප" : "Reject"}
+                        </button>
+                        <Link
+                          href={`/daily-mail/register?id=${encodeURIComponent(req.letter_id || req.ref_no)}`}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "4px",
+                            backgroundColor: "#eff6ff",
+                            color: "#2563eb",
+                            border: "1px solid #bfdbfe",
+                            padding: "5px 10px",
+                            borderRadius: "6px",
+                            fontSize: "12px",
+                            fontWeight: 600,
+                            textDecoration: "none"
+                          }}
+                        >
+                          👁 {lang === "si" ? "බලන්න" : "Review Form"}
+                        </Link>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {showToast && (
+        <div className="toast-notification">
+          <div className="toast-success-icon-container">
+            <svg style={{ width: "16px", height: "16px", color: "#ffffff" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <span>{toastMessage}</span>
+        </div>
+      )}
 
       {/* Chart Section */}
       <div className="admin-chart-card">

@@ -815,12 +815,22 @@
   align-items: center;
 }
 
+.date-icon {
+  width: 16px;
+  height: 16px;
+  color: #4f46e5;
+}
+
+.search-icon-wrapper {
+  color: #6366f1;
+}
+
 .filter-icon {
   position: absolute;
   left: 12px;
   width: 16px;
   height: 16px;
-  color: #64748b;
+  color: #6366f1;
   pointer-events: none;
 }
 
@@ -839,15 +849,15 @@
 
 .filter-priority-select:focus {
   background-color: #ffffff;
-  border-color: var(--sidebar-background);
-  outline: 2px solid var(--sidebar-background);
+  border-color: #4f46e5;
+  outline: 2px solid #4f46e5;
   outline-offset: 2px;
 }
 
 .view-all-reset-link {
   font-size: calc(13px * var(--font-scale));
   font-weight: 600;
-  color: #1e3a8a;
+  color: #2563eb;
   text-decoration: none;
   display: inline-flex;
   align-items: center;
@@ -857,6 +867,99 @@
 
 .view-all-reset-link:hover {
   color: #1d4ed8;
+}
+
+.actions-cell {
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.btn-action-view {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  color: #2563eb;
+  padding: 7px 9px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.btn-action-view:hover {
+  background-color: #dbeafe;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(37, 99, 235, 0.16);
+}
+
+.btn-action-view.approved-edit-btn {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #059669;
+}
+
+.btn-action-view.approved-edit-btn:hover {
+  background-color: #d1fae5;
+  border-color: #6ee7b7;
+  color: #047857;
+  box-shadow: 0 3px 8px rgba(5, 150, 105, 0.2);
+}
+
+.btn-action-pdf {
+  background: #fff1f2;
+  border: 1px solid #fecdd3;
+  border-radius: 8px;
+  color: #e11d48;
+  padding: 7px 9px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.btn-action-pdf:hover {
+  background-color: #ffe4e6;
+  border-color: #fda4af;
+  color: #be123c;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(225, 29, 72, 0.16);
+}
+
+.btn-action-add-subsequent {
+  background: #f5f3ff;
+  border: 1px solid #ddd6fe;
+  border-radius: 8px;
+  color: #7c3aed;
+  padding: 7px 9px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.btn-action-add-subsequent:hover {
+  background-color: #ede9fe;
+  border-color: #c4b5fd;
+  color: #6d28d9;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(124, 58, 237, 0.16);
+}
+
+.action-row-icon {
+  width: 15px;
+  height: 15px;
 }
 
 .view-all-reset-link:hover .arrow-span {
@@ -1589,3 +1692,266 @@
   transform: translateY(0);
   background-color: #0b552c;
 }
+
+/* ============================================================
+   DAILY MAIL OFFICER NOTIFICATIONS & APPROVAL ALERTS
+   ============================================================ */
+
+.daily-mail-notification-container {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.daily-mail-notification-btn {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color, #e2e8f0);
+  background-color: #ffffff;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.daily-mail-notification-btn:hover {
+  background-color: #f8fafc;
+  border-color: #cbd5e1;
+  color: #1e293b;
+  transform: translateY(-1px);
+}
+
+.daily-mail-notification-btn.has-approvals {
+  border-color: #cbd5e1;
+  color: #334155;
+}
+
+.daily-mail-notification-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.35);
+  border: 2px solid #ffffff;
+}
+
+.daily-mail-notification-dropdown {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 380px;
+  max-width: 90vw;
+  background-color: #ffffff;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.05);
+  z-index: 1000;
+  overflow: hidden;
+  animation: dropDownSlide 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  color: #1e293b;
+}
+
+.daily-mail-notification-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background: linear-gradient(135deg, #064e3b 0%, #065f46 100%);
+  color: #ffffff;
+}
+
+.daily-mail-notification-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.daily-mail-notification-count-tag {
+  background-color: #10b981;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+.daily-mail-notification-list {
+  max-height: 380px;
+  overflow-y: auto;
+}
+
+.daily-mail-notification-item {
+  padding: 14px 18px;
+  border-bottom: 1px solid #f1f5f9;
+  transition: background-color 0.15s ease;
+}
+
+.daily-mail-notification-item:hover {
+  background-color: #f8fafc;
+}
+
+.daily-mail-notification-item.approved {
+  background-color: #f0fdf4;
+}
+
+.daily-mail-notification-item.approved:hover {
+  background-color: #dcfce7;
+}
+
+.daily-mail-notification-item-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.daily-mail-notification-item-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.daily-mail-notification-item-badge.approved {
+  background-color: #d1fae5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.daily-mail-notification-item-badge.pending {
+  background-color: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.daily-mail-notification-item-badge.rejected {
+  background-color: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fca5a5;
+}
+
+.daily-mail-notification-item-ref {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e3a8a;
+  margin-bottom: 4px;
+}
+
+.daily-mail-notification-item-details {
+  font-size: 12px;
+  color: #475569;
+  margin-bottom: 8px;
+}
+
+.daily-mail-notification-item-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background-color: #059669;
+  color: #ffffff;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.daily-mail-notification-item-btn:hover {
+  background-color: #047857;
+  transform: translateY(-1px);
+}
+
+.daily-mail-notification-empty {
+  padding: 32px 20px;
+  text-align: center;
+  color: #64748b;
+  font-size: 13px;
+}
+
+/* Dashboard Banner for Approved Requests */
+.daily-mail-approved-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+  border: 1.5px solid #6ee7b7;
+  padding: 16px 20px;
+  border-radius: 12px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.1);
+  flex-wrap: wrap;
+}
+
+.daily-mail-approved-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.daily-mail-approved-banner-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background-color: #059669;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.daily-mail-approved-banner-title {
+  font-size: calc(14.5px * var(--font-scale, 1));
+  font-weight: 700;
+  color: #064e3b;
+  margin: 0;
+}
+
+.daily-mail-approved-banner-desc {
+  font-size: calc(12.5px * var(--font-scale, 1));
+  color: #047857;
+  margin: 2px 0 0 0;
+  font-weight: 500;
+}
+
+.daily-mail-approved-banner-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background-color: #059669;
+  color: #ffffff;
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-size: calc(13px * var(--font-scale, 1));
+  font-weight: 700;
+  text-decoration: none;
+  box-shadow: 0 2px 6px rgba(5, 150, 105, 0.25);
+  transition: all 0.15s ease;
+}
+
+.daily-mail-approved-banner-btn:hover {
+  background-color: #047857;
+  transform: translateY(-1px);
+}

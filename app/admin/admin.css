@@ -858,4 +858,324 @@
   align-items: center;
 }
 
+/* ============================================================
+   ADMIN NOTIFICATION BELL & APPROVAL REQUESTS SECTION
+   ============================================================ */
+
+.admin-notification-container {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.admin-notification-btn {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background-color: #ffffff;
+  color: #1e293b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.admin-notification-btn:hover {
+  background-color: #f8fafc;
+  border-color: #cbd5e1;
+  color: #2563eb;
+  transform: translateY(-1px);
+}
+
+.admin-notification-btn.has-notifications {
+  border-color: #fed7aa;
+  background: #fffbeb;
+  color: #d97706;
+}
+
+.admin-notification-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  min-width: 19px;
+  height: 19px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  box-shadow: 0 2px 5px rgba(239, 68, 68, 0.4);
+  border: 2px solid #ffffff;
+  animation: pulseBadge 2s infinite;
+}
+
+@keyframes pulseBadge {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+.admin-notification-dropdown {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 380px;
+  max-width: 90vw;
+  background-color: #ffffff;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  z-index: 1000;
+  overflow: hidden;
+  animation: dropDownSlide 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes dropDownSlide {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.admin-notification-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  color: #ffffff;
+}
+
+.admin-notification-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.admin-notification-count-tag {
+  background-color: #f59e0b;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 12px;
+}
+
+.admin-notification-list {
+  max-height: 380px;
+  overflow-y: auto;
+  divide-y: 1px solid #f1f5f9;
+}
+
+.admin-notification-item {
+  padding: 14px 18px;
+  border-bottom: 1px solid #f1f5f9;
+  transition: background-color 0.15s ease;
+}
+
+.admin-notification-item:hover {
+  background-color: #f8fafc;
+}
+
+.admin-notification-item-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 6px;
+}
+
+.admin-notification-item-ref {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e3a8a;
+}
+
+.admin-notification-item-date {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.admin-notification-item-by {
+  font-size: 12px;
+  color: #475569;
+  margin-bottom: 4px;
+}
+
+.admin-notification-item-reason {
+  font-size: 12px;
+  color: #64748b;
+  background-color: #f1f5f9;
+  padding: 6px 10px;
+  border-radius: 6px;
+  margin-bottom: 10px;
+  font-style: italic;
+}
+
+.admin-notification-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-notif-approve {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background-color: #059669;
+  color: #ffffff;
+  border: none;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-notif-approve:hover {
+  background-color: #047857;
+  transform: translateY(-1px);
+}
+
+.btn-notif-reject {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background-color: #ffffff;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-notif-reject:hover {
+  background-color: #fee2e2;
+}
+
+.btn-notif-view {
+  margin-left: auto;
+  font-size: 12px;
+  color: #2563eb;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.btn-notif-view:hover {
+  text-decoration: underline;
+}
+
+.admin-notification-empty {
+  padding: 30px 20px;
+  text-align: center;
+  color: #64748b;
+  font-size: 13px;
+}
+
+/* Approval Requests Main Dashboard Section Card */
+.admin-approval-section-card {
+  background-color: #ffffff;
+  border: 1.5px solid #fed7aa;
+  border-radius: 14px;
+  padding: 20px 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.08);
+  position: relative;
+  overflow: hidden;
+}
+
+.admin-approval-section-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 5px;
+  height: 100%;
+  background: linear-gradient(to bottom, #f59e0b, #d97706);
+}
+
+.admin-approval-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.admin-approval-title-area {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.admin-approval-icon-badge {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background-color: #fef3c7;
+  color: #d97706;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.admin-approval-title {
+  font-size: calc(16px * var(--font-scale, 1));
+  font-weight: 700;
+  color: #78350f;
+  margin: 0;
+}
+
+.admin-approval-desc {
+  font-size: calc(12.5px * var(--font-scale, 1));
+  color: #b45309;
+  margin: 2px 0 0 0;
+}
+
+.admin-approval-table-container {
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid #fde68a;
+  background-color: #fffbeb;
+}
+
+.admin-approval-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: calc(13px * var(--font-scale, 1));
+}
+
+.admin-approval-table th {
+  background-color: #fef3c7;
+  color: #78350f;
+  font-weight: 700;
+  padding: 10px 14px;
+  border-bottom: 1px solid #fde68a;
+}
+
+.admin-approval-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid #fef3c7;
+  color: #1e293b;
+  vertical-align: middle;
+}
+
+.admin-approval-table tr:last-child td {
+  border-bottom: none;
+}
+
 

@@ -3,15 +3,16 @@
 import "../../i18n";
 import "../dashboard-common.css";
 import "./daily-mail.css";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { Sidebar } from "@/components/Sidebar";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { signOut, getCurrentProfile } from "@/lib/auth";
-import { getDailyMailRecordsServer } from "@/lib/db-actions";
+import { getDailyMailRecordsServer, getLetterEditRequestsServer } from "@/lib/db-actions";
 import { exportToExcel } from "@/lib/export-excel";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
@@ -104,6 +105,39 @@ export default function DailyMailPage() {
   // Success Notification Toast state
   const [toastMessage, setToastMessage] = useState("");
   const [showToast, setShowToast] = useState(false);
+
+  // Edit Approval Requests & Notification state
+  const [editRequests, setEditRequests] = useState<any[]>([]);
+  const [showNotifDropdown, setShowNotifDropdown] = useState(false);
+  const notifRef = useRef<HTMLDivElement>(null);
+
+  const fetchEditRequests = async () => {
+    try {
+      const res = await getLetterEditRequestsServer();
+      if (res && res.success && Array.isArray(res.data)) {
+        setEditRequests(res.data);
+      }
+    } catch (e) {
+      console.warn("Failed to fetch edit requests:", e);
+    }
+  };
+
+  useEffect(() => {
+    fetchEditRequests();
+    const interval = setInterval(fetchEditRequests, 10000);
+    const handleClickOutside = (event: MouseEvent) => {
+      if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
+        setShowNotifDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  const approvedEditRequests = editRequests.filter((r) => r.status === "Approved");
 
   // Trigger toast notification helper
   const triggerToast = (msg: string) => {
@@ -477,6 +511,100 @@ export default function DailyMailPage() {
                     { year: "numeric", month: "long", day: "numeric" }
                   )}
                 </span>
+              </div>
+
+              {/* Notification Bell for Approval Updates */}
+              <div className="daily-mail-notification-container" ref={notifRef}>
+                <button
+                  type="button"
+                  className={`daily-mail-notification-btn ${approvedEditRequests.length > 0 ? "has-approvals" : ""}`}
+                  onClick={() => setShowNotifDropdown(!showNotifDropdown)}
+                  aria-label="Edit Approval Notifications"
+                  title="Edit Approval Notifications"
+                >
+                  <svg style={{ width: "20px", height: "20px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                  </svg>
+                  {approvedEditRequests.length > 0 && (
+                    <span className="daily-mail-notification-badge">
+                      {approvedEditRequests.length}
+                    </span>
+                  )}
+                </button>
+
+                {showNotifDropdown && (
+                  <div className="daily-mail-notification-dropdown">
+                    <div className="daily-mail-notification-header">
+                      <div className="daily-mail-notification-title">
+                        <svg style={{ width: "18px", height: "18px", color: "#34d399" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>{lang === "si" ? "සංස්කරණ අනුමැති දැනුම්දීම්" : "Edit Approval Notifications"}</span>
+                      </div>
+                      <span className="daily-mail-notification-count-tag">
+                        {approvedEditRequests.length} {lang === "si" ? "අනුමතයි" : "Approved"}
+                      </span>
+                    </div>
+
+                    <div className="daily-mail-notification-list">
+                      {editRequests.length > 0 ? (
+                        editRequests.map((req) => (
+                          <div
+                            key={req.id}
+                            className={`daily-mail-notification-item ${req.status === "Approved" ? "approved" : ""}`}
+                          >
+                            <div className="daily-mail-notification-item-top">
+                              <span className={`daily-mail-notification-item-badge ${req.status.toLowerCase()}`}>
+                                {req.status === "Approved" ? "✓ Approved" : req.status === "Rejected" ? "✕ Rejected" : "⏳ Pending"}
+                              </span>
+                              <span style={{ fontSize: "11px", color: "#94a3b8" }}>
+                                {req.created_at ? new Date(req.created_at).toLocaleDateString() : ""}
+                              </span>
+                            </div>
+
+                            <div className="daily-mail-notification-item-ref">
+                              {req.ref_no || req.letter_id}
+                            </div>
+
+                            <div className="daily-mail-notification-item-details">
+                              {req.status === "Approved" ? (
+                                <span>
+                                  <strong>Approved by:</strong> {req.reviewed_by || "Branch Administrator"}. Form is now unlocked for editing.
+                                </span>
+                              ) : req.status === "Rejected" ? (
+                                <span>
+                                  <strong>Rejected by:</strong> {req.reviewed_by || "Branch Administrator"}
+                                  {req.reviewer_comments ? ` (${req.reviewer_comments})` : ""}
+                                </span>
+                              ) : (
+                                <span>
+                                  <strong>Waiting for review:</strong> Sent to Branch Administrator.
+                                </span>
+                              )}
+                            </div>
+
+                            {req.status === "Approved" && (
+                              <Link
+                                href={`/daily-mail/register?id=${encodeURIComponent(req.letter_id || req.ref_no)}`}
+                                className="daily-mail-notification-item-btn"
+                                onClick={() => setShowNotifDropdown(false)}
+                              >
+                                ✎ {lang === "si" ? "ලිපිය සංස්කරණය කරන්න →" : "Edit Letter Form →"}
+                              </Link>
+                            )}
+                          </div>
+                        ))
+                      ) : (
+                        <div className="daily-mail-notification-empty">
+                          <svg style={{ width: "32px", height: "32px", color: "#94a3b8", margin: "0 auto 8px auto" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                          </svg>
+                          <div>{lang === "si" ? "දැනුම්දීම් කිසිවක් නැත." : "No notifications yet."}</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="divider-line" aria-hidden="true" />
@@ -860,9 +988,27 @@ export default function DailyMailPage() {
                           </span>
                         </td>
                         <td>
-                          <span className={`badge-badge ${letter.status !== "pending" ? "badge-status-closed" : "badge-status-pending"}`}>
-                            {letter.status !== "pending" ? t("submitted", "Submitted") : t("pendingDetails", "Pending")}
-                          </span>
+                          {(() => {
+                            const isEditApproved = approvedEditRequests.some((r) => r.ref_no === letter.refNo || r.letter_id === letter.id);
+                            const isEditPending = editRequests.some((r) => (r.ref_no === letter.refNo || r.letter_id === letter.id) && r.status === "Pending");
+                            return (
+                              <div style={{ display: "flex", flexDirection: "column", gap: "4px", alignItems: "flex-start" }}>
+                                <span className={`badge-badge ${letter.status !== "pending" ? "badge-status-closed" : "badge-status-pending"}`}>
+                                  {letter.status !== "pending" ? t("submitted", "Submitted") : t("pendingDetails", "Pending")}
+                                </span>
+                                {isEditApproved && (
+                                  <span style={{ fontSize: "11px", fontWeight: 700, color: "#065f46", backgroundColor: "#d1fae5", border: "1px solid #a7f3d0", padding: "2px 6px", borderRadius: "4px", display: "inline-flex", alignItems: "center", gap: "3px" }}>
+                                    ✓ {lang === "si" ? "සංස්කරණය අනුමතයි" : "Edit Approved"}
+                                  </span>
+                                )}
+                                {isEditPending && (
+                                  <span style={{ fontSize: "11px", fontWeight: 700, color: "#92400e", backgroundColor: "#fef3c7", border: "1px solid #fde68a", padding: "2px 6px", borderRadius: "4px", display: "inline-flex", alignItems: "center", gap: "3px" }}>
+                                    ⏳ {lang === "si" ? "අනුමැතිය අපේක්ෂිතයි" : "Edit Pending"}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td className="text-center actions-cell">
                           {letter.documentUrl && (
@@ -870,8 +1016,7 @@ export default function DailyMailPage() {
                               href={letter.documentUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="btn-action-view"
-                              style={{ color: "#dc2626", backgroundColor: "#fef2f2", borderColor: "#fecaca" }}
+                              className="btn-action-pdf"
                               title={lang === "si" ? "PDF ලේඛනය විවෘත කරන්න" : lang === "ta" ? "PDF ஆவணத்தைத் திறக்கவும்" : "View Attached PDF Document"}
                               aria-label="View Attached PDF Document"
                             >
@@ -880,17 +1025,26 @@ export default function DailyMailPage() {
                               </svg>
                             </a>
                           )}
-                          <button
-                            className="btn-action-view"
-                            onClick={() => router.push(`/daily-mail/register?id=${letter.id}`)}
-                            title={t("editLetterTitle", "Edit Letter")}
-                            aria-label={t("editLetterTitle", "Edit Letter")}
-                          >
-                            <svg className="action-row-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                            </svg>
-                          </button>
+                          {(() => {
+                            const isEditApproved = approvedEditRequests.some((r) => r.ref_no === letter.refNo || r.letter_id === letter.id);
+                            return (
+                              <button
+                                className={`btn-action-view ${isEditApproved ? "approved-edit-btn" : ""}`}
+                                onClick={() => router.push(`/daily-mail/register?id=${letter.id}`)}
+                                title={isEditApproved ? (lang === "si" ? "ලිපිය සංස්කරණය කරන්න (අනුමැතිය ලැබී ඇත)" : "Edit Letter (Approval Granted)") : t("editLetterTitle", "Edit Letter")}
+                                aria-label={t("editLetterTitle", "Edit Letter")}
+                              >
+                                {isEditApproved ? (
+                                  <span style={{ fontSize: "13px", fontWeight: 700 }}>✎</span>
+                                ) : (
+                                  <svg className="action-row-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                  </svg>
+                                )}
+                              </button>
+                            );
+                          })()}
                           <button
                             className="btn-action-add-subsequent"
                             onClick={() => router.push(`/daily-mail/register?caseNo=${letter.refNo}&subsequent=true`)}

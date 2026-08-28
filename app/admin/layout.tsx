@@ -9,8 +9,10 @@ import "../daily-mail/daily-mail.css";
 import "../dashboard-common.css";
 import "./admin.css";
 import { Sidebar } from "@/components/Sidebar";
-import { signOut } from "@/lib/auth";
+import { signOut, getCurrentProfile, UserProfile } from "@/lib/auth";
 import { SiteFooter } from "@/components/SiteFooter";
+import { supabase } from "@/lib/supabase";
+import { getLetterEditRequestsServer, updateLetterEditRequestStatusServer } from "@/lib/db-actions";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { t, i18n } = useTranslation();
@@ -21,9 +23,91 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const lang = i18n.language;
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
+  // Notification & Edit Approval Requests state
+  const [pendingRequests, setPendingRequests] = useState<any[]>([]);
+  const [showNotifDropdown, setShowNotifDropdown] = useState(false);
+  const [currentUserProfile, setCurrentUserProfile] = useState<UserProfile | null>(null);
+  const [toastMessage, setToastMessage] = useState("");
+  const [showToast, setShowToast] = useState(false);
+  const notifRef = React.useRef<HTMLDivElement>(null);
+
+  const fetchPendingRequests = async () => {
+    try {
+      const res = await getLetterEditRequestsServer({ status: "Pending" });
+      if (res && res.success && Array.isArray(res.data)) {
+        setPendingRequests(res.data);
+      }
+    } catch (e) {
+      console.warn("Failed to fetch pending approval requests:", e);
+    }
+  };
+
   React.useEffect(() => {
     setMounted(true);
+    getCurrentProfile().then(setCurrentUserProfile);
+    fetchPendingRequests();
+
+    // Polling every 10 seconds for real-time notification updates
+    const interval = setInterval(fetchPendingRequests, 10000);
+
+    // Close dropdown on click outside
+    const handleClickOutside = (event: MouseEvent) => {
+      if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
+        setShowNotifDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
   }, []);
+
+  const handleQuickApprove = async (requestId: string, refNo: string) => {
+    try {
+      const adminName = currentUserProfile?.full_name || "Branch Administrator";
+      const res = await updateLetterEditRequestStatusServer({
+        requestId,
+        status: "Approved",
+        reviewed_by: adminName,
+        reviewer_comments: "Approved via notification popover",
+      });
+      if (res && res.success) {
+        setPendingRequests((prev) => prev.filter((r) => r.id !== requestId));
+        setToastMessage(`✓ Request for "${refNo}" approved successfully.`);
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 4000);
+      } else {
+        alert(res?.error || "Failed to approve request");
+      }
+    } catch (e: any) {
+      alert("Error approving request: " + (e?.message || "Server error"));
+    }
+  };
+
+  const handleQuickReject = async (requestId: string, refNo: string) => {
+    const reason = prompt(lang === "si" ? "ප්‍රතික්ෂේප කිරීමට හේතුව:" : "Reason for rejection:") || "";
+    try {
+      const adminName = currentUserProfile?.full_name || "Branch Administrator";
+      const res = await updateLetterEditRequestStatusServer({
+        requestId,
+        status: "Rejected",
+        reviewed_by: adminName,
+        reviewer_comments: reason,
+      });
+      if (res && res.success) {
+        setPendingRequests((prev) => prev.filter((r) => r.id !== requestId));
+        setToastMessage(`Request for "${refNo}" rejected.`);
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 4000);
+      } else {
+        alert(res?.error || "Failed to reject request");
+      }
+    } catch (e: any) {
+      alert("Error rejecting request: " + (e?.message || "Server error"));
+    }
+  };
 
   const getPageTitleAndSubtitle = () => {
     const cleanPath = (pathname || "").replace(/\/$/, "");
@@ -139,6 +223,95 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <svg className="date-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
+              </div>
+
+              {/* Notification Bell with Badge & Dropdown */}
+              <div className="admin-notification-container" ref={notifRef}>
+                <button
+                  type="button"
+                  className={`admin-notification-btn ${pendingRequests.length > 0 ? "has-notifications" : ""}`}
+                  onClick={() => setShowNotifDropdown(!showNotifDropdown)}
+                  aria-label="Pending Edit Approval Requests Notifications"
+                  title="Approval Requests"
+                >
+                  <svg style={{ width: "20px", height: "20px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                  </svg>
+                  {pendingRequests.length > 0 && (
+                    <span className="admin-notification-badge">
+                      {pendingRequests.length}
+                    </span>
+                  )}
+                </button>
+
+                {showNotifDropdown && (
+                  <div className="admin-notification-dropdown">
+                    <div className="admin-notification-header">
+                      <div className="admin-notification-title">
+                        <svg style={{ width: "18px", height: "18px", color: "#f59e0b" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                        </svg>
+                        <span>{lang === "si" ? "සංස්කරණ අනුමැති ඉල්ලීම්" : "Edit Approval Requests"}</span>
+                      </div>
+                      <span className="admin-notification-count-tag">
+                        {pendingRequests.length} {lang === "si" ? "බලාපොරොත්තුවෙන්" : "Pending"}
+                      </span>
+                    </div>
+
+                    <div className="admin-notification-list">
+                      {pendingRequests.length > 0 ? (
+                        pendingRequests.map((req) => (
+                          <div key={req.id} className="admin-notification-item">
+                            <div className="admin-notification-item-top">
+                              <span className="admin-notification-item-ref">
+                                {req.ref_no || req.letter_id}
+                              </span>
+                              <span className="admin-notification-item-date">
+                                {req.created_at ? new Date(req.created_at).toLocaleDateString() : ""}
+                              </span>
+                            </div>
+                            <div className="admin-notification-item-by">
+                              <strong>{req.requested_by}</strong> ({req.requester_role || "Officer"})
+                            </div>
+                            <div className="admin-notification-item-reason">
+                              "{req.reason || "No reason specified"}"
+                            </div>
+                            <div className="admin-notification-actions">
+                              <button
+                                type="button"
+                                className="btn-notif-approve"
+                                onClick={() => handleQuickApprove(req.id, req.ref_no)}
+                              >
+                                ✓ {lang === "si" ? "අනුමත කරන්න" : "Approve"}
+                              </button>
+                              <button
+                                type="button"
+                                className="btn-notif-reject"
+                                onClick={() => handleQuickReject(req.id, req.ref_no)}
+                              >
+                                ✕ {lang === "si" ? "ප්‍රතික්ෂේප" : "Reject"}
+                              </button>
+                              <Link
+                                href={`/daily-mail/register?id=${encodeURIComponent(req.letter_id || req.ref_no)}`}
+                                className="btn-notif-view"
+                                onClick={() => setShowNotifDropdown(false)}
+                              >
+                                {lang === "si" ? "ලිපිය බලන්න →" : "View Letter →"}
+                              </Link>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="admin-notification-empty">
+                          <svg style={{ width: "32px", height: "32px", color: "#10b981", margin: "0 auto 8px auto" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <div>{lang === "si" ? "නව අනුමැති ඉල්ලීම් කිසිවක් නැත." : "No pending edit approval requests."}</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="divider-line" aria-hidden="true" />

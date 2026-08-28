@@ -10,8 +10,21 @@ import { Sidebar } from "@/components/Sidebar";
 import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
-import { getCurrentProfile } from "@/lib/auth";
-import { saveDailyMailRecordServer, saveDailyMailToNewTableServer, logAuditEventServer, getSubjectOfficersServer, getInstitutesServer, getDailyMailRecordsServer } from "@/lib/db-actions";
+import { getCurrentProfile, UserProfile } from "@/lib/auth";
+import {
+  saveDailyMailRecordServer,
+  saveDailyMailToNewTableServer,
+  logAuditEventServer,
+  getSubjectOfficersServer,
+  getInstitutesServer,
+  getDailyMailRecordsServer,
+  getRegisterOfficersServer,
+  verifyBranchAdminAuthorizationServer,
+  createLetterEditRequestServer,
+  getLetterEditRequestsServer,
+  updateLetterEditRequestStatusServer,
+  checkLetterEditApprovalStatusServer,
+} from "@/lib/db-actions";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
@@ -80,11 +93,73 @@ function RegisterComplaintForm() {
   const lang = i18n.language;
 
   const [isEditMode, setIsEditMode] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const [isSubsequentMode, setIsSubsequentMode] = useState(false);
   const [mounted, setMounted] = useState(false);
+
+  // User Profile & Branch Admin authorization state
+  const [currentUserProfile, setCurrentUserProfile] = useState<UserProfile | null>(null);
+  const [adminApproval, setAdminApproval] = useState<{
+    approved: boolean;
+    approverName: string;
+    approverRole: string;
+    approverId?: string;
+    approvedAt: string;
+  } | null>(null);
+  const [initialLoadedForm, setInitialLoadedForm] = useState<any>(null);
+
+  // Approval Request states (from PostgreSQL table dcmms_letter_edit_requests)
+  const [editRequest, setEditRequest] = useState<any>(null);
+  const [isLoadingApprovalStatus, setIsLoadingApprovalStatus] = useState(false);
+
+  // Send Approval Request Modal state
+  const [showRequestModal, setShowRequestModal] = useState(false);
+  const [requestReason, setRequestReason] = useState("");
+  const [targetAdminIdentifier, setTargetAdminIdentifier] = useState("");
+  const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
+
+  // Quick Branch Admin Direct Auth Modal state
+  const [showAdminAuthModal, setShowAdminAuthModal] = useState(false);
+  const [authAdminIdentifier, setAuthAdminIdentifier] = useState("");
+  const [authAdminPassword, setAuthAdminPassword] = useState("");
+  const [authError, setAuthError] = useState("");
+  const [isVerifyingAdmin, setIsVerifyingAdmin] = useState(false);
+  const [availableBranchAdmins, setAvailableBranchAdmins] = useState<any[]>([]);
+
+  // Toast notification state
+  const [toastMessage, setToastMessage] = useState("");
+  const [showToast, setShowToast] = useState(false);
+
   useEffect(() => {
     setMounted(true);
+    const initAuthAndAdmins = async () => {
+      const prof = await getCurrentProfile();
+      setCurrentUserProfile(prof);
+
+      // Load registered branch administrators for quick authorization
+      try {
+        const res = await getRegisterOfficersServer("Branch");
+        if (res && res.success && Array.isArray(res.data) && res.data.length > 0) {
+          setAvailableBranchAdmins(res.data);
+        }
+      } catch (e) {
+        console.warn("Could not load branch admins:", e);
+      }
+    };
+    initAuthAndAdmins();
   }, []);
+
+  const isCurrentUserBranchAdmin = Boolean(
+    currentUserProfile &&
+      (currentUserProfile.role === "admin" ||
+        currentUserProfile.role === "system_admin" ||
+        String(currentUserProfile.role).toLowerCase().includes("admin") ||
+        String(currentUserProfile.role).toLowerCase().includes("branch"))
+  );
+  const isBranchAdmin = isCurrentUserBranchAdmin;
+
+  const isFieldDisabled = isEditMode && !isEditing;
+
   const [currentCaseDetails, setCurrentCaseDetails] = useState<{
     letterNo: string;
     officerName: string;
@@ -146,13 +221,13 @@ function RegisterComplaintForm() {
   const [selectedPdf, setSelectedPdf] = useState<File | null>(null);
   const [isUploadingPdf, setIsUploadingPdf] = useState(false);
 
-  const isOfficerLocked = Boolean(isEditMode || initialOfficerName);
+  const isOfficerLocked = Boolean(isFieldDisabled || (initialOfficerName && !isEditing));
 
   // Sync document properties
   useEffect(() => {
     document.documentElement.lang = lang;
-    document.title = `${isEditMode ? t("editLetterTitle", "Edit Letter") : isSubsequentMode ? t("registerLetterForCurrentComplaintTitle", "Register New Letter for Current Complaint") : t("registerComplaintTitle")} | DCMMS`;
-  }, [lang, t, isEditMode, isSubsequentMode]);
+    document.title = `${isEditMode ? (isEditing ? (lang === "si" ? "ලිපිය සංස්කරණය" : "Edit Letter") : (lang === "si" ? "පූර්වයෙන් යොමු කළ ලිපි විස්තර" : "View Submitted Letter Details")) : isSubsequentMode ? t("registerLetterForCurrentComplaintTitle", "Register New Letter for Current Complaint") : t("registerComplaintTitle")} | DCMMS`;
+  }, [lang, t, isEditMode, isEditing, isSubsequentMode]);
 
   // Load subject officers and institutes on mount
   useEffect(() => {
@@ -538,7 +613,7 @@ function RegisterComplaintForm() {
           setInitialOfficerName(loadedOfficer);
         }
 
-        setFormState({
+        const loadedFormData = {
           id: String(found.id || id),
           letterNo: found.letter_no || found.letterNo || found.letter_number || "",
           senderName: found.sender || found.sender_name || found.senderName || found.senders_party || found.sender_party || "",
@@ -556,7 +631,11 @@ function RegisterComplaintForm() {
           isAnswerLetter: found.is_answer_letter === true || String(found.is_answer_letter) === "true",
           documentUrl: found.document_url || found.documentUrl || "",
           documentName: found.document_name || found.documentName || "",
-        });
+        };
+
+        setFormState(loadedFormData);
+        setInitialLoadedForm(loadedFormData);
+        refreshApprovalStatus(String(found.id || id), loadedFormData.refNo);
       };
 
       // 1. Try PostgreSQL via Server Action (handles daily_mail_letter_table, daily_mail, & dcmms_daily_mail)
@@ -623,6 +702,7 @@ function RegisterComplaintForm() {
 
     loadLetter();
   }, [searchParams]);
+
 
   // Submit Handler
   const handleSubmit = async (e: React.FormEvent) => {
@@ -1034,10 +1114,16 @@ function RegisterComplaintForm() {
 
         // Log audit event
         await logAuditEvent(
-          "REGISTER_DAILY_MAIL",
+          isEditMode ? "UPDATE_DAILY_MAIL_BY_BRANCH_ADMIN" : "REGISTER_DAILY_MAIL",
           "dcmms_daily_mail",
           newLetter.refNo,
-          { sender: newLetter.senderName, subject: newLetter.subject, officer: newLetter.officerName }
+          {
+            sender: newLetter.senderName,
+            subject: newLetter.subject,
+            officer: newLetter.officerName,
+            approvedBy: adminApproval?.approverName || currentUserProfile?.full_name || "Branch Administrator",
+            approvedAt: adminApproval?.approvedAt || new Date().toISOString(),
+          }
         );
 
         // success
@@ -1213,6 +1299,253 @@ function RegisterComplaintForm() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
+  // Load Edit Approval Request Status for current letter
+  const refreshApprovalStatus = async (letterIdToQuery?: string, refNoToQuery?: string) => {
+    const targetId = letterIdToQuery || formState.id || (typeof window !== "undefined" ? searchParams?.get("id") || "" : "");
+    const targetRef = refNoToQuery || formState.refNo || (typeof window !== "undefined" ? searchParams?.get("caseNo") || "" : "");
+    if (!targetId && !targetRef) return;
+
+    try {
+      setIsLoadingApprovalStatus(true);
+      const res = await checkLetterEditApprovalStatusServer(targetId, targetRef);
+      if (res && res.success) {
+        if (res.isApproved && res.latestRequest) {
+          setEditRequest(res.latestRequest);
+          setAdminApproval({
+            approved: true,
+            approverName: res.latestRequest.reviewed_by || "Branch Administrator",
+            approverRole: "Branch admin",
+            approvedAt: res.latestRequest.reviewed_at || new Date().toISOString(),
+          });
+        } else if (res.latestRequest) {
+          setEditRequest(res.latestRequest);
+        } else {
+          setEditRequest(null);
+        }
+      }
+    } catch (err) {
+      console.warn("Could not check approval status:", err);
+    } finally {
+      setIsLoadingApprovalStatus(false);
+    }
+  };
+
+  // 1. Submit Edit Approval Request to Branch Admin
+  const handleSendApprovalRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formState.id && !searchParams?.get("id")) {
+      alert("Letter ID is missing");
+      return;
+    }
+    if (!requestReason.trim()) {
+      alert(lang === "si" ? "කරුණාකර සංස්කරණය කිරීමට හේතුව ඇතුළත් කරන්න." : "Please enter the reason for editing.");
+      return;
+    }
+
+    try {
+      setIsSubmittingRequest(true);
+      const targetLetterId = formState.id || searchParams?.get("id") || "";
+      const targetRefNo = formState.refNo || searchParams?.get("caseNo") || targetLetterId;
+      const requesterName = currentUserProfile?.full_name || currentUserProfile?.email || "Daily Mail Officer";
+      const requesterEmail = currentUserProfile?.email || "";
+      const requesterRole = currentUserProfile?.role || "Daily Mail";
+
+      const res = await createLetterEditRequestServer({
+        letter_id: targetLetterId,
+        ref_no: targetRefNo,
+        requested_by: requesterName,
+        requester_email: requesterEmail,
+        requester_role: requesterRole,
+        target_branch_admin: targetAdminIdentifier || "All Branch Administrators",
+        reason: requestReason.trim(),
+      });
+
+      if (res && res.success) {
+        setEditRequest(res.data);
+        setShowRequestModal(false);
+        setRequestReason("");
+        setToastMessage(lang === "si" ? "ශාඛා පරිපාලක වෙත අනුමැති ඉල්ලීම සාර්ථකව යවන ලදී." : "Approval request sent to Branch Administrator successfully.");
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 4000);
+      } else {
+        alert(res?.error || "Failed to submit approval request");
+      }
+    } catch (err: any) {
+      console.error("Error sending approval request:", err);
+      alert("Failed to send approval request: " + (err?.message || "Server error"));
+    } finally {
+      setIsSubmittingRequest(false);
+    }
+  };
+
+  // 2. Branch Admin Approves Request
+  const handleApproveRequestByAdmin = async (requestId?: string) => {
+    const targetRequestId = requestId || editRequest?.id;
+    if (!targetRequestId) return;
+
+    try {
+      const adminName = currentUserProfile?.full_name || "Branch Administrator";
+      const res = await updateLetterEditRequestStatusServer({
+        requestId: targetRequestId,
+        status: "Approved",
+        reviewed_by: adminName,
+        reviewer_comments: "Approved by Branch Admin",
+      });
+
+      if (res && res.success) {
+        setEditRequest((prev: any) => ({
+          ...prev,
+          status: "Approved",
+          reviewed_by: adminName,
+          reviewed_at: new Date().toISOString(),
+        }));
+        setAdminApproval({
+          approved: true,
+          approverName: adminName,
+          approverRole: "Branch admin",
+          approvedAt: new Date().toISOString(),
+        });
+        setIsEditing(true);
+        setToastMessage(lang === "si" ? "ශාඛා පරිපාලක විසින් සංස්කරණය අනුමත කරන ලදී. දැන් පෝරමය වෙනස් කළ හැක." : "Edit request approved by Branch Admin. Form is now unlocked.");
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 4000);
+      } else {
+        alert(res?.error || "Failed to approve request");
+      }
+    } catch (err: any) {
+      console.error("Error approving request:", err);
+      alert("Failed to approve request: " + (err?.message || "Server error"));
+    }
+  };
+
+  // 3. Branch Admin Rejects Request
+  const handleRejectRequestByAdmin = async (requestId?: string) => {
+    const targetRequestId = requestId || editRequest?.id;
+    if (!targetRequestId) return;
+
+    const rejectionNotes = prompt(lang === "si" ? "ප්‍රතික්ෂේප කිරීමට හේතුව (විකල්ප):" : "Reason for rejection (optional):") || "";
+
+    try {
+      const adminName = currentUserProfile?.full_name || "Branch Administrator";
+      const res = await updateLetterEditRequestStatusServer({
+        requestId: targetRequestId,
+        status: "Rejected",
+        reviewed_by: adminName,
+        reviewer_comments: rejectionNotes,
+      });
+
+      if (res && res.success) {
+        setEditRequest((prev: any) => ({
+          ...prev,
+          status: "Rejected",
+          reviewed_by: adminName,
+          reviewed_at: new Date().toISOString(),
+          reviewer_comments: rejectionNotes,
+        }));
+        setIsEditing(false);
+        setToastMessage(lang === "si" ? "ඉල්ලීම ප්‍රතික්ෂේප කරන ලදී." : "Edit request rejected.");
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 4000);
+      } else {
+        alert(res?.error || "Failed to reject request");
+      }
+    } catch (err: any) {
+      console.error("Error rejecting request:", err);
+      alert("Failed to reject request: " + (err?.message || "Server error"));
+    }
+  };
+
+  // 4. Start Editing Form
+  const handleStartEdit = () => {
+    // If logged-in user is Branch Admin, unlock directly
+    if (isCurrentUserBranchAdmin) {
+      setAdminApproval({
+        approved: true,
+        approverName: currentUserProfile?.full_name || "Branch Administrator",
+        approverRole: currentUserProfile?.role || "Branch admin",
+        approvedAt: new Date().toISOString(),
+      });
+      setIsEditing(true);
+      setToastMessage(lang === "si" ? "ශාඛා පරිපාලක ලෙස සංස්කරණය සක්‍රිය විය." : "Unlocked for editing as Branch Administrator.");
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 3000);
+      return;
+    }
+
+    // If approval request was already granted by Branch Admin
+    if (editRequest && editRequest.status === "Approved") {
+      setAdminApproval({
+        approved: true,
+        approverName: editRequest.reviewed_by || "Branch Administrator",
+        approverRole: "Branch admin",
+        approvedAt: editRequest.reviewed_at || new Date().toISOString(),
+      });
+      setIsEditing(true);
+      setToastMessage(lang === "si" ? "අනුමත සංස්කරණ මාදිලිය සක්‍රිය විය." : "Approved edit mode active.");
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 3000);
+      return;
+    }
+
+    // If pending request exists, inform user
+    if (editRequest && editRequest.status === "Pending") {
+      alert(lang === "si" ? "ශාඛා පරිපාලක වෙත අනුමැති ඉල්ලීමක් දැනටමත් යවා ඇත. කරුණාකර අනුමැතිය ලැබෙන තෙක් රැඳී සිටින්න." : "An edit approval request is already pending with the Branch Administrator. Please wait for approval.");
+      return;
+    }
+
+    // Otherwise, open modal to send approval request
+    setShowRequestModal(true);
+  };
+
+  // 5. In-Person Direct Branch Admin Authorization
+  const handleAuthorizeAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError("");
+
+    if (!authAdminIdentifier.trim()) {
+      setAuthError(lang === "si" ? "ශාඛා පරිපාලක හඳුනාගැනීමේ අංකය හෝ ඊමේල් අවශ්‍යයි" : "Branch Admin email or employee ID is required");
+      return;
+    }
+
+    try {
+      setIsVerifyingAdmin(true);
+      const res = await verifyBranchAdminAuthorizationServer(authAdminIdentifier.trim(), authAdminPassword.trim());
+      if (res.success && res.data) {
+        setAdminApproval({
+          approved: true,
+          approverName: res.data.fullName || "Branch Administrator",
+          approverRole: res.data.role || "Branch admin",
+          approverId: res.data.id,
+          approvedAt: new Date().toISOString(),
+        });
+        setIsEditing(true);
+        setShowAdminAuthModal(false);
+        setAuthAdminPassword("");
+        setToastMessage(lang === "si" ? `ශාඛා පරිපාලක ${res.data.fullName} විසින් අනුමත කරන ලදී.` : `Authorized by Branch Admin: ${res.data.fullName}`);
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 4000);
+      } else {
+        setAuthError(res.error || (lang === "si" ? "වලංගු නොවන ශාඛා පරිපාලක මුරපදයකි" : "Invalid Branch Administrator credentials"));
+      }
+    } catch (err: any) {
+      console.error("Authorization verification failed:", err);
+      setAuthError(err?.message || "Failed to verify Branch Administrator authorization");
+    } finally {
+      setIsVerifyingAdmin(false);
+    }
+  };
+
+  // 6. Cancel Editing
+  const handleCancelEdit = () => {
+    if (initialLoadedForm) {
+      setFormState(initialLoadedForm);
+    }
+    setIsEditing(false);
+    setToastMessage(lang === "si" ? "සංස්කරණය අවලංගු කරන ලදී." : "Editing canceled. Reverted to original details.");
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 3000);
+  };
+
   if (!mounted) {
     return <div className="dashboard-container" style={{ minHeight: "100vh", opacity: 0 }}></div>;
   }
@@ -1361,14 +1694,18 @@ function RegisterComplaintForm() {
                 <div className="register-header-left">
                   <h1 className="register-title">
                     {isEditMode 
-                      ? (lang === "si" ? "පූර්වයෙන් යොමු කළ ලිපි විස්තර නැරඹීම" : t("viewSubmittedLetterTitle", "View Submitted Letter Details")) 
+                      ? (isEditing
+                          ? (lang === "si" ? "පූර්වයෙන් යොමු කළ ලිපි විස්තර සංස්කරණය" : lang === "ta" ? "சமர்ப்பிக்கப்பட்ட கடித விவரங்களைத் தொகுக்க" : "Edit Submitted Letter Details")
+                          : (lang === "si" ? "පූර්වයෙන් යොමු කළ ලිපි විස්තර නැරඹීම" : t("viewSubmittedLetterTitle", "View Submitted Letter Details"))) 
                       : isSubsequentMode 
                         ? t("registerLetterForCurrentComplaintTitle", "Register New Letter for Current Complaint") 
                         : t("registerComplaintTitle")}
                   </h1>
                   <p className="register-subtitle">
                     {isEditMode 
-                      ? (lang === "si" ? "පූර්වයෙන් ඇතුළත් කළ ලිපි දත්ත කියවීම සඳහා පමණි (වෙනස් කළ නොහැක)." : t("viewSubmittedLetterDesc", "Previously submitted letter data is read-only and cannot be modified.")) 
+                      ? (isEditing
+                          ? (lang === "si" ? `ශාඛා පරිපාලක අනුමැතිය ලදි: ${adminApproval?.approverName || "Branch Admin"}. අවශ්‍ය වෙනස්කම් සිදුකර සුරකින්න.` : lang === "ta" ? `கிளை நிர்வாகி அனுமதி வழங்கப்பட்டது: ${adminApproval?.approverName || "Branch Admin"}. திருத்தங்களை மேற்கொண்டு சேமிக்கவும்.` : `Authorized by Branch Administrator: ${adminApproval?.approverName || "Branch Admin"}. You can modify details and save changes.`)
+                          : (lang === "si" ? "පූර්වයෙන් ඇතුළත් කළ ලිපි දත්ත (කියවීම සඳහා පමණි). සංස්කරණය සඳහා ශාඛා පරිපාලක අනුමැතිය අවශ්‍ය වේ." : lang === "ta" ? "முன்பு சமர்ப்பிக்கப்பட்ட கடித விவரங்கள் (வாசிக்க மட்டுமே). திருத்துவதற்கு கிளை நிர்வாகி அனுமதி தேவை." : "Previously submitted letter data (Read-only). Editing requires Branch Administrator authorization.")) 
                       : t("registerComplaintDesc")}
                   </p>
                 </div>
@@ -1379,6 +1716,34 @@ function RegisterComplaintForm() {
                     </svg>
                     {t("backToHome")}
                   </Link>
+
+                  {/* Edit Button in Header for View Submitted Letter Details */}
+                  {isEditMode && !isEditing && (
+                    <button
+                      type="button"
+                      className="btn-header-edit"
+                      onClick={handleStartEdit}
+                      title={lang === "si" ? "ශාඛා පරිපාලක අනුමැතියෙන් සංස්කරණය කරන්න" : "Edit Letter (Branch Admin Authorization)"}
+                      aria-label="Edit Submitted Letter"
+                    >
+                      <svg className="btn-header-edit-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                      {lang === "si" ? "සංස්කරණය (ශාඛා පරිපාලක)" : lang === "ta" ? "திருத்துக (கிளை நிர்வாகி)" : t("editLetterTitle", "Edit Letter")}
+                    </button>
+                  )}
+
+                  {isEditMode && isEditing && (
+                    <button
+                      type="button"
+                      className="btn-auth-cancel"
+                      onClick={handleCancelEdit}
+                      style={{ borderColor: "#f87171", color: "#dc2626", fontWeight: 700 }}
+                    >
+                      ✕ {lang === "si" ? "සංස්කරණය අවලංගු කරන්න" : lang === "ta" ? "இரத்து செய்க" : "Cancel Edit"}
+                    </button>
+                  )}
+
                   {!isEditMode && (
                     <button
                       type="button"
@@ -1498,7 +1863,7 @@ function RegisterComplaintForm() {
                 <div className="subsequent-letters-table-card">
                   <h2 className="card-title-header">
                     <svg className="card-title-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 19v-8.93a2 2 0 01.89-1.664l8-5.333a2 2 0 012.22 0l8 5.333A2 2 0 0121 10.07V19M3 19a2 2 0 002 2h14a2 2 0 002-2M3 19l6.75-4.5M21 19l-6.75-4.5M3 10l6.75 4.5M21 10l-6.75 4.5m0 0l-2.25-1.5a2 2 0 00-2.22 0l-2.25 1.5" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 19v-8.93a2 2 0 01.89-1.664l8-5.333a2 2 0 012.22 0l8 5.333A2 2 0 0121 10.07V19M3 19a2 2 0 002-2h14a2 2 0 002-2M3 19l6.75-4.5M21 19l-6.75-4.5M3 10l6.75 4.5M21 10l-6.75 4.5m0 0l-2.25-1.5a2 2 0 00-2.22 0l-2.25 1.5" />
                     </svg>
                     {t("previousLettersForCase", "Previous Letters for This Case")}
                   </h2>
@@ -1539,30 +1904,366 @@ function RegisterComplaintForm() {
 
               {/* Form entries section */}
               <div className="entries-container">
-                {isEditMode && (
+                {/* Banner when viewing submitted letter in read-only mode */}
+                {/* ── Status Banners for View / Edit Mode ── */}
+                {isEditMode && isEditing && (
                   <div style={{
                     display: "flex",
                     alignItems: "center",
-                    gap: "12px",
+                    justifyContent: "space-between",
+                    gap: "14px",
+                    backgroundColor: "#ecfdf5",
+                    color: "#065f46",
+                    border: "1.5px solid #a7f3d0",
+                    padding: "16px 20px",
+                    borderRadius: "12px",
+                    marginBottom: "22px",
+                    fontWeight: 600,
+                    fontSize: "13.5px",
+                    flexWrap: "wrap",
+                    boxShadow: "0 2px 6px rgba(5, 150, 105, 0.08)"
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                      <div style={{
+                        width: "38px",
+                        height: "38px",
+                        borderRadius: "8px",
+                        backgroundColor: "#d1fae5",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0
+                      }}>
+                        <svg style={{ width: "22px", height: "22px", color: "#059669" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <div style={{ color: "#064e3b", fontWeight: 700, fontSize: "14px" }}>
+                          {lang === "si"
+                            ? `✓ ශාඛා පරිපාලක අනුමැතිය ලදි (${adminApproval?.approverName || "Branch Admin"}) — සංස්කරණය සක්‍රියයි`
+                            : lang === "ta"
+                            ? `✓ கிளை நிர்வாகி அனுமதி வழங்கப்பட்டது (${adminApproval?.approverName || "Branch Admin"}) — திருத்த முறைமை செயலில்`
+                            : `✓ Approved by Branch Administrator (${adminApproval?.approverName || "Branch Admin"}) — Form Editing Active`}
+                        </div>
+                        <div style={{ fontSize: "12.5px", color: "#047857", fontWeight: 500, marginTop: "2px" }}>
+                          {lang === "si"
+                            ? "අවශ්‍ය සියලු ක්ෂේත්‍ර වෙනස් කර අවසානයේ 'වෙනස්කම් සුරකින්න' බොත්තම ඔබන්න."
+                            : lang === "ta"
+                            ? "தேவையான புலங்களை மாற்றி, முடிவில் 'மாற்றங்களைச் சேமிக்கவும்' பொத்தானைக் கிளிக் செய்யவும்."
+                            : "Modify any details and click 'Save Changes' at the bottom to update the letter records."}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleCancelEdit}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        backgroundColor: "#ffffff",
+                        color: "#dc2626",
+                        border: "1px solid #fca5a5",
+                        borderRadius: "8px",
+                        padding: "8px 16px",
+                        fontSize: "13px",
+                        fontWeight: 700,
+                        cursor: "pointer"
+                      }}
+                    >
+                      ✕ {lang === "si" ? "සංස්කරණය අවලංගු කරන්න" : lang === "ta" ? "இரத்து" : "Cancel Edit"}
+                    </button>
+                  </div>
+                )}
+
+                {/* State A: Edit Request has been APPROVED by Branch Admin */}
+                {isEditMode && !isEditing && editRequest && editRequest.status === "Approved" && (
+                  <div style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "14px",
+                    backgroundColor: "#ecfdf5",
+                    color: "#065f46",
+                    border: "1.5px solid #6ee7b7",
+                    padding: "16px 20px",
+                    borderRadius: "12px",
+                    marginBottom: "22px",
+                    fontWeight: 600,
+                    fontSize: "13.5px",
+                    flexWrap: "wrap",
+                    boxShadow: "0 4px 12px rgba(16, 185, 129, 0.12)"
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                      <div style={{
+                        width: "38px",
+                        height: "38px",
+                        borderRadius: "8px",
+                        backgroundColor: "#d1fae5",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0
+                      }}>
+                        <svg style={{ width: "24px", height: "24px", color: "#059669" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <div style={{ color: "#064e3b", fontWeight: 700, fontSize: "14.5px" }}>
+                          {lang === "si"
+                            ? `✓ ශාඛා පරිපාලක අනුමැතිය හිමිවිය: ${editRequest.reviewed_by || "Branch Admin"}`
+                            : `✓ Edit Permission Granted by Branch Administrator: ${editRequest.reviewed_by || "Branch Admin"}`}
+                        </div>
+                        <div style={{ fontSize: "12.5px", color: "#047857", fontWeight: 500, marginTop: "2px" }}>
+                          {lang === "si"
+                            ? `අනුමත කළ දිනය: ${editRequest.reviewed_at ? new Date(editRequest.reviewed_at).toLocaleDateString() : 'මෑතකදී'}. ඔබට දැන් ලිපි දත්ත වෙනස් කළ හැක.`
+                            : `Approved on ${editRequest.reviewed_at ? new Date(editRequest.reviewed_at).toLocaleDateString() : 'recently'}. You can now unlock the form to make edits.`}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleStartEdit}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        backgroundColor: "#059669",
+                        color: "#ffffff",
+                        border: "none",
+                        borderRadius: "8px",
+                        padding: "9px 20px",
+                        fontSize: "13.5px",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        boxShadow: "0 3px 8px rgba(5, 150, 105, 0.3)",
+                        transition: "all 0.15s ease"
+                      }}
+                    >
+                      <svg style={{ width: "16px", height: "16px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                      {lang === "si" ? "පෝරමය සංස්කරණය අරඹන්න" : lang === "ta" ? "திருத்தலைத் தொடங்குக" : "Start Editing Form"}
+                    </button>
+                  </div>
+                )}
+
+                {/* State B: Edit Request is PENDING review by Branch Admin */}
+                {isEditMode && !isEditing && editRequest && editRequest.status === "Pending" && (
+                  <div style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "14px",
+                    backgroundColor: "#fffbeb",
+                    color: "#92400e",
+                    border: "1.5px solid #fde68a",
+                    padding: "16px 20px",
+                    borderRadius: "12px",
+                    marginBottom: "22px",
+                    fontWeight: 600,
+                    fontSize: "13.5px",
+                    flexWrap: "wrap",
+                    boxShadow: "0 4px 12px rgba(217, 119, 6, 0.08)"
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                      <div style={{
+                        width: "38px",
+                        height: "38px",
+                        borderRadius: "8px",
+                        backgroundColor: "#fef3c7",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0
+                      }}>
+                        <svg style={{ width: "24px", height: "24px", color: "#d97706" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <div style={{ color: "#78350f", fontWeight: 700, fontSize: "14px" }}>
+                          {lang === "si"
+                            ? `⏳ ශාඛා පරිපාලක වෙත අනුමැති ඉල්ලීම යවා ඇත (තත්ත්වය: අනුමැතිය බලාපොරොත්තුවෙන්)`
+                            : `⏳ Edit Approval Request Sent to Branch Administrator (Pending Review)`}
+                        </div>
+                        <div style={{ fontSize: "12.5px", color: "#b45309", fontWeight: 500, marginTop: "2px" }}>
+                          {lang === "si"
+                            ? `ඉල්ලුම්කරු: ${editRequest.requested_by} | හේතුව: "${editRequest.reason || 'විස්තර නැත'}"`
+                            : `Requested by ${editRequest.requested_by} • Reason: "${editRequest.reason || 'N/A'}"`}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                      {/* If current viewer is a Branch Admin, allow 1-click Approval right here */}
+                      {isCurrentUserBranchAdmin ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleApproveRequestByAdmin(editRequest.id)}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "6px",
+                              backgroundColor: "#059669",
+                              color: "#ffffff",
+                              border: "none",
+                              borderRadius: "8px",
+                              padding: "8px 18px",
+                              fontSize: "13px",
+                              fontWeight: 700,
+                              cursor: "pointer",
+                              boxShadow: "0 2px 6px rgba(5, 150, 105, 0.25)"
+                            }}
+                          >
+                            ✓ {lang === "si" ? "ඉල්ලීම අනුමත කරන්න" : "Approve Request"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRejectRequestByAdmin(editRequest.id)}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "6px",
+                              backgroundColor: "#ffffff",
+                              color: "#dc2626",
+                              border: "1px solid #fca5a5",
+                              borderRadius: "8px",
+                              padding: "8px 14px",
+                              fontSize: "13px",
+                              fontWeight: 600,
+                              cursor: "pointer"
+                            }}
+                          >
+                            ✕ {lang === "si" ? "ප්‍රතික්ෂේප කරන්න" : "Reject"}
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => refreshApprovalStatus()}
+                          disabled={isLoadingApprovalStatus}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "6px",
+                            backgroundColor: "#ffffff",
+                            color: "#92400e",
+                            border: "1px solid #fde68a",
+                            borderRadius: "8px",
+                            padding: "8px 16px",
+                            fontSize: "13px",
+                            fontWeight: 700,
+                            cursor: "pointer"
+                          }}
+                        >
+                          <span style={{ display: "inline-block", transform: isLoadingApprovalStatus ? "rotate(360deg)" : "none", transition: "transform 0.5s ease" }}>🔄</span>
+                          {lang === "si" ? "තත්ත්වය යාවත්කාලීන කරන්න" : "Check Status"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* State C: No Approval Request Sent or Rejected */}
+                {isEditMode && !isEditing && (!editRequest || (editRequest.status !== "Approved" && editRequest.status !== "Pending")) && (
+                  <div style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "14px",
                     backgroundColor: "#eff6ff",
                     color: "#1e40af",
-                    border: "1px solid #bfdbfe",
-                    padding: "14px 18px",
-                    borderRadius: "10px",
-                    marginBottom: "20px",
+                    border: "1.5px solid #bfdbfe",
+                    padding: "16px 20px",
+                    borderRadius: "12px",
+                    marginBottom: "22px",
                     fontWeight: 600,
-                    fontSize: "13.5px"
+                    fontSize: "13.5px",
+                    flexWrap: "wrap",
+                    boxShadow: "0 2px 6px rgba(37, 99, 235, 0.05)"
                   }}>
-                    <svg style={{ width: "22px", height: "22px", flexShrink: 0, color: "#2563eb" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                    </svg>
-                    <span>
-                      {lang === "si"
-                        ? "පූර්වයෙන් යොමු කළ ලිපි විස්තර (කියවීම සඳහා පමණි - වෙනස් කළ නොහැක)"
-                        : lang === "ta"
-                        ? "முன்பு சமர்ப்பிக்கப்பட்ட கடித விவரங்கள் (வாசிக்க மட்டுமே - திருத்த முடியாது)"
-                        : "Previously submitted letter details (Read-Only mode: Previously submitted data cannot be edited)"}
-                    </span>
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                      <div style={{
+                        width: "38px",
+                        height: "38px",
+                        borderRadius: "8px",
+                        backgroundColor: "#dbeafe",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0
+                      }}>
+                        <svg style={{ width: "20px", height: "20px", color: "#2563eb" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <div style={{ color: "#1e3a8a", fontWeight: 700, fontSize: "14px" }}>
+                          {lang === "si" ? "පූර්වයෙන් යොමු කළ ලිපි විස්තර (කියවීම සඳහා පමණි)" : lang === "ta" ? "முன்பு சமர்ப்பிக்கப்பட்ட கடித விவரங்கள்" : "Submitted Letter Details (Read-Only)"}
+                        </div>
+                        <div style={{ fontSize: "12.5px", color: "#3b82f6", fontWeight: 500, marginTop: "2px" }}>
+                          {lang === "si"
+                            ? "සංස්කරණය කිරීමට ශාඛා පරිපාලක (Branch Admin) වෙත අනුමැති ඉල්ලීමක් යවන්න හෝ සෘජුවම අනුමත කරගන්න."
+                            : "Editing requires approval from a Branch Administrator. Send an approval request to unlock this form."}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        onClick={() => setShowRequestModal(true)}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "8px",
+                          background: "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)",
+                          color: "#ffffff",
+                          border: "none",
+                          borderRadius: "8px",
+                          padding: "8px 18px",
+                          fontSize: "13px",
+                          fontWeight: 700,
+                          cursor: "pointer",
+                          boxShadow: "0 2px 8px rgba(217, 119, 6, 0.25)",
+                          transition: "all 0.15s ease"
+                        }}
+                      >
+                        <svg style={{ width: "16px", height: "16px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                        {lang === "si" ? "ශාඛා පරිපාලක අනුමැතිය ඉල්ලන්න" : lang === "ta" ? "நிர்வாகி அனுமதி கோருக" : "Request Edit Approval"}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setShowAdminAuthModal(true)}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          backgroundColor: "#2563eb",
+                          color: "#ffffff",
+                          border: "none",
+                          borderRadius: "8px",
+                          padding: "8px 16px",
+                          fontSize: "13px",
+                          fontWeight: 700,
+                          cursor: "pointer",
+                          boxShadow: "0 2px 6px rgba(37, 99, 235, 0.2)",
+                          transition: "all 0.15s ease"
+                        }}
+                      >
+                        <svg style={{ width: "15px", height: "15px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
+                        {lang === "si" ? "සෘජු අනුමැතිය" : "Direct Unlock"}
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -1586,13 +2287,13 @@ function RegisterComplaintForm() {
                         <input
                           id="letterNo"
                           type="text"
-                          disabled={isEditMode}
-                          readOnly={isEditMode}
+                          disabled={isFieldDisabled}
+                          readOnly={isFieldDisabled}
                           value={formState.letterNo}
                           onChange={(e) => setFormState({ ...formState, letterNo: e.target.value })}
                           placeholder={t("placeholderLetterNo")}
                           className="field-input"
-                          style={isEditMode ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
+                          style={isFieldDisabled ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
                         />
                       </div>
 
@@ -1603,13 +2304,13 @@ function RegisterComplaintForm() {
                           id="refNo"
                           type="text"
                           required
-                          disabled={isEditMode || isSubsequentMode}
-                          readOnly={isEditMode || isSubsequentMode}
+                          disabled={isFieldDisabled || isSubsequentMode}
+                          readOnly={isFieldDisabled || isSubsequentMode}
                           value={formState.refNo}
                           onChange={(e) => setFormState({ ...formState, refNo: e.target.value })}
                           placeholder={t("refPlaceholder")}
                           className="field-input"
-                          style={(isEditMode || isSubsequentMode) ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
+                          style={(isFieldDisabled || isSubsequentMode) ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
                         />
                       </div>
 
@@ -1618,11 +2319,11 @@ function RegisterComplaintForm() {
                         <label htmlFor="letterType" className="field-label">{t("letterType")}</label>
                         <select
                           id="letterType"
-                          disabled={isEditMode}
+                          disabled={isFieldDisabled}
                           value={formState.letterType}
                           onChange={(e) => setFormState({ ...formState, letterType: e.target.value })}
                           className="field-select"
-                          style={isEditMode ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
+                          style={isFieldDisabled ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
                         >
                           <option value="">{t("placeholderLetterType")}</option>
                           {receiptModes.map((mode) => (
@@ -1645,7 +2346,7 @@ function RegisterComplaintForm() {
                                 display: "inline-flex",
                                 alignItems: "center",
                                 gap: "8px",
-                                cursor: isEditMode ? "not-allowed" : "pointer",
+                                cursor: isFieldDisabled ? "not-allowed" : "pointer",
                                 userSelect: "none"
                               }}
                             >
@@ -1653,11 +2354,11 @@ function RegisterComplaintForm() {
                                 id="isAnswerYes"
                                 type="radio"
                                 name="isAnswerLetterRadio"
-                                disabled={isEditMode}
+                                disabled={isFieldDisabled}
                                 value="true"
                                 checked={String(formState.isAnswerLetter) === "true"}
                                 onChange={() => setFormState((prev) => ({ ...prev, isAnswerLetter: "true" }))}
-                                style={{ width: "18px", height: "18px", accentColor: "#0e162f", cursor: isEditMode ? "not-allowed" : "pointer" }}
+                                style={{ width: "18px", height: "18px", accentColor: "#0e162f", cursor: isFieldDisabled ? "not-allowed" : "pointer" }}
                               />
                               <span style={{ fontWeight: 700, color: "#0e162f", fontSize: "13px" }}>{t("yes", "Yes")}</span>
                             </label>
@@ -1669,7 +2370,7 @@ function RegisterComplaintForm() {
                                 display: "inline-flex",
                                 alignItems: "center",
                                 gap: "8px",
-                                cursor: isEditMode ? "not-allowed" : "pointer",
+                                cursor: isFieldDisabled ? "not-allowed" : "pointer",
                                 userSelect: "none"
                               }}
                             >
@@ -1677,11 +2378,11 @@ function RegisterComplaintForm() {
                                 id="isAnswerNo"
                                 type="radio"
                                 name="isAnswerLetterRadio"
-                                disabled={isEditMode}
+                                disabled={isFieldDisabled}
                                 value="false"
                                 checked={String(formState.isAnswerLetter) !== "true"}
                                 onChange={() => setFormState((prev) => ({ ...prev, isAnswerLetter: "false" }))}
-                                style={{ width: "18px", height: "18px", accentColor: "#0e162f", cursor: isEditMode ? "not-allowed" : "pointer" }}
+                                style={{ width: "18px", height: "18px", accentColor: "#0e162f", cursor: isFieldDisabled ? "not-allowed" : "pointer" }}
                               />
                               <span style={{ fontWeight: 700, color: "#0e162f", fontSize: "13px" }}>{t("no", "No")}</span>
                             </label>
@@ -1703,13 +2404,13 @@ function RegisterComplaintForm() {
                         <input
                           id="senderName"
                           type="text"
-                          disabled={isEditMode}
-                          readOnly={isEditMode}
+                          disabled={isFieldDisabled}
+                          readOnly={isFieldDisabled}
                           value={formState.senderName}
                           onChange={(e) => setFormState({ ...formState, senderName: e.target.value })}
                           placeholder={t("senderPlaceholder")}
                           className="field-input"
-                          style={isEditMode ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
+                          style={isFieldDisabled ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
                         />
                       </div>
 
@@ -1718,11 +2419,11 @@ function RegisterComplaintForm() {
                         <label htmlFor="regionProvince" className="field-label">{t("regionProvince")}</label>
                         <select
                           id="regionProvince"
-                          disabled={isEditMode}
+                          disabled={isFieldDisabled}
                           value={formState.regionProvince}
                           onChange={(e) => setFormState({ ...formState, regionProvince: e.target.value })}
                           className="field-select"
-                          style={isEditMode ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
+                          style={isFieldDisabled ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
                         >
                           <option value="">{t("selectClassification")}</option>
                           {letterNatures.map((nature) => (
@@ -1738,11 +2439,11 @@ function RegisterComplaintForm() {
                         <label htmlFor="subjectCategory" className="field-label">{t("subjectCategory")}</label>
                         <select
                           id="subjectCategory"
-                          disabled={isEditMode}
+                          disabled={isFieldDisabled}
                           value={formState.subjectCategory}
                           onChange={(e) => setFormState({ ...formState, subjectCategory: e.target.value })}
                           className="field-select"
-                          style={isEditMode ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
+                          style={isFieldDisabled ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
                         >
                           <option value="">{t("selectCategory", "Select category...")}</option>
                           {letterClassifications.map((item) => (
@@ -1768,13 +2469,13 @@ function RegisterComplaintForm() {
                           id="subject"
                           type="text"
                           required
-                          disabled={isEditMode}
-                          readOnly={isEditMode}
+                          disabled={isFieldDisabled}
+                          readOnly={isFieldDisabled}
                           value={formState.subject}
                           onChange={(e) => setFormState({ ...formState, subject: e.target.value })}
                           placeholder={t("subjectPlaceholder")}
                           className="field-input"
-                          style={isEditMode ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
+                          style={isFieldDisabled ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
                         />
                       </div>
 
@@ -1786,12 +2487,12 @@ function RegisterComplaintForm() {
                             id="receivedDate"
                             type="date"
                             required
-                            disabled={isEditMode}
-                            readOnly={isEditMode}
+                            disabled={isFieldDisabled}
+                            readOnly={isFieldDisabled}
                             value={formState.receivedDate}
                             onChange={(e) => setFormState({ ...formState, receivedDate: e.target.value })}
                             className="field-input input-with-right-icon"
-                            style={isEditMode ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
+                            style={isFieldDisabled ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
                           />
                           <div className="input-right-icons">
                             <svg className="input-right-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -1809,12 +2510,12 @@ function RegisterComplaintForm() {
                             id="letterDate"
                             type="date"
                             required
-                            disabled={isEditMode}
-                            readOnly={isEditMode}
+                            disabled={isFieldDisabled}
+                            readOnly={isFieldDisabled}
                             value={formState.letterDate}
                             onChange={(e) => setFormState({ ...formState, letterDate: e.target.value })}
                             className="field-input input-with-right-icon"
-                            style={isEditMode ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
+                            style={isFieldDisabled ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
                           />
                           <div className="input-right-icons">
                             <svg className="input-right-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -1858,7 +2559,7 @@ function RegisterComplaintForm() {
                               }}
                               placeholder={t("selectSubjectOfficer")}
                               className="field-input searchable-select-input"
-                              style={isOfficerLocked ? { backgroundColor: "#f1f5f9", cursor: "not-allowed", opacity: 0.9, fontWeight: 700, borderColor: "#cbd5e1" } : {}}
+                              style={isOfficerLocked ? { backgroundColor: "#f1f5f9", cursor: "not-allowed", opacity: 0.9, fontWeight: 700, borderColor: "#cbd5e1" } : { cursor: "pointer" }}
                             />
                             <div className="searchable-select-icons">
                               {formState.officerName && !isOfficerLocked && (
@@ -1959,7 +2660,7 @@ function RegisterComplaintForm() {
                                     ))
                                 ) : (
                                   <div className="searchable-select-no-options">
-                                    {lang === "si" ? "ගැලපෙන විෂය ලිපිකරුවන් හමු නොවුණි" : lang === "ta" ? "பொருந்தக்கூடிய அதிகாரிகள் இல்லை" : "No matching subject officers found"}
+                                    {lang === "si" ? "ගැලපෙන විෂය ලිපිකරුවන් හමු නොවුණි" : lang === "ta" ? "පொருந்தக்கூடிய அதிகாரிகள் இல்லை" : "No matching subject officers found"}
                                   </div>
                                 )}
                               </div>
@@ -1976,11 +2677,11 @@ function RegisterComplaintForm() {
                           <div className="select-wrapper" style={{ flex: 1 }}>
                             <select
                               id="priority"
-                              disabled={isEditMode}
+                              disabled={isFieldDisabled}
                               value={formState.priority}
                               onChange={(e) => setFormState({ ...formState, priority: e.target.value as any })}
                               className="field-select"
-                              style={isEditMode ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
+                              style={isFieldDisabled ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
                             >
                               <option value="high" className="priority-option-high">{t("priorityHigh")}</option>
                               <option value="medium" className="priority-option-medium">{t("priorityMedium")}</option>
@@ -2007,7 +2708,7 @@ function RegisterComplaintForm() {
                       {lang === "si" ? "ලිපියේ PDF පිටපත අමුණන්න" : lang === "ta" ? "PDF ஆவணத்தை இணைக்கவும்" : "Attach PDF Document (Complaint / Letter)"}
                     </h3>
                     <div style={{ padding: "12px 0" }}>
-                      {/* If existing document exists in edit mode */}
+                      {/* If existing document exists */}
                       {formState.documentUrl && (
                         <div style={{
                           display: "flex",
@@ -2026,7 +2727,7 @@ function RegisterComplaintForm() {
                                 {formState.documentName || "Attached_Document.pdf"}
                               </div>
                               <div style={{ fontSize: "12px", color: "#64748b" }}>
-                                {lang === "si" ? "පවතින ලේඛනය සුරක්ෂිතව ගබඩා කර ඇත" : lang === "ta" ? "இணைக்கப்பட்ட ஆவணம் சேமிக்கப்பட்டுள்ளது" : "Attached document stored in PostgreSQL"}
+                                {lang === "si" ? "පවතින ලේඛනය සුරක්ෂිතව ගබඩා කර ඇත" : lang === "ta" ? "இணைக்கப்பட்ட ஆவணம் சேமிக்கப்பட்டுள்ளது" : "Attached document stored securely in system"}
                               </div>
                             </div>
                           </div>
@@ -2055,8 +2756,8 @@ function RegisterComplaintForm() {
                         </div>
                       )}
 
-                      {/* File upload input */}
-                      {!isEditMode && (
+                      {/* File upload input: available in new letter mode OR active edit mode */}
+                      {(!isEditMode || isEditing) && (
                         <div>
                           <input
                             id="pdfUploadInput"
@@ -2097,7 +2798,7 @@ function RegisterComplaintForm() {
                               <path strokeLinecap="round" strokeLinejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                             </svg>
                             <span style={{ fontSize: "14px", fontWeight: 600, color: "#1e293b" }}>
-                              {selectedPdf ? selectedPdf.name : (lang === "si" ? "PDF ගොනුවක් තෝරන්න (හෝ මෙහි ඇද දමන්න)" : lang === "ta" ? "PDF கோப்பைத் தேர்ந்தெடுக்கவும்" : "Click to select or browse a PDF document")}
+                              {selectedPdf ? selectedPdf.name : (formState.documentUrl ? (lang === "si" ? "නව PDF ගොනුවක් තෝරා පවතින ගොනුව ප්‍රතිස්ථාපනය කරන්න" : "Select new PDF to replace existing document") : (lang === "si" ? "PDF ගොනුවක් තෝරන්න (හෝ මෙහි ඇද දමන්න)" : lang === "ta" ? "PDF கோப்பைத் தேர்ந்தெடுக்கவும்" : "Click to select or browse a PDF document"))}
                             </span>
                             <span style={{ fontSize: "12px", color: "#64748b", marginTop: "4px" }}>
                               {selectedPdf ? `${(selectedPdf.size / 1024).toFixed(1)} KB — ready to upload` : (lang === "si" ? "උපරිම ප්‍රමාණය: 25MB (PDF පමණි)" : lang === "ta" ? "அதிகபட்ச அளவு: 25MB (PDF மட்டும்)" : "Supports PDF files up to 25MB")}
@@ -2132,21 +2833,88 @@ function RegisterComplaintForm() {
 
                   {/* Form Action Buttons */}
                   <div className="register-form-actions">
-                    <button
-                      type="button"
-                      className="btn-action-cancel"
-                      onClick={() => router.push("/daily-mail")}
-                    >
-                      {isEditMode ? (lang === "si" ? "නැවත ප්‍රධාන පුවරුවට" : lang === "ta" ? "முகப்புக்குச் செல்" : "Back to Dashboard") : t("cancelBtn")}
-                    </button>
-
-                    {!isEditMode && (
-                      <button
-                        type="submit"
-                        className="btn-action-submit"
-                      >
-                        {t("submitBtn")}
-                      </button>
+                    {isEditMode && !isEditing ? (
+                      <>
+                        <button
+                          type="button"
+                          className="btn-action-cancel"
+                          onClick={() => router.push("/daily-mail")}
+                        >
+                          {lang === "si" ? "නැවත ප්‍රධාන පුවරුවට" : lang === "ta" ? "முகப்புக்குச் செல்" : "Back to Dashboard"}
+                        </button>
+                        {editRequest && editRequest.status === "Approved" ? (
+                          <button
+                            type="button"
+                            className="btn-action-edit-trigger"
+                            onClick={handleStartEdit}
+                            style={{ backgroundColor: "#059669", boxShadow: "0 4px 12px rgba(5, 150, 105, 0.3)" }}
+                          >
+                            <svg style={{ width: "18px", height: "18px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                            {lang === "si" ? "සංස්කරණය අරඹන්න (අනුමතයි)" : "Start Editing (Approved)"}
+                          </button>
+                        ) : editRequest && editRequest.status === "Pending" ? (
+                          <button
+                            type="button"
+                            className="btn-action-edit-trigger"
+                            onClick={() => isCurrentUserBranchAdmin ? handleApproveRequestByAdmin() : refreshApprovalStatus()}
+                            style={{ backgroundColor: "#d97706", boxShadow: "0 4px 12px rgba(217, 119, 6, 0.25)" }}
+                          >
+                            <span style={{ fontSize: "16px" }}>⏳</span>
+                            {isCurrentUserBranchAdmin
+                              ? (lang === "si" ? "ඉල්ලීම අනුමත කරන්න (පරිපාලක)" : "Approve Edit Request (Admin)")
+                              : (lang === "si" ? "අනුමැතිය බලාපොරොත්තුවෙන්..." : "Approval Pending (Click to check)")}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn-action-edit-trigger"
+                            onClick={() => setShowRequestModal(true)}
+                          >
+                            <svg style={{ width: "18px", height: "18px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                            </svg>
+                            {lang === "si" ? "ශාඛා පරිපාලක අනුමැතිය ඉල්ලන්න" : lang === "ta" ? "நிர்வாகி அனுமதி கோருக" : "Request Edit Approval"}
+                          </button>
+                        )}
+                      </>
+                    ) : isEditMode && isEditing ? (
+                      <>
+                        <button
+                          type="button"
+                          className="btn-action-cancel"
+                          onClick={handleCancelEdit}
+                        >
+                          {lang === "si" ? "සංස්කරණය අවලංගු කරන්න" : lang === "ta" ? "இரத்து செய்க" : "Cancel Edit"}
+                        </button>
+                        <button
+                          type="submit"
+                          className="btn-action-submit"
+                          style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}
+                        >
+                          <svg style={{ width: "18px", height: "18px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                          {lang === "si" ? "වෙනස්කම් සුරකින්න" : lang === "ta" ? "மாற்றங்களைச் சேமிக்கவும்" : "Save Changes"}
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          className="btn-action-cancel"
+                          onClick={() => router.push("/daily-mail")}
+                        >
+                          {t("cancelBtn")}
+                        </button>
+                        <button
+                          type="submit"
+                          className="btn-action-submit"
+                        >
+                          {t("submitBtn")}
+                        </button>
+                      </>
                     )}
                   </div>
 
@@ -2155,6 +2923,294 @@ function RegisterComplaintForm() {
 
             </div>
           </section>
+
+          {/* Send Approval Request to Branch Administrator Modal */}
+          {showRequestModal && (
+            <div className="admin-auth-modal-backdrop" onClick={() => setShowRequestModal(false)}>
+              <div className="admin-auth-modal-box" onClick={(e) => e.stopPropagation()}>
+                <div className="admin-auth-modal-header" style={{ background: "linear-gradient(135deg, #1e3a8a 0%, #0f172a 100%)" }}>
+                  <div className="admin-auth-modal-title">
+                    <svg style={{ width: "22px", height: "22px", color: "#60a5fa" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                    <span>
+                      {lang === "si" ? "ශාඛා පරිපාලක අනුමැති ඉල්ලීම යැවීම" : lang === "ta" ? "நிர்வாகியிடம் அனுமதி கோருதல்" : "Send Edit Approval Request to Branch Admin"}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="admin-auth-modal-close"
+                    onClick={() => setShowRequestModal(false)}
+                    aria-label="Close modal"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <form onSubmit={handleSendApprovalRequest}>
+                  <div className="admin-auth-modal-body">
+                    <p className="admin-auth-modal-desc">
+                      {lang === "si"
+                        ? "පූර්වයෙන් යොමු කළ ලිපි විස්තර සංස්කරණය කිරීමට ශාඛා පරිපාලකවරයෙකුගේ අනුමැතිය අවශ්‍ය වේ. ඔබගේ ඉල්ලීම සහ හේතුව පහත ඇතුළත් කරන්න."
+                        : lang === "ta"
+                        ? "கடித விவரங்களைத் திருத்த கிளை நிர்வாகியின் அனுமதி தேவை. உங்கள் கோரிக்கையையும் காரணத்தையும் கீழே உள்ளிடவும்."
+                        : "Editing submitted letter details is protected. Submit an approval request to the Branch Administrator with the reason for modification."}
+                    </p>
+
+                    <div className="admin-auth-info-card" style={{ backgroundColor: "#eff6ff", borderColor: "#bfdbfe", color: "#1e40af" }}>
+                      <svg style={{ width: "20px", height: "20px", color: "#2563eb", flexShrink: 0, marginTop: "1px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span>
+                        {lang === "si"
+                          ? `ලිපි අංකය: ${formState.letterNo || "—"} | යොමු අංකය: ${formState.refNo || "—"}`
+                          : `Letter No: ${formState.letterNo || "—"} • Ref No: ${formState.refNo || "—"}`}
+                      </span>
+                    </div>
+
+                    <div className="form-field-group">
+                      <label className="field-label" htmlFor="targetAdminSelect">
+                        {lang === "si" ? "ඉලක්කගත ශාඛා පරිපාලක" : "Target Branch Administrator"}
+                      </label>
+                      <select
+                        id="targetAdminSelect"
+                        value={targetAdminIdentifier}
+                        onChange={(e) => setTargetAdminIdentifier(e.target.value)}
+                        className="field-select"
+                      >
+                        <option value="">-- {lang === "si" ? "සියලුම ශාඛා පරිපාලකවරුන්ට (All Branch Admins)" : "All Branch Administrators"} --</option>
+                        {availableBranchAdmins.map((adm: any) => (
+                          <option key={adm.id} value={adm.full_name || adm.email}>
+                            {adm.full_name || adm.employee_no} ({adm.email || adm.employee_no})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="form-field-group">
+                      <label className="field-label" htmlFor="requestReason">
+                        {lang === "si" ? "සංස්කරණය කිරීමට හේතුව" : "Reason for Edit / Modification"} <span className="required-star">*</span>
+                      </label>
+                      <textarea
+                        id="requestReason"
+                        required
+                        rows={3}
+                        value={requestReason}
+                        onChange={(e) => setRequestReason(e.target.value)}
+                        placeholder={lang === "si" ? "උදා: යවන පාර්ශ්වයේ තොරතුරු නිවැරදි කිරීම, විෂය ලිපිකරු සංශෝධනය..." : "e.g. Need to update sender details, rectify subject officer assignment..."}
+                        className="field-input"
+                        style={{ height: "80px", resize: "vertical", padding: "10px" }}
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+
+                  <div className="admin-auth-modal-actions">
+                    <button
+                      type="button"
+                      className="btn-auth-cancel"
+                      onClick={() => setShowRequestModal(false)}
+                      disabled={isSubmittingRequest}
+                    >
+                      {lang === "si" ? "අවලංගු කරන්න" : "Cancel"}
+                    </button>
+                    <button
+                      type="submit"
+                      className="btn-auth-submit"
+                      disabled={isSubmittingRequest}
+                      style={{ background: "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)" }}
+                    >
+                      {isSubmittingRequest ? (
+                        <>
+                          <span style={{ display: "inline-block", width: "14px", height: "14px", border: "2px solid #ffffff", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                          {lang === "si" ? "යවමින්..." : "Sending..."}
+                        </>
+                      ) : (
+                        <>
+                          <svg style={{ width: "16px", height: "16px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                          </svg>
+                          {lang === "si" ? "ඉල්ලීම යවන්න" : "Send Approval Request"}
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Branch Administrator Authorization Modal */}
+          {showAdminAuthModal && (
+            <div className="admin-auth-modal-backdrop" onClick={() => setShowAdminAuthModal(false)}>
+              <div className="admin-auth-modal-box" onClick={(e) => e.stopPropagation()}>
+                <div className="admin-auth-modal-header">
+                  <div className="admin-auth-modal-title">
+                    <svg style={{ width: "22px", height: "22px", color: "#38bdf8" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                    </svg>
+                    <span>
+                      {lang === "si" ? "ශාඛා පරිපාලක අනුමැතිය (Branch Admin Authorization)" : lang === "ta" ? "கிளை நிர்வாகி அனுமதி" : "Branch Admin Authorization Required"}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="admin-auth-modal-close"
+                    onClick={() => setShowAdminAuthModal(false)}
+                    aria-label="Close modal"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <form onSubmit={handleAuthorizeAdmin}>
+                  <div className="admin-auth-modal-body">
+                    <p className="admin-auth-modal-desc">
+                      {lang === "si"
+                        ? "පූර්වයෙන් යොමු කළ ලිපි විස්තර සංස්කරණය කිරීමට ශාඛා පරිපාලකවරයෙකුගේ අනුමැතිය සහ මුරපද සත්‍යාපනය අවශ්‍ය වේ."
+                        : lang === "ta"
+                        ? "சமர்ப்பிக்கப்பட்ட கடித விவரங்களைத் திருத்த கிளை நிர்வாகியின் அனுமதியும் கடவுச்சொல் சரிபார்ப்பும் தேவை."
+                        : "Editing submitted letter details is restricted. Please provide Branch Administrator credentials to authorize editing."}
+                    </p>
+
+                    <div className="admin-auth-info-card">
+                      <svg style={{ width: "20px", height: "20px", color: "#d97706", flexShrink: 0, marginTop: "1px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span>
+                        {lang === "si"
+                          ? "අනුමත ශාඛා පරිපාලකවරයාගේ ඊමේල් ලිපිනය හෝ සේවක අංකය තෝරා මුරපදය ඇතුළත් කරන්න."
+                          : "Select or enter the Branch Administrator email / employee ID and enter password to unlock."}
+                      </span>
+                    </div>
+
+                    {authError && (
+                      <div className="admin-auth-error-alert">
+                        <svg style={{ width: "18px", height: "18px", flexShrink: 0 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <span>{authError}</span>
+                      </div>
+                    )}
+
+                    <div className="form-field-group">
+                      <label className="field-label" htmlFor="adminIdentifier">
+                        {lang === "si" ? "ශාඛා පරිපාලක (ඊමේල් / සේවක අංකය)" : "Branch Administrator (Email / Employee ID)"} <span className="required-star">*</span>
+                      </label>
+                      {availableBranchAdmins.length > 0 ? (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                          <select
+                            id="adminIdentifierSelect"
+                            value={authAdminIdentifier}
+                            onChange={(e) => setAuthAdminIdentifier(e.target.value)}
+                            className="field-select"
+                          >
+                            <option value="">-- {lang === "si" ? "ශාඛා පරිපාලක තෝරන්න" : "Select Branch Administrator"} --</option>
+                            {availableBranchAdmins.map((adm: any) => (
+                              <option key={adm.id} value={adm.email || adm.employee_no}>
+                                {adm.full_name || adm.employee_no} ({adm.email || adm.employee_no})
+                              </option>
+                            ))}
+                          </select>
+                          <input
+                            id="adminIdentifierManual"
+                            type="text"
+                            value={authAdminIdentifier}
+                            onChange={(e) => setAuthAdminIdentifier(e.target.value)}
+                            placeholder="or type email/employee number..."
+                            className="field-input"
+                            style={{ fontSize: "12px", height: "36px" }}
+                          />
+                        </div>
+                      ) : (
+                        <input
+                          id="adminIdentifier"
+                          type="text"
+                          required
+                          value={authAdminIdentifier}
+                          onChange={(e) => setAuthAdminIdentifier(e.target.value)}
+                          placeholder="e.g. branch_admin@moe.gov.lk or 200133702441"
+                          className="field-input"
+                          autoFocus
+                        />
+                      )}
+                    </div>
+
+                    <div className="form-field-group">
+                      <label className="field-label" htmlFor="adminPassword">
+                        {lang === "si" ? "ශාඛා පරිපාලක මුරපදය" : "Branch Admin Password"} <span className="required-star">*</span>
+                      </label>
+                      <input
+                        id="adminPassword"
+                        type="password"
+                        required
+                        value={authAdminPassword}
+                        onChange={(e) => setAuthAdminPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className="field-input"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="admin-auth-modal-actions">
+                    <button
+                      type="button"
+                      className="btn-auth-cancel"
+                      onClick={() => setShowAdminAuthModal(false)}
+                      disabled={isVerifyingAdmin}
+                    >
+                      {lang === "si" ? "අවලංගු කරන්න" : lang === "ta" ? "இரத்து" : "Cancel"}
+                    </button>
+                    <button
+                      type="submit"
+                      className="btn-auth-submit"
+                      disabled={isVerifyingAdmin}
+                    >
+                      {isVerifyingAdmin ? (
+                        <>
+                          <span style={{ display: "inline-block", width: "14px", height: "14px", border: "2px solid #ffffff", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                          {lang === "si" ? "සත්‍යාපනය වෙමින්..." : "Verifying..."}
+                        </>
+                      ) : (
+                        <>
+                          <svg style={{ width: "16px", height: "16px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                          </svg>
+                          {lang === "si" ? "අනුමත කර සංස්කරණය අරඹන්න" : lang === "ta" ? "அனுமதித்து திருத்துக" : "Authorize & Unlock"}
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Toast Notification */}
+          {showToast && (
+            <div style={{
+              position: "fixed",
+              bottom: "24px",
+              right: "24px",
+              backgroundColor: "#0f172a",
+              color: "#ffffff",
+              padding: "14px 20px",
+              borderRadius: "10px",
+              boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.3)",
+              zIndex: 9999,
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              fontSize: "13.5px",
+              fontWeight: 600,
+              animation: "fadeIn 0.25s ease-out"
+            }}>
+              <svg style={{ width: "20px", height: "20px", color: "#10b981", flexShrink: 0 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+              <span>{toastMessage}</span>
+            </div>
+          )}
 
           {/* Footer Branding Notice */}
           <SiteFooter />
