@@ -629,8 +629,58 @@ function RegisterComplaintForm() {
     e.preventDefault();
 
     // Enforce required fields validation
-    if (!formState.senderName || !formState.refNo) {
-      alert("Please fill in all required fields (Reference Number and Sender's Party).");
+    if (!formState.refNo) {
+      alert(
+        lang === "si"
+          ? "කරුණාකර යොමු අංකය ඇතුළත් කරන්න."
+          : lang === "ta"
+          ? "தயவுசெய்து குறிப்பு எண்ணை உள்ளிடவும்."
+          : "Please fill in the Reference Number."
+      );
+      return;
+    }
+
+    if (!formState.subject || !formState.subject.trim()) {
+      alert(
+        lang === "si"
+          ? "කරුණාකර ලිපියේ විෂය / කරුණ ඇතුළත් කරන්න."
+          : lang === "ta"
+          ? "தயவுசெய்து கடிதத்தின் விடயத்தை உள்ளிடவும்."
+          : "Please fill in the Subject / Matter of the letter."
+      );
+      return;
+    }
+
+    if (!formState.receivedDate) {
+      alert(
+        lang === "si"
+          ? "කරුණාකර අතිරේක ලේකම් වෙත ලැබුණු දිනය ඇතුළත් කරන්න."
+          : lang === "ta"
+          ? "தயவுசெய்து மேலதிக செயலாளரால் பெறப்பட்ட திகதியை உள்ளிடவும்."
+          : "Please select the Date received by additional secretary."
+      );
+      return;
+    }
+
+    if (!formState.letterDate) {
+      alert(
+        lang === "si"
+          ? "කරුණාකර විනය ශාඛාවට භාරදුන් දිනය ඇතුළත් කරන්න."
+          : lang === "ta"
+          ? "தயவுசெய்து ஒழுக்காற்றுப் பிரிவிடம் ஒப்படைக்கப்பட்ட திகதியை உள்ளிடவும்."
+          : "Please select the Date letter handed over to disciplinary branch."
+      );
+      return;
+    }
+
+    if (!formState.officerName || !formState.officerName.trim()) {
+      alert(
+        lang === "si"
+          ? "කරුණාකර විෂයභාර නිලධාරියා තෝරන්න."
+          : lang === "ta"
+          ? "தயவுசெய்து விடய உத்தியோகத்தரைத் தேர்ந்தெடுக்கவும்."
+          : "Please select a Subject Officer before submitting."
+      );
       return;
     }
 
@@ -1647,13 +1697,12 @@ function RegisterComplaintForm() {
                     <h3 className="register-step-title">{t("stepSenderDetails", "Sender Details")}</h3>
                     <div className="register-step-grid">
 
-                      {/* Sender's Party * */}
+                      {/* Sender's Party */}
                       <div className="form-field-group">
-                        <label htmlFor="senderName" className="field-label">{t("senderName")} <span className="required-star">*</span></label>
+                        <label htmlFor="senderName" className="field-label">{t("senderName")}</label>
                         <input
                           id="senderName"
                           type="text"
-                          required
                           disabled={isEditMode}
                           readOnly={isEditMode}
                           value={formState.senderName}
@@ -1712,12 +1761,13 @@ function RegisterComplaintForm() {
                     <h3 className="register-step-title">{t("stepLetterSubjectDates", "Letter Subject & Dates")}</h3>
                     <div className="register-step-grid">
 
-                      {/* Subject / Matter of the Letter */}
+                      {/* Subject / Matter of the Letter * */}
                       <div className="form-field-group">
-                        <label htmlFor="subject" className="field-label">{t("letterTitle")}</label>
+                        <label htmlFor="subject" className="field-label">{t("letterTitle")} <span className="required-star">*</span></label>
                         <input
                           id="subject"
                           type="text"
+                          required
                           disabled={isEditMode}
                           readOnly={isEditMode}
                           value={formState.subject}
@@ -1728,13 +1778,14 @@ function RegisterComplaintForm() {
                         />
                       </div>
 
-                      {/* Date Received by Additional Secretary */}
+                      {/* Date Received by Additional Secretary * */}
                       <div className="form-field-group">
-                        <label htmlFor="receivedDate" className="field-label">{t("receivedDate")}</label>
+                        <label htmlFor="receivedDate" className="field-label">{t("receivedDate")} <span className="required-star">*</span></label>
                         <div className="input-icon-wrapper">
                           <input
                             id="receivedDate"
                             type="date"
+                            required
                             disabled={isEditMode}
                             readOnly={isEditMode}
                             value={formState.receivedDate}
@@ -1750,13 +1801,14 @@ function RegisterComplaintForm() {
                         </div>
                       </div>
 
-                      {/* Date Letter Handed Over to Disciplinary Branch */}
+                      {/* Date Letter Handed Over to Disciplinary Branch * */}
                       <div className="form-field-group">
-                        <label htmlFor="letterDate" className="field-label">{t("letterDate")}</label>
+                        <label htmlFor="letterDate" className="field-label">{t("letterDate")} <span className="required-star">*</span></label>
                         <div className="input-icon-wrapper">
                           <input
                             id="letterDate"
                             type="date"
+                            required
                             disabled={isEditMode}
                             readOnly={isEditMode}
                             value={formState.letterDate}
@@ -1783,7 +1835,7 @@ function RegisterComplaintForm() {
                       {/* Subject Officer Name (Searchable & Filterable Select) */}
                       <div className="form-field-group" ref={officerDropdownRef}>
                         <label htmlFor="officerNameInput" className="field-label" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                          <span>{t("nameOfOfficer")}</span>
+                          <span>{t("nameOfOfficer")} <span className="required-star">*</span></span>
                           {isOfficerLocked && (
                             <span style={{ fontSize: "11px", fontWeight: 700, color: "#1e40af", backgroundColor: "#dbeafe", border: "1px solid #bfdbfe", padding: "2px 8px", borderRadius: "12px", display: "inline-flex", alignItems: "center", gap: "4px" }}>
                               <svg style={{ width: "12px", height: "12px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
