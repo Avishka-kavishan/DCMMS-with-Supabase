@@ -12,7 +12,7 @@ import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { getCurrentProfile, signOut, UserProfile } from "@/lib/auth";
-import { updateCaseByDateExtensionApprovalServer, saveCaseByAppointmentAndReportDueDateServer } from "@/lib/db-actions";
+import { updateCaseByDateExtensionApprovalServer, saveCaseByAppointmentAndReportDueDateServer, getRecommendationsListServer } from "@/lib/db-actions";
 import { CheckCircle, XCircle, FileText, Send, Clock, X, AlertCircle, ShieldCheck, Calendar as CalendarIcon, ChevronDown, ChevronUp, Bell, Eye, MoreHorizontal, Filter, Check, MailCheck, ClipboardList, Plus, Sparkles, ExternalLink, User, Building, ArrowRight, ShieldAlert, FileCheck, Layers, UserCheck } from "lucide-react";
 
 interface Case {
@@ -1078,36 +1078,30 @@ export default function SubjectOfficerDashboard() {
     const fetchRecommendations = async () => {
       let recList: any[] = [];
       try {
-        if (isSupabaseConfigured) {
-          const { data: recData, error } = await supabase
-            .from("dcmms_recommendations")
-            .select("*")
-            .order("created_at", { ascending: false });
-
-          if (!error && recData) {
-            recList = recData.map((r: any) => ({
-              id: r.id,
-              caseNo: r.case_no,
-              letterNo: r.letter_no,
-              category: r.category || "issuing_charge_sheet",
-              urgency: r.urgency || "normal",
-              title: r.title || "Preliminary Investigation Recommendation",
-              recommendationText: r.recommendation_text || "",
-              disciplinaryAction: r.disciplinary_action || "",
-              forwardTo: r.forward_to || "disciplinary_branch",
-              targetDate: r.target_date || "",
-              referenceNotes: r.reference_notes || "",
-              secretaryApprovalDate: r.secretary_approval_date || r.date_approved_by_secretary || r.secretaryApprovalDate || "",
-              secretaryApprovedRecommendation: r.secretary_approved_recommendation || r.recommendation_approved_by_secretary || r.secretaryApprovedRecommendation || "",
-              status: r.status || "Submitted",
-              submittedAt: r.submitted_at || r.created_at || "",
-              updatedAt: r.updated_at || r.created_at || "",
-              createdAt: r.created_at || "",
-            }));
-          }
+        const recsRes = await getRecommendationsListServer();
+        if (recsRes?.success && Array.isArray(recsRes.data)) {
+          recList = recsRes.data.map((r: any) => ({
+            id: r.id,
+            caseNo: r.caseNo || r.case_no,
+            letterNo: r.letterNo || r.letter_no,
+            category: r.category || "issuing_charge_sheet",
+            urgency: r.urgency || "normal",
+            title: r.title || "Preliminary Investigation Recommendation",
+            recommendationText: r.recommendationText || r.recommendation_text || "",
+            disciplinaryAction: r.disciplinaryAction || r.disciplinary_action || "",
+            forwardTo: r.forwardTo || r.forward_to || "disciplinary_branch",
+            targetDate: r.targetDate ? String(r.targetDate).slice(0, 10) : "",
+            referenceNotes: r.referenceNotes || r.reference_notes || "",
+            secretaryApprovalDate: r.secretaryApprovalDate ? String(r.secretaryApprovalDate).slice(0, 10) : "",
+            secretaryApprovedRecommendation: r.secretaryApprovedRecommendation || r.secretary_approved_recommendation || "",
+            status: r.status || "Submitted",
+            submittedAt: r.submittedAt || r.createdAt || "",
+            updatedAt: r.updatedAt || r.createdAt || "",
+            createdAt: r.createdAt || "",
+          }));
         }
       } catch (err) {
-        console.error("Error fetching recommendations from Supabase:", err);
+        console.error("Error fetching recommendations from PostgreSQL:", err);
       }
 
       if (typeof window !== "undefined") {

@@ -4210,6 +4210,534 @@ export async function getAuditLogsServer() {
   }
 }
 
+// -------------------------------------------------------------
+// 21. Investigation Recommendations Operations
+// -------------------------------------------------------------
+async function ensureRecommendationsTable() {
+  try {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS public.dcmms_recommendations (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        case_no VARCHAR(255) UNIQUE NOT NULL,
+        letter_no VARCHAR(255),
+        category VARCHAR(255),
+        urgency VARCHAR(50) DEFAULT 'normal',
+        title VARCHAR(255),
+        recommendation_text TEXT,
+        disciplinary_action TEXT,
+        forward_to VARCHAR(255),
+        target_date DATE,
+        reference_notes TEXT,
+        issued_charge_sheet TEXT,
+        charge_sheet_issued_date DATE,
+        charge_sheet_response_date DATE,
+        disciplinary_order TEXT,
+        secretary_approval_date DATE,
+        secretary_approved_recommendation TEXT,
+        status VARCHAR(50) DEFAULT 'Submitted',
+        submitted_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+  } catch (e: any) {
+    console.warn("Table creation warning for dcmms_recommendations:", e?.message);
+  }
+}
+
+export async function getAvailableCasesForRecommendationsServer() {
+  try {
+    await ensureRecommendationsTable();
+
+    const casesMap = new Map<string, any>();
+
+    // 1. Fetch from subject_officer_form_table
+    try {
+      const forms: any[] = await prisma.$queryRaw`
+        SELECT 
+          sof.id as form_id,
+          sof.ref_number,
+          sof.subject_file_no,
+          sof.name_of_the_presenting_the_complain as complainant_name,
+          sof.classification_of_complaint_letter,
+          sof.accused_officer_id,
+          sof.daily_mail_letter_id
+        FROM subject_officer_form_table sof
+        ORDER BY sof.created_at DESC;
+      `;
+
+      for (const form of forms) {
+        const cNo = (form.ref_number || form.subject_file_no || "").trim();
+        if (!cNo) continue;
+        const key = cNo.toLowerCase();
+
+        // Accused details via junction table or direct FK
+        let accusedName = "";
+        let accusedDesignation = "";
+        let schoolName = "";
+
+        const junctionOfficers: any[] = await prisma.$queryRaw`
+          SELECT 
+            ao.accused_officer_name,
+            ao.position,
+            sch.accused_school_name
+          FROM accused_officer_subject_officer_form_table j
+          JOIN accused_officer_table ao ON j.accused_officer_id = ao.id
+          LEFT JOIN accused_school_table sch ON ao.accused_school_id = sch.id
+          WHERE j.subject_officer_form_id = ${Number(form.form_id)}::bigint;
+        `;
+
+        if (junctionOfficers && junctionOfficers.length > 0) {
+          accusedName = junctionOfficers.map((o) => o.accused_officer_name).filter(Boolean).join(", ");
+          accusedDesignation = junctionOfficers.map((o) => o.position).filter(Boolean).join(", ");
+          schoolName = junctionOfficers.map((o) => o.accused_school_name).filter(Boolean).join(", ");
+        } else if (form.accused_officer_id) {
+          const directOfficer: any[] = await prisma.$queryRaw`
+            SELECT ao.accused_officer_name, ao.position, sch.accused_school_name
+            FROM accused_officer_table ao
+            LEFT JOIN accused_school_table sch ON ao.accused_school_id = sch.id
+            WHERE ao.id = ${form.accused_officer_id}::uuid
+            LIMIT 1;
+          `;
+          if (directOfficer && directOfficer.length > 0) {
+            accusedName = directOfficer[0].accused_officer_name || "";
+            accusedDesignation = directOfficer[0].position || "";
+            schoolName = directOfficer[0].accused_school_name || "";
+          }
+        }
+
+        // Check letter info
+        let letterNo = "";
+        let mailSubject = "";
+        try {
+          const mail: any[] = await prisma.$queryRaw`
+            SELECT letter_number, subject_of_letter, senders_party
+            FROM daily_mail_letter_table
+            WHERE LOWER(TRIM(ref_number)) = LOWER(${cNo})
+               OR id = ${Number(form.daily_mail_letter_id || 0)}
+            LIMIT 1;
+          `;
+          if (mail && mail.length > 0) {
+            letterNo = mail[0].letter_number || "";
+            if (mail[0].subject_of_letter && mail[0].subject_of_letter !== "N/A") {
+              mailSubject = mail[0].subject_of_letter;
+            }
+          }
+        } catch (e) {}
+
+        // Check dates
+        let initialCompletedDate = "";
+        try {
+          const appts: any[] = await prisma.$queryRaw`
+            SELECT report_due_date, appointment_letter_date
+            FROM case_by_appointment_and_report_due_date
+            WHERE LOWER(TRIM(subject_file_no)) = LOWER(${cNo})
+               OR LOWER(TRIM(sub_file_no)) = LOWER(${cNo})
+               OR subject_officer_form_id = ${Number(form.form_id)}::bigint
+            LIMIT 1;
+          `;
+          if (appts && appts.length > 0) {
+            if (appts[0].report_due_date) {
+              initialCompletedDate = new Date(appts[0].report_due_date).toISOString().slice(0, 10);
+            } else if (appts[0].appointment_letter_date) {
+              initialCompletedDate = new Date(appts[0].appointment_letter_date).toISOString().slice(0, 10);
+            }
+          }
+        } catch (e) {}
+
+        casesMap.set(key, {
+          caseNo: cNo,
+          letterNo,
+          complainantName: form.complainant_name || "",
+          accusedName,
+          accusedDesignation,
+          schoolName,
+          subject: mailSubject || form.classification_of_complaint_letter || "Formal disciplinary investigation",
+          initialCompletedDate,
+          hasRecommendation: false,
+          recStatus: "Awaiting Rec"
+        });
+      }
+    } catch (e) {
+      console.warn("Error fetching forms for recommendations:", e);
+    }
+
+    // 2. Fetch daily_mail_letter_table for other letters
+    try {
+      const dailyLetters: any[] = await prisma.$queryRaw`
+        SELECT 
+          id,
+          letter_number,
+          ref_number,
+          senders_party,
+          subject_of_letter
+        FROM daily_mail_letter_table
+        ORDER BY created_at DESC;
+      `;
+      for (const letter of dailyLetters) {
+        const cNo = (letter.ref_number || letter.letter_number || "").trim();
+        if (!cNo) continue;
+        const key = cNo.toLowerCase();
+
+        if (!casesMap.has(key)) {
+          casesMap.set(key, {
+            caseNo: cNo,
+            letterNo: letter.letter_number || "",
+            complainantName: letter.senders_party || "",
+            accusedName: "",
+            accusedDesignation: "",
+            schoolName: "",
+            subject: (letter.subject_of_letter && letter.subject_of_letter !== "N/A") ? letter.subject_of_letter : "General inquiry",
+            initialCompletedDate: "",
+            hasRecommendation: false,
+            recStatus: "Awaiting Rec"
+          });
+        } else {
+          const existing = casesMap.get(key);
+          if (letter.letter_number && !existing.letterNo) existing.letterNo = letter.letter_number;
+          if (letter.senders_party && !existing.complainantName) existing.complainantName = letter.senders_party;
+          if (letter.subject_of_letter && letter.subject_of_letter !== "N/A" && (!existing.subject || existing.subject === "Formal disciplinary investigation")) {
+            existing.subject = letter.subject_of_letter;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Error fetching letters for recommendations:", e);
+    }
+
+    // 3. Mark existing recommendations status
+    try {
+      const recs: any[] = await prisma.$queryRaw`
+        SELECT case_no, status FROM public.dcmms_recommendations;
+      `;
+      for (const r of recs) {
+        const key = (r.case_no || "").trim().toLowerCase();
+        if (casesMap.has(key)) {
+          const existing = casesMap.get(key);
+          existing.hasRecommendation = true;
+          existing.recStatus = r.status || "Submitted";
+        }
+      }
+    } catch (e) {}
+
+    return serializeForServerAction({ success: true, data: Array.from(casesMap.values()) });
+  } catch (error: any) {
+    console.error("Error in getAvailableCasesForRecommendationsServer:", error);
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to fetch available cases", data: [] });
+  }
+}
+
+export async function getCaseDetailsForRecommendationServer(caseRef: string) {
+  try {
+    await ensureRecommendationsTable();
+    const clean = (caseRef || "").trim();
+    if (!clean) {
+      return serializeForServerAction({ success: false, error: "Case reference is required" });
+    }
+
+    let complainantName = "";
+    let accusedName = "";
+    let accusedDesignation = "";
+    let schoolName = "";
+    let caseSubject = "";
+    let letterNo = "";
+    let initialCompletedDate = "";
+    let formId: any = null;
+    let actualSubNo = "";
+
+    // 1. Check subject_officer_form_table
+    try {
+      const forms: any[] = await prisma.$queryRaw`
+        SELECT 
+          sof.id as form_id,
+          sof.ref_number,
+          sof.subject_file_no,
+          sof.name_of_the_presenting_the_complain,
+          sof.classification_of_complaint_letter,
+          sof.accused_officer_id,
+          sof.daily_mail_letter_id
+        FROM subject_officer_form_table sof
+        WHERE LOWER(TRIM(sof.ref_number)) = LOWER(${clean})
+           OR LOWER(TRIM(sof.subject_file_no)) = LOWER(${clean})
+        LIMIT 1;
+      `;
+
+      if (forms && forms.length > 0) {
+        const form = forms[0];
+        formId = form.form_id;
+        actualSubNo = form.subject_file_no || "";
+        if (form.name_of_the_presenting_the_complain && form.name_of_the_presenting_the_complain.toLowerCase() !== "anonymous") {
+          complainantName = form.name_of_the_presenting_the_complain;
+        }
+
+        // Junction officers
+        const junctionOfficers: any[] = await prisma.$queryRaw`
+          SELECT 
+            ao.accused_officer_name,
+            ao.position,
+            sch.accused_school_name
+          FROM accused_officer_subject_officer_form_table j
+          JOIN accused_officer_table ao ON j.accused_officer_id = ao.id
+          LEFT JOIN accused_school_table sch ON ao.accused_school_id = sch.id
+          WHERE j.subject_officer_form_id = ${Number(form.form_id)}::bigint;
+        `;
+
+        if (junctionOfficers && junctionOfficers.length > 0) {
+          accusedName = junctionOfficers.map((o) => o.accused_officer_name).filter(Boolean).join(", ");
+          accusedDesignation = junctionOfficers.map((o) => o.position).filter(Boolean).join(", ");
+          schoolName = junctionOfficers.map((o) => o.accused_school_name).filter(Boolean).join(", ");
+        } else if (form.accused_officer_id) {
+          const directOfficer: any[] = await prisma.$queryRaw`
+            SELECT ao.accused_officer_name, ao.position, sch.accused_school_name
+            FROM accused_officer_table ao
+            LEFT JOIN accused_school_table sch ON ao.accused_school_id = sch.id
+            WHERE ao.id = ${form.accused_officer_id}::uuid
+            LIMIT 1;
+          `;
+          if (directOfficer && directOfficer.length > 0) {
+            accusedName = directOfficer[0].accused_officer_name || "";
+            accusedDesignation = directOfficer[0].position || "";
+            schoolName = directOfficer[0].accused_school_name || "";
+          }
+        }
+
+        // Classification
+        if (form.classification_of_complaint_letter) {
+          caseSubject = form.classification_of_complaint_letter;
+        }
+      }
+    } catch (e) {
+      console.warn("Error looking up form for case details:", e);
+    }
+
+    // 2. Query daily_mail_letter_table
+    try {
+      const mails: any[] = await prisma.$queryRaw`
+        SELECT letter_number, senders_party, subject_of_letter
+        FROM daily_mail_letter_table
+        WHERE LOWER(TRIM(ref_number)) = LOWER(${clean})
+           OR LOWER(TRIM(letter_number)) = LOWER(${clean})
+        ORDER BY id ASC
+        LIMIT 1;
+      `;
+      if (mails && mails.length > 0) {
+        if (mails[0].letter_number) letterNo = mails[0].letter_number;
+        if (!complainantName && mails[0].senders_party && mails[0].senders_party.toLowerCase() !== "anonymous") {
+          complainantName = mails[0].senders_party;
+        }
+        if (mails[0].subject_of_letter && mails[0].subject_of_letter !== "N/A") {
+          caseSubject = mails[0].subject_of_letter;
+        }
+      }
+    } catch (e) {}
+
+    // 3. Query case_by_appointment_and_report_due_date
+    try {
+      const formIdBigInt = formId ? Number(formId) : null;
+      const subNoTrimmed = actualSubNo ? actualSubNo.trim() : "";
+      const appts: any[] = await prisma.$queryRaw`
+        SELECT report_due_date, appointment_letter_date
+        FROM case_by_appointment_and_report_due_date
+        WHERE LOWER(TRIM(subject_file_no)) = LOWER(${clean})
+           OR LOWER(TRIM(sub_file_no)) = LOWER(${clean})
+           OR (${subNoTrimmed} != '' AND (LOWER(TRIM(subject_file_no)) = LOWER(${subNoTrimmed}) OR LOWER(TRIM(sub_file_no)) = LOWER(${subNoTrimmed})))
+           OR (${formIdBigInt}::bigint IS NOT NULL AND subject_officer_form_id = ${formIdBigInt}::bigint)
+        LIMIT 1;
+      `;
+      if (appts && appts.length > 0) {
+        if (appts[0].report_due_date) {
+          initialCompletedDate = new Date(appts[0].report_due_date).toISOString().slice(0, 10);
+        } else if (appts[0].appointment_letter_date) {
+          initialCompletedDate = new Date(appts[0].appointment_letter_date).toISOString().slice(0, 10);
+        }
+      }
+    } catch (e) {
+      console.warn("Appts query error:", e);
+    }
+
+    // 4. Query existing recommendation
+    let existingRec: any = null;
+    try {
+      const recs: any[] = await prisma.$queryRaw`
+        SELECT * FROM public.dcmms_recommendations
+        WHERE LOWER(TRIM(case_no)) = LOWER(${clean})
+           OR LOWER(TRIM(letter_no)) = LOWER(${clean})
+        LIMIT 1;
+      `;
+      if (recs && recs.length > 0) {
+        const r = recs[0];
+        existingRec = {
+          id: r.id,
+          caseNo: r.case_no,
+          letterNo: r.letter_no,
+          category: r.category || "issuing_charge_sheet",
+          urgency: r.urgency || "normal",
+          title: r.title || "Preliminary Investigation Recommendation",
+          recommendationText: r.recommendation_text || "",
+          disciplinaryAction: r.disciplinary_action || "",
+          forwardTo: r.forward_to || "disciplinary_branch",
+          targetDate: r.target_date ? new Date(r.target_date).toISOString().slice(0, 10) : "",
+          referenceNotes: r.reference_notes || "",
+          issuedChargeSheet: r.issued_charge_sheet || "",
+          chargeSheetIssuedDate: r.charge_sheet_issued_date ? new Date(r.charge_sheet_issued_date).toISOString().slice(0, 10) : "",
+          chargeSheetResponseDate: r.charge_sheet_response_date ? new Date(r.charge_sheet_response_date).toISOString().slice(0, 10) : "",
+          disciplinaryOrder: r.disciplinary_order || "",
+          secretaryApprovalDate: r.secretary_approval_date ? new Date(r.secretary_approval_date).toISOString().slice(0, 10) : "",
+          secretaryApprovedRecommendation: r.secretary_approved_recommendation || "",
+          status: r.status || "Submitted",
+          submittedAt: r.submitted_at ? new Date(r.submitted_at).toISOString() : "",
+          updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : ""
+        };
+      }
+    } catch (e) {}
+
+    if (!caseSubject || caseSubject === "N/A") {
+      caseSubject = "Formal disciplinary & preliminary investigation inquiry";
+    }
+
+    return serializeForServerAction({
+      success: true,
+      data: {
+        caseNo: clean,
+        letterNo,
+        complainantName,
+        accusedName,
+        accusedDesignation,
+        schoolName,
+        caseSubject,
+        initialCompletedDate,
+        recommendation: existingRec
+      }
+    });
+  } catch (error: any) {
+    console.error("Error in getCaseDetailsForRecommendationServer:", error);
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to fetch case details" });
+  }
+}
+
+export async function saveRecommendationServer(recData: any) {
+  try {
+    await ensureRecommendationsTable();
+
+    const caseNo = (recData.case_no || recData.caseNo || "").trim();
+    if (!caseNo) {
+      return serializeForServerAction({ success: false, error: "Case number is required" });
+    }
+
+    const letterNo = recData.letter_no || recData.letterNo || null;
+    const category = recData.category || "issuing_charge_sheet";
+    const urgency = recData.urgency || "normal";
+    const title = recData.title || "Formal Preliminary Recommendation";
+    const recommendationText = recData.recommendation_text || recData.recommendationText || "";
+    const disciplinaryAction = recData.disciplinary_action || recData.disciplinaryAction || null;
+    const forwardTo = recData.forward_to || recData.forwardTo || "disciplinary_branch";
+    const targetDate = parseSafeDate(recData.target_date || recData.targetDate);
+    const referenceNotes = recData.reference_notes || recData.referenceNotes || null;
+    const issuedChargeSheet = recData.issued_charge_sheet || recData.issuedChargeSheet || null;
+    const chargeSheetIssuedDate = parseSafeDate(recData.charge_sheet_issued_date || recData.chargeSheetIssuedDate);
+    const chargeSheetResponseDate = parseSafeDate(recData.charge_sheet_response_date || recData.chargeSheetResponseDate);
+    const disciplinaryOrder = recData.disciplinary_order || recData.disciplinaryOrder || null;
+    const secretaryApprovalDate = parseSafeDate(recData.secretary_approval_date || recData.secretaryApprovalDate);
+    const secretaryApprovedRecommendation = recData.secretary_approved_recommendation || recData.secretaryApprovedRecommendation || null;
+    const status = recData.status || "Submitted";
+    const submittedAt = status === "Submitted" ? new Date() : null;
+
+    const existing: any[] = await prisma.$queryRaw`
+      SELECT id FROM public.dcmms_recommendations
+      WHERE LOWER(TRIM(case_no)) = LOWER(${caseNo})
+      LIMIT 1;
+    `;
+
+    let savedId: any = null;
+
+    if (existing && existing.length > 0) {
+      savedId = existing[0].id;
+      await prisma.$executeRaw`
+        UPDATE public.dcmms_recommendations
+        SET letter_no = ${letterNo},
+            category = ${category},
+            urgency = ${urgency},
+            title = ${title},
+            recommendation_text = ${recommendationText},
+            disciplinary_action = ${disciplinaryAction},
+            forward_to = ${forwardTo},
+            target_date = ${targetDate},
+            reference_notes = ${referenceNotes},
+            issued_charge_sheet = ${issuedChargeSheet},
+            charge_sheet_issued_date = ${chargeSheetIssuedDate},
+            charge_sheet_response_date = ${chargeSheetResponseDate},
+            disciplinary_order = ${disciplinaryOrder},
+            secretary_approval_date = ${secretaryApprovalDate},
+            secretary_approved_recommendation = ${secretaryApprovedRecommendation},
+            status = ${status},
+            submitted_at = COALESCE(${submittedAt}, submitted_at),
+            updated_at = NOW()
+        WHERE id = ${savedId}::uuid;
+      `;
+    } else {
+      const inserted: any[] = await prisma.$queryRaw`
+        INSERT INTO public.dcmms_recommendations (
+          case_no, letter_no, category, urgency, title, recommendation_text, disciplinary_action,
+          forward_to, target_date, reference_notes, issued_charge_sheet, charge_sheet_issued_date,
+          charge_sheet_response_date, disciplinary_order, secretary_approval_date,
+          secretary_approved_recommendation, status, submitted_at
+        ) VALUES (
+          ${caseNo}, ${letterNo}, ${category}, ${urgency}, ${title}, ${recommendationText}, ${disciplinaryAction},
+          ${forwardTo}, ${targetDate}, ${referenceNotes}, ${issuedChargeSheet}, ${chargeSheetIssuedDate},
+          ${chargeSheetResponseDate}, ${disciplinaryOrder}, ${secretaryApprovalDate},
+          ${secretaryApprovedRecommendation}, ${status}, ${submittedAt}
+        ) RETURNING id;
+      `;
+      if (inserted && inserted.length > 0) {
+        savedId = inserted[0].id;
+      }
+    }
+
+    return serializeForServerAction({ success: true, id: savedId ? String(savedId) : null });
+  } catch (error: any) {
+    console.error("Error saving recommendation in saveRecommendationServer:", error);
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to save recommendation" });
+  }
+}
+
+export async function getRecommendationsListServer() {
+  await ensureRecommendationsTable();
+  try {
+    const rawRecs: any[] = await prisma.$queryRaw`
+      SELECT 
+        r.id::text as id,
+        r.case_no as "caseNo",
+        r.letter_no as "letterNo",
+        r.category,
+        r.urgency,
+        r.title,
+        r.recommendation_text as "recommendationText",
+        r.disciplinary_action as "disciplinaryAction",
+        r.forward_to as "forwardTo",
+        r.target_date as "targetDate",
+        r.reference_notes as "referenceNotes",
+        r.issued_charge_sheet as "issuedChargeSheet",
+        r.charge_sheet_issued_date as "chargeSheetIssuedDate",
+        r.charge_sheet_response_date as "chargeSheetResponseDate",
+        r.disciplinary_order as "disciplinaryOrder",
+        r.secretary_approval_date as "secretaryApprovalDate",
+        r.secretary_approved_recommendation as "secretaryApprovedRecommendation",
+        r.status,
+        r.submitted_at as "submittedAt",
+        r.created_at as "createdAt",
+        r.updated_at as "updatedAt"
+      FROM public.dcmms_recommendations r
+      ORDER BY r.updated_at DESC;
+    `;
+
+    return serializeForServerAction({ success: true, data: rawRecs || [] });
+  } catch (error: any) {
+    console.error("Error fetching recommendations list in getRecommendationsListServer:", error);
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to fetch recommendations", data: [] });
+  }
+}
+
+
 
 
 

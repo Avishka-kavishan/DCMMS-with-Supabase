@@ -15,6 +15,12 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 import { signOut, getCurrentProfile } from "@/lib/auth";
 import {
+  getAvailableCasesForRecommendationsServer,
+  getCaseDetailsForRecommendationServer,
+  saveRecommendationServer,
+  getRecommendationsListServer,
+} from "@/lib/db-actions";
+import {
   ArrowLeft,
   Save,
   CheckCircle2,
@@ -101,7 +107,7 @@ function RecommendationFormContent() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // View Mode: 'form' (Formulate Recommendation) vs 'list' (All Recommendations & Completed Cases)
-  const [viewMode, setViewMode] = useState<"form" | "list">(caseNoParam ? "form" : "form");
+  const [viewMode, setViewMode] = useState<"form" | "list">(caseNoParam ? "form" : "list");
 
   // Available cases list for quick selector
   const [availableCases, setAvailableCases] = useState<CaseOption[]>([]);
@@ -171,103 +177,56 @@ function RecommendationFormContent() {
   // Load all available cases and registered recommendations
   const loadCasesAndRecommendationsList = async () => {
     const casesMap = new Map<string, CaseOption>();
-    const recsList: RecommendationRecord[] = [];
+    let recsList: RecommendationRecord[] = [];
 
-    // 1. Supabase Fetch
-    if (isSupabaseConfigured) {
-      try {
-        const { data: recData } = await supabase
-          .from("dcmms_recommendations")
-          .select("*")
-          .order("updated_at", { ascending: false });
-
-        if (recData) {
-          recData.forEach((r: any) => {
-            recsList.push({
-              id: r.id,
-              caseNo: r.case_no,
-              letterNo: r.letter_no,
-              category: r.category || "issuing_charge_sheet",
-              urgency: r.urgency || "normal",
-              title: r.title || "Preliminary Investigation Recommendation",
-              recommendationText: r.recommendation_text || "",
-              disciplinaryAction: r.disciplinary_action,
-              forwardTo: r.forward_to || "disciplinary_branch",
-              targetDate: r.target_date,
-              referenceNotes: r.reference_notes,
-              issuedChargeSheet: r.issued_charge_sheet || r.charge_sheet_issued || r.issuedChargeSheet,
-              chargeSheetIssuedDate: r.charge_sheet_issued_date || r.issued_charge_sheet_date || r.chargeSheetIssuedDate,
-              chargeSheetResponseDate: r.charge_sheet_response_date || r.response_charge_sheet_date || r.chargeSheetResponseDate,
-              disciplinaryOrder: r.disciplinary_order || r.disciplinaryOrder,
-              secretaryApprovalDate: r.secretary_approval_date || r.date_approved_by_secretary || r.secretaryApprovalDate || "",
-              secretaryApprovedRecommendation: r.secretary_approved_recommendation || r.recommendation_approved_by_secretary || r.secretaryApprovedRecommendation || "",
-              status: r.status || "Submitted",
-              submittedAt: r.submitted_at,
-              updatedAt: r.updated_at
-            });
+    // 1. Fetch from PostgreSQL server actions
+    try {
+      const casesRes = await getAvailableCasesForRecommendationsServer();
+      if (casesRes?.success && Array.isArray(casesRes.data)) {
+        casesRes.data.forEach((c: any) => {
+          const cNo = c.caseNo;
+          if (!cNo) return;
+          casesMap.set(cNo.trim().toLowerCase(), {
+            caseNo: cNo,
+            letterNo: c.letterNo,
+            accusedName: c.accusedName,
+            accusedDesignation: c.accusedDesignation,
+            schoolName: c.schoolName,
+            subject: c.subject,
+            initialCompletedDate: c.initialCompletedDate,
+            hasRecommendation: c.hasRecommendation || false,
+            recStatus: c.recStatus || "Awaiting Rec",
           });
-        }
-
-        const { data: asgnData } = await supabase
-          .from("dcmms_subject_assignments")
-          .select("*");
-
-        if (asgnData) {
-          asgnData.forEach((a: any) => {
-            const cNo = a.case_no || a.caseNo;
-            if (!cNo) return;
-            casesMap.set(cNo.trim().toLowerCase(), {
-              caseNo: cNo,
-              initialCompletedDate: a.initial_investigation_completed_at || a.initialInvestigationCompletedAt,
-              hasRecommendation: a.recommendation_submitted || false,
-              recStatus: a.status
-            });
-          });
-        }
-
-        const { data: subjData } = await supabase
-          .from("dcmms_subject")
-          .select("*");
-
-        if (subjData) {
-          subjData.forEach((s: any) => {
-            const cNo = s.case_no;
-            if (!cNo) return;
-            const key = cNo.trim().toLowerCase();
-            const existing: CaseOption = casesMap.get(key) || { caseNo: cNo };
-            casesMap.set(key, {
-              ...existing,
-              caseNo: cNo,
-              subject: s.subject || existing.subject,
-              accusedName: s.subject_name || existing.accusedName,
-              accusedDesignation: s.designation || existing.accusedDesignation,
-              schoolName: s.workplace || existing.schoolName
-            });
-          });
-        }
-
-        const { data: accData } = await supabase
-          .from("dcmms_accused_officers")
-          .select("*");
-
-        if (accData) {
-          accData.forEach((a: any) => {
-            const cNo = a.ref_number || a.case_no;
-            if (!cNo) return;
-            const key = cNo.trim().toLowerCase();
-            const existing: CaseOption = casesMap.get(key) || { caseNo: cNo };
-            casesMap.set(key, {
-              ...existing,
-              caseNo: cNo,
-              accusedName: a.accused_officer_name || a.officer_name || a.full_name || existing.accusedName,
-              accusedDesignation: a.position || existing.accusedDesignation,
-              schoolName: a.accused_school_name || a.school_name || existing.schoolName
-            });
-          });
-        }
-      } catch (err) {
-        console.error("Supabase load cases error:", err);
+        });
       }
+
+      const recsRes = await getRecommendationsListServer();
+      if (recsRes?.success && Array.isArray(recsRes.data)) {
+        recsList = recsRes.data.map((r: any) => ({
+          id: r.id,
+          caseNo: r.caseNo || r.case_no,
+          letterNo: r.letterNo || r.letter_no,
+          category: r.category || "issuing_charge_sheet",
+          urgency: r.urgency || "normal",
+          title: r.title || "Preliminary Investigation Recommendation",
+          recommendationText: r.recommendationText || r.recommendation_text || "",
+          disciplinaryAction: r.disciplinaryAction || r.disciplinary_action,
+          forwardTo: r.forwardTo || r.forward_to || "disciplinary_branch",
+          targetDate: r.targetDate ? String(r.targetDate).slice(0, 10) : "",
+          referenceNotes: r.referenceNotes || r.reference_notes,
+          issuedChargeSheet: r.issuedChargeSheet || r.issued_charge_sheet,
+          chargeSheetIssuedDate: r.chargeSheetIssuedDate ? String(r.chargeSheetIssuedDate).slice(0, 10) : "",
+          chargeSheetResponseDate: r.chargeSheetResponseDate ? String(r.chargeSheetResponseDate).slice(0, 10) : "",
+          disciplinaryOrder: r.disciplinaryOrder || r.disciplinary_order,
+          secretaryApprovalDate: r.secretaryApprovalDate ? String(r.secretaryApprovalDate).slice(0, 10) : "",
+          secretaryApprovedRecommendation: r.secretaryApprovedRecommendation || r.secretary_approved_recommendation,
+          status: r.status || "Submitted",
+          submittedAt: r.submittedAt || r.submitted_at,
+          updatedAt: r.updatedAt || r.updated_at,
+        }));
+      }
+    } catch (err) {
+      console.warn("PostgreSQL load recommendations error:", err);
     }
 
     // 2. LocalStorage Fallback & Merge
@@ -299,7 +258,7 @@ function RecommendationFormContent() {
                   secretaryApprovedRecommendation: lr.secretaryApprovedRecommendation || lr.secretary_approved_recommendation || lr.recommendation_approved_by_secretary || "",
                   status: lr.status || "Submitted",
                   submittedAt: lr.submittedAt || lr.submitted_at,
-                  updatedAt: lr.updatedAt || lr.updated_at
+                  updatedAt: lr.updatedAt || lr.updated_at,
                 });
               }
             });
@@ -323,7 +282,7 @@ function RecommendationFormContent() {
                 accusedName: c.accusedName || c.accusedOfficer || c.officerName || existing.accusedName,
                 accusedDesignation: c.designation || existing.accusedDesignation,
                 schoolName: c.schoolName || c.instituteName || existing.schoolName,
-                initialCompletedDate: c.initialCompletedDate || c.initialInvestigationCompletedAt || existing.initialCompletedDate
+                initialCompletedDate: c.initialCompletedDate || c.initialInvestigationCompletedAt || existing.initialCompletedDate,
               });
             });
           }
@@ -342,32 +301,12 @@ function RecommendationFormContent() {
                 ...existing,
                 caseNo: cNo,
                 initialCompletedDate: a.initialInvestigationCompletedAt || a.initial_investigation_completed_at || existing.initialCompletedDate,
-                hasRecommendation: a.recommendationSubmitted || a.recommendation_submitted || existing.hasRecommendation
+                hasRecommendation: a.recommendationSubmitted || a.recommendation_submitted || existing.hasRecommendation,
               });
             });
           }
         }
       } catch (e) {}
-    }
-
-    // Default fallback sample cases if list is empty
-    if (casesMap.size === 0) {
-      casesMap.set("dmms/t/02", {
-        caseNo: "DMMS/T/02",
-        subject: "Disciplinary inquiry regarding unauthorized absence & fund management",
-        accusedName: "K. L. Gamage",
-        accusedDesignation: "Principal",
-        schoolName: "Royal College, Colombo",
-        initialCompletedDate: new Date().toISOString().slice(0, 10)
-      });
-      casesMap.set("inq/2026/001", {
-        caseNo: "INQ/2026/001",
-        subject: "Preliminary investigation on examination paper irregularities",
-        accusedName: "M. R. Perera",
-        accusedDesignation: "Teacher",
-        schoolName: "Ananda College, Colombo",
-        initialCompletedDate: new Date().toISOString().slice(0, 10)
-      });
     }
 
     const casesArr = Array.from(casesMap.values());
@@ -376,7 +315,9 @@ function RecommendationFormContent() {
 
     // If no caseNo currently set, select the first available case
     if (!caseNoParam && casesArr.length > 0) {
-      setCaseNo(casesArr[0].caseNo);
+      const firstCase = casesArr[0].caseNo;
+      setCaseNo(firstCase);
+      fetchCaseDetails(firstCase);
     }
   };
 
@@ -408,113 +349,39 @@ function RecommendationFormContent() {
     setSecretaryApprovedRecommendation("");
 
     try {
-      if (isSupabaseConfigured) {
-        // Daily mail
-        try {
-          const { data: mailData } = await supabase
-            .from("dcmms_daily_mail")
-            .select("*")
-            .or(`ref_no.ilike.${targetCaseNo},letter_no.ilike.${targetCaseNo}`)
-            .maybeSingle();
+      // 1. Fetch from PostgreSQL server action
+      const caseDetailsRes = await getCaseDetailsForRecommendationServer(targetCaseNo);
+      if (caseDetailsRes?.success && caseDetailsRes.data) {
+        const d = caseDetailsRes.data;
+        if (d.letterNo) setLetterNo(d.letterNo);
+        if (d.complainantName) setComplainantName(d.complainantName);
+        if (d.accusedName) setAccusedName(d.accusedName);
+        if (d.accusedDesignation) setAccusedDesignation(d.accusedDesignation);
+        if (d.schoolName) setSchoolName(d.schoolName);
+        if (d.caseSubject) setCaseSubject(d.caseSubject);
+        if (d.initialCompletedDate) setInitialCompletedDate(d.initialCompletedDate);
 
-          if (mailData) {
-            if (mailData.letter_no) setLetterNo(mailData.letter_no);
-            if (mailData.sender_name && mailData.sender_name.toLowerCase() !== "anonymous") setComplainantName(mailData.sender_name);
-            if (mailData.institute_name) setSchoolName(mailData.institute_name);
-            if (mailData.subject) setCaseSubject(mailData.subject);
-          }
-        } catch (e) {}
-
-        // Accused officers
-        try {
-          const { data: accList } = await supabase
-            .from("dcmms_accused_officers")
-            .select("*")
-            .or(`ref_number.ilike.${targetCaseNo},case_no.ilike.${targetCaseNo}`);
-
-          if (accList && accList.length > 0) {
-            const acc = accList[0];
-            if (acc.accused_officer_name || acc.officer_name || acc.full_name) setAccusedName(acc.accused_officer_name || acc.officer_name || acc.full_name);
-            if (acc.position) setAccusedDesignation(acc.position);
-            if (acc.accused_school_name || acc.school_name) setSchoolName(acc.accused_school_name || acc.school_name);
-            if (acc.name_of_the_presenting_the_complain && acc.name_of_the_presenting_the_complain.toLowerCase() !== "anonymous") {
-              setComplainantName(acc.name_of_the_presenting_the_complain);
-            }
-          }
-        } catch (e) {}
-
-        // Subject Table
-        try {
-          const { data: subjData } = await supabase
-            .from("dcmms_subject")
-            .select("*")
-            .or(`case_no.ilike.${targetCaseNo},subject_id.ilike.${targetCaseNo}`)
-            .maybeSingle();
-
-          if (subjData) {
-            if (subjData.subject_name) setAccusedName((prev) => prev || subjData.subject_name);
-            if (subjData.designation) setAccusedDesignation((prev) => prev || subjData.designation);
-            if (subjData.workplace) setSchoolName((prev) => prev || subjData.workplace);
-            if (subjData.subject) setCaseSubject((prev) => prev || subjData.subject);
-          }
-        } catch (e) {}
-
-        // Assignments
-        try {
-          const { data: asgnData } = await supabase
-            .from("dcmms_subject_assignments")
-            .select("*")
-            .or(`case_no.ilike.${targetCaseNo},id.ilike.${targetCaseNo}`)
-            .maybeSingle();
-
-          if (asgnData) {
-            if (asgnData.initial_investigation_completed_at || asgnData.initialInvestigationCompletedAt) {
-              setInitialCompletedDate(asgnData.initial_investigation_completed_at || asgnData.initialInvestigationCompletedAt);
-            }
-          }
-        } catch (e) {}
-
-        // Recommendations Table
-        try {
-          const { data: recData } = await supabase
-            .from("dcmms_recommendations")
-            .select("*")
-            .or(`case_no.ilike.${targetCaseNo},letter_no.ilike.${targetCaseNo}`)
-            .maybeSingle();
-
-          if (recData) {
-            if (recData.category) setRecommendationCategory(recData.category);
-            if (recData.urgency) setRecommendationUrgency(recData.urgency);
-            if (recData.title) setRecommendationTitle(recData.title);
-            if (recData.recommendation_text) setRecommendationText(recData.recommendation_text);
-            if (recData.disciplinary_action) setDisciplinaryAction(recData.disciplinary_action);
-            if (recData.forward_to) setForwardTo(recData.forward_to);
-            if (recData.target_date) setTargetDate(recData.target_date);
-            if (recData.reference_notes) setReferenceNotes(recData.reference_notes);
-            if (recData.status) setRecommendationStatus(recData.status);
-            if (recData.issued_charge_sheet || recData.charge_sheet_issued || recData.issuedChargeSheet) {
-              setIssuedChargeSheet(recData.issued_charge_sheet || recData.charge_sheet_issued || recData.issuedChargeSheet);
-            }
-            if (recData.charge_sheet_issued_date || recData.issued_charge_sheet_date || recData.chargeSheetIssuedDate) {
-              setChargeSheetIssuedDate(recData.charge_sheet_issued_date || recData.issued_charge_sheet_date || recData.chargeSheetIssuedDate);
-            }
-            if (recData.charge_sheet_response_date || recData.response_charge_sheet_date || recData.chargeSheetResponseDate) {
-              setChargeSheetResponseDate(recData.charge_sheet_response_date || recData.response_charge_sheet_date || recData.chargeSheetResponseDate);
-            }
-            if (recData.disciplinary_order || recData.disciplinaryOrder) {
-              setDisciplinaryOrder(recData.disciplinary_order || recData.disciplinaryOrder);
-            }
-            if (recData.secretary_approval_date || recData.date_approved_by_secretary || recData.secretaryApprovalDate) {
-              setSecretaryApprovalDate(recData.secretary_approval_date || recData.date_approved_by_secretary || recData.secretaryApprovalDate);
-            }
-            if (recData.secretary_approved_recommendation || recData.recommendation_approved_by_secretary || recData.secretaryApprovedRecommendation) {
-              setSecretaryApprovedRecommendation(recData.secretary_approved_recommendation || recData.recommendation_approved_by_secretary || recData.secretaryApprovedRecommendation);
-            }
-          }
-        } catch (e) {}
+        if (d.recommendation) {
+          const rec = d.recommendation;
+          if (rec.category) setRecommendationCategory(rec.category);
+          if (rec.urgency) setRecommendationUrgency(rec.urgency);
+          if (rec.title) setRecommendationTitle(rec.title);
+          if (rec.recommendationText) setRecommendationText(rec.recommendationText);
+          if (rec.disciplinaryAction) setDisciplinaryAction(rec.disciplinaryAction);
+          if (rec.forwardTo) setForwardTo(rec.forwardTo);
+          if (rec.targetDate) setTargetDate(rec.targetDate);
+          if (rec.referenceNotes) setReferenceNotes(rec.referenceNotes);
+          if (rec.status) setRecommendationStatus(rec.status);
+          if (rec.issuedChargeSheet) setIssuedChargeSheet(rec.issuedChargeSheet);
+          if (rec.chargeSheetIssuedDate) setChargeSheetIssuedDate(rec.chargeSheetIssuedDate);
+          if (rec.chargeSheetResponseDate) setChargeSheetResponseDate(rec.chargeSheetResponseDate);
+          if (rec.disciplinaryOrder) setDisciplinaryOrder(rec.disciplinaryOrder);
+          if (rec.secretaryApprovalDate) setSecretaryApprovalDate(rec.secretaryApprovalDate);
+          if (rec.secretaryApprovedRecommendation) setSecretaryApprovedRecommendation(rec.secretaryApprovedRecommendation);
+        }
       }
 
-      // LocalStorage Fallback
+      // 2. LocalStorage Fallback for any supplemental fields
       if (typeof window !== "undefined") {
         const localCases = JSON.parse(localStorage.getItem("dcmms_cases") || "[]");
         const foundCase = Array.isArray(localCases)
@@ -525,6 +392,7 @@ function RecommendationFormContent() {
           if (foundCase.subject) setCaseSubject((prev) => prev || foundCase.subject);
           if (foundCase.complainantName || foundCase.senderName) setComplainantName((prev) => prev || foundCase.complainantName || foundCase.senderName);
           if (foundCase.accusedName || foundCase.accusedOfficer || foundCase.officerName) setAccusedName((prev) => prev || foundCase.accusedName || foundCase.accusedOfficer || foundCase.officerName);
+          if (foundCase.designation) setAccusedDesignation((prev) => prev || foundCase.designation);
           if (foundCase.schoolName || foundCase.instituteName) setSchoolName((prev) => prev || foundCase.schoolName || foundCase.instituteName);
           if (foundCase.initialCompletedDate) setInitialCompletedDate((prev) => prev || foundCase.initialCompletedDate);
         }
@@ -535,33 +403,21 @@ function RecommendationFormContent() {
           : null;
 
         if (foundRec) {
-          if (foundRec.category) setRecommendationCategory(foundRec.category);
-          if (foundRec.urgency) setRecommendationUrgency(foundRec.urgency);
-          if (foundRec.title) setRecommendationTitle(foundRec.title);
-          if (foundRec.recommendationText) setRecommendationText(foundRec.recommendationText);
-          if (foundRec.disciplinaryAction) setDisciplinaryAction(foundRec.disciplinaryAction);
-          if (foundRec.forwardTo) setForwardTo(foundRec.forwardTo);
-          if (foundRec.targetDate) setTargetDate(foundRec.targetDate);
-          if (foundRec.referenceNotes) setReferenceNotes(foundRec.referenceNotes);
-          if (foundRec.status) setRecommendationStatus(foundRec.status);
-          if (foundRec.issuedChargeSheet || foundRec.issued_charge_sheet || foundRec.chargeSheetIssued) {
-            setIssuedChargeSheet(foundRec.issuedChargeSheet || foundRec.issued_charge_sheet || foundRec.chargeSheetIssued);
-          }
-          if (foundRec.chargeSheetIssuedDate || foundRec.charge_sheet_issued_date || foundRec.issuedChargeSheetDate) {
-            setChargeSheetIssuedDate(foundRec.chargeSheetIssuedDate || foundRec.charge_sheet_issued_date || foundRec.issuedChargeSheetDate);
-          }
-          if (foundRec.chargeSheetResponseDate || foundRec.charge_sheet_response_date || foundRec.responseChargeSheetDate) {
-            setChargeSheetResponseDate(foundRec.chargeSheetResponseDate || foundRec.charge_sheet_response_date || foundRec.responseChargeSheetDate);
-          }
-          if (foundRec.disciplinaryOrder || foundRec.disciplinary_order) {
-            setDisciplinaryOrder(foundRec.disciplinaryOrder || foundRec.disciplinary_order);
-          }
-          if (foundRec.secretaryApprovalDate || foundRec.secretary_approval_date || foundRec.date_approved_by_secretary) {
-            setSecretaryApprovalDate(foundRec.secretaryApprovalDate || foundRec.secretary_approval_date || foundRec.date_approved_by_secretary);
-          }
-          if (foundRec.secretaryApprovedRecommendation || foundRec.secretary_approved_recommendation || foundRec.recommendation_approved_by_secretary) {
-            setSecretaryApprovedRecommendation(foundRec.secretaryApprovedRecommendation || foundRec.secretary_approved_recommendation || foundRec.recommendation_approved_by_secretary);
-          }
+          if (foundRec.category) setRecommendationCategory((prev) => prev || foundRec.category);
+          if (foundRec.urgency) setRecommendationUrgency((prev) => prev || foundRec.urgency);
+          if (foundRec.title) setRecommendationTitle((prev) => prev || foundRec.title);
+          if (foundRec.recommendationText) setRecommendationText((prev) => prev || foundRec.recommendationText);
+          if (foundRec.disciplinaryAction) setDisciplinaryAction((prev) => prev || foundRec.disciplinaryAction);
+          if (foundRec.forwardTo) setForwardTo((prev) => prev || foundRec.forwardTo);
+          if (foundRec.targetDate) setTargetDate((prev) => prev || foundRec.targetDate);
+          if (foundRec.referenceNotes) setReferenceNotes((prev) => prev || foundRec.referenceNotes);
+          if (foundRec.status) setRecommendationStatus((prev) => prev || foundRec.status);
+          if (foundRec.issuedChargeSheet) setIssuedChargeSheet((prev) => prev || foundRec.issuedChargeSheet);
+          if (foundRec.chargeSheetIssuedDate) setChargeSheetIssuedDate((prev) => prev || foundRec.chargeSheetIssuedDate);
+          if (foundRec.chargeSheetResponseDate) setChargeSheetResponseDate((prev) => prev || foundRec.chargeSheetResponseDate);
+          if (foundRec.disciplinaryOrder) setDisciplinaryOrder((prev) => prev || foundRec.disciplinaryOrder);
+          if (foundRec.secretaryApprovalDate) setSecretaryApprovalDate((prev) => prev || foundRec.secretaryApprovalDate);
+          if (foundRec.secretaryApprovedRecommendation) setSecretaryApprovedRecommendation((prev) => prev || foundRec.secretaryApprovedRecommendation);
         }
       }
     } catch (e) {
@@ -614,16 +470,17 @@ function RecommendationFormContent() {
       secretary_approval_date: secretaryApprovalDate || null,
       secretary_approved_recommendation: secretaryApprovedRecommendation || null,
       status: "Draft",
-      updated_at: new Date().toISOString()
     };
 
     try {
-      if (isSupabaseConfigured) {
-        await supabase.from("dcmms_recommendations").upsert(payload, { onConflict: "case_no" }).catch(() => {});
-        const profile = await getCurrentProfile();
-        await logAuditEvent(profile?.full_name || profile?.id || "Subject Officer", "SAVE_RECOMMENDATION_DRAFT", `Saved recommendation draft for ${caseNo}`);
-      }
+      // 1. Save to PostgreSQL via Server Action
+      await saveRecommendationServer(payload);
 
+      // 2. Audit logging
+      const profile = await getCurrentProfile();
+      await logAuditEvent("SAVE_RECOMMENDATION_DRAFT", "Recommendation", caseNo, { title: payload.title }, profile?.full_name || profile?.id || "Subject Officer");
+
+      // 3. LocalStorage sync
       if (typeof window !== "undefined") {
         const storedRecs = localStorage.getItem("dcmms_recommendations") || "[]";
         let recList = [];
@@ -697,30 +554,17 @@ function RecommendationFormContent() {
       secretary_approval_date: secretaryApprovalDate || null,
       secretary_approved_recommendation: secretaryApprovedRecommendation || null,
       status: "Submitted",
-      submitted_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
     };
 
     try {
-      if (isSupabaseConfigured) {
-        await supabase.from("dcmms_recommendations").upsert(payload, { onConflict: "case_no" }).catch(() => {});
+      // 1. Save to PostgreSQL via Server Action
+      await saveRecommendationServer(payload);
 
-        await supabase.from("dcmms_preliminary_investigations").update({
-          recommendations: recommendationText,
-          status: "Implementation of Recommendations",
-          updated_at: new Date().toISOString()
-        }).eq("case_no", caseNo).catch(() => {});
+      // 2. Audit logging
+      const profile = await getCurrentProfile();
+      await logAuditEvent("SUBMIT_RECOMMENDATION", "Recommendation", caseNo, { title: payload.title }, profile?.full_name || profile?.id || "Subject Officer");
 
-        await supabase.from("dcmms_subject_assignments").update({
-          status: "Implementation of Recommendations",
-          recommendation_submitted: true,
-          recommendation_submitted_at: now
-        }).eq("case_no", caseNo).catch(() => {});
-
-        const profile = await getCurrentProfile();
-        await logAuditEvent(profile?.full_name || profile?.id || "Subject Officer", "SUBMIT_RECOMMENDATION", `Submitted formal recommendation for case ${caseNo}`);
-      }
-
+      // 3. LocalStorage sync
       if (typeof window !== "undefined") {
         const storedRecs = localStorage.getItem("dcmms_recommendations") || "[]";
         let recList = [];
@@ -972,36 +816,7 @@ function RecommendationFormContent() {
             </div>
           </div>
 
-          {/* Navigation View Mode Tabs */}
-          <div className="navigation-tab-list" style={{ marginBottom: "22px" }}>
-            <button
-              type="button"
-              className={`nav-tab-btn${viewMode === "form" ? " active" : ""}`}
-              onClick={() => setViewMode("form")}
-            >
-              <Sparkles className="tab-icon" />
-              <span>{lang === "si" ? "නිර්දේශය සටහන් කිරීමේ පෝරමය" : "Formulate / Edit Recommendation"}</span>
-              {caseNo && (
-                <span style={{ fontSize: "11px", fontWeight: 700, backgroundColor: "#dbeafe", color: "#1e40af", padding: "2px 8px", borderRadius: "10px", marginLeft: "4px" }}>
-                  {caseNo}
-                </span>
-              )}
-            </button>
 
-            <button
-              type="button"
-              className={`nav-tab-btn${viewMode === "list" ? " active" : ""}`}
-              onClick={() => setViewMode("list")}
-            >
-              <Layers className="tab-icon" />
-              <span>{lang === "si" ? "සියලු නිර්දේශ සහ නිමවූ විමර්ශන ලැයිස්තුව" : "All Recommendations & Pending Cases"}</span>
-              {allRecommendations.length > 0 && (
-                <span style={{ fontSize: "11px", fontWeight: 700, backgroundColor: viewMode === "list" ? "#4f46e5" : "#94a3b8", color: "#ffffff", padding: "2px 8px", borderRadius: "10px", marginLeft: "4px" }}>
-                  {allRecommendations.length}
-                </span>
-              )}
-            </button>
-          </div>
 
           {/* ============================================================
              VIEW MODE 1: FORMULATE RECOMMENDATION FORM
@@ -1571,36 +1386,9 @@ function RecommendationFormContent() {
                       </button>
                     </div>
                   </div>
-                </section>
 
-                {/* Card 4: Forwarding & Routing */}
-                <section className="recommendation-form-card">
-                  <div className="section-header-pill">
-                    <Send size={16} />
-                    <span>{lang === "si" ? "4. නිර්දේශය යොමු කිරීම සහ ක්‍රියාත්මක කිරීමේ අධිකාරිය" : "4. Routing & Implementation Authority"}</span>
-                  </div>
-
-                  <div className="form-field-group">
-                    <label className="form-field-label">
-                      {lang === "si" ? "නිර්දේශය යොමු කරන ප්‍රධාන අංශය / නිලධාරියා" : "Forward Recommendation To"}
-                      <span className="required-asterisk">*</span>
-                    </label>
-                    <select
-                      value={forwardTo}
-                      onChange={(e) => setForwardTo(e.target.value)}
-                      className="form-field-select"
-                      required
-                    >
-                      <option value="disciplinary_branch">{lang === "si" ? "අධ්‍යාපන අමාත්‍යාංශ විනය අංශය (Disciplinary Branch)" : "Ministry Disciplinary Branch"}</option>
-                      <option value="secretary_education">{lang === "si" ? "අධ්‍යාපන අමාත්‍යාංශ ලේකම් (Secretary, Ministry of Education)" : "Secretary, Ministry of Education"}</option>
-                      <option value="provincial_director">{lang === "si" ? "පළාත් අධ්‍යාපන අධ්‍යක්ෂ (Provincial Director of Education)" : "Provincial Director of Education"}</option>
-                      <option value="zonal_director">{lang === "si" ? "කලාප අධ්‍යාපන අධ්‍යක්ෂ (Zonal Director of Education)" : "Zonal Director of Education"}</option>
-                      <option value="public_service_commission">{lang === "si" ? "රාජ්‍ය සේවා කොමිෂන් සභාව (Public Service Commission - PSC)" : "Public Service Commission (PSC)"}</option>
-                      <option value="investigation_unit">{lang === "si" ? "විමර්ශන අධ්‍යක්ෂක / විමර්ශන ඒකකය (Investigation Branch)" : "Investigation Director / Unit"}</option>
-                    </select>
-                  </div>
-
-                  <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", marginTop: "24px", paddingTop: "16px", borderTop: "1px solid #f1f5f9" }}>
+                  {/* Form Submission Action Buttons */}
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", marginTop: "24px", paddingTop: "16px", borderTop: "1px solid #fde68a" }}>
                     <button type="button" onClick={() => setViewMode("list")} className="btn-back-gray">
                       {lang === "si" ? "ලැයිස්තුවට යන්න" : "View List"}
                     </button>
