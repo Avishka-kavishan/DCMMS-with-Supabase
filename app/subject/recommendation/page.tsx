@@ -1007,21 +1007,6 @@ function RecommendationFormContent() {
                       />
                     </div>
                   </div>
-
-                  <div className="form-field-group" style={{ marginTop: "14px" }}>
-                    <label className="form-field-label">
-                      {lang === "si" ? "නිර්දේශයේ මාතෘකාව / කෙටි සාරාංශය" : "Recommendation Headline / Brief Summary"}
-                      <span className="required-asterisk">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={recommendationTitle}
-                      onChange={(e) => setRecommendationTitle(e.target.value)}
-                      placeholder={lang === "si" ? "උදා: චෝදනා පත්‍රයක් ගොනු කර විධිමත් පරීක්ෂණයක් සඳහා විනය අංශයට යොමු කිරීම" : "e.g., Recommend issuance of formal charge sheet and appoint inquiry officer"}
-                      className="form-field-input"
-                      required
-                    />
-                  </div>
                 </section>
 
                 {/* Conditional Section: Charge Sheet & Disciplinary Order Details (Displayed ONLY when 'issuing a charge sheet' is selected) */}
