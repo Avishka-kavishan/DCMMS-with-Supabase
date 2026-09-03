@@ -225,6 +225,18 @@
   border-color: #c7d2fe !important;
 }
 
+.secretary-approval-card {
+  border: 1.5px solid #f59e0b !important;
+  background: linear-gradient(180deg, #ffffff 0%, #fffdfa 100%);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.08);
+}
+
+.secretary-approval-pill {
+  background-color: #fef3c7 !important;
+  color: #92400e !important;
+  border-color: #fde68a !important;
+}
+
 @keyframes fadeInDown {
   from {
     opacity: 0;

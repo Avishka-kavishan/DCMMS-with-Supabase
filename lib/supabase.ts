@@ -1,16 +1,18 @@
-import { createClient } from "@supabase/supabase-js";
 import { logAuditEventServer } from "@/lib/db-actions";
 
-export const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-export const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-
-// Supabase is completely disabled — System operates 100% on local PostgreSQL
+// Supabase is completely disabled — System operates 100% on local PostgreSQL via Prisma
 export const isSupabaseConfigured = false;
+export const supabaseUrl = "";
+export const supabaseAnonKey = "";
 
 if (typeof window !== "undefined") {
-  console.log("DCMMS Database Mode: Local PostgreSQL (Supabase Disabled)");
+  console.log("DCMMS Database Mode: Pure Local PostgreSQL (Supabase Disabled)");
 }
 
+/**
+ * Lightweight stub maintaining compatibility for components transitioning
+ * away from Supabase to pure PostgreSQL Server Actions.
+ */
 export const supabase: {
   auth: {
     getSession: () => Promise<{ data: { session: any }; error: any }>;
@@ -26,28 +28,36 @@ export const supabase: {
   auth: {
     getSession: async () => ({ data: { session: null }, error: null }),
     signOut: async () => ({ error: null }),
-    onAuthStateChange: (callback: any) => ({ data: { subscription: { unsubscribe: () => {} } } }),
+    onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
     signInWithPassword: async () => ({ data: { user: null, session: null }, error: null }),
     signUp: async () => ({ data: { user: null, session: null }, error: null }),
   },
   from: () => ({
-    select: () => ({ order: () => Promise.resolve({ data: [], error: null }), single: () => Promise.resolve({ data: null, error: null }), eq: () => Promise.resolve({ data: [], error: null }), or: () => Promise.resolve({ data: [], error: null }) }),
+    select: () => ({
+      order: () => Promise.resolve({ data: [], error: null }),
+      single: () => Promise.resolve({ data: null, error: null }),
+      eq: () => Promise.resolve({ data: [], error: null }),
+      or: () => Promise.resolve({ data: [], error: null }),
+      catch: () => Promise.resolve({ data: [], error: null }),
+    }),
     upsert: () => Promise.resolve({ data: null, error: null }),
     insert: () => Promise.resolve({ data: null, error: null }),
-    update: () => Promise.resolve({ data: null, error: null }),
-    delete: () => Promise.resolve({ data: null, error: null }),
+    update: () => ({ eq: () => Promise.resolve({ data: null, error: null }) }),
+    delete: () => ({ eq: () => Promise.resolve({ data: null, error: null }) }),
   }),
   channel: () => ({
-    on: function() { return this; },
+    on: function () {
+      return this;
+    },
     subscribe: () => {},
   }),
   removeChannel: () => {},
 };
 
 export function subscribeToTables(
-  channelName: string,
-  tables: string[],
-  onChange: () => void
+  _channelName: string,
+  _tables: string[],
+  _onChange: () => void
 ) {
   return () => {};
 }
@@ -63,7 +73,11 @@ export async function logAuditEvent(
   performedBy?: string
 ) {
   try {
-    const username = performedBy || (typeof window !== "undefined" ? localStorage.getItem("dcmms_username") || "system_user" : "system_user");
+    const username =
+      performedBy ||
+      (typeof window !== "undefined"
+        ? localStorage.getItem("dcmms_username") || "system_user"
+        : "system_user");
     await logAuditEventServer(action, entityType, entityId, details, username);
   } catch (err) {
     console.warn("Failed to log local audit event:", err);
@@ -71,21 +85,9 @@ export async function logAuditEvent(
 }
 
 /**
- * Record active session to dcmms_sessions table in Supabase
+ * Record active session - no-op in pure PostgreSQL mode
  */
-export async function recordSession(userId: string, role?: string) {
-  if (!isSupabaseConfigured) return;
-  try {
-    await supabase.from("dcmms_sessions").insert([
-      {
-        user_id: userId,
-        role: role || "User",
-        login_time: new Date().toISOString(),
-        is_active: true
-      }
-    ]);
-  } catch (err) {
-    console.error("Failed to record session:", err);
-  }
+export async function recordSession(_userId: string, _role?: string) {
+  // Session tracking is managed natively via localStorage & PostgreSQL AuditLog
+  return;
 }
-

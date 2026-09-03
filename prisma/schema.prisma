@@ -8,36 +8,39 @@ datasource db {
 }
 
 model RegisterOfficerTable {
-  id          String                 @id @default(uuid())
-  employee_no String                 @unique
-  full_name   String
-  email       String                 @unique
-  password    String                 @default("123456")
-  role        String?                @default("Register Officer")
-  subject_type String?               @db.VarChar(255)
-  is_active   Boolean?               @default(true)
-  created_by  String?
-  created_at  DateTime?              @default(now())
-  updated_at  DateTime?              @default(now()) @updatedAt
-  creator     RegisterOfficerTable?  @relation("RegisterOfficerCreatedBy", fields: [created_by], references: [id])
-  created     RegisterOfficerTable[] @relation("RegisterOfficerCreatedBy")
+  id           String                 @id @default(dbgenerated("(gen_random_uuid())::text"))
+  employee_no  String                 @unique
+  full_name    String
+  email        String                 @unique
+  password     String                 @default("123456")
+  role         String?                @default("Register Officer")
+  is_active    Boolean?               @default(true)
+  created_by   String?
+  created_at   DateTime?              @default(now())
+  updated_at   DateTime?              @default(now()) @updatedAt
+  subject_type String?                @db.VarChar(255)
+  creator      RegisterOfficerTable?  @relation("RegisterOfficerCreatedBy", fields: [created_by], references: [id])
+  created      RegisterOfficerTable[] @relation("RegisterOfficerCreatedBy")
 
   @@map("register_officer_table")
 }
 
 model DailyMailLetterTable {
-  id                              BigInt                     @id @default(autoincrement())
-  letter_number                   String?                    @db.VarChar(100)
-  ref_number                      String?                    @db.VarChar(100)
-  mode_of_receipt                 String?                    @db.VarChar(100)
-  senders_party                   String?                    @db.VarChar(255)
-  nature_of_letter                String?                    @db.VarChar(1000)
-  subject_category                String?                    @db.VarChar(500)
+  id                              BigInt                    @id @default(autoincrement())
+  letter_number                   String?                   @db.VarChar(100)
+  ref_number                      String?                   @db.VarChar(100)
+  mode_of_receipt                 String?                   @db.VarChar(100)
+  senders_party                   String?                   @db.VarChar(255)
+  nature_of_letter                String?                   @db.VarChar(1000)
+  subject_category                String?                   @db.VarChar(500)
   subject_of_letter               String?
-  date_received_by_add_secretary  DateTime?                  @db.Date
-  date_letter_handover_discipline DateTime?                  @db.Date
-  created_at                      DateTime?                  @default(now())
-  updated_at                      DateTime?                  @default(now()) @updatedAt
+  date_received_by_add_secretary  DateTime?                 @db.Date
+  date_letter_handover_discipline DateTime?                 @db.Date
+  created_at                      DateTime?                 @default(now())
+  updated_at                      DateTime?                 @default(now()) @updatedAt
+  document_url                    String?
+  document_name                   String?                   @db.VarChar(255)
+  document_size                   BigInt?
   subject_officer_form_table      SubjectOfficerFormTable[]
 
   @@map("daily_mail_letter_table")
@@ -49,45 +52,44 @@ model accused_officer_table {
   address                                    String?
   position                                   String?                                      @db.VarChar(150)
   date_of_birth                              DateTime?                                    @db.Date
-  nic_no                                     String?                                      @db.VarChar(12)
+  nic_no                                     String?                                      @unique @db.VarChar(12)
   appointment_date                           DateTime?                                    @db.Date
   created_at                                 DateTime?                                    @default(now()) @db.Timestamptz(6)
   updated_at                                 DateTime?                                    @default(now()) @db.Timestamptz(6)
   accused_school_id                          BigInt?
-  accused_school_table                       accused_school_table?                        @relation(fields: [accused_school_id], references: [id], onUpdate: NoAction)
-  subject_officer_form_table                 SubjectOfficerFormTable[]
   accused_officer_subject_officer_form_table accused_officer_subject_officer_form_table[]
+  subject_officer_form_table                 SubjectOfficerFormTable[]
 }
 
 model accused_school_table {
-  id                    BigInt                  @id @default(autoincrement())
-  accused_school_name   String                  @db.VarChar(255)
-  address               String?
-  province              String?                 @db.VarChar(100)
-  district              String?                 @db.VarChar(100)
-  zone                  String?                 @db.VarChar(100)
-  created_at            DateTime?               @default(now()) @db.Timestamptz(6)
-  updated_at            DateTime?               @default(now()) @db.Timestamptz(6)
-  accused_officer_table accused_officer_table[]
+  id                  BigInt    @id @default(autoincrement())
+  accused_school_name String    @db.VarChar(255)
+  address             String?
+  province            String?   @db.VarChar(100)
+  district            String?   @db.VarChar(100)
+  zone                String?   @db.VarChar(100)
+  created_at          DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime? @default(now()) @db.Timestamptz(6)
 }
 
 model SubjectOfficerFormTable {
-  id                                              BigInt                                       @id @default(autoincrement())
-  daily_mail_letter_id                            BigInt?
-  ref_number                                      String?                                      @db.VarChar(100)
-  subject_file_no                                 String?                                      @db.VarChar(100)
-  file_name                                       String?                                      @db.VarChar(100)
-  future_action                                   String?
-  date_prepared_and_submitted_for_signature       DateTime?                                    @db.Date
-  classification_of_complaint_letter              String?                                      @db.VarChar(100)
-  name_of_the_presenting_the_complain             String?                                      @db.VarChar(255)
+  id                                             BigInt                                       @id @default(autoincrement())
+  daily_mail_letter_id                           BigInt?
+  ref_number                                     String?                                      @unique @db.VarChar(100)
+  subject_file_no                                String?                                      @db.VarChar(100)
+  future_action                                  String?
+  date_prepared_and_submitted_for_signature      DateTime?                                    @db.Date
+  classification_of_complaint_letter             String?                                      @db.VarChar(255)
+  name_of_the_presenting_the_complain            String?                                      @db.VarChar(255)
   address_of_the_person_presenting_the_complaint String?
-  accused_officer_id                              String?                                      @db.Uuid
-  accused_officer                                 accused_officer_table?                       @relation(fields: [accused_officer_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
-  daily_mail_letter                               DailyMailLetterTable?                        @relation(fields: [daily_mail_letter_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
-  created_at                                      DateTime?                                    @default(now()) @db.Timestamptz(6)
-  updated_at                                      DateTime?                                    @default(now()) @db.Timestamptz(6)
-  accused_officer_subject_officer_form_table      accused_officer_subject_officer_form_table[]
+  created_at                                     DateTime?                                    @default(now()) @db.Timestamptz(6)
+  updated_at                                     DateTime?                                    @default(now()) @db.Timestamptz(6)
+  accused_officer_id                             String?                                      @db.Uuid
+  subject_category                               String?                                      @db.VarChar(255)
+  accused_officer_subject_officer_form_table     accused_officer_subject_officer_form_table[]
+  case_by_date_extention                         case_by_date_extention[]
+  accused_officer                                accused_officer_table?                       @relation(fields: [accused_officer_id], references: [id], onUpdate: NoAction)
+  daily_mail_letter                              DailyMailLetterTable?                        @relation(fields: [daily_mail_letter_id], references: [id], onUpdate: NoAction)
 
   @@map("subject_officer_form_table")
 }
@@ -95,8 +97,8 @@ model SubjectOfficerFormTable {
 model accused_officer_subject_officer_form_table {
   accused_officer_id      String                  @db.Uuid
   subject_officer_form_id BigInt
-  accused_officer         accused_officer_table   @relation(fields: [accused_officer_id], references: [id], onDelete: Cascade)
-  subject_officer_form    SubjectOfficerFormTable @relation(fields: [subject_officer_form_id], references: [id], onDelete: Cascade)
+  subject_officer_form    SubjectOfficerFormTable @relation(fields: [subject_officer_form_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "accused_officer_subject_officer_fo_subject_officer_form_id_fkey")
+  accused_officer         accused_officer_table   @relation(fields: [accused_officer_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "accused_officer_subject_officer_form_ta_accused_officer_id_fkey")
 
   @@id([accused_officer_id, subject_officer_form_id])
   @@map("accused_officer_subject_officer_form_table")
@@ -116,42 +118,46 @@ model institute_table {
 }
 
 model commitee_table {
-  id           String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  employee_no  String         @unique @db.VarChar(255)
-  full_name    String         @db.VarChar(255)
-  email        String?        @unique @db.VarChar(255)
-  position     String?        @db.VarChar(255)
-  nic_no       String?        @unique @db.VarChar(255)
-  state        String?        @db.VarChar(255)
-  created_at      DateTime?         @default(now()) @db.Timestamptz(6)
-  updated_at      DateTime?         @default(now()) @db.Timestamptz(6)
-  school_table    school_table[]
-  members_by_case members_by_case[]
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employee_no       String              @unique @db.VarChar(50)
+  full_name         String              @db.VarChar(255)
+  email             String?             @unique @db.VarChar(255)
+  position          String?             @db.VarChar(100)
+  nic_no            String?             @unique @db.VarChar(20)
+  state             String?             @default("Active") @db.VarChar(50)
+  created_at        DateTime?           @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime?           @default(now()) @db.Timestamptz(6)
+  chairment_by_case chairment_by_case[]
+  members_by_case   members_by_case[]
+  school_table      school_table[]
 
   @@map("commitee_table")
 }
 
 model school_table {
   id                           String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  employee_no                  String?         @db.VarChar(255)
+  employee_no                  String?         @db.VarChar(50)
   member_school_name           String?         @db.VarChar(255)
-  member_children_schools_name String?         @db.Text
+  member_children_schools_name String?
   created_at                   DateTime?       @default(now()) @db.Timestamptz(6)
   updated_at                   DateTime?       @default(now()) @db.Timestamptz(6)
-  commitee_table               commitee_table? @relation(fields: [employee_no], references: [employee_no], onDelete: Cascade, onUpdate: Cascade)
+  commitee_table               commitee_table? @relation(fields: [employee_no], references: [employee_no], onDelete: Cascade, onUpdate: NoAction)
 
   @@map("school_table")
 }
 
 model chairment_by_case {
-  id         BigInt    @id @default(autoincrement())
-  ref_number String?   @db.VarChar(255)
-  full_name  String?   @db.VarChar(255)
-  position   String?   @db.VarChar(255)
-  email      String?   @db.VarChar(255)
-  created_at DateTime? @default(now()) @db.Timestamptz(6)
-  updated_at DateTime? @default(now()) @db.Timestamptz(6)
+  id             BigInt          @id @default(autoincrement())
+  ref_number     String          @db.VarChar(100)
+  full_name      String          @db.VarChar(255)
+  position       String?         @db.VarChar(255)
+  email          String?         @db.VarChar(255)
+  created_at     DateTime?       @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime?       @default(now()) @db.Timestamptz(6)
+  commitee_table commitee_table? @relation(fields: [email], references: [email])
 
+  @@index([email], map: "idx_chairment_by_case_email")
+  @@index([ref_number], map: "idx_chairment_by_case_ref_number")
   @@map("chairment_by_case")
 }
 
@@ -163,27 +169,102 @@ model members_by_case {
   email          String?         @db.VarChar(255)
   created_at     DateTime?       @default(now()) @db.Timestamptz(6)
   updated_at     DateTime?       @default(now()) @db.Timestamptz(6)
-  commitee_table commitee_table? @relation(fields: [email], references: [email], onDelete: SetNull, onUpdate: Cascade)
+  commitee_table commitee_table? @relation(fields: [email], references: [email])
 
+  @@index([email], map: "idx_members_by_case_email")
+  @@index([ref_number], map: "idx_members_by_case_ref")
   @@map("members_by_case")
 }
 
 model case_by_appointment_and_report_due_date {
-  id                         BigInt    @id @default(autoincrement())
+  id                         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   subject_file_no            String?   @db.VarChar(100)
+  appointment_date           DateTime? @db.Date
+  due_date                   DateTime? @db.Date
+  created_at                 DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at                 DateTime? @default(now()) @db.Timestamptz(6)
   sub_file_no                String?   @db.VarChar(100)
   subject_officer_form_id    BigInt?
   appointment_letter_date    DateTime? @db.Date
   report_due_date            DateTime? @db.Date
   dates_submitted_by_subject Boolean?  @default(true)
-  created_at                 DateTime? @default(now()) @db.Timestamptz(6)
-  updated_at                 DateTime? @default(now()) @db.Timestamptz(6)
 
+  @@index([subject_file_no], map: "idx_case_app_due_file_no")
   @@map("case_by_appointment_and_report_due_date")
 }
 
+model case_by_date_extention {
+  id                         BigInt                   @id @default(autoincrement())
+  subject_file_no            String                   @db.VarChar(100)
+  subject_officer_form_id    BigInt?
+  extention_term             String?                  @db.VarChar(50)
+  start_date                 DateTime                 @db.Date
+  end_date                   DateTime                 @db.Date
+  created_at                 DateTime?                @default(now()) @db.Timestamptz(6)
+  updated_at                 DateTime?                @default(now()) @db.Timestamptz(6)
+  approval_status            String?                  @default("Pending") @db.VarChar(50)
+  decision_date              DateTime?                @db.Date
+  sub_file_no                String?                  @db.VarChar(100)
+  subject_officer_form_table SubjectOfficerFormTable? @relation(fields: [subject_officer_form_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
 
+model case_history {
+  history_id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  case_id             String    @db.VarChar(100)
+  action_type         String    @db.VarChar(150)
+  description         String?
+  status              String?   @db.VarChar(100)
+  performed_by        String?   @db.VarChar(150)
+  performed_role      String?   @db.VarChar(100)
+  performed_at        DateTime? @default(now()) @db.Timestamptz(6)
+  remarks             String?
+  document_id         String?   @db.VarChar(100)
+  document_name       String?   @db.VarChar(255)
+  document_url        String?
+  related_ref         String?   @db.VarChar(100)
+  created_at          DateTime? @default(now()) @db.Timestamptz(6)
+  performed_by_emp_id String?   @db.VarChar(100)
 
+  @@index([case_id], map: "idx_case_history_case_id")
+  @@index([performed_at(sort: Desc)], map: "idx_case_history_performed_at")
+}
 
+model dcmms_audit_logs {
+  id        String   @id
+  timestamp DateTime @default(now()) @db.Timestamptz(6)
+  user_id   String?
+  username  String?
+  email     String?
+  action    String
+  details   String?
+}
 
+model dcmms_letter_edit_requests {
+  id                  String    @id @db.VarChar(100)
+  letter_id           String    @db.VarChar(100)
+  ref_no              String    @db.VarChar(100)
+  requested_by        String    @db.VarChar(255)
+  requester_email     String?   @db.VarChar(255)
+  requester_role      String?   @db.VarChar(100)
+  target_branch_admin String?   @db.VarChar(255)
+  reason              String?
+  status              String?   @default("Pending") @db.VarChar(50)
+  created_at          DateTime? @default(now()) @db.Timestamptz(6)
+  reviewed_by         String?   @db.VarChar(255)
+  reviewed_at         DateTime? @db.Timestamptz(6)
+  reviewer_comments   String?
+}
 
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model dcmms_sessions {
+  id          String    @id
+  user_id     String
+  username    String
+  email       String
+  login_time  DateTime  @default(now()) @db.Timestamptz(6)
+  logout_time DateTime? @db.Timestamptz(6)
+  duration    Int?
+  status      String?   @default("active")
+  ip_address  String?
+  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+}

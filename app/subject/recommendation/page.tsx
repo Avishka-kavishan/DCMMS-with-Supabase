@@ -2,6 +2,8 @@
 
 import "@/i18n";
 import "../../globals.css";
+import "../../daily-mail/daily-mail.css";
+import "../subject.css";
 import "../../dashboard-common.css";
 import "./recommendation.css";
 import { useState, useEffect, Suspense } from "react";
@@ -69,6 +71,8 @@ interface RecommendationRecord {
   chargeSheetIssuedDate?: string;
   chargeSheetResponseDate?: string;
   disciplinaryOrder?: string;
+  secretaryApprovalDate?: string;
+  secretaryApprovedRecommendation?: string;
   status: string;
   submittedAt?: string;
   updatedAt?: string;
@@ -85,6 +89,13 @@ function RecommendationFormContent() {
 
   const caseNoParam = searchParams?.get("caseNo") || searchParams?.get("refNo") || searchParams?.get("id") || "";
   const lang = i18n.language;
+
+  // Client mount state to prevent SSR/CSR hydration mismatches
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Mobile sidebar visibility state
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -122,6 +133,10 @@ function RecommendationFormContent() {
   const [chargeSheetIssuedDate, setChargeSheetIssuedDate] = useState("");
   const [chargeSheetResponseDate, setChargeSheetResponseDate] = useState("");
   const [disciplinaryOrder, setDisciplinaryOrder] = useState("");
+
+  // Secretary of Education Approval State
+  const [secretaryApprovalDate, setSecretaryApprovalDate] = useState("");
+  const [secretaryApprovedRecommendation, setSecretaryApprovedRecommendation] = useState("");
 
   // List View Filter & Search State
   const [recSearchQuery, setRecSearchQuery] = useState("");
@@ -184,6 +199,8 @@ function RecommendationFormContent() {
               chargeSheetIssuedDate: r.charge_sheet_issued_date || r.issued_charge_sheet_date || r.chargeSheetIssuedDate,
               chargeSheetResponseDate: r.charge_sheet_response_date || r.response_charge_sheet_date || r.chargeSheetResponseDate,
               disciplinaryOrder: r.disciplinary_order || r.disciplinaryOrder,
+              secretaryApprovalDate: r.secretary_approval_date || r.date_approved_by_secretary || r.secretaryApprovalDate || "",
+              secretaryApprovedRecommendation: r.secretary_approved_recommendation || r.recommendation_approved_by_secretary || r.secretaryApprovedRecommendation || "",
               status: r.status || "Submitted",
               submittedAt: r.submitted_at,
               updatedAt: r.updated_at
@@ -278,6 +295,8 @@ function RecommendationFormContent() {
                   chargeSheetIssuedDate: lr.chargeSheetIssuedDate || lr.charge_sheet_issued_date || lr.issuedChargeSheetDate,
                   chargeSheetResponseDate: lr.chargeSheetResponseDate || lr.charge_sheet_response_date || lr.responseChargeSheetDate,
                   disciplinaryOrder: lr.disciplinaryOrder || lr.disciplinary_order,
+                  secretaryApprovalDate: lr.secretaryApprovalDate || lr.secretary_approval_date || lr.date_approved_by_secretary || "",
+                  secretaryApprovedRecommendation: lr.secretaryApprovedRecommendation || lr.secretary_approved_recommendation || lr.recommendation_approved_by_secretary || "",
                   status: lr.status || "Submitted",
                   submittedAt: lr.submittedAt || lr.submitted_at,
                   updatedAt: lr.updatedAt || lr.updated_at
@@ -385,6 +404,8 @@ function RecommendationFormContent() {
     setChargeSheetIssuedDate("");
     setChargeSheetResponseDate("");
     setDisciplinaryOrder("");
+    setSecretaryApprovalDate("");
+    setSecretaryApprovedRecommendation("");
 
     try {
       if (isSupabaseConfigured) {
@@ -483,6 +504,12 @@ function RecommendationFormContent() {
             if (recData.disciplinary_order || recData.disciplinaryOrder) {
               setDisciplinaryOrder(recData.disciplinary_order || recData.disciplinaryOrder);
             }
+            if (recData.secretary_approval_date || recData.date_approved_by_secretary || recData.secretaryApprovalDate) {
+              setSecretaryApprovalDate(recData.secretary_approval_date || recData.date_approved_by_secretary || recData.secretaryApprovalDate);
+            }
+            if (recData.secretary_approved_recommendation || recData.recommendation_approved_by_secretary || recData.secretaryApprovedRecommendation) {
+              setSecretaryApprovedRecommendation(recData.secretary_approved_recommendation || recData.recommendation_approved_by_secretary || recData.secretaryApprovedRecommendation);
+            }
           }
         } catch (e) {}
       }
@@ -528,6 +555,12 @@ function RecommendationFormContent() {
           }
           if (foundRec.disciplinaryOrder || foundRec.disciplinary_order) {
             setDisciplinaryOrder(foundRec.disciplinaryOrder || foundRec.disciplinary_order);
+          }
+          if (foundRec.secretaryApprovalDate || foundRec.secretary_approval_date || foundRec.date_approved_by_secretary) {
+            setSecretaryApprovalDate(foundRec.secretaryApprovalDate || foundRec.secretary_approval_date || foundRec.date_approved_by_secretary);
+          }
+          if (foundRec.secretaryApprovedRecommendation || foundRec.secretary_approved_recommendation || foundRec.recommendation_approved_by_secretary) {
+            setSecretaryApprovedRecommendation(foundRec.secretaryApprovedRecommendation || foundRec.secretary_approved_recommendation || foundRec.recommendation_approved_by_secretary);
           }
         }
       }
@@ -578,6 +611,8 @@ function RecommendationFormContent() {
       charge_sheet_issued_date: recommendationCategory === "issuing_charge_sheet" ? (chargeSheetIssuedDate || null) : null,
       charge_sheet_response_date: recommendationCategory === "issuing_charge_sheet" ? (chargeSheetResponseDate || null) : null,
       disciplinary_order: recommendationCategory === "issuing_charge_sheet" ? disciplinaryOrder : null,
+      secretary_approval_date: secretaryApprovalDate || null,
+      secretary_approved_recommendation: secretaryApprovedRecommendation || null,
       status: "Draft",
       updated_at: new Date().toISOString()
     };
@@ -609,6 +644,8 @@ function RecommendationFormContent() {
           chargeSheetIssuedDate: recommendationCategory === "issuing_charge_sheet" ? chargeSheetIssuedDate : "",
           chargeSheetResponseDate: recommendationCategory === "issuing_charge_sheet" ? chargeSheetResponseDate : "",
           disciplinaryOrder: recommendationCategory === "issuing_charge_sheet" ? disciplinaryOrder : "",
+          secretaryApprovalDate,
+          secretaryApprovedRecommendation,
           status: "Draft",
           updatedAt: now
         });
@@ -657,6 +694,8 @@ function RecommendationFormContent() {
       charge_sheet_issued_date: recommendationCategory === "issuing_charge_sheet" ? (chargeSheetIssuedDate || null) : null,
       charge_sheet_response_date: recommendationCategory === "issuing_charge_sheet" ? (chargeSheetResponseDate || null) : null,
       disciplinary_order: recommendationCategory === "issuing_charge_sheet" ? disciplinaryOrder : null,
+      secretary_approval_date: secretaryApprovalDate || null,
+      secretary_approved_recommendation: secretaryApprovedRecommendation || null,
       status: "Submitted",
       submitted_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -702,6 +741,8 @@ function RecommendationFormContent() {
           chargeSheetIssuedDate: recommendationCategory === "issuing_charge_sheet" ? chargeSheetIssuedDate : "",
           chargeSheetResponseDate: recommendationCategory === "issuing_charge_sheet" ? chargeSheetResponseDate : "",
           disciplinaryOrder: recommendationCategory === "issuing_charge_sheet" ? disciplinaryOrder : "",
+          secretaryApprovalDate,
+          secretaryApprovedRecommendation,
           status: "Submitted",
           submittedAt: now,
           updatedAt: now
@@ -815,8 +856,16 @@ function RecommendationFormContent() {
 
   const pendingCases = availableCases.filter((c) => !c.hasRecommendation);
 
+  if (!mounted) {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "#f8fafc" }}>
+        <div style={{ color: "#64748b", fontWeight: 600, fontSize: "14px" }}>Loading Investigation Recommendation...</div>
+      </div>
+    );
+  }
+
   return (
-    <div className="dashboard-layout" style={{ minHeight: "100vh", display: "flex", backgroundColor: "#f8fafc" }}>
+    <div className="dashboard-layout" style={{ minHeight: "100vh", display: "flex", backgroundColor: "#f8fafc" }} suppressHydrationWarning>
       {/* Universal Responsive Sidebar */}
       <Sidebar
         isSidebarOpen={isSidebarOpen}
@@ -827,7 +876,7 @@ function RecommendationFormContent() {
 
       <div className="main-content-wrapper" style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
         {/* Top Header */}
-        <header className="top-header" style={{ padding: "14px 28px", backgroundColor: "#ffffff", borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <header className="top-header" style={{ padding: "14px 28px", backgroundColor: "#ffffff", borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center" }} suppressHydrationWarning>
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             <button
               className="btn-menu-toggle mobile-only"
@@ -837,19 +886,19 @@ function RecommendationFormContent() {
             >
               <Menu size={22} />
             </button>
-            <div className="breadcrumb-box" style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", fontWeight: 600, color: "#475569" }}>
+            <div className="breadcrumb-box" style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", fontWeight: 600, color: "#475569" }} suppressHydrationWarning>
               <Link href="/subject" style={{ color: "#4f46e5", textDecoration: "none", display: "flex", alignItems: "center", gap: "4px" }}>
                 <ArrowLeft size={16} />
-                <span>{lang === "si" ? "විෂය නිලධාරී පුවරුව" : "Subject Dashboard"}</span>
+                <span suppressHydrationWarning>{lang === "si" ? "විෂය නිලධාරී පුවරුව" : "Subject Dashboard"}</span>
               </Link>
               <ChevronRight size={14} style={{ color: "#94a3b8" }} />
-              <span style={{ color: "#0f172a", fontWeight: 700 }}>
+              <span style={{ color: "#0f172a", fontWeight: 700 }} suppressHydrationWarning>
                 {lang === "si" ? "විමර්ශන නිර්දේශ" : lang === "ta" ? "விசாரணை பரிந்துரை" : "Investigation Recommendation"}
               </span>
             </div>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }} suppressHydrationWarning>
             <button
               type="button"
               onClick={() => setViewMode(viewMode === "form" ? "list" : "form")}
@@ -1415,6 +1464,143 @@ function RecommendationFormContent() {
                       </select>
                     </div>
                   </div>
+                </section>
+
+                {/* Card 4: Secretary of Education Approval Details */}
+                <section className="recommendation-form-card secretary-approval-card">
+                  <div className="section-header-pill secretary-approval-pill">
+                    <UserCheck size={16} />
+                    <span>
+                      {lang === "si"
+                        ? "4. අධ්‍යාපන ලේකම්ගේ අනුමැතිය සහ නියෝග"
+                        : lang === "ta"
+                        ? "4. கல்விச் செயலாளரின் ஒப்புதல் மற்றும் உத்தரவு"
+                        : "4. Secretary of Education Approval & Directive"}
+                    </span>
+                  </div>
+
+                  <div className="form-grid-2">
+                    {/* Date approved by the Secretary of Education */}
+                    <div className="form-field-group">
+                      <label className="form-field-label">
+                        {lang === "si"
+                          ? "අධ්‍යාපන ලේකම් අනුමත කළ දිනය (Date approved by the Secretary of Education)"
+                          : lang === "ta"
+                          ? "கல்விச் செயலாளரால் அங்கீகரிக்கப்பட்ட திகதி (Date approved by the Secretary of Education)"
+                          : "Date approved by the Secretary of Education"}
+                      </label>
+                      <input
+                        type="date"
+                        value={secretaryApprovalDate}
+                        onChange={(e) => setSecretaryApprovalDate(e.target.value)}
+                        className="form-field-input"
+                      />
+                    </div>
+
+                    {/* Secretary Approval Quick Indicator */}
+                    <div className="form-field-group">
+                      <label className="form-field-label">
+                        {lang === "si" ? "අනුමැතියේ තත්ත්වය" : "Secretary Approval Status"}
+                      </label>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", minHeight: "42px" }}>
+                        {secretaryApprovalDate ? (
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12.5px", fontWeight: 700, color: "#92400e", backgroundColor: "#fef3c7", padding: "6px 14px", borderRadius: "8px", border: "1px solid #fde68a" }}>
+                            <CheckCircle2 size={15} style={{ color: "#d97706" }} />
+                            {lang === "si" ? `අධ්‍යාපන ලේකම් විසින් ${secretaryApprovalDate} දින අනුමතයි` : `Approved by Secretary on ${secretaryApprovalDate}`}
+                          </span>
+                        ) : (
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "#64748b", backgroundColor: "#f1f5f9", padding: "6px 12px", borderRadius: "8px" }}>
+                            <Clock size={14} />
+                            {lang === "si" ? "අධ්‍යාපන ලේකම්ගේ අනුමැතිය අපේක්ෂිතයි" : "Awaiting Secretary of Education approval"}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Recommendation approved by the Secretary of Education */}
+                  <div className="form-field-group" style={{ marginTop: "12px" }}>
+                    <label className="form-field-label">
+                      {lang === "si"
+                        ? "අධ්‍යාපන ලේකම් අනුමත කළ නිර්දේශය (Recommendation approved by the Secretary of Education)"
+                        : lang === "ta"
+                        ? "கல்விச் செயலாளரால் அங்கீகரிக்கப்பட்ட பரிந்துரை (Recommendation approved by the Secretary of Education)"
+                        : "Recommendation approved by the Secretary of Education"}
+                    </label>
+                    <textarea
+                      value={secretaryApprovedRecommendation}
+                      onChange={(e) => setSecretaryApprovedRecommendation(e.target.value)}
+                      rows={3}
+                      placeholder={
+                        lang === "si"
+                          ? "අධ්‍යාපන අමාත්‍යාංශ ලේකම්වරයා විසින් අනුමත කරන ලද නිල නිර්දේශය, තීරණය හෝ විනය නියෝගය මෙහි සටහන් කරන්න..."
+                          : lang === "ta"
+                          ? "கல்விச் செயலாளரால் அங்கீகரிக்கப்பட்ட பரிந்துரை அல்லது உத்தரவை இங்கு உள்ளிடவும்..."
+                          : "Enter the formal recommendation, directive, or disciplinary order approved and signed by the Secretary of Education..."
+                      }
+                      className="form-field-textarea"
+                      style={{ minHeight: "85px" }}
+                    />
+
+                    {/* Quick presets for Secretary Approved Recommendation */}
+                    <div className="presets-container" style={{ marginTop: "8px" }}>
+                      <span style={{ fontSize: "12px", color: "#64748b", fontWeight: 600, alignSelf: "center" }}>
+                        {lang === "si" ? "ඉක්මන් ආකෘති:" : "Quick Presets:"}
+                      </span>
+                      <button
+                        type="button"
+                        className="preset-chip"
+                        onClick={() =>
+                          setSecretaryApprovedRecommendation(
+                            lang === "si"
+                              ? "මූලික විමර්ශන නිර්දේශය අධ්‍යාපන අමාත්‍යාංශ ලේකම් විසින් එලෙසම අනුමත කරන ලදී."
+                              : "Approved as recommended by the preliminary investigation committee."
+                          )
+                        }
+                      >
+                        + {lang === "si" ? "නිර්දේශය එලෙසම අනුමතයි" : "Approved as Recommended"}
+                      </button>
+                      <button
+                        type="button"
+                        className="preset-chip"
+                        onClick={() =>
+                          setSecretaryApprovedRecommendation(
+                            lang === "si"
+                              ? "අදාළ නිලධාරියා වෙත චෝදනා පත්‍රයක් නිකුත් කර විධිමත් විනය පරීක්ෂණයක් පැවැත්වීමට අධ්‍යාපන ලේකම් විසින් අනුමත කරන ලදී."
+                              : "Approved issuance of formal charge sheet and formal disciplinary inquiry."
+                          )
+                        }
+                      >
+                        + {lang === "si" ? "චෝදනා පත්‍ර නිකුත් කිරීමට අනුමැතිය" : "Approve Charge Sheet"}
+                      </button>
+                      <button
+                        type="button"
+                        className="preset-chip"
+                        onClick={() =>
+                          setSecretaryApprovedRecommendation(
+                            lang === "si"
+                              ? "නිලධාරියා වෙත දැඩි ලිඛිත අවවාදයක් නිකුත් කර විනය ගොනුව අවසන් කිරීමට අධ්‍යාපන ලේකම් අනුමැතිය ලබා දෙන ලදී."
+                              : "Approved issuance of severe written warning and closure of disciplinary file."
+                          )
+                        }
+                      >
+                        + {lang === "si" ? "අවවාද කර ගොනුව අවසන් කිරීමට අනුමැතිය" : "Approve Warning & Close"}
+                      </button>
+                      <button
+                        type="button"
+                        className="preset-chip"
+                        onClick={() =>
+                          setSecretaryApprovedRecommendation(
+                            lang === "si"
+                              ? "පරිපාලන අවශ්‍යතාවය මත නිලධාරියා වහාම වෙනත් සේවා ස්ථානයකට මාරු කිරීමට අධ්‍යාපන ලේකම් අනුමැතිය ලබා දෙන ලදී."
+                              : "Approved administrative transfer of the officer with immediate effect."
+                          )
+                        }
+                      >
+                        + {lang === "si" ? "ස්ථාන මාරුව අනුමතයි" : "Approve Transfer"}
+                      </button>
+                    </div>
+                  </div>
 
                   <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", marginTop: "24px", paddingTop: "16px", borderTop: "1px solid #f1f5f9" }}>
                     <button type="button" onClick={() => setViewMode("list")} className="btn-back-gray">
@@ -1846,6 +2032,11 @@ function RecommendationFormContent() {
                                 <span>Target: <strong>{item.targetDate}</strong></span>
                               )}
                               <span>{item.submittedAt ? item.submittedAt.slice(0, 10) : item.updatedAt ? item.updatedAt.slice(0, 10) : "—"}</span>
+                              {item.secretaryApprovalDate && (
+                                <span style={{ fontSize: "10.5px", color: "#92400e", backgroundColor: "#fef3c7", padding: "1px 6px", borderRadius: "4px", fontWeight: 600, border: "1px solid #fde68a", display: "inline-flex", alignItems: "center", gap: "3px", width: "fit-content", marginTop: "2px" }} title={`Secretary Approved: ${item.secretaryApprovedRecommendation || item.secretaryApprovalDate}`}>
+                                  ✓ Sec: {item.secretaryApprovalDate}
+                                </span>
+                              )}
                             </div>
                           </td>
                           <td className="text-center actions-cell">
@@ -2012,6 +2203,38 @@ function RecommendationFormContent() {
                             </div>
                             <div style={{ fontSize: "13px", fontWeight: 600, color: "#1e1b4b", marginTop: "2px" }}>
                               {selectedRecModal.disciplinaryOrder}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Secretary of Education Approval Details (If present) */}
+                  {(selectedRecModal.secretaryApprovalDate || selectedRecModal.secretaryApprovedRecommendation) && (
+                    <div style={{ backgroundColor: "#fffbeb", padding: "14px 16px", borderRadius: "10px", border: "1.5px solid #fde68a", display: "flex", flexDirection: "column", gap: "8px" }}>
+                      <div style={{ fontSize: "12.5px", fontWeight: 700, color: "#92400e", display: "flex", alignItems: "center", gap: "6px" }}>
+                        <UserCheck size={16} style={{ color: "#d97706" }} />
+                        <span>{lang === "si" ? "අධ්‍යාපන ලේකම්ගේ අනුමැතිය සහ නියෝග" : "Secretary of Education Approval & Directive"}</span>
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                        {selectedRecModal.secretaryApprovalDate && (
+                          <div>
+                            <div style={{ fontSize: "11px", fontWeight: 700, color: "#92400e", textTransform: "uppercase" }}>
+                              {lang === "si" ? "අනුමත කළ දිනය" : "Date Approved by Secretary"}
+                            </div>
+                            <div style={{ fontSize: "13px", fontWeight: 600, color: "#1e1b4b", marginTop: "2px" }}>
+                              {selectedRecModal.secretaryApprovalDate}
+                            </div>
+                          </div>
+                        )}
+                        {selectedRecModal.secretaryApprovedRecommendation && (
+                          <div style={{ gridColumn: selectedRecModal.secretaryApprovalDate ? "1 / span 2" : "span 2" }}>
+                            <div style={{ fontSize: "11px", fontWeight: 700, color: "#92400e", textTransform: "uppercase" }}>
+                              {lang === "si" ? "අනුමත කළ නිර්දේශය" : "Recommendation Approved by Secretary"}
+                            </div>
+                            <div style={{ fontSize: "13px", fontWeight: 600, color: "#1e1b4b", marginTop: "2px", whiteSpace: "pre-wrap" }}>
+                              {selectedRecModal.secretaryApprovedRecommendation}
                             </div>
                           </div>
                         )}

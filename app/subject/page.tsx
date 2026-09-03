@@ -13,7 +13,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { getCurrentProfile, signOut, UserProfile } from "@/lib/auth";
 import { updateCaseByDateExtensionApprovalServer, saveCaseByAppointmentAndReportDueDateServer } from "@/lib/db-actions";
-import { CheckCircle, XCircle, FileText, Send, Clock, X, AlertCircle, ShieldCheck, Calendar as CalendarIcon, ChevronDown, ChevronUp, Bell, Eye, MoreHorizontal, Filter, Check, MailCheck, ClipboardList, Plus, Sparkles, ExternalLink, User, Building, ArrowRight, ShieldAlert, FileCheck, Layers } from "lucide-react";
+import { CheckCircle, XCircle, FileText, Send, Clock, X, AlertCircle, ShieldCheck, Calendar as CalendarIcon, ChevronDown, ChevronUp, Bell, Eye, MoreHorizontal, Filter, Check, MailCheck, ClipboardList, Plus, Sparkles, ExternalLink, User, Building, ArrowRight, ShieldAlert, FileCheck, Layers, UserCheck } from "lucide-react";
 
 interface Case {
   id: string;
@@ -1051,7 +1051,7 @@ export default function SubjectOfficerDashboard() {
                 return timeB - timeA;
               }
               const dateA = new Date(a.letterDate || a.receivedDate || a.assignedDate || 0).getTime();
-const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).getTime();
+              const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).getTime();
               return dateB - dateA;
             });
             const fallbackAnswerList = collectAnswerLetters(
@@ -1097,6 +1097,8 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
               forwardTo: r.forward_to || "disciplinary_branch",
               targetDate: r.target_date || "",
               referenceNotes: r.reference_notes || "",
+              secretaryApprovalDate: r.secretary_approval_date || r.date_approved_by_secretary || r.secretaryApprovalDate || "",
+              secretaryApprovedRecommendation: r.secretary_approved_recommendation || r.recommendation_approved_by_secretary || r.secretaryApprovedRecommendation || "",
               status: r.status || "Submitted",
               submittedAt: r.submitted_at || r.created_at || "",
               updatedAt: r.updated_at || r.created_at || "",
@@ -1129,6 +1131,8 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
                   forwardTo: lr.forwardTo || lr.forward_to || "disciplinary_branch",
                   targetDate: lr.targetDate || lr.target_date || "",
                   referenceNotes: lr.referenceNotes || lr.reference_notes || "",
+                  secretaryApprovalDate: lr.secretaryApprovalDate || lr.secretary_approval_date || lr.date_approved_by_secretary || "",
+                  secretaryApprovedRecommendation: lr.secretaryApprovedRecommendation || lr.secretary_approved_recommendation || lr.recommendation_approved_by_secretary || "",
                   status: lr.status || "Submitted",
                   submittedAt: lr.submittedAt || lr.submitted_at || lr.updatedAt || "",
                   updatedAt: lr.updatedAt || lr.updated_at || "",
@@ -4565,6 +4569,38 @@ const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).ge
                   )}
                 </div>
               </div>
+
+              {/* Secretary of Education Approval Details (If present) */}
+              {(selectedRecModal.secretaryApprovalDate || selectedRecModal.secretaryApprovedRecommendation) && (
+                <div style={{ backgroundColor: "#fffbeb", padding: "14px 16px", borderRadius: "10px", border: "1.5px solid #fde68a", display: "flex", flexDirection: "column", gap: "8px" }}>
+                  <div style={{ fontSize: "12.5px", fontWeight: 700, color: "#92400e", display: "flex", alignItems: "center", gap: "6px" }}>
+                    <UserCheck size={16} style={{ color: "#d97706" }} />
+                    <span>{lang === "si" ? "අධ්‍යාපන ලේකම්ගේ අනුමැතිය සහ නියෝග" : "Secretary of Education Approval & Directive"}</span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                    {selectedRecModal.secretaryApprovalDate && (
+                      <div>
+                        <div style={{ fontSize: "11px", fontWeight: 700, color: "#92400e", textTransform: "uppercase" }}>
+                          {lang === "si" ? "අනුමත කළ දිනය" : "Date Approved by Secretary"}
+                        </div>
+                        <div style={{ fontSize: "13px", fontWeight: 600, color: "#1e1b4b", marginTop: "2px" }}>
+                          {selectedRecModal.secretaryApprovalDate}
+                        </div>
+                      </div>
+                    )}
+                    {selectedRecModal.secretaryApprovedRecommendation && (
+                      <div style={{ gridColumn: selectedRecModal.secretaryApprovalDate ? "1 / span 2" : "span 2" }}>
+                        <div style={{ fontSize: "11px", fontWeight: 700, color: "#92400e", textTransform: "uppercase" }}>
+                          {lang === "si" ? "අනුමත කළ නිර්දේශය" : "Recommendation Approved by Secretary"}
+                        </div>
+                        <div style={{ fontSize: "13px", fontWeight: 600, color: "#1e1b4b", marginTop: "2px", whiteSpace: "pre-wrap" }}>
+                          {selectedRecModal.secretaryApprovedRecommendation}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Recommendation Title */}
               {selectedRecModal.title && (

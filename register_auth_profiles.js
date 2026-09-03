@@ -1,68 +1,102 @@
-const fs = require('fs');
-const path = require('path');
-
-const envPath = path.join(__dirname, '.env.local');
-if (fs.existsSync(envPath)) {
-  const raw = fs.readFileSync(envPath, 'utf8');
-  raw.split(/\r?\n/).forEach(line => {
-    const m = line.match(/^\s*([^#=\s]+)\s*=\s*(.*)$/);
-    if (m) {
-      let v = m[2];
-      if (v.startsWith('"') && v.endsWith('"')) v = v.slice(1, -1);
-      process.env[m[1]] = v;
-    }
-  });
-}
-
-const { createClient } = require('@supabase/supabase-js');
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(url, key);
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
 
 async function run() {
   try {
-    // 1. Sign in Subject Officer
-    console.log('Signing in Subject Officer...');
-    const { data: subData, error: subError } = await supabase.auth.signInWithPassword({
-      email: 'avishkakavishan13@gmail.com',
-      password: 'rath123456'
+    console.log("Registering/Updating officer profiles in local PostgreSQL...");
+
+    const officers = [
+      {
+        employee_no: "200280401310",
+        full_name: "Nathasha Sathsarani",
+        email: "nathashasathsarani209@gmail.com",
+        password: "123456",
+        role: "System admin",
+        is_active: true,
+      },
+      {
+        employee_no: "200133702441",
+        full_name: "Avishka Kavishan",
+        email: "avishkakavishan13@gmail.com",
+        password: "123456",
+        role: "Branch admin",
+        is_active: true,
+      },
+      {
+        employee_no: "200399100111",
+        full_name: "Rathnaweera",
+        email: "rathnaweera@dcmms.gov.lk",
+        password: "rath123456",
+        role: "Subject officer",
+        is_active: true,
+      },
+      {
+        employee_no: "200399100222",
+        full_name: "Avishka",
+        email: "avishakavishan3@gmail.com",
+        password: "kavi123456",
+        role: "Daily mail officer",
+        is_active: true,
+      },
+      {
+        employee_no: "200399100000",
+        full_name: "System Administrator",
+        email: "admin@dcmms.gov.lk",
+        password: "sysadmin123456",
+        role: "System admin",
+        is_active: true,
+      },
+    ];
+
+    for (const officer of officers) {
+      const existing = await prisma.registerOfficerTable.findFirst({
+        where: {
+          OR: [
+            { employee_no: officer.employee_no },
+            { email: officer.email }
+          ]
+        }
+      });
+
+      if (existing) {
+        await prisma.registerOfficerTable.update({
+          where: { id: existing.id },
+          data: {
+            employee_no: officer.employee_no,
+            full_name: officer.full_name,
+            email: officer.email,
+            password: officer.password,
+            role: officer.role,
+            is_active: officer.is_active,
+          }
+        });
+        console.log(`Updated: ${officer.full_name} (${officer.email}) [${officer.role}]`);
+      } else {
+        await prisma.registerOfficerTable.create({
+          data: {
+            employee_no: officer.employee_no,
+            full_name: officer.full_name,
+            email: officer.email,
+            password: officer.password,
+            role: officer.role,
+            is_active: officer.is_active,
+          }
+        });
+        console.log(`Created: ${officer.full_name} (${officer.email}) [${officer.role}]`);
+      }
+    }
+
+    const allOfficers = await prisma.registerOfficerTable.findMany({
+      select: { employee_no: true, full_name: true, email: true, role: true, is_active: true }
     });
-    if (subError) throw subError;
-    console.log('Subject Officer UUID:', subData.user.id);
 
-    // Upsert profile
-    const { error: subProfError } = await supabase.from('dcmms_profiles').upsert({
-      id: subData.user.id,
-      full_name: 'Rathnaweera',
-      role: 'subject_officer'
-    });
-    if (subProfError) throw subProfError;
-    console.log('Subject Officer profile created/updated!');
-
-    // Sign out
-    await supabase.auth.signOut();
-
-    // 2. Sign in Daily Mail Officer
-    console.log('Signing in Daily Mail Officer...');
-    const { data: dmData, error: dmError } = await supabase.auth.signInWithPassword({
-      email: 'avishakavishan3@gmail.com',
-      password: 'kavi123456'
-    });
-    if (dmError) throw dmError;
-    console.log('Daily Mail Officer UUID:', dmData.user.id);
-
-    // Upsert profile
-    const { error: dmProfError } = await supabase.from('dcmms_profiles').upsert({
-      id: dmData.user.id,
-      full_name: 'Avishka',
-      role: 'daily_mail'
-    });
-    if (dmProfError) throw dmProfError;
-    console.log('Daily Mail Officer profile created/updated!');
-
-    console.log('All profiles registered successfully!');
+    console.log("\n--- Active Officers in Database ---");
+    console.table(allOfficers);
+    console.log("All local PostgreSQL profiles synced successfully!");
   } catch (err) {
-    console.error('Error:', err.message || err);
+    console.error("Registration Error:", err);
+  } finally {
+    await prisma.$disconnect();
   }
 }
 

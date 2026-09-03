@@ -10,7 +10,6 @@
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
-    "@supabase/supabase-js": "^2.110.0",
     "googleapis": "^173.0.0",
     "i18next": "^26.3.1",
     "lucide-react": "^1.23.0",

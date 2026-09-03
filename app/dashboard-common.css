@@ -225,4 +225,27 @@
   color: #4f46e5;
 }
 
+/* Sidebar Baseline Safeguards */
+.menu-icon, .sidebar .menu-icon {
+  width: 20px !important;
+  height: 20px !important;
+  max-width: 20px !important;
+  max-height: 20px !important;
+  flex-shrink: 0;
+}
+
+.logout-icon, .sidebar .logout-icon {
+  width: 18px !important;
+  height: 18px !important;
+  max-width: 18px !important;
+  max-height: 18px !important;
+  flex-shrink: 0;
+}
+
+.sidebar-menu-list {
+  list-style: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
 

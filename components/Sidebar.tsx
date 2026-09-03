@@ -304,7 +304,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* ============================================================
          SIDEBAR PANEL
          ============================================================ */}
-      <aside className={`sidebar ${isSidebarOpen ? "open" : ""}`}>
+      <aside className={`sidebar ${isSidebarOpen ? "open" : ""}`} suppressHydrationWarning>
         {/* Logo & Close Button Header */}
         <div className="sidebar-header">
           <div className="sidebar-brand">
@@ -319,7 +319,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
             <div className="sidebar-brand-text">
               <h1 className="sidebar-brand-title">DCMMS</h1>
-              <p className="sidebar-brand-subtitle">{t("subtitle")}</p>
+              <p className="sidebar-brand-subtitle" suppressHydrationWarning>{t("subtitle")}</p>
             </div>
           </div>
 
@@ -336,7 +336,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Quick Action Sidebar Button */}
         {quickActionButton && (
-          <div className="sidebar-action-wrapper">
+          <div className="sidebar-action-wrapper" suppressHydrationWarning>
             {quickActionButton}
           </div>
         )}
@@ -352,7 +352,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   className={`sidebar-menu-item ${item.isActive ? "active" : ""}`}
                 >
                   {item.icon}
-                  <span>{item.label}</span>
+                  <span suppressHydrationWarning>{item.label}</span>
                   {item.badge !== undefined && (
                     <span className="badge-count">{item.badge}</span>
                   )}
@@ -363,14 +363,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </nav>
 
         {/* Sidebar Footer User Info and Logout */}
-        <div className="sidebar-footer">
+        <div className="sidebar-footer" suppressHydrationWarning>
           <div className="user-profile-box">
             <div className="user-avatar-circle">
-              <span>{userInitials}</span>
+              <span suppressHydrationWarning>{userInitials}</span>
             </div>
             <div className="user-details">
-              <span className="user-name">{userName}</span>
-              <span className="user-email">{userEmail}</span>
+              <span className="user-name" suppressHydrationWarning>{userName}</span>
+              <span className="user-email" suppressHydrationWarning>{userEmail}</span>
             </div>
           </div>
           <a href="#" className="logout-link" onClick={async (e) => {
@@ -383,7 +383,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <svg className="logout-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
               <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>
-            <span>{t("logout")}</span>
+            <span suppressHydrationWarning>{t("logout")}</span>
           </a>
         </div>
       </aside>
