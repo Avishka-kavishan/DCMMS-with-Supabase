@@ -1106,7 +1106,7 @@ function RecommendationFormContent() {
                     <span>{lang === "si" ? "1. නිර්දේශ වර්ගීකරණය සහ ප්‍රමුඛතාව" : "1. Recommendation Classification & Priority"}</span>
                   </div>
 
-                  <div className="form-grid-3">
+                  <div className="form-grid-2">
                     <div className="form-field-group">
                       <label className="form-field-label">
                         {lang === "si"
@@ -1162,6 +1162,21 @@ function RecommendationFormContent() {
                         <option value="high">{lang === "si" ? "🔴 ඉහළ / කඩිනම් (High / Urgent)" : "🔴 High / Urgent"}</option>
                         <option value="normal">{lang === "si" ? "🟡 සාමාන්‍ය (Normal / Medium)" : "🟡 Normal / Medium"}</option>
                         <option value="low">{lang === "si" ? "🟢 අඩු (Low)" : "🟢 Low"}</option>
+                      </select>
+                    </div>
+
+                    <div className="form-field-group">
+                      <label className="form-field-label">
+                        {lang === "si" ? "නඩුවේ තත්ත්වය (Case Status Update)" : "Case Status Update"}
+                      </label>
+                      <select
+                        value={recommendationStatus}
+                        onChange={(e) => setRecommendationStatus(e.target.value)}
+                        className="form-field-select"
+                      >
+                        <option value="Submitted">{lang === "si" ? "නිර්දේශය ඉදිරිපත් කරන ලදී (Recommendation Submitted)" : "Recommendation Submitted"}</option>
+                        <option value="Implementation of Recommendations">{lang === "si" ? "නිර්දේශ ක්‍රියාත්මක කිරීමේ අදියර (Implementation of Recommendations)" : "Implementation of Recommendations"}</option>
+                        <option value="Draft">{lang === "si" ? "කෙටුම්පතක් ලෙස පමණක් සුරකින්න (Draft)" : "Draft"}</option>
                       </select>
                     </div>
 
@@ -1421,61 +1436,16 @@ function RecommendationFormContent() {
                   </div>
                 </section>
 
-                {/* Card 3: Forwarding & Routing */}
-                <section className="recommendation-form-card">
-                  <div className="section-header-pill">
-                    <Send size={16} />
-                    <span>{lang === "si" ? "3. නිර්දේශය යොමු කිරීම සහ ක්‍රියාත්මක කිරීමේ අධිකාරිය" : "3. Routing & Implementation Authority"}</span>
-                  </div>
-
-                  <div className="form-grid-2">
-                    <div className="form-field-group">
-                      <label className="form-field-label">
-                        {lang === "si" ? "නිර්දේශය යොමු කරන ප්‍රධාන අංශය / නිලධාරියා" : "Forward Recommendation To"}
-                        <span className="required-asterisk">*</span>
-                      </label>
-                      <select
-                        value={forwardTo}
-                        onChange={(e) => setForwardTo(e.target.value)}
-                        className="form-field-select"
-                        required
-                      >
-                        <option value="disciplinary_branch">{lang === "si" ? "අධ්‍යාපන අමාත්‍යාංශ විනය අංශය (Disciplinary Branch)" : "Ministry Disciplinary Branch"}</option>
-                        <option value="secretary_education">{lang === "si" ? "අධ්‍යාපන අමාත්‍යාංශ ලේකම් (Secretary, Ministry of Education)" : "Secretary, Ministry of Education"}</option>
-                        <option value="provincial_director">{lang === "si" ? "පළාත් අධ්‍යාපන අධ්‍යක්ෂ (Provincial Director of Education)" : "Provincial Director of Education"}</option>
-                        <option value="zonal_director">{lang === "si" ? "කලාප අධ්‍යාපන අධ්‍යක්ෂ (Zonal Director of Education)" : "Zonal Director of Education"}</option>
-                        <option value="public_service_commission">{lang === "si" ? "රාජ්‍ය සේවා කොමිෂන් සභාව (Public Service Commission - PSC)" : "Public Service Commission (PSC)"}</option>
-                        <option value="investigation_unit">{lang === "si" ? "විමර්ශන අධ්‍යක්ෂක / විමර්ශන ඒකකය (Investigation Branch)" : "Investigation Director / Unit"}</option>
-                      </select>
-                    </div>
-
-                    <div className="form-field-group">
-                      <label className="form-field-label">
-                        {lang === "si" ? "නඩුවේ තත්ත්වය (Case Status Update)" : "Case Status Update"}
-                      </label>
-                      <select
-                        value={recommendationStatus}
-                        onChange={(e) => setRecommendationStatus(e.target.value)}
-                        className="form-field-select"
-                      >
-                        <option value="Submitted">{lang === "si" ? "නිර්දේශය ඉදිරිපත් කරන ලදී (Recommendation Submitted)" : "Recommendation Submitted"}</option>
-                        <option value="Implementation of Recommendations">{lang === "si" ? "නිර්දේශ ක්‍රියාත්මක කිරීමේ අදියර (Implementation of Recommendations)" : "Implementation of Recommendations"}</option>
-                        <option value="Draft">{lang === "si" ? "කෙටුම්පතක් ලෙස පමණක් සුරකින්න (Draft)" : "Draft"}</option>
-                      </select>
-                    </div>
-                  </div>
-                </section>
-
-                {/* Card 4: Secretary of Education Approval Details */}
+                {/* Card 3: Secretary of Education Approval Details */}
                 <section className="recommendation-form-card secretary-approval-card">
                   <div className="section-header-pill secretary-approval-pill">
                     <UserCheck size={16} />
                     <span>
                       {lang === "si"
-                        ? "4. අධ්‍යාපන ලේකම්ගේ අනුමැතිය සහ නියෝග"
+                        ? "3. අධ්‍යාපන ලේකම්ගේ අනුමැතිය සහ නියෝග"
                         : lang === "ta"
-                        ? "4. கல்விச் செயலாளரின் ஒப்புதல் மற்றும் உத்தரவு"
-                        : "4. Secretary of Education Approval & Directive"}
+                        ? "3. கல்விச் செயலாளரின் ஒப்புதல் மற்றும் உத்தரவு"
+                        : "3. Secretary of Education Approval & Directive"}
                     </span>
                   </div>
 
@@ -1600,6 +1570,34 @@ function RecommendationFormContent() {
                         + {lang === "si" ? "ස්ථාන මාරුව අනුමතයි" : "Approve Transfer"}
                       </button>
                     </div>
+                  </div>
+                </section>
+
+                {/* Card 4: Forwarding & Routing */}
+                <section className="recommendation-form-card">
+                  <div className="section-header-pill">
+                    <Send size={16} />
+                    <span>{lang === "si" ? "4. නිර්දේශය යොමු කිරීම සහ ක්‍රියාත්මක කිරීමේ අධිකාරිය" : "4. Routing & Implementation Authority"}</span>
+                  </div>
+
+                  <div className="form-field-group">
+                    <label className="form-field-label">
+                      {lang === "si" ? "නිර්දේශය යොමු කරන ප්‍රධාන අංශය / නිලධාරියා" : "Forward Recommendation To"}
+                      <span className="required-asterisk">*</span>
+                    </label>
+                    <select
+                      value={forwardTo}
+                      onChange={(e) => setForwardTo(e.target.value)}
+                      className="form-field-select"
+                      required
+                    >
+                      <option value="disciplinary_branch">{lang === "si" ? "අධ්‍යාපන අමාත්‍යාංශ විනය අංශය (Disciplinary Branch)" : "Ministry Disciplinary Branch"}</option>
+                      <option value="secretary_education">{lang === "si" ? "අධ්‍යාපන අමාත්‍යාංශ ලේකම් (Secretary, Ministry of Education)" : "Secretary, Ministry of Education"}</option>
+                      <option value="provincial_director">{lang === "si" ? "පළාත් අධ්‍යාපන අධ්‍යක්ෂ (Provincial Director of Education)" : "Provincial Director of Education"}</option>
+                      <option value="zonal_director">{lang === "si" ? "කලාප අධ්‍යාපන අධ්‍යක්ෂ (Zonal Director of Education)" : "Zonal Director of Education"}</option>
+                      <option value="public_service_commission">{lang === "si" ? "රාජ්‍ය සේවා කොමිෂන් සභාව (Public Service Commission - PSC)" : "Public Service Commission (PSC)"}</option>
+                      <option value="investigation_unit">{lang === "si" ? "විමර්ශන අධ්‍යක්ෂක / විමර්ශන ඒකකය (Investigation Branch)" : "Investigation Director / Unit"}</option>
+                    </select>
                   </div>
 
                   <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", marginTop: "24px", paddingTop: "16px", borderTop: "1px solid #f1f5f9" }}>
