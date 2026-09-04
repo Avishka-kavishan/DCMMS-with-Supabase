@@ -1540,6 +1540,7 @@ export async function saveAccusedOfficerServer(officerData: any) {
     try {
       await prisma.$executeRawUnsafe(`
         ALTER TABLE subject_officer_form_table ADD COLUMN IF NOT EXISTS file_name VARCHAR(100);
+        ALTER TABLE subject_officer_form_table ADD COLUMN IF NOT EXISTS description TEXT;
       `);
     } catch (e) {}
 
@@ -1755,6 +1756,7 @@ export async function saveAccusedOfficerServer(officerData: any) {
 
       const prepDateVal = parseSafeDate(date_prepared_and_submitted_for_signature);
       const fileNameVal = officerData.file_name || officerData.fileName || "discipline";
+      const descVal = officerData.description || officerData.complaint_matter || officerData.complaintMatter || null;
 
       const existingForms: any[] = await prisma.$queryRaw`
         SELECT id FROM subject_officer_form_table WHERE ref_number = ${refTrimmed} LIMIT 1;
@@ -1769,6 +1771,7 @@ export async function saveAccusedOfficerServer(officerData: any) {
               subject_file_no = ${subject_file_no || null},
               file_name = ${fileNameVal},
               future_action = ${future_action || null},
+              description = ${descVal},
               date_prepared_and_submitted_for_signature = ${prepDateVal},
               classification_of_complaint_letter = ${classification_of_complaint_letter || null},
               name_of_the_presenting_the_complain = ${name_of_the_presenting_the_complain || null},
@@ -1779,13 +1782,13 @@ export async function saveAccusedOfficerServer(officerData: any) {
       } else {
         const insertedForm: any[] = await prisma.$queryRaw`
           INSERT INTO subject_officer_form_table (
-            ref_number, daily_mail_letter_id, accused_officer_id, subject_file_no, file_name, future_action,
+            ref_number, daily_mail_letter_id, accused_officer_id, subject_file_no, file_name, future_action, description,
             date_prepared_and_submitted_for_signature, classification_of_complaint_letter,
             name_of_the_presenting_the_complain, address_of_the_person_presenting_the_complaint
           )
           VALUES (
             ${refTrimmed}, ${dailyMailId ? Number(dailyMailId) : null}, ${primaryOfficerId ? primaryOfficerId : null}::uuid,
-            ${subject_file_no || null}, ${fileNameVal}, ${future_action || null}, ${prepDateVal},
+            ${subject_file_no || null}, ${fileNameVal}, ${future_action || null}, ${descVal}, ${prepDateVal},
             ${classification_of_complaint_letter || null}, ${name_of_the_presenting_the_complain || null},
             ${address_of_the_person_presenting_the_complaint || null}
           )
@@ -1862,6 +1865,7 @@ export async function getAccusedOfficerByRefServer(refNumber: string) {
         sof.subject_file_no,
         sof.file_name,
         sof.future_action,
+        sof.description,
         sof.date_prepared_and_submitted_for_signature,
         sof.classification_of_complaint_letter,
         sof.name_of_the_presenting_the_complain,
@@ -2025,7 +2029,9 @@ export async function getAccusedOfficerByRefServer(refNumber: string) {
         form_id: form.form_id ? String(form.form_id) : null,
         ref_number: form.ref_number,
         subject_file_no: form.subject_file_no,
+        file_name: form.file_name,
         future_action: form.future_action,
+        description: form.description,
         date_prepared_and_submitted_for_signature: form.date_prepared_and_submitted_for_signature,
         classification_of_complaint_letter: form.classification_of_complaint_letter,
         name_of_the_presenting_the_complain: form.name_of_the_presenting_the_complain,

@@ -1271,4 +1271,305 @@
   color: #451a03;
 }
 
+/* ============================================================
+   STREAMLINED SKETCH FORM LAYOUT STYLES
+   ============================================================ */
+
+.sketch-form-container {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 32px 36px;
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05), 0 2px 6px -1px rgba(15, 23, 42, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  margin-top: 10px;
+}
+
+.sketch-form-row-2col {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px 32px;
+}
+
+@media (min-width: 768px) {
+  .sketch-form-row-2col {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.sketch-field-label {
+  font-size: calc(14px * var(--font-scale, 1));
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Radio Row Styling (Discipline / Mail) */
+.sketch-radio-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 2px;
+}
+
+.sketch-radio-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  padding: 10px 22px;
+  border-radius: 10px;
+  border: 1.5px solid #cbd5e1;
+  background-color: #ffffff;
+  color: #334155;
+  font-weight: 600;
+  font-size: calc(14px * var(--font-scale, 1));
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.sketch-radio-pill:hover {
+  border-color: #94a3b8;
+  background-color: #f8fafc;
+}
+
+.sketch-radio-pill.active-discipline {
+  border-color: #2563eb;
+  background-color: #eff6ff;
+  color: #1d4ed8;
+  box-shadow: 0 0 0 1px #2563eb, 0 2px 4px rgba(37, 99, 235, 0.1);
+}
+
+.sketch-radio-pill.active-mail {
+  border-color: #2563eb;
+  background-color: #eff6ff;
+  color: #1d4ed8;
+  box-shadow: 0 0 0 1px #2563eb, 0 2px 4px rgba(37, 99, 235, 0.1);
+}
+
+.sketch-radio-native {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.sketch-radio-dot-outer {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid #94a3b8;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  background-color: #ffffff;
+  flex-shrink: 0;
+}
+
+.sketch-radio-pill.active-discipline .sketch-radio-dot-outer,
+.sketch-radio-pill.active-mail .sketch-radio-dot-outer {
+  border-color: #2563eb;
+}
+
+.sketch-radio-dot-inner {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: transparent;
+  transition: all 0.2s ease;
+}
+
+.sketch-radio-pill.active-discipline .sketch-radio-dot-inner,
+.sketch-radio-pill.active-mail .sketch-radio-dot-inner {
+  background-color: #2563eb;
+}
+
+.sketch-radio-text {
+  font-weight: 600;
+}
+
+/* Inputs & Select Elements */
+.sketch-field-input,
+.sketch-field-select {
+  width: 100%;
+  box-sizing: border-box;
+  background-color: #ffffff;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: calc(14px * var(--font-scale, 1));
+  color: #0f172a;
+  font-family: inherit;
+  transition: all 0.2s ease;
+  height: 44px;
+}
+
+.sketch-field-input:hover,
+.sketch-field-select:hover {
+  border-color: #94a3b8;
+}
+
+.sketch-field-input:focus,
+.sketch-field-select:focus,
+.sketch-field-textarea:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.sketch-select-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.sketch-field-select {
+  padding-right: 42px;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  cursor: pointer;
+  background-color: #ffffff;
+}
+
+.sketch-select-arrow-container {
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  transform: translateY(-50%);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  color: #64748b;
+}
+
+.sketch-date-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.sketch-date-input {
+  padding-right: 42px;
+}
+
+.sketch-date-icon {
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  color: #64748b;
+  pointer-events: none;
+}
+
+/* Description Textarea */
+.sketch-description-group {
+  width: 100%;
+}
+
+.sketch-field-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  background-color: #ffffff;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 14px 16px;
+  font-size: calc(14px * var(--font-scale, 1));
+  color: #0f172a;
+  font-family: inherit;
+  transition: all 0.2s ease;
+  min-height: 140px;
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.sketch-field-textarea:hover {
+  border-color: #94a3b8;
+}
+
+/* Form Action Buttons (Cancel & Submit) */
+.sketch-form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  margin-top: 32px;
+  padding-top: 16px;
+}
+
+.sketch-btn-cancel {
+  background-color: #dc2626;
+  color: #ffffff;
+  border: none;
+  border-radius: 24px;
+  padding: 11px 36px;
+  font-family: inherit;
+  font-size: calc(14px * var(--font-scale, 1));
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(220, 38, 38, 0.2);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  min-width: 130px;
+  text-align: center;
+}
+
+.sketch-btn-cancel:hover {
+  background-color: #b91c1c;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(220, 38, 38, 0.28);
+}
+
+.sketch-btn-cancel:active {
+  transform: translateY(0);
+}
+
+.sketch-btn-submit {
+  background-color: #16a34a;
+  color: #ffffff;
+  border: none;
+  border-radius: 24px;
+  padding: 11px 40px;
+  font-family: inherit;
+  font-size: calc(14px * var(--font-scale, 1));
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(22, 163, 74, 0.2);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  min-width: 140px;
+  text-align: center;
+}
+
+.sketch-btn-submit:hover {
+  background-color: #15803d;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(22, 163, 74, 0.28);
+}
+
+.sketch-btn-submit:active {
+  transform: translateY(0);
+}
+
+@media (max-width: 640px) {
+  .sketch-form-container {
+    padding: 20px;
+  }
+
+  .sketch-form-actions {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .sketch-btn-cancel,
+  .sketch-btn-submit {
+    width: 100%;
+  }
+}
+
+
 

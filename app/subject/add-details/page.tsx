@@ -245,51 +245,42 @@ function CaseDetailsForm() {
     if (!trimmed || trimmed.toUpperCase() === "N/A" || trimmed === "—" || trimmed === "-") return "";
 
     const optionMap: Record<string, string[]> = {
-      statusCallingReports: [
-        "statuscallingreports",
-        "calling reports from principal/zone/province/police",
-        "විදුහල්පති/කලාප/පළාත්/පොලිස් වාර්තා කැදවීම",
-      ],
-      statusCallingCourtReports: [
-        "statuscallingcourtreports",
-        "calling court reports",
-        "අධිකරණ වාර්තා කැදවීම",
-        "උසාවි වාර්තා කැදවීම",
-      ],
-      statusPreliminaryInvestigation: [
+      "Initial investigation": [
+        "initial investigation",
         "statuspreliminaryinvestigation",
         "conducting preliminary investigations",
         "මූලික විමර්ශන සිදු කිරීම",
+        "මූලික විමර්ශනය",
+        "preliminary investigation",
+        "ஆரம்ப விசாரணை",
+        "statuscallingreports",
+        "calling reports from principal/zone/province/police",
+        "statuscallingcourtreports",
+        "calling court reports",
+        "statusobtainstatements",
+        "proceeding by taking statements",
       ],
-      statusInquiry: [
+      "Conduct an inspection": [
+        "conduct an inspection",
+        "conducting an inspection",
         "statusinquiry",
         "conducting an inquiry",
         "පරීක්ෂණයක් සිදු කිරීම",
         "පරීක්ෂණයක් පැවැත්වීම",
+        "විමර්ශනයක් පැවැත්වීම",
+        "ஆய்வு நடத்துதல்",
+        "inspection",
+        "proper disciplinary inspection",
       ],
-      statusConsultRelevantInstitutes: [
-        "statusconsultrelevantinstitutes",
-        "taking advice from relevant institutes for complaints",
-        "පැමිණිලි සදහා අදාළ ආයතන වලින් උපදෙස් ලබා ගැනීම",
-        "පැමිණිලි සදහා අදාල ආයතන වලින් උපදෙස් ලබා ගැනීම",
-      ],
-      statusObtainStatements: [
-        "statusobtainstatements",
-        "proceeding by taking statements",
-        "ප්රකාශ ලබා ගැනීම මගින් ඉදිරි කටයුතු සිදු කිරීම",
-        "කටඋත්තර ලබා ගනිමින් කටයුතු කිරීම",
-      ],
-      statusUnclearAnonymous: [
+      "Finalize the file according to the additional secretary's instruction": [
+        "finalize the file according to the additional secretary's instruction",
+        "අතිරේක ලේකම්ගේ උපදෙස් පරිදි ගොනුව අවසන් කිරීම",
+        "கூடுதல் செயலாளரின் அறிவுறுத்தலின்படி கோப்பை இறுதி செய்தல்",
+        "statusfinalizeaccordingtosecondary",
+        "statusfinalizeaccordingtosecretary",
         "statusunclearanonymous",
-        "unclear facts / anonymous letters file",
-        "කරුණු අපැදිලි/නිර්නාමික ලිපි ගොනු",
-        "අපැහැදිලි තොරතුරු / නිර්නාමික ලිපි ගොනු කිරීම",
-      ],
-      statusReferOtherInstitute: [
         "statusreferotherinstitute",
-        "referring letters not related to this ministry system to other institutes",
-        "මෙම අමාත්යංශ පද්ධතියට අයත් නොවන ලිපි වෙනත් ආයතන වෙත යොමු කිරීම",
-        "මෙම අමාත්‍යාංශ පද්ධතියට අදාල නැති ලිපි වෙනත් ආයතන වලට යොමු කිරීම",
+        "statusconsultrelevantinstitutes",
       ],
     };
 
@@ -716,6 +707,9 @@ function CaseDetailsForm() {
             if (!isUserEditingReportStateRef.current && d.future_action) {
               setReportState(normalizeReportState(d.future_action));
             }
+            if (d.description) {
+              setComplaintMatter(cleanVal(d.description));
+            }
             if (d.date_prepared_and_submitted_for_signature) {
               setReceivedDate(String(d.date_prepared_and_submitted_for_signature).split("T")[0]);
             }
@@ -1044,6 +1038,7 @@ function CaseDetailsForm() {
         name_of_the_presenting_the_complain: classification === "nominal" ? complainantName : "Anonymous",
         address_of_the_person_presenting_the_complaint: classification === "nominal" ? complainantAddress : "N/A",
         future_action: reportState || "",
+        description: complaintMatter || "",
       };
 
       let res: any = null;
@@ -1752,654 +1747,179 @@ function CaseDetailsForm() {
                   </div>
                 )}
 
-                <div className="add-details-cards-grid">
-                  {/* ───────────────── Left Card ("Complaint Information" Flowchart) ───────────────── */}
-                  <div className="add-details-card">
-                    <h2 className="card-title-header">
-                      <svg className="card-title-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                      {t("complaintClassification", "Classification of Complaint")}
-                    </h2>
-
-                    <div className="flowchart-container">
-
-                      {/* Step 1: Case Administration */}
-                      <div className="flowchart-step">
-                        <div className="step-indicator">1</div>
-                        <div className="step-content">
-                          <h3 className="step-section-title">{t("caseAdministration", "Case Administration")}</h3>
-                          
-                          {/* File Name Radio Group (Discipline / Mail) */}
-                          <div className="form-field-group" style={{ marginBottom: "16px" }}>
-                            <label className="field-label" style={{ display: "block", marginBottom: "8px" }}>
-                              {t("fileName", "File name")} <span className="required-star">*</span>
-                            </label>
-                            <div className="radio-group-container" role="radiogroup" aria-label={t("fileName", "File name")} style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-                              <label
-                                className={`radio-option-item ${fileName === "discipline" ? "active" : ""}`}
-                                style={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: "8px",
-                                  cursor: "pointer",
-                                  padding: "9px 18px",
-                                  borderRadius: "8px",
-                                  border: fileName === "discipline" ? "1.5px solid #2563eb" : "1.5px solid #e2e8f0",
-                                  backgroundColor: fileName === "discipline" ? "#eff6ff" : "#ffffff",
-                                  color: fileName === "discipline" ? "#1d4ed8" : "#334155",
-                                  fontWeight: 600,
-                                  fontSize: "14px",
-                                  transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
-                                  userSelect: "none"
-                                }}
-                              >
-                                <input
-                                  type="radio"
-                                  name="fileNameRadio"
-                                  id="fileNameDiscipline"
-                                  value="discipline"
-                                  checked={fileName === "discipline"}
-                                  onChange={() => setFileName("discipline")}
-                                  style={{ width: "18px", height: "18px", accentColor: "#2563eb", cursor: "pointer" }}
-                                />
-                                <span>{t("discipline", "Discipline")}</span>
-                              </label>
-
-                              <label
-                                className={`radio-option-item ${fileName === "mail" ? "active" : ""}`}
-                                style={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: "8px",
-                                  cursor: "pointer",
-                                  padding: "9px 18px",
-                                  borderRadius: "8px",
-                                  border: fileName === "mail" ? "1.5px solid #2563eb" : "1.5px solid #e2e8f0",
-                                  backgroundColor: fileName === "mail" ? "#eff6ff" : "#ffffff",
-                                  color: fileName === "mail" ? "#1d4ed8" : "#334155",
-                                  fontWeight: 600,
-                                  fontSize: "14px",
-                                  transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
-                                  userSelect: "none"
-                                }}
-                              >
-                                <input
-                                  type="radio"
-                                  name="fileNameRadio"
-                                  id="fileNameMail"
-                                  value="mail"
-                                  checked={fileName === "mail"}
-                                  onChange={() => setFileName("mail")}
-                                  style={{ width: "18px", height: "18px", accentColor: "#2563eb", cursor: "pointer" }}
-                                />
-                                <span>{t("mail", "Mail")}</span>
-                              </label>
-                            </div>
-                          </div>
-                          
-                          <div className="form-grid-2">
-                            {/* Reference Number */}
-                            <div className="form-field-group">
-                              <label htmlFor="refNo" className="field-label">
-                                {t("refNo")} <span className="required-star">*</span>
-                              </label>
-                              <input
-                                id="refNo"
-                                type="text"
-                                required
-                                readOnly
-                                value={refNo}
-                                className="field-input"
-                                style={{ backgroundColor: "#e2e8f0", cursor: "not-allowed" }}
-                              />
-                            </div>
-
-                            {/* Subject File Number (විෂය ගොනු අංකය) */}
-                            <div className="form-field-group">
-                              <label htmlFor="specialNotes" className="field-label">
-                                {t("subjectFileNo", "විෂය ගොනු අංකය")}
-                              </label>
-                              <input
-                                id="specialNotes"
-                                type="text"
-                                value={specialNotes}
-                                onChange={(e) => setSpecialNotes(e.target.value)}
-                                className="field-input"
-                                placeholder="e.g. SUB/FILE/102"
-                              />
-                            </div>
-                          </div>
-
-                          <div className="form-grid-2 mt-3">
-
-                            {/* Future Actions (ගනු ලබන ඉදිරි ක්‍රියාමාර්ග) */}
-                            <div className="form-field-group">
-                              <label htmlFor="reportState" className="field-label">
-                                {t("futureActions", "ගනු ලබන ඉදිරි ක්‍රියාමාර්ග")} <span className="required-star">*</span>
-                              </label>
-                              <div className="select-wrapper">
-                                <select
-                                  id="reportState"
-                                  value={reportState}
-                                  onChange={(e) => {
-                                    isUserEditingReportStateRef.current = true;
-                                    setReportState(e.target.value);
-                                  }}
-                                  className="field-select"
-                                  required
-                                >
-                                  <option value="">{t("Choose report state", "Select current status...")}</option>
-                                  <option value="statusCallingReports">{t("statusCallingReports")}</option>
-                                  <option value="statusCallingCourtReports">{t("statusCallingCourtReports")}</option>
-                                  <option value="statusPreliminaryInvestigation">{t("statusPreliminaryInvestigation")}</option>
-                                  <option value="statusInquiry">{t("statusInquiry")}</option>
-                                  <option value="statusConsultRelevantInstitutes">{t("statusConsultRelevantInstitutes")}</option>
-                                  <option value="statusObtainStatements">{t("statusObtainStatements")}</option>
-                                  <option value="statusUnclearAnonymous">{t("statusUnclearAnonymous")}</option>
-                                  <option value="statusReferOtherInstitute">{t("statusReferOtherInstitute")}</option>
-                                  {reportState &&
-                                    ![
-                                      "",
-                                      "statusCallingReports",
-                                      "statusCallingCourtReports",
-                                      "statusPreliminaryInvestigation",
-                                      "statusInquiry",
-                                      "statusConsultRelevantInstitutes",
-                                      "statusObtainStatements",
-                                      "statusUnclearAnonymous",
-                                      "statusReferOtherInstitute",
-                                    ].includes(reportState) && (
-                                      <option value={reportState}>
-                                        {t(reportState, reportState)}
-                                      </option>
-                                    )}
-                                </select>
-                                <div className="select-arrow-container">
-                                  <svg className="select-arrow-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                                  </svg>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Date prepared and submitted for signature (ලිපිය සකසා අත්සනට ඉදිරිපත් කළ දිනය) */}
-                            <div className="form-field-group">
-                              <label htmlFor="receivedDate" className="field-label">
-                                {t("datePreparedSubmitted")}
-                              </label>
-                              <div className="input-icon-wrapper">
-                                <input
-                                  id="receivedDate"
-                                  type="date"
-                                  value={receivedDate}
-                                  onChange={(e) => setReceivedDate(e.target.value)}
-                                  className="field-input input-with-right-icon"
-                                />
-                                <svg className="input-right-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                </svg>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Step 2: Classification */}
-                      <div className="flowchart-step">
-                        <div className="step-indicator">2</div>
-                        <div className="step-content">
-                          <span className="field-label" style={{ display: "block", marginBottom: "8px" }}>
-                            {t("complaintClassification", "Classification of complaint letter")} <span className="required-star">*</span>
+                {/* ───────────────── Streamlined Case Details Form (Matching Handwritten Specification) ───────────────── */}
+                <div className="sketch-form-container">
+                  {/* Row 1: File name (Left) & File No (Right) */}
+                  <div className="sketch-form-row-2col">
+                    {/* File Name Radio Group (Discipline / Mail) */}
+                    <div className="form-field-group">
+                      <label className="sketch-field-label">
+                        {t("fileName", "File name")} <span className="required-star">*</span>
+                      </label>
+                      <div className="sketch-radio-row" role="radiogroup" aria-label={t("fileName", "File name")}>
+                        <label
+                          className={`sketch-radio-pill ${fileName === "discipline" ? "active-discipline" : ""}`}
+                          onClick={() => setFileName("discipline")}
+                        >
+                          <input
+                            type="radio"
+                            name="fileNameRadio"
+                            id="fileNameDiscipline"
+                            value="discipline"
+                            checked={fileName === "discipline"}
+                            onChange={() => setFileName("discipline")}
+                            className="sketch-radio-native"
+                          />
+                          <span className="sketch-radio-dot-outer">
+                            <span className="sketch-radio-dot-inner" />
                           </span>
-                          <div className="classification-toggle-group" role="radiogroup" aria-label="Complaint Classification">
-                            <button
-                              type="button"
-                              className={`toggle-btn ${classification === "nominal" ? "active" : ""}`}
-                              onClick={() => setClassification("nominal")}
-                              aria-checked={classification === "nominal"}
-                              role="radio"
-                            >
-                              {t("nominalLabel", "Nominal")}
-                            </button>
-                            <button
-                              type="button"
-                              className={`toggle-btn ${classification === "anonymous" ? "active" : ""}`}
-                              onClick={() => setClassification("anonymous")}
-                              aria-checked={classification === "anonymous"}
-                              role="radio"
-                            >
-                              {t("anonymousLabel", "Anonymous")}
-                            </button>
-                          </div>
-                        </div>
+                          <span className="sketch-radio-text">{t("discipline", "Discipline")}</span>
+                        </label>
+
+                        <label
+                          className={`sketch-radio-pill ${fileName === "mail" ? "active-mail" : ""}`}
+                          onClick={() => setFileName("mail")}
+                        >
+                          <input
+                            type="radio"
+                            name="fileNameRadio"
+                            id="fileNameMail"
+                            value="mail"
+                            checked={fileName === "mail"}
+                            onChange={() => setFileName("mail")}
+                            className="sketch-radio-native"
+                          />
+                          <span className="sketch-radio-dot-outer">
+                            <span className="sketch-radio-dot-inner" />
+                          </span>
+                          <span className="sketch-radio-text">{t("mail", "Mail")}</span>
+                        </label>
                       </div>
+                    </div>
 
-                      {/* Step 3: Complainant Details (Shown only if nominal) */}
-                      {classification === "nominal" && (
-                        <div className="flowchart-step animated-fade-in">
-                          <div className="step-indicator">3</div>
-                          <div className="step-content">
-                            <h3 className="step-section-title">{t("complainantDetailsTitle", "Complainant Details")}</h3>
-                            <div className="form-grid-2">
-                              <div className="form-field-group">
-                                <label htmlFor="complainantName" className="field-label">
-                                  {t("complainantName", "Name of the person presenting the complaint")} <span className="required-star">*</span>
-                                </label>
-                                <input
-                                  id="complainantName"
-                                  type="text"
-                                  required={classification === "nominal"}
-                                  value={complainantName}
-                                  onChange={(e) => setComplainantName(e.target.value)}
-                                  className="field-input"
-                                  placeholder="Enter name..."
-                                />
-                              </div>
-                              <div className="form-field-group">
-                                <label htmlFor="complainantAddress" className="field-label">
-                                  {t("complainantAddress", "Address of the person presenting the complaint")}
-                                </label>
-                                <input
-                                  id="complainantAddress"
-                                  type="text"
-                                  value={complainantAddress}
-                                  onChange={(e) => setComplainantAddress(e.target.value)}
-                                  className="field-input"
-                                  placeholder="Enter address..."
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
+                    {/* File No : (Right) */}
+                    <div className="form-field-group">
+                      <label htmlFor="fileNoInput" className="sketch-field-label">
+                        {t("fileNo", "File No")} : <span className="required-star">*</span>
+                      </label>
+                      <input
+                        id="fileNoInput"
+                        type="text"
+                        required
+                        value={specialNotes || refNo}
+                        onChange={(e) => {
+                          setSpecialNotes(e.target.value);
+                          if (!refNo) setRefNo(e.target.value);
+                        }}
+                        className="sketch-field-input"
+                        placeholder="e.g. DMMS/T/02 / SUB/FILE/101"
+                      />
                     </div>
                   </div>
 
-                  {/* ───────────────── Right Card ("Related Person & Status" Flowchart) ───────────────── */}
-                  <div className="add-details-card">
-                    <h2 className="card-title-header">
-                      <svg className="card-title-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-                      </svg>
-                      {t("relatedPersonStatus", "Accused Officer(s) Information")}
-                    </h2>
-
-                    <div className="flowchart-container">
-                      {/* Step 4: Concerned Person */}
-                      <div className="flowchart-step">
-                        <div className="step-indicator">{classification === "nominal" ? "4" : "3"}</div>
-                        <div className="step-content">
-                          <span className="field-label" style={{ display: "block", marginBottom: "8px" }}>
-                            {t("personRelatedQuestion", "Is there a person related to the complaint?")}
-                          </span>
-                          <div className="classification-toggle-group" role="radiogroup" aria-label="Concerned Person Toggle">
-                            <button
-                              type="button"
-                              className={`toggle-btn ${isConcerned === "yes" ? "active" : ""}`}
-                              onClick={() => setIsConcerned("yes")}
-                              aria-checked={isConcerned === "yes"}
-                              role="radio"
-                            >
-                              {t("yesLabel", "Yes")}
-                            </button>
-                            <button
-                              type="button"
-                              className={`toggle-btn ${isConcerned === "no" ? "active" : ""}`}
-                              onClick={() => setIsConcerned("no")}
-                              aria-checked={isConcerned === "no"}
-                              role="radio"
-                            >
-                              {t("noLabel", "No")}
-                            </button>
-                          </div>
-
-                          {isConcerned === "yes" && (
-                            <div className="concerned-person-fields animated-fade-in" style={{ marginTop: "20px", display: "flex", flexDirection: "column", gap: "20px" }}>
-                              {concernedPersons.map((person, index) => (
-                                <div 
-                                  key={index} 
-                                  style={{ 
-                                    backgroundColor: "#f8fafc", 
-                                    padding: "16px", 
-                                    borderRadius: "10px", 
-                                    border: "1px solid #cbd5e1"
-                                  }}
-                                >
-                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", borderBottom: "1px solid #e2e8f0", paddingBottom: "8px" }}>
-                                    <h3 className="step-section-title" style={{ margin: 0 }}>
-                                      {t("personRelatedDetails", "Concerned Person Details")} {concernedPersons.length > 1 ? `#${index + 1}` : ""}
-                                    </h3>
-                                    {concernedPersons.length > 1 && (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleRemovePerson(index)}
-                                        title="Remove Person"
-                                        style={{
-                                          background: "none",
-                                          border: "1px solid #fca5a5",
-                                          color: "#ef4444",
-                                          cursor: "pointer",
-                                          padding: "4px 10px",
-                                          borderRadius: "6px",
-                                          display: "inline-flex",
-                                          alignItems: "center",
-                                          gap: "4px",
-                                          fontSize: "12px",
-                                          fontWeight: 600,
-                                          backgroundColor: "#fef2f2"
-                                        }}
-                                      >
-                                        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                        </svg>
-                                        <span>{lang === "si" ? "ඉවත් කරන්න" : "Remove"}</span>
-                                      </button>
-                                    )}
-                                  </div>
-
-                                  <div className="form-grid-2">
-                                    <div className="form-field-group">
-                                      <label htmlFor={`officerName_${index}`} className="field-label">
-                                        {t("personName", "Person's Name")} <span className="required-star">*</span>
-                                      </label>
-                                      <input
-                                        id={`officerName_${index}`}
-                                        type="text"
-                                        required={isConcerned === "yes"}
-                                        value={person.name}
-                                        onChange={(e) => handlePersonChange(index, "name", e.target.value)}
-                                        className="field-input"
-                                        placeholder="Enter name..."
-                                      />
-                                    </div>
-                                    <div className="form-field-group">
-                                      <label htmlFor={`officerPosition_${index}`} className="field-label">
-                                        {t("personDesignation", "Person's Designation / Position")}
-                                      </label>
-                                      <input
-                                        id={`officerPosition_${index}`}
-                                        type="text"
-                                        value={person.position}
-                                        onChange={(e) => handlePersonChange(index, "position", e.target.value)}
-                                        className="field-input"
-                                        placeholder="Enter position..."
-                                      />
-                                    </div>
-                                  </div>
-
-                                  <div className="form-grid-2 mt-3">
-                                    <div className="form-field-group">
-                                      <label htmlFor={`officerDob_${index}`} className="field-label">{t("dateOfBirth")}</label>
-                                      <input
-                                        id={`officerDob_${index}`}
-                                        type="date"
-                                        value={person.dob}
-                                        onChange={(e) => handlePersonChange(index, "dob", e.target.value)}
-                                        className="field-input"
-                                      />
-                                    </div>
-                                    <div className="form-field-group">
-                                      <label htmlFor={`officerNic_${index}`} className="field-label">{t("nicNumber")}</label>
-                                      <input
-                                        id={`officerNic_${index}`}
-                                        type="text"
-                                        value={person.nic}
-                                        onChange={(e) => handlePersonChange(index, "nic", e.target.value)}
-                                        className="field-input"
-                                        placeholder="NIC number"
-                                      />
-                                    </div>
-                                  </div>
-
-                                  <div className="form-grid-2 mt-3">
-                                    <div className="form-field-group">
-                                      <label htmlFor={`officerApptDate_${index}`} className="field-label">{t("appointmentDate")}</label>
-                                      <input
-                                        id={`officerApptDate_${index}`}
-                                        type="date"
-                                        value={person.appointmentDate}
-                                        onChange={(e) => handlePersonChange(index, "appointmentDate", e.target.value)}
-                                        className="field-input"
-                                      />
-                                    </div>
-                                    <div className="form-field-group">
-                                      <label htmlFor={`officerAddress_${index}`} className="field-label">{t("addressLabel")}</label>
-                                      <input
-                                        id={`officerAddress_${index}`}
-                                        type="text"
-                                        value={person.address}
-                                        onChange={(e) => handlePersonChange(index, "address", e.target.value)}
-                                        className="field-input"
-                                        placeholder="Address"
-                                      />
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-
-                              {/* Plus Button to add another person */}
-                              <button
-                                type="button"
-                                onClick={handleAddPerson}
-                                style={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  gap: "8px",
-                                  padding: "10px 18px",
-                                  backgroundColor: "#eff6ff",
-                                  color: "#1d4ed8",
-                                  border: "1.5px dashed #93c5fd",
-                                  borderRadius: "8px",
-                                  fontWeight: 700,
-                                  fontSize: "14px",
-                                  cursor: "pointer",
-                                  transition: "all 0.2s ease",
-                                  marginTop: "4px"
-                                }}
-                              >
-                                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                                </svg>
-                                <span>
-                                  {lang === "si" ? "+ තවත් පුද්ගලයෙකු එක් කරන්න" : "+ Add Another Person"}
-                                </span>
-                              </button>
-                            </div>
+                  {/* Row 2: Upcoming actions to be taken (Left) & Date (Right) */}
+                  <div className="sketch-form-row-2col">
+                    {/* Upcoming actions to be taken : */}
+                    <div className="form-field-group">
+                      <label htmlFor="upcomingActionsSelect" className="sketch-field-label">
+                        {t("upcomingActions", "Upcoming actions to be taken")} : <span className="required-star">*</span>
+                      </label>
+                      <div className="sketch-select-wrapper">
+                        <select
+                          id="upcomingActionsSelect"
+                          value={reportState}
+                          onChange={(e) => {
+                            isUserEditingReportStateRef.current = true;
+                            setReportState(e.target.value);
+                          }}
+                          className="sketch-field-select"
+                          required
+                        >
+                          <option value="">
+                            {lang === "si" ? "ක්‍රියාමාර්ගයක් තෝරන්න..." : lang === "ta" ? "நடவடிக்கையைத் தேர்ந்தெடுக்கவும்..." : "Select upcoming action..."}
+                          </option>
+                          <option value="Initial investigation">
+                            {t("actionInitialInvestigation", "Initial investigation")}
+                          </option>
+                          <option value="Conduct an inspection">
+                            {t("actionConductInspection", "Conduct an inspection")}
+                          </option>
+                          <option value="Finalize the file according to the additional secretary's instruction">
+                            {t("actionFinalizeFileAccordingToSecretary", "Finalize the file according to the additional secretary's instruction")}
+                          </option>
+                          {reportState && ![
+                            "",
+                            "Initial investigation",
+                            "Conduct an inspection",
+                            "Finalize the file according to the additional secretary's instruction"
+                          ].includes(reportState) && (
+                            <option value={reportState}>
+                              {t(reportState, reportState)}
+                            </option>
                           )}
+                        </select>
+                        <div className="sketch-select-arrow-container">
+                          <svg className="sketch-select-arrow" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                          </svg>
                         </div>
                       </div>
-
-                      {/* Step 5: School Details */}
-                      <div className="flowchart-step" style={{ position: "relative", zIndex: 40 }}>
-                        <div className="step-indicator">{classification === "nominal" ? "5" : "4"}</div>
-                        <div className="step-content" style={{ overflow: "visible" }}>
-                          <h3 className="step-section-title">{t("schoolDetailsTitle", "School Details")}</h3>
-                          <div className="form-grid-2" style={{ overflow: "visible" }}>
-                            <div className="form-field-group" style={{ position: "relative", zIndex: 100 }}>
-                              <label htmlFor="schoolName" className="field-label">
-                                {t("schoolName", "School Name")} <span className="required-star">*</span>
-                              </label>
-                              <input
-                                id="schoolName"
-                                type="text"
-                                required
-                                value={schoolName}
-                                onChange={(e) => handleSchoolNameChange(e.target.value)}
-                                onFocus={() => {
-                                  const query = schoolName.trim().toLowerCase();
-                                  if (query.length > 0 && institutesList.length > 0) {
-                                    const matches = institutesList
-                                      .filter((inst) => inst.name.toLowerCase().includes(query))
-                                      .slice(0, 10);
-                                    setFilteredInstitutes(matches);
-                                    setShowInstituteDropdown(matches.length > 0);
-                                  }
-                                }}
-                                onBlur={() => {
-                                  setTimeout(() => setShowInstituteDropdown(false), 300);
-                                }}
-                                className="field-input"
-                                placeholder="Enter school name..."
-                                autoComplete="off"
-                              />
-
-                              {/* Autocomplete Dropdown List from institute_table */}
-                              {showInstituteDropdown && filteredInstitutes.length > 0 && (
-                                <ul
-                                  style={{
-                                    position: "absolute",
-                                    top: "100%",
-                                    left: 0,
-                                    right: 0,
-                                    zIndex: 9999,
-                                    backgroundColor: "#ffffff",
-                                    border: "1px solid #94a3b8",
-                                    borderRadius: "8px",
-                                    boxShadow: "0 14px 28px rgba(0, 0, 0, 0.18), 0 10px 10px rgba(0, 0, 0, 0.12)",
-                                    maxHeight: "220px",
-                                    overflowY: "auto",
-                                    margin: "4px 0 0 0",
-                                    padding: "6px 0",
-                                    listStyle: "none",
-                                  }}
-                                >
-                                  {filteredInstitutes.map((inst, index) => (
-                                    <li
-                                      key={index}
-                                      onMouseDown={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        handleSelectInstitute(inst);
-                                      }}
-                                      style={{
-                                        padding: "10px 14px",
-                                        cursor: "pointer",
-                                        borderBottom: index === filteredInstitutes.length - 1 ? "none" : "1px solid #f1f5f9",
-                                        transition: "background-color 0.15s ease",
-                                      }}
-                                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#eff6ff")}
-                                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#ffffff")}
-                                    >
-                                      <div style={{ fontWeight: 600, fontSize: "14px", color: "#0f172a" }}>{inst.name}</div>
-                                      {inst.address && (
-                                        <div style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}>{inst.address}</div>
-                                      )}
-                                    </li>
-                                  ))}
-                                </ul>
-                              )}
-                            </div>
-                            <div className="form-field-group">
-                              <label htmlFor="schoolAddress" className="field-label">
-                                {t("schoolAddress", "School Address")}
-                              </label>
-                              <input
-                                id="schoolAddress"
-                                type="text"
-                                value={schoolAddress}
-                                onChange={(e) => {
-                                  isUserEditingSchoolRef.current = true;
-                                  setSchoolAddress(e.target.value);
-                                }}
-                                className="field-input"
-                                placeholder="Enter school address..."
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Step 6: Subject Matter */}
-                      <div className="flowchart-step" style={{ position: "relative", zIndex: 1 }}>
-                        <div className="step-indicator">{classification === "nominal" ? "6" : "5"}</div>
-                        <div className="step-content">
-                          <div className="form-field-group">
-                            <label htmlFor="complaintMatter" className="field-label">
-                              {t("complaintMatterLabel", "Matter related to the complaint")} <span className="required-star">*</span>
-                            </label>
-                            <textarea
-                              id="complaintMatter"
-                              required
-                              value={complaintMatter}
-                              onChange={(e) => setComplaintMatter(e.target.value)}
-                              className="field-textarea"
-                              placeholder="Enter details of the complaint matter..."
-                              rows={4}
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Step 7: Education Secretary's Approval */}
-                      <div className="flowchart-step">
-                        <div className="step-indicator">{classification === "nominal" ? "7" : "6"}</div>
-                        <div className="step-content">
-                          <span className="field-label" style={{ display: "block", marginBottom: "8px" }}>
-                            {t("eduSecretaryApproval", "මූලික විමර්ශනයට යවන්නේනම් අධ්‍යාපන ලේකම්ගේ අනුමැතිය")} <span className="required-star">*</span>
-                          </span>
-                          <div className="classification-toggle-group" role="radiogroup" aria-label="Education Secretary Approval Toggle">
-                            <button
-                              type="button"
-                              className={`toggle-btn ${eduSecretaryApproval === "yes" ? "active" : ""}`}
-                              onClick={() => setEduSecretaryApproval("yes")}
-                              aria-checked={eduSecretaryApproval === "yes"}
-                              role="radio"
-                            >
-                              {t("yesLabel", "Yes")}
-                            </button>
-                            <button
-                              type="button"
-                              className={`toggle-btn ${eduSecretaryApproval === "no" ? "active" : ""}`}
-                              onClick={() => setEduSecretaryApproval("no")}
-                              aria-checked={eduSecretaryApproval === "no"}
-                              role="radio"
-                            >
-                              {t("noLabel", "No")}
-                            </button>
-                          </div>
-
-                          {eduSecretaryApproval === "yes" && (
-                            <div className="form-field-group animated-fade-in" style={{ marginTop: "16px" }}>
-                              <label htmlFor="approvalDate" className="field-label">
-                                {t("approvalDate", "Approved Date")} <span className="required-star">*</span>
-                              </label>
-                              <input
-                                id="approvalDate"
-                                type="date"
-                                required={eduSecretaryApproval === "yes"}
-                                value={approvalDate}
-                                onChange={(e) => setApprovalDate(e.target.value)}
-                                className="field-input"
-                              />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
                     </div>
+
+                    {/* Date : */}
+                    <div className="form-field-group">
+                      <label htmlFor="actionDateInput" className="sketch-field-label">
+                        {t("date", "Date")} : <span className="required-star">*</span>
+                      </label>
+                      <div className="sketch-date-wrapper">
+                        <input
+                          id="actionDateInput"
+                          type="date"
+                          required
+                          value={receivedDate}
+                          onChange={(e) => setReceivedDate(e.target.value)}
+                          className="sketch-field-input sketch-date-input"
+                        />
+                        <svg className="sketch-date-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Row 3: Description */}
+                  <div className="form-field-group sketch-description-group">
+                    <label htmlFor="complaintDescription" className="sketch-field-label">
+                      {t("description", "Description")} :
+                    </label>
+                    <textarea
+                      id="complaintDescription"
+                      value={complaintMatter}
+                      onChange={(e) => setComplaintMatter(e.target.value)}
+                      className="sketch-field-textarea"
+                      placeholder={lang === "si" ? "පැමිණිල්ල / ගොනුව පිළිබඳ විස්තර ඇතුළත් කරන්න..." : lang === "ta" ? "வழக்கு பற்றிய விவரங்களை உள்ளிடவும்..." : "Enter details and description regarding this case file..."}
+                      rows={6}
+                    />
                   </div>
                 </div>
 
-              {/* Action Buttons Row */}
-              <div className="add-details-form-actions">
-                <button
-                  type="button"
-                  className="btn-action-cancel"
-                  onClick={() => router.push("/subject")}
-                >
-                  {t("cancelBtn")}
-                </button>
+                {/* Action Buttons Row: Cancel and Submit */}
+                <div className="sketch-form-actions">
+                  <button
+                    type="button"
+                    className="sketch-btn-cancel"
+                    onClick={() => router.push("/subject")}
+                  >
+                    {t("cancelBtn", "Cancel")}
+                  </button>
 
-                <button
-                  type="submit"
-                  className="btn-action-submit"
-                >
-                  {t("submitToPrelimBtn")}
-                </button>
-              </div>
+                  <button
+                    type="submit"
+                    className="sketch-btn-submit"
+                  >
+                    {t("submitBtn", "Submit")}
+                  </button>
+                </div>
             </form>
             </div>
           </section>

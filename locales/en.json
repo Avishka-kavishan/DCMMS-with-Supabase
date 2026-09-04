@@ -696,7 +696,14 @@
   "disciplinaryActionOrder": "Disciplinary Action / Order",
   "disciplinaryCharge": "Disciplinary Charge & Rule Violation",
   "noInquiriesFound": "No inquiry cases found matching search criteria.",
-  "noInspectionsFound": "No disciplinary inspection cases found matching search criteria."
+  "noInspectionsFound": "No disciplinary inspection cases found matching search criteria.",
+  "upcomingActions": "Upcoming actions to be taken",
+  "fileNo": "File No",
+  "description": "Description",
+  "actionInitialInvestigation": "Initial investigation",
+  "actionConductInspection": "Conduct an inspection",
+  "actionFinalizeFileAccordingToSecretary": "Finalize the file according to the additional secretary's instruction"
 }
+
 
 

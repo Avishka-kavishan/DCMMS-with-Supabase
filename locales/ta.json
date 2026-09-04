@@ -693,6 +693,13 @@
   "disciplinaryActionOrder": "ஒழுங்கு நடவடிக்கை / உத்தரவு",
   "disciplinaryCharge": "ஒழுங்கு குற்றச்சாட்டு & விதிமீறல்",
   "noInquiriesFound": "பொருந்தக்கூடிய விசாரணை வழக்குகள் எதுவும் காணப்படவில்லை.",
-  "noInspectionsFound": "பொருந்தக்கூடிய ஒழுக்காற்று வழக்குகள் எதுவும் காணப்படவில்லை."
+  "noInspectionsFound": "பொருந்தக்கூடிய ஒழுக்காற்று வழக்குகள் எதுவும் காணப்படவில்லை.",
+  "upcomingActions": "மேற்கொள்ளப்படவுள்ள தொடர் நடவடிக்கைகள்",
+  "fileNo": "கோப்பு எண்",
+  "description": "விவரம்",
+  "actionInitialInvestigation": "ஆரம்ப விசாரணை",
+  "actionConductInspection": "ஆய்வு நடத்துதல்",
+  "actionFinalizeFileAccordingToSecretary": "கூடுதல் செயலாளரின் அறிவுறுத்தலின்படி கோப்பை இறுதி செய்தல்"
 }
+
 

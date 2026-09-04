@@ -694,5 +694,11 @@
   "disciplinaryActionOrder": "විනය ක්‍රියාමාර්ග / නියෝගය",
   "disciplinaryCharge": "විනය චෝදනාව සහ ආයතන සංග්‍රහ වගන්තිය",
   "noInquiriesFound": "සෙවුම් නිර්ණායකවලට ගැලපෙන පරීක්ෂණ නඩු හමු නොවීය.",
-  "noInspectionsFound": "සෙවුම් නිර්ණායකවලට ගැලපෙන විනය පරීක්ෂණ හමු නොවීය."
+  "noInspectionsFound": "සෙවුම් නිර්ණායකවලට ගැලපෙන විනය පරීක්ෂණ හමු නොවීය.",
+  "upcomingActions": "ගනු ලබන ඉදිරි ක්‍රියාමාර්ග",
+  "fileNo": "ගොනු අංකය",
+  "description": "විස්තරය",
+  "actionInitialInvestigation": "මූලික විමර්ශනය",
+  "actionConductInspection": "විමර්ශනයක් පැවැත්වීම",
+  "actionFinalizeFileAccordingToSecretary": "අතිරේක ලේකම්ගේ උපදෙස් පරිදි ගොනුව අවසන් කිරීම"
 }
