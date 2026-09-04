@@ -561,12 +561,14 @@ function RecommendationFormContent() {
       forward_to: forwardTo,
       issued_charge_sheet: recommendationCategory === "issuing_charge_sheet" ? issuedChargeSheet : null,
       charge_sheet_issued_date: recommendationCategory === "issuing_charge_sheet" ? (chargeSheetIssuedDate || null) : null,
+      date_the_charge_sheet_issued: recommendationCategory === "issuing_charge_sheet" ? (chargeSheetIssuedDate || null) : null,
       charge_sheet_response_date: recommendationCategory === "issuing_charge_sheet" ? (chargeSheetResponseDate || null) : null,
+      date_the_response_to_the_charge_sheet_was_given: recommendationCategory === "issuing_charge_sheet" ? (chargeSheetResponseDate || null) : null,
       disciplinary_order: recommendationCategory === "issuing_charge_sheet" ? disciplinaryOrder : null,
     };
 
     try {
-      // 1. Save to PostgreSQL (investigation_table) via Server Action
+      // 1. Save to PostgreSQL (investigation_table & charge_sheet_table) via Server Action
       await saveRecommendationServer(payload);
 
       // 2. Audit logging
@@ -655,12 +657,14 @@ function RecommendationFormContent() {
       forward_to: forwardTo,
       issued_charge_sheet: recommendationCategory === "issuing_charge_sheet" ? issuedChargeSheet : null,
       charge_sheet_issued_date: recommendationCategory === "issuing_charge_sheet" ? (chargeSheetIssuedDate || null) : null,
+      date_the_charge_sheet_issued: recommendationCategory === "issuing_charge_sheet" ? (chargeSheetIssuedDate || null) : null,
       charge_sheet_response_date: recommendationCategory === "issuing_charge_sheet" ? (chargeSheetResponseDate || null) : null,
+      date_the_response_to_the_charge_sheet_was_given: recommendationCategory === "issuing_charge_sheet" ? (chargeSheetResponseDate || null) : null,
       disciplinary_order: recommendationCategory === "issuing_charge_sheet" ? disciplinaryOrder : null,
     };
 
     try {
-      // 1. Save to PostgreSQL (investigation_table) via Server Action
+      // 1. Save to PostgreSQL (investigation_table & charge_sheet_table) via Server Action
       await saveRecommendationServer(payload);
 
       // 2. Audit logging

@@ -289,6 +289,19 @@ CREATE TABLE IF NOT EXISTS accused_officer_subject_officer_form_table (
     PRIMARY KEY (accused_officer_id, subject_officer_form_id)
 );
 
+-- Charge Sheet & Disciplinary Order Details Table
+CREATE TABLE IF NOT EXISTS charge_sheet_table (
+    id BIGSERIAL PRIMARY KEY,
+    ref_number VARCHAR(100) NOT NULL UNIQUE REFERENCES subject_officer_form_table(ref_number) ON DELETE CASCADE,
+    issued_charge_sheet TEXT,
+    date_the_charge_sheet_issued DATE,
+    date_the_response_to_the_charge_sheet_was_given DATE,
+    disciplinary_order TEXT,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_charge_sheet_ref_number ON charge_sheet_table(ref_number);
+
 -- =============================================================
 -- PART 6: SYSTEM AUDIT & DOCUMENTS MODULE
 -- =============================================================

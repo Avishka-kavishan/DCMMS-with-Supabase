@@ -4233,7 +4233,40 @@ async function ensureRecommendationsTable() {
       );
     `);
 
-    // 2. Ensure fallback dcmms_recommendations exists
+    // 2. Ensure charge_sheet_table exists in PostgreSQL
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS public.charge_sheet_table (
+        id BIGSERIAL PRIMARY KEY,
+        ref_number VARCHAR(100) NOT NULL UNIQUE REFERENCES public.subject_officer_form_table(ref_number) ON DELETE CASCADE,
+        issued_charge_sheet TEXT,
+        date_the_charge_sheet_issued DATE,
+        date_the_response_to_the_charge_sheet_was_given DATE,
+        disciplinary_order TEXT,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_charge_sheet_ref_number ON public.charge_sheet_table(ref_number);
+      `);
+    } catch (e) {}
+
+    try {
+      await prisma.$executeRawUnsafe(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint WHERE conname = 'uq_charge_sheet_ref_number_con'
+          ) THEN
+            ALTER TABLE public.charge_sheet_table ADD CONSTRAINT uq_charge_sheet_ref_number_con UNIQUE (ref_number);
+          END IF;
+        END $$;
+      `);
+    } catch (e) {}
+
+    // 3. Ensure fallback dcmms_recommendations exists
     await prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS public.dcmms_recommendations (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -4260,7 +4293,7 @@ async function ensureRecommendationsTable() {
       );
     `);
   } catch (e: any) {
-    console.warn("Table verification notice for recommendations / investigation_table:", e?.message);
+    console.warn("Table verification notice for recommendations / investigation_table / charge_sheet_table:", e?.message);
   }
 }
 
@@ -4656,12 +4689,15 @@ export async function getCaseDetailsForRecommendationServer(caseRef: string) {
           if (r.title) existingRec.title = r.title;
           if (r.forward_to) existingRec.forwardTo = r.forward_to;
           if (r.issued_charge_sheet) existingRec.issuedChargeSheet = r.issued_charge_sheet;
-          if (r.charge_sheet_issued_date) existingRec.chargeSheetIssuedDate = new Date(r.charge_sheet_issued_date).toISOString().slice(0, 10);
-          if (r.charge_sheet_response_date) existingRec.chargeSheetResponseDate = new Date(r.charge_sheet_response_date).toISOString().slice(0, 10);
-          if (r.disciplinary_order) existingRec.disciplinaryOrder = r.disciplinary_order;
+          if (cs.issued_charge_sheet) existingRec.issuedChargeSheet = cs.issued_charge_sheet;
+          if (cs.date_the_charge_sheet_issued) existingRec.chargeSheetIssuedDate = new Date(cs.date_the_charge_sheet_issued).toISOString().slice(0, 10);
+          if (cs.date_the_response_to_the_charge_sheet_was_given) existingRec.chargeSheetResponseDate = new Date(cs.date_the_response_to_the_charge_sheet_was_given).toISOString().slice(0, 10);
+          if (cs.disciplinary_order) existingRec.disciplinaryOrder = cs.disciplinary_order;
         }
       }
-    } catch (e) {}
+    } catch (csFetchErr) {
+      console.warn("charge_sheet_table fetch error:", csFetchErr);
+    }
 
     if (!caseSubject || caseSubject === "N/A") {
       caseSubject = "Formal disciplinary & preliminary investigation inquiry";
@@ -4705,14 +4741,14 @@ export async function saveRecommendationServer(recData: any) {
     const secretaryApprovalDate = parseSafeDate(recData.date_approved_by_secretory || recData.secretary_approval_date || recData.secretaryApprovalDate);
     const secretaryApprovedRecommendation = recData.secretory_recommendation || recData.secretary_approved_recommendation || recData.secretaryApprovedRecommendation || null;
 
-    // Supplemental fields
+    // Supplemental & Charge Sheet fields
     const letterNo = recData.letter_no || recData.letterNo || null;
     const urgency = recData.urgency || "normal";
     const title = recData.title || "Preliminary Investigation Recommendation";
     const forwardTo = recData.forward_to || recData.forwardTo || "disciplinary_branch";
     const issuedChargeSheet = recData.issued_charge_sheet || recData.issuedChargeSheet || null;
-    const chargeSheetIssuedDate = parseSafeDate(recData.charge_sheet_issued_date || recData.chargeSheetIssuedDate);
-    const chargeSheetResponseDate = parseSafeDate(recData.charge_sheet_response_date || recData.chargeSheetResponseDate);
+    const chargeSheetIssuedDate = parseSafeDate(recData.date_the_charge_sheet_issued || recData.charge_sheet_issued_date || recData.chargeSheetIssuedDate);
+    const chargeSheetResponseDate = parseSafeDate(recData.date_the_response_to_the_charge_sheet_was_given || recData.charge_sheet_response_date || recData.chargeSheetResponseDate);
     const disciplinaryOrder = recData.disciplinary_order || recData.disciplinaryOrder || null;
     const submittedAt = status === "Submitted" ? new Date() : null;
 
@@ -4785,7 +4821,38 @@ export async function saveRecommendationServer(recData: any) {
       throw invErr;
     }
 
-    // 3. Dual-save to dcmms_recommendations for secondary fallback compatibility
+    // 3. Save / Upsert directly to charge_sheet_table
+    try {
+      if (category === "issuing_charge_sheet" || issuedChargeSheet || chargeSheetIssuedDate || chargeSheetResponseDate || disciplinaryOrder) {
+        await prisma.$executeRaw`
+          INSERT INTO public.charge_sheet_table (
+            ref_number,
+            issued_charge_sheet,
+            date_the_charge_sheet_issued,
+            date_the_response_to_the_charge_sheet_was_given,
+            disciplinary_order,
+            updated_at
+          ) VALUES (
+            ${matchedRef},
+            ${issuedChargeSheet},
+            ${chargeSheetIssuedDate},
+            ${chargeSheetResponseDate},
+            ${disciplinaryOrder},
+            NOW()
+          )
+          ON CONFLICT (ref_number) DO UPDATE SET
+            issued_charge_sheet = EXCLUDED.issued_charge_sheet,
+            date_the_charge_sheet_issued = EXCLUDED.date_the_charge_sheet_issued,
+            date_the_response_to_the_charge_sheet_was_given = EXCLUDED.date_the_response_to_the_charge_sheet_was_given,
+            disciplinary_order = EXCLUDED.disciplinary_order,
+            updated_at = NOW();
+        `;
+      }
+    } catch (csErr) {
+      console.warn("Write to charge_sheet_table warning:", csErr);
+    }
+
+    // 4. Dual-save to dcmms_recommendations for secondary fallback compatibility
     try {
       const existingDcmms: any[] = await prisma.$queryRaw`
         SELECT id FROM public.dcmms_recommendations
@@ -4919,7 +4986,35 @@ export async function getRecommendationsListServer() {
       console.warn("Error querying investigation_table in getRecommendationsListServer:", invErr);
     }
 
-    // 2. Fetch and merge supplemental records from dcmms_recommendations
+    // 2. Fetch and merge charge sheet details from charge_sheet_table
+    try {
+      const rawCS: any[] = await prisma.$queryRaw`
+        SELECT 
+          ref_number as "refNumber",
+          issued_charge_sheet as "issuedChargeSheet",
+          date_the_charge_sheet_issued as "chargeSheetIssuedDate",
+          date_the_response_to_the_charge_sheet_was_given as "chargeSheetResponseDate",
+          disciplinary_order as "disciplinaryOrder"
+        FROM public.charge_sheet_table;
+      `;
+      if (rawCS && Array.isArray(rawCS)) {
+        for (const cs of rawCS) {
+          const key = (cs.refNumber || "").trim().toLowerCase();
+          if (!key) continue;
+          if (listMap.has(key)) {
+            const item = listMap.get(key);
+            if (cs.issuedChargeSheet) item.issuedChargeSheet = cs.issuedChargeSheet;
+            if (cs.chargeSheetIssuedDate) item.chargeSheetIssuedDate = new Date(cs.chargeSheetIssuedDate).toISOString().slice(0, 10);
+            if (cs.chargeSheetResponseDate) item.chargeSheetResponseDate = new Date(cs.chargeSheetResponseDate).toISOString().slice(0, 10);
+            if (cs.disciplinaryOrder) item.disciplinaryOrder = cs.disciplinaryOrder;
+          }
+        }
+      }
+    } catch (csListErr) {
+      console.warn("charge_sheet_table list fetch error:", csListErr);
+    }
+
+    // 3. Fetch and merge supplemental records from dcmms_recommendations
     try {
       const rawRecs: any[] = await prisma.$queryRaw`
         SELECT 
@@ -4957,10 +5052,10 @@ export async function getRecommendationsListServer() {
             if (item.urgency) existing.urgency = item.urgency;
             if (item.title) existing.title = item.title;
             if (item.forwardTo) existing.forwardTo = item.forwardTo;
-            if (item.issuedChargeSheet) existing.issuedChargeSheet = item.issuedChargeSheet;
-            if (item.chargeSheetIssuedDate) existing.chargeSheetIssuedDate = new Date(item.chargeSheetIssuedDate).toISOString().slice(0, 10);
-            if (item.chargeSheetResponseDate) existing.chargeSheetResponseDate = new Date(item.chargeSheetResponseDate).toISOString().slice(0, 10);
-            if (item.disciplinaryOrder) existing.disciplinaryOrder = item.disciplinaryOrder;
+            if (item.issuedChargeSheet && !existing.issuedChargeSheet) existing.issuedChargeSheet = item.issuedChargeSheet;
+            if (item.chargeSheetIssuedDate && !existing.chargeSheetIssuedDate) existing.chargeSheetIssuedDate = new Date(item.chargeSheetIssuedDate).toISOString().slice(0, 10);
+            if (item.chargeSheetResponseDate && !existing.chargeSheetResponseDate) existing.chargeSheetResponseDate = new Date(item.chargeSheetResponseDate).toISOString().slice(0, 10);
+            if (item.disciplinaryOrder && !existing.disciplinaryOrder) existing.disciplinaryOrder = item.disciplinaryOrder;
           } else {
             listMap.set(key, {
               id: item.id,
@@ -4997,11 +5092,108 @@ export async function getRecommendationsListServer() {
   }
 }
 
+// -------------------------------------------------------------
+// Direct Charge Sheet Server Actions
+// -------------------------------------------------------------
+export async function getChargeSheetDetailsServer(refNumber: string) {
+  try {
+    await ensureRecommendationsTable();
+    const clean = (refNumber || "").trim();
+    if (!clean) return serializeForServerAction({ success: false, error: "Reference number is required" });
 
+    const rows: any[] = await prisma.$queryRaw`
+      SELECT 
+        cs.id,
+        cs.ref_number,
+        cs.issued_charge_sheet,
+        cs.date_the_charge_sheet_issued,
+        cs.date_the_response_to_the_charge_sheet_was_given,
+        cs.disciplinary_order,
+        cs.created_at,
+        cs.updated_at
+      FROM public.charge_sheet_table cs
+      WHERE LOWER(TRIM(cs.ref_number)) = LOWER(${clean})
+      LIMIT 1;
+    `;
 
+    if (rows && rows.length > 0) {
+      const r = rows[0];
+      return serializeForServerAction({
+        success: true,
+        data: {
+          id: String(r.id),
+          ref_number: r.ref_number,
+          issued_charge_sheet: r.issued_charge_sheet || "",
+          date_the_charge_sheet_issued: r.date_the_charge_sheet_issued ? new Date(r.date_the_charge_sheet_issued).toISOString().slice(0, 10) : "",
+          date_the_response_to_the_charge_sheet_was_given: r.date_the_response_to_the_charge_sheet_was_given ? new Date(r.date_the_response_to_the_charge_sheet_was_given).toISOString().slice(0, 10) : "",
+          disciplinary_order: r.disciplinary_order || "",
+          created_at: r.created_at ? new Date(r.created_at).toISOString() : "",
+          updated_at: r.updated_at ? new Date(r.updated_at).toISOString() : ""
+        }
+      });
+    }
 
+    return serializeForServerAction({ success: true, data: null });
+  } catch (err: any) {
+    console.error("Error in getChargeSheetDetailsServer:", err);
+    return serializeForServerAction({ success: false, error: err?.message || "Failed to fetch charge sheet details" });
+  }
+}
 
+export async function saveChargeSheetDetailsServer(data: {
+  ref_number: string;
+  issued_charge_sheet?: string | null;
+  date_the_charge_sheet_issued?: string | null;
+  date_the_response_to_the_charge_sheet_was_given?: string | null;
+  disciplinary_order?: string | null;
+}) {
+  try {
+    await ensureRecommendationsTable();
+    const cleanRef = (data.ref_number || "").trim();
+    if (!cleanRef) return serializeForServerAction({ success: false, error: "Reference number is required" });
 
+    const issuedChargeSheet = data.issued_charge_sheet || null;
+    const dateIssued = parseSafeDate(data.date_the_charge_sheet_issued);
+    const dateResponse = parseSafeDate(data.date_the_response_to_the_charge_sheet_was_given);
+    const disciplinaryOrder = data.disciplinary_order || null;
+
+    // Ensure parent ref_number in subject_officer_form_table
+    await prisma.$executeRaw`
+      INSERT INTO subject_officer_form_table (ref_number, subject_file_no, created_at, updated_at)
+      VALUES (${cleanRef}, ${cleanRef}, NOW(), NOW())
+      ON CONFLICT (ref_number) DO NOTHING;
+    `;
+
+    await prisma.$executeRaw`
+      INSERT INTO public.charge_sheet_table (
+        ref_number,
+        issued_charge_sheet,
+        date_the_charge_sheet_issued,
+        date_the_response_to_the_charge_sheet_was_given,
+        disciplinary_order,
+        updated_at
+      ) VALUES (
+        ${cleanRef},
+        ${issuedChargeSheet},
+        ${dateIssued},
+        ${dateResponse},
+        ${disciplinaryOrder},
+        NOW()
+      )
+      ON CONFLICT (ref_number) DO UPDATE SET
+        issued_charge_sheet = EXCLUDED.issued_charge_sheet,
+        date_the_charge_sheet_issued = EXCLUDED.date_the_charge_sheet_issued,
+        date_the_response_to_the_charge_sheet_was_given = EXCLUDED.date_the_response_to_the_charge_sheet_was_given,
+        disciplinary_order = EXCLUDED.disciplinary_order,
+        updated_at = NOW();
+    `;
+
+    return serializeForServerAction({ success: true, ref_number: cleanRef });
+  } catch (err: any) {
+    console.error("Error in saveChargeSheetDetailsServer:", err);
+    return serializeForServerAction({ success: false, error: err?.message || "Failed to save charge sheet details" });
+  }
+}
 
 
 
