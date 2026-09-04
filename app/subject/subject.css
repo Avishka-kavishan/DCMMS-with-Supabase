@@ -964,5 +964,138 @@
   background-color: #e3efff !important;
 }
 
+.inquiry-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
 
+@media (max-width: 1024px) {
+  .inquiry-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
 
+@media (max-width: 640px) {
+  .inquiry-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.inquiry-kpi-card {
+  border-radius: 16px;
+  padding: 18px 20px;
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 110px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.inquiry-kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+}
+
+.inquiry-card-purple { background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%); }
+.inquiry-card-amber { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); }
+.inquiry-card-blue { background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); }
+.inquiry-card-emerald { background: linear-gradient(135deg, #10b981 0%, #047857 100%); }
+.inquiry-card-rose { background: linear-gradient(135deg, #f43f5e 0%, #be123c 100%); }
+.inquiry-card-indigo { background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%); }
+.inquiry-card-teal { background: linear-gradient(135deg, #0d9488 0%, #0f766e 100%); }
+.inquiry-card-violet { background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%); }
+
+.inquiry-stage-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.inquiry-stage-prelim { background-color: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
+.inquiry-stage-inquiry { background-color: #e0e7ff; color: #3730a3; border: 1px solid #c7d2fe; }
+.inquiry-stage-formal { background-color: #f3e8ff; color: #6b21a8; border: 1px solid #e9d5ff; }
+.inquiry-stage-scheduled { background-color: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+.inquiry-stage-report { background-color: #ffedd5; color: #9a3412; border: 1px solid #fed7aa; }
+.inquiry-stage-charge { background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+.inquiry-stage-psc { background-color: #fdf4ff; color: #86198f; border: 1px solid #f5d0fe; }
+.inquiry-stage-order { background-color: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
+
+.inquiry-dossier-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(4px);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.inquiry-dossier-modal-content {
+  background-color: #ffffff;
+  border-radius: 20px;
+  width: 100%;
+  max-width: 780px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+  animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(16px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.inquiry-dossier-header {
+  padding: 20px 24px;
+  background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
+  color: #ffffff;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.inquiry-dossier-body {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.inquiry-dossier-section {
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 16px 20px;
+}
+
+.inquiry-dossier-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #64748b;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}

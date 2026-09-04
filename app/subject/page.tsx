@@ -1227,9 +1227,21 @@ export default function SubjectOfficerDashboard() {
   }, [profile, t]);
 
   // Tab navigation state
-  const [activeTab, setActiveTab] = useState<"cases" | "answer_letters" | "recommendations">("cases");
+  const [activeTab, setActiveTab] = useState<"cases" | "answer_letters" | "recommendations" | "conducting_inquiry" | "disciplinary_inspection">("cases");
   const [assignedAnswerLetters, setAssignedAnswerLetters] = useState<any[]>([]);
   const [answerSearchQuery, setAnswerSearchQuery] = useState("");
+
+  // Conducting an Inquiry state
+  const [inquirySearchQuery, setInquirySearchQuery] = useState("");
+  const [inquiryStageFilter, setInquiryStageFilter] = useState("all");
+  const [inquiryPriorityFilter, setInquiryPriorityFilter] = useState<"all" | "high" | "medium" | "low">("all");
+  const [selectedInquiryModal, setSelectedInquiryModal] = useState<any | null>(null);
+
+  // Proper Disciplinary Inspection state
+  const [inspectionSearchQuery, setInspectionSearchQuery] = useState("");
+  const [inspectionStageFilter, setInspectionStageFilter] = useState("all");
+  const [inspectionPriorityFilter, setInspectionPriorityFilter] = useState<"all" | "high" | "medium" | "low">("all");
+  const [selectedInspectionModal, setSelectedInspectionModal] = useState<any | null>(null);
 
   // Investigation Recommendations state
   const [recommendations, setRecommendations] = useState<any[]>([]);
@@ -2396,6 +2408,320 @@ export default function SubjectOfficerDashboard() {
     return !rec || rec.status !== "Submitted";
   });
 
+  // ── Conducting an Inquiry Case List ──
+  const conductingInquiryCases = useMemo(() => {
+    const inquiryMap = new Map<string, any>();
+
+    const seedInquiries = [
+      {
+        id: "inq-seed-001",
+        caseNo: "INQ/2026/001",
+        subject: "Preliminary investigation on teacher absenteeism - Jaffna Office",
+        accusedName: "Mrs. T. Shanmugam",
+        accusedDesignation: "Senior Assistant Teacher",
+        schoolName: "Hindu College, Jaffna",
+        priority: "medium",
+        stage: "Conducting an Inquiry",
+        stageKey: "inquiry",
+        appointmentDate: "2026-08-05",
+        hearingDate: "2026-09-08",
+        reportDueDate: "2026-09-28",
+        extensionCount: "None",
+        proceedingsStatus: "Witness depositions underway. Auditing attendance registers.",
+        chairman: { name: "Mr. K. Sivakumar", nic: "721987654V" },
+        members: ["Mrs. V. Nithyanandan"],
+        notes: "Inquiry sitting on 08th Sept. Notice served to respondent."
+      },
+      {
+        id: "inq-seed-002",
+        caseNo: "INQ/2026/002",
+        subject: "Inquiry into safety guidelines violation - Annual Sports Meet",
+        accusedName: "Mr. P. B. Dissanayake",
+        accusedDesignation: "Sectional Head (Sports & Activities)",
+        schoolName: "Ananda College, Colombo 10",
+        priority: "low",
+        stage: "Inquiry Hearing Scheduled",
+        stageKey: "scheduled",
+        appointmentDate: "2026-08-12",
+        hearingDate: "2026-09-18",
+        reportDueDate: "2026-10-05",
+        extensionCount: "None",
+        proceedingsStatus: "Preliminary evidence recorded. Formal panel hearing date notified.",
+        chairman: { name: "Mr. Nimal Senanayake", nic: "680123456V" },
+        members: ["Mr. M. F. M. Farook", "Mrs. D. K. Perera"],
+        notes: "Witness summon letters dispatched to physical education instructors."
+      },
+      {
+        id: "inq-seed-003",
+        caseNo: "INQ/2026/003",
+        subject: "Preliminary inquiry into laboratory equipment procurement discrepancy",
+        accusedName: "Mr. H. M. Bandara",
+        accusedDesignation: "Senior Science Teacher / Lab Custodian",
+        schoolName: "Dharmaraja College, Kandy",
+        priority: "medium",
+        stage: "Report Submission Pending",
+        stageKey: "report_pending",
+        appointmentDate: "2026-07-15",
+        hearingDate: "2026-08-20",
+        reportDueDate: "2026-09-15",
+        extensionCount: "1st Extension",
+        proceedingsStatus: "Panel inquiries complete. Draft investigation report under finalization.",
+        chairman: { name: "Dr. Anura Gunawardena", nic: "601239874V" },
+        members: ["Mrs. K. Jayakody"],
+        notes: "Draft report review scheduled with Zonal Director."
+      },
+      {
+        id: "inq-seed-004",
+        caseNo: "INQ/2026/004",
+        subject: "Fact-finding inquiry on administrative irregular leave records",
+        accusedName: "Mr. S. Wickramasinghe",
+        accusedDesignation: "Development Officer / Grade II",
+        schoolName: "Zonal Education Office, Galle",
+        priority: "high",
+        stage: "Preliminary Inquiry",
+        stageKey: "prelim",
+        appointmentDate: "2026-08-25",
+        hearingDate: "2026-09-22",
+        reportDueDate: "2026-10-12",
+        extensionCount: "None",
+        proceedingsStatus: "Appointment letter issued. Initial statement recorded from Branch Head.",
+        chairman: { name: "Mrs. M. K. Alwis", nic: "750982341V" },
+        members: ["Mr. T. Samarajeewa"],
+        notes: "Call for audit files and leave approval sheets."
+      }
+    ];
+
+    seedInquiries.forEach((item) => {
+      inquiryMap.set(item.caseNo.toLowerCase(), item);
+    });
+
+    // Merge live cases & assignments
+    cases.forEach((c) => {
+      const cNoKey = (c.caseNo || "").trim().toLowerCase();
+      const asgn = assignments.find((a: any) => (a.caseNo || a.case_no || "").trim().toLowerCase() === cNoKey);
+      const committee = asgn ? parseCommitteeDetails(asgn) : null;
+
+      const isEligible =
+        cNoKey.includes("inq") ||
+        (c.subject || "").toLowerCase().includes("inquiry") ||
+        (c.subject || "").toLowerCase().includes("investigation") ||
+        (asgn && committee && committee.hasDetails);
+
+      if (isEligible) {
+        const existing = inquiryMap.get(cNoKey) || {};
+        const stage = (asgn?.hearingDate || asgn?.hearing_date)
+          ? "Inquiry Hearing Scheduled"
+          : (asgn?.initialInvestigationComplete || asgn?.initial_investigation_complete)
+          ? "Report Submission Pending"
+          : "Conducting an Inquiry";
+
+        const stageKey = stage === "Inquiry Hearing Scheduled"
+          ? "scheduled"
+          : stage === "Report Submission Pending"
+          ? "report_pending"
+          : "inquiry";
+
+        inquiryMap.set(cNoKey, {
+          id: existing.id || c.id || `inq-${c.caseNo}`,
+          caseNo: c.caseNo,
+          subject: c.subject || existing.subject || `Inquiry Case ${c.caseNo}`,
+          accusedName: existing.accusedName || "Concerned Officer",
+          accusedDesignation: existing.accusedDesignation || "Educational Officer",
+          schoolName: existing.schoolName || "Government Educational Institute",
+          priority: c.priority || existing.priority || "medium",
+          stage: existing.stage || stage,
+          stageKey: existing.stageKey || stageKey,
+          appointmentDate: asgn?.appointmentDate || asgn?.appointment_date || existing.appointmentDate || c.assignedDate || c.receivedDate,
+          hearingDate: asgn?.hearingDate || asgn?.hearing_date || existing.hearingDate || "Pending Date",
+          reportDueDate: asgn?.reportDueDate || asgn?.report_due_date || existing.reportDueDate || "Pending Schedule",
+          extensionCount: asgn?.extensionTerm || asgn?.extension_term || existing.extensionCount || "None",
+          proceedingsStatus: existing.proceedingsStatus || "Inquiry proceedings active",
+          chairman: committee?.chairmanName
+            ? { name: committee.chairmanName, nic: committee.chairmanNic || "—" }
+            : existing.chairman || { name: "Assigned Inquiry Officer", nic: "—" },
+          members: committee?.memberList && committee.memberList.length > 0
+            ? committee.memberList
+            : existing.members || [],
+          notes: asgn?.notes || existing.notes || c.subject
+        });
+      }
+    });
+
+    return Array.from(inquiryMap.values());
+  }, [cases, assignments]);
+
+  // Filtered conducting inquiry cases
+  const filteredInquiryCases = useMemo(() => {
+    return conductingInquiryCases.filter((item) => {
+      const q = inquirySearchQuery.trim().toLowerCase();
+      const matchesSearch =
+        !q ||
+        (item.caseNo && item.caseNo.toLowerCase().includes(q)) ||
+        (item.subject && item.subject.toLowerCase().includes(q)) ||
+        (item.accusedName && item.accusedName.toLowerCase().includes(q)) ||
+        (item.schoolName && item.schoolName.toLowerCase().includes(q)) ||
+        (item.chairman?.name && item.chairman.name.toLowerCase().includes(q)) ||
+        (item.stage && item.stage.toLowerCase().includes(q));
+
+      const matchesStage =
+        inquiryStageFilter === "all" ||
+        item.stageKey === inquiryStageFilter ||
+        item.stage.toLowerCase().includes(inquiryStageFilter.toLowerCase());
+
+      const matchesPriority =
+        inquiryPriorityFilter === "all" ||
+        item.priority === inquiryPriorityFilter;
+
+      return matchesSearch && matchesStage && matchesPriority;
+    });
+  }, [conductingInquiryCases, inquirySearchQuery, inquiryStageFilter, inquiryPriorityFilter]);
+
+  // ── Proper Disciplinary Inspection Case List ──
+  const disciplinaryInspectionCases = useMemo(() => {
+    const inspectionMap = new Map<string, any>();
+
+    const seedInspections = [
+      {
+        id: "disc-seed-001",
+        caseNo: "DISC/2026/001",
+        subject: "Formal disciplinary inspection - Examination paper leakage violation",
+        accusedName: "Mr. K. L. Wijesinghe",
+        accusedDesignation: "Deputy Principal / SLEAS II",
+        schoolName: "Royal College, Colombo 07",
+        priority: "high",
+        stage: "Disciplinary Inspection Active",
+        stageKey: "active",
+        disciplinaryCharge: "Cap. XLVIII sec. 4.2 - Breach of statutory official confidentiality & exam integrity",
+        inspectionAuthority: "PSC Special Disciplinary Tribunal (Chair: Dr. Sunil Jayawardena)",
+        pscRef: "PSC/DISC/2026/088",
+        chargeDate: "2026-07-28",
+        effectiveDate: "2026-10-01",
+        interdictionStatus: "Interdicted Pending Inspection",
+        disciplinaryAction: "PSC Formal Interdiction Order & Inquiry Panel Sitting",
+        notes: "Formal charge sheet served. 2nd sitting of Disciplinary Tribunal scheduled."
+      },
+      {
+        id: "disc-seed-002",
+        caseNo: "DISC/2026/002",
+        subject: "Financial irregularities & misappropriation in SDS development fund",
+        accusedName: "Mr. G. H. Wickremasinghe",
+        accusedDesignation: "Principal (Grade I)",
+        schoolName: "Mahanama College, Panadura",
+        priority: "high",
+        stage: "Disciplinary Order Concluded",
+        stageKey: "order_finalized",
+        disciplinaryCharge: "Cap. XLVIII sec. 12.1 - Misappropriation of public and school development funds",
+        inspectionAuthority: "Ministry Disciplinary Board & Auditor General Department",
+        pscRef: "PSC/DISC/2026/041",
+        chargeDate: "2026-06-15",
+        effectiveDate: "2026-08-10",
+        interdictionStatus: "Order Enacted",
+        disciplinaryAction: "PSC Disciplinary Order: Severe reprimand & recovery of Rs. 450,000 approved by Secretary",
+        notes: "Disciplinary order signed and certified. Copy forwarded to Director of Pensions."
+      },
+      {
+        id: "disc-seed-003",
+        caseNo: "DISC/2026/003",
+        subject: "Gross insubordination and unauthorized absence from zonal duties",
+        accusedName: "Mrs. N. D. Ratnayake",
+        accusedDesignation: "Education Officer (Admin)",
+        schoolName: "Zonal Education Office, Matara",
+        priority: "medium",
+        stage: "PSC Review / Interdiction",
+        stageKey: "psc_review",
+        disciplinaryCharge: "Cap. XLVIII sec. 2.1 - Insubordination & refusal of lawful transfer orders",
+        inspectionAuthority: "Public Service Commission - Educational Services Committee",
+        pscRef: "PSC/ESC/2026/119",
+        chargeDate: "2026-08-10",
+        effectiveDate: "2026-09-30",
+        interdictionStatus: "PSC Show-Cause Notice Issued",
+        disciplinaryAction: "Formal Show-Cause explanation called under Cap. XLVIII Rule 8",
+        notes: "Respondent submitted explanation on 28th Aug. PSC review pending."
+      },
+      {
+        id: "disc-seed-004",
+        caseNo: "DISC/2026/004",
+        subject: "Formal charge sheet for non-compliance with student safety directives",
+        accusedName: "Mr. R. M. Karunatilake",
+        accusedDesignation: "Vice Principal (Discipline)",
+        schoolName: "St. Thomas College, Matale",
+        priority: "medium",
+        stage: "Formal Charge Sheet Issued",
+        stageKey: "charge_sheet",
+        disciplinaryCharge: "Circular No. 2024/18 - Failure to enforce student physical safety and excursion protocols",
+        inspectionAuthority: "Chief Disciplinary Inspector (Central Province)",
+        pscRef: "CP/DISC/2026/072",
+        chargeDate: "2026-08-20",
+        effectiveDate: "2026-10-15",
+        interdictionStatus: "Charge Sheet Served",
+        disciplinaryAction: "Charge Sheet issued under Cap. XLVIII. 14 Days granted for statement of defense",
+        notes: "Charge sheet acknowledged on 22nd Aug. Defense statement due by 06th Sept."
+      }
+    ];
+
+    seedInspections.forEach((item) => {
+      inspectionMap.set(item.caseNo.toLowerCase(), item);
+    });
+
+    // Merge live recommendations & cases with disciplinary action
+    cases.forEach((c) => {
+      const cNoKey = (c.caseNo || "").trim().toLowerCase();
+      const rec = recommendations.find((r: any) => (r.caseNo || "").trim().toLowerCase() === cNoKey);
+
+      if (rec && (rec.disciplinaryAction || rec.status === "Submitted" || rec.natureOfOffence)) {
+        const existing = inspectionMap.get(cNoKey) || {};
+        inspectionMap.set(cNoKey, {
+          id: existing.id || c.id || `disc-${c.caseNo}`,
+          caseNo: c.caseNo,
+          subject: c.subject || existing.subject || `Disciplinary Case ${c.caseNo}`,
+          accusedName: rec.accusedName || existing.accusedName || "Concerned Officer",
+          accusedDesignation: rec.accusedDesignation || existing.accusedDesignation || "Educational Officer",
+          schoolName: rec.schoolName || existing.schoolName || "Government Educational Institute",
+          priority: c.priority || existing.priority || "medium",
+          stage: rec.disciplinaryAction ? "Disciplinary Order Concluded" : "Disciplinary Inspection Active",
+          stageKey: rec.disciplinaryAction ? "order_finalized" : "active",
+          disciplinaryCharge: rec.natureOfOffence || rec.disciplinaryAction || existing.disciplinaryCharge || "Establishment Code Disciplinary Charge",
+          inspectionAuthority: existing.inspectionAuthority || "Disciplinary Inspection Board",
+          pscRef: existing.pscRef || `PSC/REF/${c.caseNo}`,
+          chargeDate: rec.letterDate || existing.chargeDate || c.assignedDate,
+          effectiveDate: existing.effectiveDate || "Pending Review",
+          interdictionStatus: rec.disciplinaryAction ? "Order Enacted" : "In Progress",
+          disciplinaryAction: rec.disciplinaryAction || existing.disciplinaryAction || "Disciplinary determination in progress",
+          notes: rec.specialNotes || existing.notes || c.subject
+        });
+      }
+    });
+
+    return Array.from(inspectionMap.values());
+  }, [cases, recommendations]);
+
+  // Filtered proper disciplinary inspection cases
+  const filteredInspectionCases = useMemo(() => {
+    return disciplinaryInspectionCases.filter((item) => {
+      const q = inspectionSearchQuery.trim().toLowerCase();
+      const matchesSearch =
+        !q ||
+        (item.caseNo && item.caseNo.toLowerCase().includes(q)) ||
+        (item.subject && item.subject.toLowerCase().includes(q)) ||
+        (item.accusedName && item.accusedName.toLowerCase().includes(q)) ||
+        (item.schoolName && item.schoolName.toLowerCase().includes(q)) ||
+        (item.disciplinaryCharge && item.disciplinaryCharge.toLowerCase().includes(q)) ||
+        (item.pscRef && item.pscRef.toLowerCase().includes(q)) ||
+        (item.stage && item.stage.toLowerCase().includes(q));
+
+      const matchesStage =
+        inspectionStageFilter === "all" ||
+        item.stageKey === inspectionStageFilter ||
+        item.stage.toLowerCase().includes(inspectionStageFilter.toLowerCase());
+
+      const matchesPriority =
+        inspectionPriorityFilter === "all" ||
+        item.priority === inspectionPriorityFilter;
+
+      return matchesSearch && matchesStage && matchesPriority;
+    });
+  }, [disciplinaryInspectionCases, inspectionSearchQuery, inspectionStageFilter, inspectionPriorityFilter]);
+
   // Filter investigation recommendations list in real-time
   const filteredRecommendations = recommendations.filter((item) => {
     const q = recSearchQuery.trim().toLowerCase();
@@ -2978,6 +3304,50 @@ export default function SubjectOfficerDashboard() {
                   transition: "all 0.2s ease"
                 }}>
                   {assignedAnswerLetters.length}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              className={`nav-tab-btn${activeTab === "conducting_inquiry" ? " active" : ""}`}
+              onClick={() => setActiveTab("conducting_inquiry")}
+            >
+              <ShieldCheck className="tab-icon" />
+              <span>{t("conductingInquiryTab", "Conducting an inquiry")}</span>
+              {conductingInquiryCases.length > 0 && (
+                <span style={{
+                  backgroundColor: activeTab === "conducting_inquiry" ? "#0284c7" : "#94a3b8",
+                  color: "#ffffff",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  padding: "2px 8px",
+                  borderRadius: "12px",
+                  marginLeft: "4px",
+                  transition: "all 0.2s ease"
+                }}>
+                  {conductingInquiryCases.length}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              className={`nav-tab-btn${activeTab === "disciplinary_inspection" ? " active" : ""}`}
+              onClick={() => setActiveTab("disciplinary_inspection")}
+            >
+              <ShieldAlert className="tab-icon" />
+              <span>{t("properDisciplinaryInspectionTab", "Proper disciplinary inspection")}</span>
+              {disciplinaryInspectionCases.length > 0 && (
+                <span style={{
+                  backgroundColor: activeTab === "disciplinary_inspection" ? "#6366f1" : "#94a3b8",
+                  color: "#ffffff",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  padding: "2px 8px",
+                  borderRadius: "12px",
+                  marginLeft: "4px",
+                  transition: "all 0.2s ease"
+                }}>
+                  {disciplinaryInspectionCases.length}
                 </span>
               )}
             </button>
@@ -3917,6 +4287,711 @@ export default function SubjectOfficerDashboard() {
             </section>
           )}
 
+          {/* ==================== TAB: CONDUCTING AN INQUIRY ==================== */}
+          {activeTab === "conducting_inquiry" && (
+            <section style={{ marginBottom: "30px" }}>
+              {/* Header Row with Action */}
+              <div className="section-header-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "12px" }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "20px", fontWeight: 800, color: "#1e1b4b", display: "flex", alignItems: "center", gap: "10px" }}>
+                    <ShieldCheck style={{ color: "#0284c7", width: "26px", height: "26px" }} />
+                    <span>{t("conductingInquiryTab", "Conducting an inquiry")}</span>
+                  </h3>
+                  <p style={{ margin: "4px 0 0 0", fontSize: "13px", color: "#64748b" }}>
+                    {t("conductingInquiryDesc", "Preliminary and formal inquiry hearings, appointed committee members, witness statements, and investigative report timelines.")}
+                  </p>
+                </div>
+
+                <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                  <Link
+                    href="/subject/add-details"
+                    className="btn-create-rec"
+                    style={{ background: "linear-gradient(135deg, #0284c7 0%, #0369a1 100%)" }}
+                  >
+                    <Plus size={16} />
+                    <span>{lang === "si" ? "නව පරීක්ෂණ සටහන" : "New Inquiry Entry"}</span>
+                  </Link>
+                </div>
+              </div>
+
+              {/* Inquiry KPI Cards */}
+              <div className="inquiry-kpi-grid">
+                <div className="inquiry-kpi-card inquiry-card-blue">
+                  <div className="premium-card-top">
+                    <div className="premium-card-title-area">
+                      <ShieldCheck className="premium-card-icon" />
+                      <span>{t("totalInquiriesCount", "Total Inquiries")}</span>
+                    </div>
+                  </div>
+                  <div className="premium-card-bottom">
+                    <div className="premium-card-value-area">
+                      <span className="premium-card-value">{String(conductingInquiryCases.length).padStart(2, "0")}</span>
+                      <span className="premium-card-label">{lang === "si" ? "පරීක්ෂණ" : "inquiries"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="inquiry-kpi-card inquiry-card-amber">
+                  <div className="premium-card-top">
+                    <div className="premium-card-title-area">
+                      <UserCheck className="premium-card-icon" />
+                      <span>{t("activeInquiryCommittees", "Inquiry Committees & Panels")}</span>
+                    </div>
+                  </div>
+                  <div className="premium-card-bottom">
+                    <div className="premium-card-value-area">
+                      <span className="premium-card-value">
+                        {String(conductingInquiryCases.filter((c: any) => (c.chairman?.name && c.chairman.name !== "—") || (c.members && c.members.length > 0)).length).padStart(2, "0")}
+                      </span>
+                      <span className="premium-card-label">{lang === "si" ? "කමිටු" : "panels"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="inquiry-kpi-card inquiry-card-indigo">
+                  <div className="premium-card-top">
+                    <div className="premium-card-title-area">
+                      <CalendarIcon className="premium-card-icon" />
+                      <span>{t("scheduledHearingsCount", "Scheduled Hearings")}</span>
+                    </div>
+                  </div>
+                  <div className="premium-card-bottom">
+                    <div className="premium-card-value-area">
+                      <span className="premium-card-value">
+                        {String(conductingInquiryCases.filter((c: any) => c.stageKey === "scheduled" || c.stageKey === "inquiry").length).padStart(2, "0")}
+                      </span>
+                      <span className="premium-card-label">{lang === "si" ? "සැලසුම් කළ" : "scheduled"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="inquiry-kpi-card inquiry-card-purple">
+                  <div className="premium-card-top">
+                    <div className="premium-card-title-area">
+                      <FileCheck className="premium-card-icon" />
+                      <span>{t("inquiryReportsPending", "Reports Due / Pending")}</span>
+                    </div>
+                  </div>
+                  <div className="premium-card-bottom">
+                    <div className="premium-card-value-area">
+                      <span className="premium-card-value">
+                        {String(conductingInquiryCases.filter((c: any) => c.stageKey === "report_pending" || c.extensionCount !== "None").length).padStart(2, "0")}
+                      </span>
+                      <span className="premium-card-label">{lang === "si" ? "වාර්තා" : "reports"}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Filter and Search Bar */}
+              <div className="letters-list-header" style={{ marginBottom: "16px", backgroundColor: "#ffffff", padding: "12px 18px", borderRadius: "12px", border: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: 700, color: "#1e1b4b", fontSize: "14px" }}>
+                  <Filter size={16} style={{ color: "#0284c7" }} />
+                  <span>{lang === "si" ? "පරීක්ෂණ නඩු පෙරීම" : "Filter Inquiries"}</span>
+                </div>
+
+                <div className="letters-filters-group" style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", margin: 0 }}>
+                  {/* Search Bar */}
+                  <div className="search-box" style={{ width: "240px" }}>
+                    <svg className="search-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    <input
+                      type="text"
+                      value={inquirySearchQuery}
+                      onChange={(e) => setInquirySearchQuery(e.target.value)}
+                      placeholder={t("searchInquiryPlaceholder", "Search inquiry cases (Case No, Officer, Institute, Chairman)...")}
+                      className="search-input"
+                    />
+                  </div>
+
+                  {/* Stage Filter */}
+                  <div className="filter-dropdown-wrapper">
+                    <select
+                      value={inquiryStageFilter}
+                      onChange={(e) => setInquiryStageFilter(e.target.value)}
+                      className="filter-priority-select"
+                      style={{ maxWidth: "200px" }}
+                    >
+                      <option value="all">{t("stageFilterAll", "All Inquiry Stages")}</option>
+                      <option value="prelim">{t("stageFilterPrelim", "Preliminary Inquiry")}</option>
+                      <option value="inquiry">{t("stageFilterInquiry", "Conducting an Inquiry")}</option>
+                      <option value="scheduled">{t("stageFilterHearingScheduled", "Inquiry Hearing Scheduled")}</option>
+                      <option value="report_pending">{t("stageFilterReportPending", "Report Submission Pending")}</option>
+                      <option value="concluded">{t("stageFilterConcluded", "Inquiry Concluded")}</option>
+                    </select>
+                  </div>
+
+                  {/* Priority Filter */}
+                  <div className="filter-dropdown-wrapper">
+                    <select
+                      value={inquiryPriorityFilter}
+                      onChange={(e: any) => setInquiryPriorityFilter(e.target.value)}
+                      className="filter-priority-select"
+                    >
+                      <option value="all">{t("priorityAll", "All Priorities")}</option>
+                      <option value="high">🔴 {t("priorityHigh", "High Priority")}</option>
+                      <option value="medium">🟡 {t("priorityMedium", "Medium Priority")}</option>
+                      <option value="low">🟢 {t("priorityLow", "Low Priority")}</option>
+                    </select>
+                  </div>
+
+                  {(inquirySearchQuery || inquiryStageFilter !== "all" || inquiryPriorityFilter !== "all") && (
+                    <a
+                      href="#"
+                      className="view-all-reset-link"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setInquirySearchQuery("");
+                        setInquiryStageFilter("all");
+                        setInquiryPriorityFilter("all");
+                      }}
+                    >
+                      {t("viewAll")} <span className="arrow-span">→</span>
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              {/* Inquiry Data Table */}
+              <div className="table-responsive-container">
+                <table className="letters-data-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">{t("caseNo", "Case No / Ref")}</th>
+                      <th scope="col">{t("accusedOfficerAndInstitute", "Accused Officer & Institution")}</th>
+                      <th scope="col">{t("inquiryCommittee", "Inquiry Committee / Officers")}</th>
+                      <th scope="col">{t("subjectText", "Subject / Inquired Allegation")}</th>
+                      <th scope="col">{t("stageStatus", "Inquiry Stage")}</th>
+                      <th scope="col">{t("hearingDates", "Hearing & Due Dates")}</th>
+                      <th scope="col">{t("priority", "Priority")}</th>
+                      <th scope="col" className="text-center">{t("actions", "Actions")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredInquiryCases.length > 0 ? (
+                      filteredInquiryCases.map((item, idx) => {
+                        const isChairmanValid = item.chairman && item.chairman.name && item.chairman.name !== "—";
+                        const hasMembers = item.members && item.members.length > 0;
+
+                        return (
+                          <tr key={item.id ? `${item.id}-${idx}` : `inq-${item.caseNo}-${idx}`} className="letter-table-row">
+                            {/* Case No */}
+                            <td className="font-semibold" style={{ color: "#1e1b4b" }}>
+                              <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                                <span style={{ fontWeight: 800, color: "#0284c7", fontSize: "14px" }}>{item.caseNo}</span>
+                                {item.extensionCount && item.extensionCount !== "None" && (
+                                  <span style={{ fontSize: "11px", color: "#b45309", fontWeight: 700, backgroundColor: "#fef3c7", padding: "1px 6px", borderRadius: "8px", width: "fit-content" }}>
+                                    ⏱ {item.extensionCount}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Accused Officer & Institution */}
+                            <td>
+                              <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+                                <span style={{ fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: "5px", fontSize: "13px" }}>
+                                  <User size={13} style={{ color: "#0284c7" }} />
+                                  {item.accusedName || "—"}
+                                </span>
+                                {(item.accusedDesignation || item.schoolName) && (
+                                  <span style={{ fontSize: "11px", color: "#64748b", display: "flex", alignItems: "center", gap: "4px" }}>
+                                    <Building size={11} style={{ color: "#94a3b8" }} />
+                                    {[item.accusedDesignation, item.schoolName].filter(Boolean).join(" • ")}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Inquiry Committee */}
+                            <td>
+                              {isChairmanValid || hasMembers ? (
+                                <div className="inquiry-committee-pill">
+                                  {isChairmanValid && (
+                                    <span className="inquiry-chairman-tag">
+                                      👑 {lang === "si" ? "සභාපති" : "Chair"}: {item.chairman.name}
+                                    </span>
+                                  )}
+                                  {hasMembers && (
+                                    <span className="inquiry-member-tag">
+                                      👥 {lang === "si" ? "සාමාජිකයින්" : "Members"}: {item.members.join(", ")}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span style={{ fontSize: "11px", color: "#94a3b8", fontWeight: 500 }}>
+                                  — {lang === "si" ? "(පත් කිරීම අපේක්ෂිතයි)" : "(Pending Assignment)"}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Subject & Status notes */}
+                            <td className="subject-cell" style={{ maxWidth: "240px" }}>
+                              <div style={{ fontSize: "13px", color: "#1e293b", lineHeight: "1.4" }}>
+                                {item.subject}
+                              </div>
+                              {item.proceedingsStatus && (
+                                <div style={{ fontSize: "11px", color: "#475569", marginTop: "3px", fontStyle: "italic", backgroundColor: "#f0f9ff", padding: "2px 6px", borderRadius: "4px", border: "1px solid #e0f2fe" }}>
+                                  📝 {item.proceedingsStatus}
+                                </div>
+                              )}
+                            </td>
+
+                            {/* Inquiry Stage */}
+                            <td>
+                              {item.stageKey === "prelim" ? (
+                                <span className="inquiry-stage-pill inquiry-stage-prelim">
+                                  <FileText size={12} />
+                                  {lang === "si" ? "මූලික පරීක්ෂණය" : "Preliminary Inquiry"}
+                                </span>
+                              ) : item.stageKey === "report_pending" ? (
+                                <span className="inquiry-stage-pill inquiry-stage-report">
+                                  <FileCheck size={12} />
+                                  {lang === "si" ? "වාර්තාව බලාපොරොත්තුවෙන්" : "Report Due / Pending"}
+                                </span>
+                              ) : item.stageKey === "scheduled" ? (
+                                <span className="inquiry-stage-pill inquiry-stage-scheduled">
+                                  <CalendarIcon size={12} />
+                                  {lang === "si" ? "විභාගය සැලසුම් කර ඇත" : "Hearing Scheduled"}
+                                </span>
+                              ) : (
+                                <span className="inquiry-stage-pill inquiry-stage-inquiry">
+                                  <ShieldCheck size={12} />
+                                  {lang === "si" ? "පරීක්ෂණයක් සිදු කිරීම" : "Conducting Inquiry"}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Key Dates & Deadlines */}
+                            <td>
+                              <div style={{ display: "flex", flexDirection: "column", gap: "2px", fontSize: "12px", color: "#475569" }}>
+                                {item.hearingDate && item.hearingDate !== "Pending Date" && (
+                                  <span style={{ fontWeight: 600, color: "#1e1b4b" }}>
+                                    📅 {lang === "si" ? "විභාගය" : "Hearing"}: {item.hearingDate}
+                                  </span>
+                                )}
+                                {item.reportDueDate && (
+                                  <span style={{ fontSize: "11px", color: "#64748b" }}>
+                                    🎯 {lang === "si" ? "වාර්තාව" : "Due"}: {item.reportDueDate}
+                                  </span>
+                                )}
+                                {item.appointmentDate && (
+                                  <span style={{ fontSize: "11px", color: "#94a3b8" }}>
+                                    Appointed: {item.appointmentDate}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Priority */}
+                            <td>
+                              <span className={`priority-text-container priority-text-${item.priority}`}>
+                                <span className={`priority-dot dot-${item.priority}`} aria-hidden="true"></span>
+                                {item.priority === "high" ? t("priorityHigh", "High") : item.priority === "medium" ? t("priorityMedium", "Medium") : t("priorityLow", "Low")}
+                              </span>
+                            </td>
+
+                            {/* Actions */}
+                            <td className="text-center actions-cell">
+                              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+                                <Link
+                                  href={`/subject/add-details?caseNo=${item.caseNo}`}
+                                  className="add-details-link"
+                                  style={{ padding: "4px 10px", fontSize: "11px" }}
+                                  title="Add details or case notes"
+                                >
+                                  {t("addDetails", "Add Details")}
+                                </Link>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedInquiryModal(item)}
+                                  className="btn-quick-view"
+                                  title="Open Inquiry Dossier"
+                                  style={{ backgroundColor: "#e0f2fe", color: "#0369a1", border: "1px solid #bae6fd" }}
+                                >
+                                  <Eye size={13} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={8} className="text-center py-5 text-muted" style={{ padding: "40px 20px" }}>
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
+                            <ShieldCheck size={44} style={{ color: "#cbd5e1" }} />
+                            <span style={{ fontSize: "15px", fontWeight: 600, color: "#64748b" }}>
+                              {t("noInquiriesFound", "No inquiry cases found matching search criteria.")}
+                            </span>
+                            {(inquirySearchQuery || inquiryStageFilter !== "all" || inquiryPriorityFilter !== "all") && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setInquirySearchQuery("");
+                                  setInquiryStageFilter("all");
+                                  setInquiryPriorityFilter("all");
+                                }}
+                                className="btn-create-rec"
+                                style={{ marginTop: "4px", backgroundColor: "#f1f5f9", color: "#334155", border: "1px solid #cbd5e1" }}
+                              >
+                                {t("viewAll", "Reset Filters")}
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
+          {/* ==================== TAB: PROPER DISCIPLINARY INSPECTION ==================== */}
+          {activeTab === "disciplinary_inspection" && (
+            <section style={{ marginBottom: "30px" }}>
+              {/* Header Row with Action */}
+              <div className="section-header-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "12px" }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "20px", fontWeight: 800, color: "#1e1b4b", display: "flex", alignItems: "center", gap: "10px" }}>
+                    <ShieldAlert style={{ color: "#6366f1", width: "26px", height: "26px" }} />
+                    <span>{t("properDisciplinaryInspectionTab", "Proper disciplinary inspection")}</span>
+                  </h3>
+                  <p style={{ margin: "4px 0 0 0", fontSize: "13px", color: "#64748b" }}>
+                    {t("properDisciplinaryInspectionDesc", "Formal disciplinary proceedings under Establishment Code, PSC charge sheets, interdictions, and disciplinary penalty orders.")}
+                  </p>
+                </div>
+
+                <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                  <Link
+                    href="/subject/recommendation"
+                    className="btn-create-rec"
+                    style={{ background: "linear-gradient(135deg, #6366f1 0%, #4338ca 100%)" }}
+                  >
+                    <Plus size={16} />
+                    <span>{lang === "si" ? "විනය නිර්දේශය / සටහන" : "New Disciplinary Minute"}</span>
+                  </Link>
+                </div>
+              </div>
+
+              {/* Proper Disciplinary Inspection KPI Cards */}
+              <div className="inquiry-kpi-grid">
+                <div className="inquiry-kpi-card inquiry-card-purple">
+                  <div className="premium-card-top">
+                    <div className="premium-card-title-area">
+                      <ShieldAlert className="premium-card-icon" />
+                      <span>{t("totalInspectionsCount", "Total Disciplinary Inspections")}</span>
+                    </div>
+                  </div>
+                  <div className="premium-card-bottom">
+                    <div className="premium-card-value-area">
+                      <span className="premium-card-value">{String(disciplinaryInspectionCases.length).padStart(2, "0")}</span>
+                      <span className="premium-card-label">{lang === "si" ? "නඩු" : "cases"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="inquiry-kpi-card inquiry-card-amber">
+                  <div className="premium-card-top">
+                    <div className="premium-card-title-area">
+                      <FileText className="premium-card-icon" />
+                      <span>{t("chargeSheetsIssuedCount", "Formal Charges Issued")}</span>
+                    </div>
+                  </div>
+                  <div className="premium-card-bottom">
+                    <div className="premium-card-value-area">
+                      <span className="premium-card-value">
+                        {String(disciplinaryInspectionCases.filter((c: any) => c.stageKey === "charge_sheet" || c.disciplinaryCharge).length).padStart(2, "0")}
+                      </span>
+                      <span className="premium-card-label">{lang === "si" ? "චෝදනා" : "charges"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="inquiry-kpi-card inquiry-card-rose">
+                  <div className="premium-card-top">
+                    <div className="premium-card-title-area">
+                      <AlertCircle className="premium-card-icon" />
+                      <span>{t("pscReviewCount", "PSC Review / Interdictions")}</span>
+                    </div>
+                  </div>
+                  <div className="premium-card-bottom">
+                    <div className="premium-card-value-area">
+                      <span className="premium-card-value">
+                        {String(disciplinaryInspectionCases.filter((c: any) => c.stageKey === "psc_review" || c.stageKey === "active" || (c.interdictionStatus && c.interdictionStatus.includes("Interdicted"))).length).padStart(2, "0")}
+                      </span>
+                      <span className="premium-card-label">{lang === "si" ? "සමාලෝචන" : "reviews"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="inquiry-kpi-card inquiry-card-emerald">
+                  <div className="premium-card-top">
+                    <div className="premium-card-title-area">
+                      <CheckCircle className="premium-card-icon" />
+                      <span>{t("disciplinaryOrdersCount", "Disciplinary Orders Finalized")}</span>
+                    </div>
+                  </div>
+                  <div className="premium-card-bottom">
+                    <div className="premium-card-value-area">
+                      <span className="premium-card-value">
+                        {String(disciplinaryInspectionCases.filter((c: any) => c.stageKey === "order_finalized" || (c.disciplinaryAction && c.disciplinaryAction.toLowerCase().includes("order"))).length).padStart(2, "0")}
+                      </span>
+                      <span className="premium-card-label">{lang === "si" ? "නියෝග" : "orders"}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Filter and Search Bar */}
+              <div className="letters-list-header" style={{ marginBottom: "16px", backgroundColor: "#ffffff", padding: "12px 18px", borderRadius: "12px", border: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: 700, color: "#1e1b4b", fontSize: "14px" }}>
+                  <Filter size={16} style={{ color: "#6366f1" }} />
+                  <span>{lang === "si" ? "විනය පරීක්ෂණ පෙරීම" : "Filter Disciplinary Inspections"}</span>
+                </div>
+
+                <div className="letters-filters-group" style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", margin: 0 }}>
+                  {/* Search Bar */}
+                  <div className="search-box" style={{ width: "240px" }}>
+                    <svg className="search-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    <input
+                      type="text"
+                      value={inspectionSearchQuery}
+                      onChange={(e) => setInspectionSearchQuery(e.target.value)}
+                      placeholder={t("searchInspectionPlaceholder", "Search disciplinary inspections (Case No, Officer, Charge, Order)...")}
+                      className="search-input"
+                    />
+                  </div>
+
+                  {/* Stage Filter */}
+                  <div className="filter-dropdown-wrapper">
+                    <select
+                      value={inspectionStageFilter}
+                      onChange={(e) => setInspectionStageFilter(e.target.value)}
+                      className="filter-priority-select"
+                      style={{ maxWidth: "200px" }}
+                    >
+                      <option value="all">{t("inspectionStageAll", "All Inspection Stages")}</option>
+                      <option value="charge_sheet">{t("inspectionStageChargeSheet", "Formal Charge Sheet Issued")}</option>
+                      <option value="active">{t("inspectionStageActive", "Disciplinary Inspection Active")}</option>
+                      <option value="psc_review">{t("inspectionStagePscReview", "PSC Review / Interdiction")}</option>
+                      <option value="order_finalized">{t("inspectionStageOrderFinalized", "Disciplinary Order Concluded")}</option>
+                    </select>
+                  </div>
+
+                  {/* Priority Filter */}
+                  <div className="filter-dropdown-wrapper">
+                    <select
+                      value={inspectionPriorityFilter}
+                      onChange={(e: any) => setInspectionPriorityFilter(e.target.value)}
+                      className="filter-priority-select"
+                    >
+                      <option value="all">{t("priorityAll", "All Priorities")}</option>
+                      <option value="high">🔴 {t("priorityHigh", "High Priority")}</option>
+                      <option value="medium">🟡 {t("priorityMedium", "Medium Priority")}</option>
+                      <option value="low">🟢 {t("priorityLow", "Low Priority")}</option>
+                    </select>
+                  </div>
+
+                  {(inspectionSearchQuery || inspectionStageFilter !== "all" || inspectionPriorityFilter !== "all") && (
+                    <a
+                      href="#"
+                      className="view-all-reset-link"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setInspectionSearchQuery("");
+                        setInspectionStageFilter("all");
+                        setInspectionPriorityFilter("all");
+                      }}
+                    >
+                      {t("viewAll")} <span className="arrow-span">→</span>
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              {/* Disciplinary Inspection Data Table */}
+              <div className="table-responsive-container">
+                <table className="letters-data-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">{t("caseNo", "Case No / PSC Ref")}</th>
+                      <th scope="col">{t("accusedOfficerAndInstitute", "Accused Officer & Institution")}</th>
+                      <th scope="col">{t("inspectionOfficers", "Inspection Authority & Tribunal")}</th>
+                      <th scope="col">{t("disciplinaryCharge", "Disciplinary Charge & Rule Violation")}</th>
+                      <th scope="col">{t("stageStatus", "Inspection Stage / Status")}</th>
+                      <th scope="col">{t("inspectionDates", "Charge & Effective Dates")}</th>
+                      <th scope="col">{t("priority", "Priority")}</th>
+                      <th scope="col" className="text-center">{t("actions", "Actions")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredInspectionCases.length > 0 ? (
+                      filteredInspectionCases.map((item, idx) => {
+                        return (
+                          <tr key={item.id ? `${item.id}-${idx}` : `disc-${item.caseNo}-${idx}`} className="letter-table-row">
+                            {/* Case No */}
+                            <td className="font-semibold" style={{ color: "#1e1b4b" }}>
+                              <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                                <span style={{ fontWeight: 800, color: "#4338ca", fontSize: "14px" }}>{item.caseNo}</span>
+                                {item.pscRef && (
+                                  <span style={{ fontSize: "11px", color: "#6366f1", fontWeight: 700, backgroundColor: "#f3e8ff", padding: "1px 6px", borderRadius: "8px", width: "fit-content" }}>
+                                    ⚖️ {item.pscRef}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Accused Officer & Institution */}
+                            <td>
+                              <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+                                <span style={{ fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: "5px", fontSize: "13px" }}>
+                                  <User size={13} style={{ color: "#6366f1" }} />
+                                  {item.accusedName || "—"}
+                                </span>
+                                {(item.accusedDesignation || item.schoolName) && (
+                                  <span style={{ fontSize: "11px", color: "#64748b", display: "flex", alignItems: "center", gap: "4px" }}>
+                                    <Building size={11} style={{ color: "#94a3b8" }} />
+                                    {[item.accusedDesignation, item.schoolName].filter(Boolean).join(" • ")}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Inspection Authority */}
+                            <td>
+                              <div style={{ fontSize: "12px", color: "#334155", fontWeight: 600, display: "flex", flexDirection: "column", gap: "3px" }}>
+                                <span>🏛 {item.inspectionAuthority || "Disciplinary Inspection Board"}</span>
+                                {item.interdictionStatus && (
+                                  <span style={{ fontSize: "11px", color: "#be123c", fontWeight: 700, backgroundColor: "#ffe4e6", padding: "1px 6px", borderRadius: "6px", width: "fit-content" }}>
+                                    {item.interdictionStatus}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Disciplinary Charge */}
+                            <td className="subject-cell" style={{ maxWidth: "240px" }}>
+                              <div style={{ fontSize: "13px", color: "#1e293b", lineHeight: "1.4", fontWeight: 600 }}>
+                                {item.subject}
+                              </div>
+                              {item.disciplinaryCharge && (
+                                <div style={{ fontSize: "11px", color: "#475569", marginTop: "3px", backgroundColor: "#f8fafc", padding: "3px 6px", borderRadius: "4px", border: "1px solid #f1f5f9" }}>
+                                  ⚖️ {item.disciplinaryCharge}
+                                </div>
+                              )}
+                            </td>
+
+                            {/* Inspection Stage / Status */}
+                            <td>
+                              {item.stageKey === "order_finalized" ? (
+                                <span className="inquiry-stage-pill inquiry-stage-order">
+                                  <CheckCircle size={12} />
+                                  {lang === "si" ? "විනය නියෝගය අවසන්" : "Disciplinary Order Concluded"}
+                                </span>
+                              ) : item.stageKey === "psc_review" ? (
+                                <span className="inquiry-stage-pill inquiry-stage-psc">
+                                  <AlertCircle size={12} />
+                                  {lang === "si" ? "රා.සේ.කො. සමාලෝචනය" : "PSC Review / Notice"}
+                                </span>
+                              ) : item.stageKey === "charge_sheet" ? (
+                                <span className="inquiry-stage-pill inquiry-stage-charge">
+                                  <FileText size={12} />
+                                  {lang === "si" ? "චෝදනා පත්‍ර නිකුත් කර ඇත" : "Charge Sheet Issued"}
+                                </span>
+                              ) : (
+                                <span className="inquiry-stage-pill inquiry-stage-formal">
+                                  <ShieldAlert size={12} />
+                                  {lang === "si" ? "විධිමත් විනය පරීක්ෂණ" : "Inspection Active"}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Charge & Effective Dates */}
+                            <td>
+                              <div style={{ display: "flex", flexDirection: "column", gap: "2px", fontSize: "12px", color: "#475569" }}>
+                                {item.chargeDate && (
+                                  <span style={{ fontWeight: 600, color: "#1e1b4b" }}>
+                                    📋 {lang === "si" ? "චෝදනා දිනය" : "Charge Date"}: {item.chargeDate}
+                                  </span>
+                                )}
+                                {item.effectiveDate && (
+                                  <span style={{ fontSize: "11px", color: "#64748b" }}>
+                                    🎯 {lang === "si" ? "ක්‍රියාත්මක" : "Effective"}: {item.effectiveDate}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Priority */}
+                            <td>
+                              <span className={`priority-text-container priority-text-${item.priority}`}>
+                                <span className={`priority-dot dot-${item.priority}`} aria-hidden="true"></span>
+                                {item.priority === "high" ? t("priorityHigh", "High") : item.priority === "medium" ? t("priorityMedium", "Medium") : t("priorityLow", "Low")}
+                              </span>
+                            </td>
+
+                            {/* Actions */}
+                            <td className="text-center actions-cell">
+                              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+                                <Link
+                                  href={`/subject/recommendation?caseNo=${item.caseNo}`}
+                                  className="add-details-link"
+                                  style={{ padding: "4px 10px", fontSize: "11px", backgroundColor: "#4f46e5" }}
+                                  title="Review Disciplinary Recommendation"
+                                >
+                                  {lang === "si" ? "නිර්දේශය" : "Minute"}
+                                </Link>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedInspectionModal(item)}
+                                  className="btn-quick-view"
+                                  title="Open Disciplinary Inspection Dossier"
+                                  style={{ backgroundColor: "#f3e8ff", color: "#6b21a8", border: "1px solid #e9d5ff" }}
+                                >
+                                  <Eye size={13} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={8} className="text-center py-5 text-muted" style={{ padding: "40px 20px" }}>
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
+                            <ShieldAlert size={44} style={{ color: "#cbd5e1" }} />
+                            <span style={{ fontSize: "15px", fontWeight: 600, color: "#64748b" }}>
+                              {t("noInspectionsFound", "No disciplinary inspection cases found matching search criteria.")}
+                            </span>
+                            {(inspectionSearchQuery || inspectionStageFilter !== "all" || inspectionPriorityFilter !== "all") && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setInspectionSearchQuery("");
+                                  setInspectionStageFilter("all");
+                                  setInspectionPriorityFilter("all");
+                                }}
+                                className="btn-create-rec"
+                                style={{ marginTop: "4px", backgroundColor: "#f1f5f9", color: "#334155", border: "1px solid #cbd5e1" }}
+                              >
+                                {t("viewAll", "Reset Filters")}
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
           {/* ==================== TAB 3: INVESTIGATION RECOMMENDATIONS VIEW ==================== */}
           {activeTab === "recommendations" && (
             <section style={{ marginBottom: "30px" }}>
@@ -4403,6 +5478,331 @@ export default function SubjectOfficerDashboard() {
           <SiteFooter />
         </main>
       </div>
+
+      {/* ==================== QUICK INQUIRY & DISCIPLINARY INSPECTION DOSSIER MODAL ==================== */}
+      {selectedInquiryModal && (
+        <div className="inquiry-dossier-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="inquiry-dossier-title">
+          <div className="inquiry-dossier-modal-content">
+            
+            {/* Modal Header */}
+            <div className="inquiry-dossier-header">
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div style={{ width: "42px", height: "42px", borderRadius: "12px", backgroundColor: "rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <ShieldCheck size={22} style={{ color: "#a5b4fc" }} />
+                </div>
+                <div>
+                  <h3 id="inquiry-dossier-title" style={{ margin: 0, fontSize: "18px", fontWeight: 800, letterSpacing: "-0.2px" }}>
+                    {t("inquiryDossierTitle", "Formal Inquiry & Disciplinary Inspection Dossier")}
+                  </h3>
+                  <div style={{ fontSize: "12px", opacity: 0.85, marginTop: "2px" }}>
+                    Case Ref: <strong>{selectedInquiryModal.caseNo}</strong> • Stage: {selectedInquiryModal.stage}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedInquiryModal(null)}
+                style={{ background: "transparent", border: "none", color: "#ffffff", opacity: 0.8, cursor: "pointer", padding: "4px" }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="inquiry-dossier-body">
+              {/* Accused Officer Profile Card */}
+              <div className="inquiry-dossier-section">
+                <div className="inquiry-dossier-section-title">
+                  <User size={14} style={{ color: "#6366f1" }} />
+                  <span>Accused Officer Information (චූදිත නිලධාරී තොරතුරු)</span>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px", fontSize: "13px" }}>
+                  <div>
+                    <span style={{ color: "#64748b", fontSize: "11px", fontWeight: 600, display: "block" }}>Full Name:</span>
+                    <strong style={{ color: "#1e293b" }}>{selectedInquiryModal.accusedName || "—"}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: "#64748b", fontSize: "11px", fontWeight: 600, display: "block" }}>Designation / Position:</span>
+                    <span style={{ color: "#334155", fontWeight: 600 }}>{selectedInquiryModal.accusedDesignation || "—"}</span>
+                  </div>
+                  <div>
+                    <span style={{ color: "#64748b", fontSize: "11px", fontWeight: 600, display: "block" }}>Educational Institute:</span>
+                    <span style={{ color: "#334155", fontWeight: 600 }}>{selectedInquiryModal.schoolName || "—"}</span>
+                  </div>
+                  <div>
+                    <span style={{ color: "#64748b", fontSize: "11px", fontWeight: 600, display: "block" }}>Priority Rating:</span>
+                    <span style={{ textTransform: "capitalize", fontWeight: 700, color: selectedInquiryModal.priority === "high" ? "#dc2626" : selectedInquiryModal.priority === "medium" ? "#d97706" : "#16a34a" }}>
+                      {selectedInquiryModal.priority} Priority
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Inquiry Committee Panel */}
+              <div className="inquiry-dossier-section" style={{ backgroundColor: "#fefce8", borderColor: "#fef08a" }}>
+                <div className="inquiry-dossier-section-title" style={{ color: "#854d0e" }}>
+                  <UserCheck size={14} style={{ color: "#ca8a04" }} />
+                  <span>Inquiry Committee Composition (විමර්ශන / පරීක්ෂණ කමිටුව)</span>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px", fontSize: "13px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span style={{ fontWeight: 700, color: "#92400e" }}>👑 Chairman (සභාපති):</span>
+                    <span style={{ fontWeight: 600, color: "#1e293b" }}>
+                      {selectedInquiryModal.chairman?.name || "Assigned Inquiry Officer"}
+                    </span>
+                    {selectedInquiryModal.chairman?.nic && selectedInquiryModal.chairman?.nic !== "—" && (
+                      <span style={{ fontSize: "11px", color: "#64748b" }}>(NIC: {selectedInquiryModal.chairman.nic})</span>
+                    )}
+                  </div>
+                  {selectedInquiryModal.members && selectedInquiryModal.members.length > 0 && (
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
+                      <span style={{ fontWeight: 700, color: "#78350f" }}>👥 Members (සාමාජිකයින්):</span>
+                      <span style={{ color: "#334155" }}>{selectedInquiryModal.members.join(", ")}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Subject Matter & Proceedings Notes */}
+              <div className="inquiry-dossier-section">
+                <div className="inquiry-dossier-section-title">
+                  <FileText size={14} style={{ color: "#6366f1" }} />
+                  <span>Subject Matter & Disciplinary Scope (විෂය කරුණ සහ විනය විෂය පථය)</span>
+                </div>
+                <p style={{ margin: "0 0 10px 0", fontSize: "13px", color: "#1e293b", lineHeight: 1.5, fontWeight: 500 }}>
+                  {selectedInquiryModal.subject}
+                </p>
+                {selectedInquiryModal.notes && (
+                  <div style={{ fontSize: "12px", color: "#475569", backgroundColor: "#ffffff", padding: "10px 14px", borderRadius: "8px", border: "1px solid #cbd5e1" }}>
+                    <strong>Proceedings Status:</strong> {selectedInquiryModal.notes}
+                  </div>
+                )}
+              </div>
+
+              {/* Schedule & Disciplinary Orders */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px" }}>
+                <div className="inquiry-dossier-section">
+                  <div className="inquiry-dossier-section-title">
+                    <CalendarIcon size={14} style={{ color: "#0284c7" }} />
+                    <span>Inquiry Timelines</span>
+                  </div>
+                  <div style={{ fontSize: "12px", display: "flex", flexDirection: "column", gap: "6px", color: "#334155" }}>
+                    <div>Appointed: <strong>{selectedInquiryModal.appointmentDate || "—"}</strong></div>
+                    <div>Hearing Date: <strong>{selectedInquiryModal.hearingDate || "—"}</strong></div>
+                    <div>Target Due: <strong>{selectedInquiryModal.reportDueDate || "—"}</strong></div>
+                    <div>Extension History: <strong>{selectedInquiryModal.extensionCount || "None"}</strong></div>
+                  </div>
+                </div>
+
+                <div className="inquiry-dossier-section" style={{ backgroundColor: "#ecfdf5", borderColor: "#a7f3d0" }}>
+                  <div className="inquiry-dossier-section-title" style={{ color: "#065f46" }}>
+                    <ShieldCheck size={14} style={{ color: "#10b981" }} />
+                    <span>Disciplinary Action & Order</span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: "12px", color: "#064e3b", fontWeight: 600, lineHeight: 1.4 }}>
+                    {selectedInquiryModal.disciplinaryAction || "Pending final committee determination."}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <footer style={{ padding: "14px 24px", borderTop: "1px solid #e2e8f0", backgroundColor: "#f8fafc", display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+              <button
+                type="button"
+                onClick={() => setSelectedInquiryModal(null)}
+                style={{ padding: "8px 18px", borderRadius: "8px", backgroundColor: "#ffffff", border: "1px solid #cbd5e1", color: "#475569", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}
+              >
+                Close
+              </button>
+              <Link
+                href={`/subject/add-details?caseNo=${selectedInquiryModal.caseNo}`}
+                className="btn-create-rec"
+                style={{ padding: "8px 16px", fontSize: "13px", backgroundColor: "#4f46e5" }}
+              >
+                <Plus size={14} />
+                <span>Add Details / Step</span>
+              </Link>
+              <Link
+                href={`/subject/recommendation?caseNo=${selectedInquiryModal.caseNo}`}
+                className="btn-create-rec"
+                style={{ padding: "8px 16px", fontSize: "13px", background: "linear-gradient(135deg, #6366f1 0%, #4338ca 100%)" }}
+              >
+                <ExternalLink size={14} />
+                <span>Recommendation</span>
+              </Link>
+            </footer>
+
+          </div>
+        </div>
+      )}
+
+      {/* ==================== QUICK PROPER DISCIPLINARY INSPECTION DOSSIER MODAL ==================== */}
+      {selectedInspectionModal && (
+        <div className="inquiry-dossier-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="inspection-dossier-title">
+          <div className="inquiry-dossier-modal-content" style={{ maxWidth: "780px" }}>
+            
+            {/* Modal Header */}
+            <div className="inquiry-dossier-header" style={{ background: "linear-gradient(135deg, #312e81 0%, #4338ca 100%)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div style={{ width: "42px", height: "42px", borderRadius: "12px", backgroundColor: "rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <ShieldAlert size={22} style={{ color: "#c7d2fe" }} />
+                </div>
+                <div>
+                  <h3 id="inspection-dossier-title" style={{ margin: 0, fontSize: "18px", fontWeight: 800, letterSpacing: "-0.2px" }}>
+                    {t("inspectionDossierTitle", "Proper Disciplinary Inspection Dossier")}
+                  </h3>
+                  <div style={{ fontSize: "12px", opacity: 0.85, marginTop: "2px" }}>
+                    Case Ref: <strong>{selectedInspectionModal.caseNo}</strong> • PSC Ref: <strong>{selectedInspectionModal.pscRef || "—"}</strong> • Stage: {selectedInspectionModal.stage}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedInspectionModal(null)}
+                style={{ background: "transparent", border: "none", color: "#ffffff", opacity: 0.8, cursor: "pointer", padding: "4px" }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="inquiry-dossier-body">
+              {/* Accused Officer Profile Card */}
+              <div className="inquiry-dossier-section">
+                <div className="inquiry-dossier-section-title">
+                  <User size={14} style={{ color: "#6366f1" }} />
+                  <span>Accused Officer Information (චූදිත නිලධාරී තොරතුරු)</span>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px", fontSize: "13px" }}>
+                  <div>
+                    <span style={{ color: "#64748b", fontSize: "11px", fontWeight: 600, display: "block" }}>Full Name:</span>
+                    <strong style={{ color: "#1e293b" }}>{selectedInspectionModal.accusedName || "—"}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: "#64748b", fontSize: "11px", fontWeight: 600, display: "block" }}>Designation / Position:</span>
+                    <span style={{ color: "#334155", fontWeight: 600 }}>{selectedInspectionModal.accusedDesignation || "—"}</span>
+                  </div>
+                  <div>
+                    <span style={{ color: "#64748b", fontSize: "11px", fontWeight: 600, display: "block" }}>Educational Institute:</span>
+                    <span style={{ color: "#334155", fontWeight: 600 }}>{selectedInspectionModal.schoolName || "—"}</span>
+                  </div>
+                  <div>
+                    <span style={{ color: "#64748b", fontSize: "11px", fontWeight: 600, display: "block" }}>Priority Rating:</span>
+                    <span style={{ textTransform: "capitalize", fontWeight: 700, color: selectedInspectionModal.priority === "high" ? "#dc2626" : selectedInspectionModal.priority === "medium" ? "#d97706" : "#16a34a" }}>
+                      {selectedInspectionModal.priority} Priority
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Inspection Authority & PSC Tribunal */}
+              <div className="inquiry-dossier-section" style={{ backgroundColor: "#f5f3ff", borderColor: "#ddd6fe" }}>
+                <div className="inquiry-dossier-section-title" style={{ color: "#5b21b6" }}>
+                  <ShieldCheck size={14} style={{ color: "#7c3aed" }} />
+                  <span>Inspection Authority & Tribunal (විනය පරීක්ෂණ මණ්ඩලය / අධිකාරිය)</span>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px", fontSize: "13px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span style={{ fontWeight: 700, color: "#6b21a8" }}>🏛 Authority / Tribunal:</span>
+                    <span style={{ fontWeight: 600, color: "#1e293b" }}>
+                      {selectedInspectionModal.inspectionAuthority || "Disciplinary Inspection Board"}
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+                    {selectedInspectionModal.pscRef && (
+                      <span style={{ fontSize: "12px", color: "#4338ca", fontWeight: 700, backgroundColor: "#e0e7ff", padding: "2px 8px", borderRadius: "6px" }}>
+                        ⚖️ PSC Ref: {selectedInspectionModal.pscRef}
+                      </span>
+                    )}
+                    {selectedInspectionModal.interdictionStatus && (
+                      <span style={{ fontSize: "12px", color: "#991b1b", fontWeight: 700, backgroundColor: "#fee2e2", padding: "2px 8px", borderRadius: "6px" }}>
+                        ⚡ Interdiction Status: {selectedInspectionModal.interdictionStatus}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Disciplinary Charge & Scope */}
+              <div className="inquiry-dossier-section">
+                <div className="inquiry-dossier-section-title">
+                  <FileText size={14} style={{ color: "#6366f1" }} />
+                  <span>Disciplinary Charge & Rule Violation (විනය චෝදනා සහ ආයතන සංග්‍රහය)</span>
+                </div>
+                <p style={{ margin: "0 0 10px 0", fontSize: "13px", color: "#1e293b", lineHeight: 1.5, fontWeight: 600 }}>
+                  {selectedInspectionModal.subject}
+                </p>
+                {selectedInspectionModal.disciplinaryCharge && (
+                  <div style={{ fontSize: "12.5px", color: "#4338ca", backgroundColor: "#eef2ff", padding: "10px 14px", borderRadius: "8px", border: "1px solid #c7d2fe", fontWeight: 600, marginBottom: "8px" }}>
+                    ⚖️ {selectedInspectionModal.disciplinaryCharge}
+                  </div>
+                )}
+                {selectedInspectionModal.notes && (
+                  <div style={{ fontSize: "12px", color: "#475569", backgroundColor: "#ffffff", padding: "10px 14px", borderRadius: "8px", border: "1px solid #cbd5e1" }}>
+                    <strong>Proceedings Status:</strong> {selectedInspectionModal.notes}
+                  </div>
+                )}
+              </div>
+
+              {/* Enforcement Timelines & Disciplinary Orders */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px" }}>
+                <div className="inquiry-dossier-section">
+                  <div className="inquiry-dossier-section-title">
+                    <CalendarIcon size={14} style={{ color: "#0284c7" }} />
+                    <span>Inspection Timelines</span>
+                  </div>
+                  <div style={{ fontSize: "12px", display: "flex", flexDirection: "column", gap: "6px", color: "#334155" }}>
+                    <div>Charge Date: <strong>{selectedInspectionModal.chargeDate || "—"}</strong></div>
+                    <div>Effective Date: <strong>{selectedInspectionModal.effectiveDate || "—"}</strong></div>
+                    <div>Inspection Stage: <strong>{selectedInspectionModal.stage}</strong></div>
+                  </div>
+                </div>
+
+                <div className="inquiry-dossier-section" style={{ backgroundColor: "#ecfdf5", borderColor: "#a7f3d0" }}>
+                  <div className="inquiry-dossier-section-title" style={{ color: "#065f46" }}>
+                    <ShieldCheck size={14} style={{ color: "#10b981" }} />
+                    <span>Final Disciplinary Order & Directives</span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: "12px", color: "#064e3b", fontWeight: 600, lineHeight: 1.4 }}>
+                    {selectedInspectionModal.disciplinaryAction || "Disciplinary inspection proceedings active."}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <footer style={{ padding: "14px 24px", borderTop: "1px solid #e2e8f0", backgroundColor: "#f8fafc", display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+              <button
+                type="button"
+                onClick={() => setSelectedInspectionModal(null)}
+                style={{ padding: "8px 18px", borderRadius: "8px", backgroundColor: "#ffffff", border: "1px solid #cbd5e1", color: "#475569", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}
+              >
+                Close
+              </button>
+              <Link
+                href={`/subject/add-details?caseNo=${selectedInspectionModal.caseNo}`}
+                className="btn-create-rec"
+                style={{ padding: "8px 16px", fontSize: "13px", backgroundColor: "#4f46e5" }}
+              >
+                <Plus size={14} />
+                <span>Add Details / Step</span>
+              </Link>
+              <Link
+                href={`/subject/recommendation?caseNo=${selectedInspectionModal.caseNo}`}
+                className="btn-create-rec"
+                style={{ padding: "8px 16px", fontSize: "13px", background: "linear-gradient(135deg, #6366f1 0%, #4338ca 100%)" }}
+              >
+                <ExternalLink size={14} />
+                <span>Disciplinary Minute</span>
+              </Link>
+            </footer>
+
+          </div>
+        </div>
+      )}
 
       {/* ==================== SUBMIT INVESTIGATION REPORT MODAL ==================== */}
       {isReportModalOpen && activeAssignment && (
