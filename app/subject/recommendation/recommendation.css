@@ -372,3 +372,78 @@
     transform: translateY(0);
   }
 }
+
+/* Charge sheet routing alert card */
+.charge-sheet-routing-alert {
+  margin-top: 14px;
+  background: linear-gradient(135deg, #eff6ff 0%, #e0e7ff 100%);
+  border: 1.5px solid #818cf8;
+  border-radius: 10px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  animation: fadeInDown 0.3s ease-out;
+}
+
+.charge-sheet-alert-icon {
+  color: #4338ca;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.charge-sheet-alert-text strong {
+  display: block;
+  font-size: 13px;
+  color: #312e81;
+  margin-bottom: 3px;
+}
+
+.charge-sheet-alert-text p {
+  margin: 0;
+  font-size: 12px;
+  color: #3730a3;
+  line-height: 1.45;
+}
+
+.badge-proper-inspection {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background-color: #ede9fe;
+  color: #5b21b6;
+  border: 1px solid #c4b5fd;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+
+.badge-proper-inspection:hover {
+  background-color: #ddd6fe;
+  color: #4c1d95;
+}
+
+.btn-view-inspection {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background-color: #ede9fe;
+  color: #5b21b6;
+  border: 1px solid #c4b5fd;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+
+.btn-view-inspection:hover {
+  background-color: #6366f1;
+  color: #ffffff;
+  border-color: #4f46e5;
+}
+

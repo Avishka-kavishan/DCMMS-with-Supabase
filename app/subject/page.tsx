@@ -4,8 +4,8 @@ import "../../i18n";
 import "../daily-mail/daily-mail.css";
 import "../dashboard-common.css";
 import "./subject.css";
-import { useMemo, useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useMemo, useState, useEffect, useRef, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { Sidebar } from "@/components/Sidebar";
 import Link from "next/link";
@@ -26,6 +26,13 @@ interface Case {
   priority: "high" | "medium" | "low";
   status: "In Progress" | "Closed" | "Pending" | "assigned answer letter" | "Assigned Answer Letter" | string;
   isOld?: boolean;
+  accusedName?: string;
+  accusedDesignation?: string;
+  schoolName?: string;
+  stage?: string;
+  stageKey?: string;
+  isProperDisciplinary?: boolean;
+  disciplinaryCharge?: string;
 }
 
 export const formatToInputDate = (dateStr?: string | null): string => {
@@ -607,9 +614,20 @@ export function collectAnswerLetters(
   });
 }
 
-export default function SubjectOfficerDashboard() {
+function SubjectOfficerDashboardContent() {
   const { t, i18n } = useTranslation();
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const tabParam = searchParams?.get("tab");
+  const caseNoParam = searchParams?.get("caseNo") || searchParams?.get("refNo");
+
+  // Client mount state to prevent SSR/CSR hydration mismatches
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Accessibility & language state
   const [fontScale, setFontScale] = useState<"small" | "medium" | "large">("medium");
@@ -1092,6 +1110,10 @@ export default function SubjectOfficerDashboard() {
             forwardTo: r.forwardTo || r.forward_to || "disciplinary_branch",
             targetDate: r.targetDate ? String(r.targetDate).slice(0, 10) : "",
             referenceNotes: r.referenceNotes || r.reference_notes || "",
+            issuedChargeSheet: r.issuedChargeSheet || r.issued_charge_sheet || "",
+            chargeSheetIssuedDate: r.chargeSheetIssuedDate ? String(r.chargeSheetIssuedDate).slice(0, 10) : "",
+            chargeSheetResponseDate: r.chargeSheetResponseDate ? String(r.chargeSheetResponseDate).slice(0, 10) : "",
+            disciplinaryOrder: r.disciplinaryOrder || r.disciplinary_order || "",
             secretaryApprovalDate: r.secretaryApprovalDate ? String(r.secretaryApprovalDate).slice(0, 10) : "",
             secretaryApprovedRecommendation: r.secretaryApprovedRecommendation || r.secretary_approved_recommendation || "",
             status: r.status || "Submitted",
@@ -1125,6 +1147,10 @@ export default function SubjectOfficerDashboard() {
                   forwardTo: lr.forwardTo || lr.forward_to || "disciplinary_branch",
                   targetDate: lr.targetDate || lr.target_date || "",
                   referenceNotes: lr.referenceNotes || lr.reference_notes || "",
+                  issuedChargeSheet: lr.issuedChargeSheet || lr.issued_charge_sheet || "",
+                  chargeSheetIssuedDate: lr.chargeSheetIssuedDate || lr.charge_sheet_issued_date || "",
+                  chargeSheetResponseDate: lr.chargeSheetResponseDate || lr.charge_sheet_response_date || "",
+                  disciplinaryOrder: lr.disciplinaryOrder || lr.disciplinary_order || "",
                   secretaryApprovalDate: lr.secretaryApprovalDate || lr.secretary_approval_date || lr.date_approved_by_secretary || "",
                   secretaryApprovedRecommendation: lr.secretaryApprovedRecommendation || lr.secretary_approved_recommendation || lr.recommendation_approved_by_secretary || "",
                   status: lr.status || "Submitted",
@@ -1230,6 +1256,18 @@ export default function SubjectOfficerDashboard() {
   const [activeTab, setActiveTab] = useState<"cases" | "answer_letters" | "recommendations" | "conducting_inquiry" | "disciplinary_inspection">("cases");
   const [assignedAnswerLetters, setAssignedAnswerLetters] = useState<any[]>([]);
   const [answerSearchQuery, setAnswerSearchQuery] = useState("");
+
+  // Sync tab and search from URL search parameters if provided
+  useEffect(() => {
+    if (tabParam) {
+      if (["cases", "answer_letters", "recommendations", "conducting_inquiry", "disciplinary_inspection"].includes(tabParam)) {
+        setActiveTab(tabParam as any);
+      }
+    }
+    if (caseNoParam && tabParam === "disciplinary_inspection") {
+      setInspectionSearchQuery(caseNoParam);
+    }
+  }, [tabParam, caseNoParam]);
 
   // Conducting an Inquiry state
   const [inquirySearchQuery, setInquirySearchQuery] = useState("");
@@ -2580,114 +2618,119 @@ export default function SubjectOfficerDashboard() {
   const disciplinaryInspectionCases = useMemo(() => {
     const inspectionMap = new Map<string, any>();
 
-    const seedInspections = [
-      {
-        id: "disc-seed-001",
-        caseNo: "DISC/2026/001",
-        subject: "Formal disciplinary inspection - Examination paper leakage violation",
-        accusedName: "Mr. K. L. Wijesinghe",
-        accusedDesignation: "Deputy Principal / SLEAS II",
-        schoolName: "Royal College, Colombo 07",
-        priority: "high",
-        stage: "Disciplinary Inspection Active",
-        stageKey: "active",
-        disciplinaryCharge: "Cap. XLVIII sec. 4.2 - Breach of statutory official confidentiality & exam integrity",
-        inspectionAuthority: "PSC Special Disciplinary Tribunal (Chair: Dr. Sunil Jayawardena)",
-        pscRef: "PSC/DISC/2026/088",
-        chargeDate: "2026-07-28",
-        effectiveDate: "2026-10-01",
-        interdictionStatus: "Interdicted Pending Inspection",
-        disciplinaryAction: "PSC Formal Interdiction Order & Inquiry Panel Sitting",
-        notes: "Formal charge sheet served. 2nd sitting of Disciplinary Tribunal scheduled."
-      },
-      {
-        id: "disc-seed-002",
-        caseNo: "DISC/2026/002",
-        subject: "Financial irregularities & misappropriation in SDS development fund",
-        accusedName: "Mr. G. H. Wickremasinghe",
-        accusedDesignation: "Principal (Grade I)",
-        schoolName: "Mahanama College, Panadura",
-        priority: "high",
-        stage: "Disciplinary Order Concluded",
-        stageKey: "order_finalized",
-        disciplinaryCharge: "Cap. XLVIII sec. 12.1 - Misappropriation of public and school development funds",
-        inspectionAuthority: "Ministry Disciplinary Board & Auditor General Department",
-        pscRef: "PSC/DISC/2026/041",
-        chargeDate: "2026-06-15",
-        effectiveDate: "2026-08-10",
-        interdictionStatus: "Order Enacted",
-        disciplinaryAction: "PSC Disciplinary Order: Severe reprimand & recovery of Rs. 450,000 approved by Secretary",
-        notes: "Disciplinary order signed and certified. Copy forwarded to Director of Pensions."
-      },
-      {
-        id: "disc-seed-003",
-        caseNo: "DISC/2026/003",
-        subject: "Gross insubordination and unauthorized absence from zonal duties",
-        accusedName: "Mrs. N. D. Ratnayake",
-        accusedDesignation: "Education Officer (Admin)",
-        schoolName: "Zonal Education Office, Matara",
-        priority: "medium",
-        stage: "PSC Review / Interdiction",
-        stageKey: "psc_review",
-        disciplinaryCharge: "Cap. XLVIII sec. 2.1 - Insubordination & refusal of lawful transfer orders",
-        inspectionAuthority: "Public Service Commission - Educational Services Committee",
-        pscRef: "PSC/ESC/2026/119",
-        chargeDate: "2026-08-10",
-        effectiveDate: "2026-09-30",
-        interdictionStatus: "PSC Show-Cause Notice Issued",
-        disciplinaryAction: "Formal Show-Cause explanation called under Cap. XLVIII Rule 8",
-        notes: "Respondent submitted explanation on 28th Aug. PSC review pending."
-      },
-      {
-        id: "disc-seed-004",
-        caseNo: "DISC/2026/004",
-        subject: "Formal charge sheet for non-compliance with student safety directives",
-        accusedName: "Mr. R. M. Karunatilake",
-        accusedDesignation: "Vice Principal (Discipline)",
-        schoolName: "St. Thomas College, Matale",
-        priority: "medium",
-        stage: "Formal Charge Sheet Issued",
-        stageKey: "charge_sheet",
-        disciplinaryCharge: "Circular No. 2024/18 - Failure to enforce student physical safety and excursion protocols",
-        inspectionAuthority: "Chief Disciplinary Inspector (Central Province)",
-        pscRef: "CP/DISC/2026/072",
-        chargeDate: "2026-08-20",
-        effectiveDate: "2026-10-15",
-        interdictionStatus: "Charge Sheet Served",
-        disciplinaryAction: "Charge Sheet issued under Cap. XLVIII. 14 Days granted for statement of defense",
-        notes: "Charge sheet acknowledged on 22nd Aug. Defense statement due by 06th Sept."
-      }
-    ];
+    // 1. Process all recommendations (crucial driver for 'issuing_charge_sheet')
+    recommendations.forEach((rec) => {
+      const cNo = (rec.caseNo || "").trim();
+      const cNoKey = cNo.toLowerCase();
+      if (!cNoKey) return;
 
-    seedInspections.forEach((item) => {
-      inspectionMap.set(item.caseNo.toLowerCase(), item);
+      const matchingCase = cases.find((c) => (c.caseNo || "").trim().toLowerCase() === cNoKey);
+      const isChargeSheetCategory =
+        rec.category === "issuing_charge_sheet" ||
+        rec.actionType === "charge_sheet" ||
+        !!rec.issuedChargeSheet ||
+        !!rec.chargeSheetIssuedDate;
+      const hasDisciplinaryOrder =
+        !!rec.disciplinaryOrder ||
+        (rec.disciplinaryAction && rec.disciplinaryAction.toLowerCase().includes("order"));
+      const isProperDisciplinaryRec =
+        isChargeSheetCategory ||
+        hasDisciplinaryOrder ||
+        (rec.futureAction && (rec.futureAction.toLowerCase().includes("proper disciplinary") || rec.futureAction.toLowerCase().includes("charge sheet"))) ||
+        (rec.disciplinaryAction && (rec.disciplinaryAction.toLowerCase().includes("charge sheet") || rec.disciplinaryAction.toLowerCase().includes("interdiction") || rec.disciplinaryAction.toLowerCase().includes("tribunal")));
+
+      if (isProperDisciplinaryRec) {
+        const existing = inspectionMap.get(cNoKey) || {};
+        
+        let determinedStage = "Disciplinary Inspection Active";
+        let determinedStageKey = "active";
+        if (hasDisciplinaryOrder) {
+          determinedStage = "Disciplinary Order Concluded";
+          determinedStageKey = "order_finalized";
+        } else if (isChargeSheetCategory) {
+          determinedStage = "Formal Charge Sheet Issued";
+          determinedStageKey = "charge_sheet";
+        }
+
+        let determinedInterdiction = "In Progress";
+        if (hasDisciplinaryOrder) {
+          determinedInterdiction = "Order Enacted";
+        } else if (rec.issuedChargeSheet) {
+          determinedInterdiction = `Charge Sheet: ${rec.issuedChargeSheet}`;
+        } else if (isChargeSheetCategory) {
+          determinedInterdiction = "Charge Sheet Served";
+        } else if (existing.interdictionStatus) {
+          determinedInterdiction = existing.interdictionStatus;
+        }
+
+        let determinedCharge = "Establishment Code Disciplinary Charge";
+        if (rec.issuedChargeSheet) {
+          determinedCharge = `Formal Charge Sheet: ${rec.issuedChargeSheet}`;
+        } else if (rec.disciplinaryAction) {
+          determinedCharge = rec.disciplinaryAction;
+        } else if (rec.recommendationText) {
+          determinedCharge = rec.recommendationText;
+        } else if (existing.disciplinaryCharge) {
+          determinedCharge = existing.disciplinaryCharge;
+        }
+
+        inspectionMap.set(cNoKey, {
+          id: existing.id || rec.id || matchingCase?.id || `disc-${cNo}`,
+          caseNo: cNo,
+          subject: rec.subject || matchingCase?.subject || existing.subject || `Disciplinary Case ${cNo}`,
+          accusedName: rec.accusedName || matchingCase?.accusedName || existing.accusedName || "Concerned Officer",
+          accusedDesignation: rec.accusedDesignation || matchingCase?.accusedDesignation || existing.accusedDesignation || "Educational Officer",
+          schoolName: rec.schoolName || matchingCase?.schoolName || existing.schoolName || "Government Educational Institute",
+          priority: rec.urgency || matchingCase?.priority || existing.priority || "medium",
+          stage: determinedStage,
+          stageKey: determinedStageKey,
+          disciplinaryCharge: determinedCharge,
+          inspectionAuthority: existing.inspectionAuthority || (rec.forwardTo === "disciplinary_branch" ? "Ministry Disciplinary Branch / PSC ESC" : "Disciplinary Inspection Board"),
+          pscRef: existing.pscRef || rec.letterNo || `PSC/DISC/${cNo}`,
+          chargeDate: rec.chargeSheetIssuedDate || rec.letterDate || rec.submittedAt?.slice(0, 10) || existing.chargeDate || matchingCase?.assignedDate || "—",
+          effectiveDate: rec.chargeSheetResponseDate || existing.effectiveDate || (rec.chargeSheetIssuedDate ? "14 Days Response Period" : "Pending Review"),
+          interdictionStatus: determinedInterdiction,
+          disciplinaryAction: rec.disciplinaryOrder || rec.disciplinaryAction || existing.disciplinaryAction || "Disciplinary determination in progress",
+          notes: rec.referenceNotes || rec.recommendationText || existing.notes || matchingCase?.subject || "Case moved to Proper Disciplinary Inspection following Subject Officer recommendation.",
+          issuedChargeSheet: rec.issuedChargeSheet || "",
+          chargeSheetIssuedDate: rec.chargeSheetIssuedDate || "",
+          chargeSheetResponseDate: rec.chargeSheetResponseDate || "",
+          disciplinaryOrder: rec.disciplinaryOrder || "",
+        });
+      }
     });
 
-    // Merge live recommendations & cases with disciplinary action
+    // 2. Also ensure any cases in cases list with stageKey === 'charge_sheet' or 'order_finalized' or 'psc_review' or 'disciplinary_active' or isProperDisciplinary are captured
     cases.forEach((c) => {
       const cNoKey = (c.caseNo || "").trim().toLowerCase();
-      const rec = recommendations.find((r: any) => (r.caseNo || "").trim().toLowerCase() === cNoKey);
+      if (!cNoKey || inspectionMap.has(cNoKey)) return;
 
-      if (rec && (rec.disciplinaryAction || rec.status === "Submitted" || rec.natureOfOffence)) {
-        const existing = inspectionMap.get(cNoKey) || {};
+      if (
+        c.stageKey === "charge_sheet" ||
+        c.stageKey === "order_finalized" ||
+        c.stageKey === "psc_review" ||
+        c.stageKey === "disciplinary_active" ||
+        (c as any).isProperDisciplinary ||
+        (c as any).hasChargeSheet
+      ) {
         inspectionMap.set(cNoKey, {
-          id: existing.id || c.id || `disc-${c.caseNo}`,
+          id: c.id || `disc-${c.caseNo}`,
           caseNo: c.caseNo,
-          subject: c.subject || existing.subject || `Disciplinary Case ${c.caseNo}`,
-          accusedName: rec.accusedName || existing.accusedName || "Concerned Officer",
-          accusedDesignation: rec.accusedDesignation || existing.accusedDesignation || "Educational Officer",
-          schoolName: rec.schoolName || existing.schoolName || "Government Educational Institute",
-          priority: c.priority || existing.priority || "medium",
-          stage: rec.disciplinaryAction ? "Disciplinary Order Concluded" : "Disciplinary Inspection Active",
-          stageKey: rec.disciplinaryAction ? "order_finalized" : "active",
-          disciplinaryCharge: rec.natureOfOffence || rec.disciplinaryAction || existing.disciplinaryCharge || "Establishment Code Disciplinary Charge",
-          inspectionAuthority: existing.inspectionAuthority || "Disciplinary Inspection Board",
-          pscRef: existing.pscRef || `PSC/REF/${c.caseNo}`,
-          chargeDate: rec.letterDate || existing.chargeDate || c.assignedDate,
-          effectiveDate: existing.effectiveDate || "Pending Review",
-          interdictionStatus: rec.disciplinaryAction ? "Order Enacted" : "In Progress",
-          disciplinaryAction: rec.disciplinaryAction || existing.disciplinaryAction || "Disciplinary determination in progress",
-          notes: rec.specialNotes || existing.notes || c.subject
+          subject: c.subject || `Disciplinary Case ${c.caseNo}`,
+          accusedName: (c as any).accusedName || "Concerned Officer",
+          accusedDesignation: (c as any).accusedDesignation || "Educational Officer",
+          schoolName: (c as any).schoolName || "Government Educational Institute",
+          priority: c.priority || "medium",
+          stage: c.stage || "Formal Charge Sheet Issued",
+          stageKey: c.stageKey || "charge_sheet",
+          disciplinaryCharge: (c as any).disciplinaryCharge || "Establishment Code Charge Sheet",
+          inspectionAuthority: "Disciplinary Inspection Board",
+          pscRef: `PSC/REF/${c.caseNo}`,
+          chargeDate: c.assignedDate || "—",
+          effectiveDate: "14 Days Response Period",
+          interdictionStatus: "Charge Sheet Served",
+          disciplinaryAction: "Formal charge sheet proceedings in progress",
+          notes: c.subject || "Moved to Proper Disciplinary Inspection."
         });
       }
     });
@@ -2786,6 +2829,10 @@ export default function SubjectOfficerDashboard() {
         return target || (lang === "si" ? "විනය ශාඛාව" : "Disciplinary Branch");
     }
   };
+
+  if (!mounted) {
+    return <div className="dashboard-container" style={{ minHeight: "100vh", opacity: 0 }} />;
+  }
 
   return (
     <div className="dashboard-container" data-font-scale={fontScale}>
@@ -5373,9 +5420,26 @@ export default function SubjectOfficerDashboard() {
                           </td>
                           <td>
                             <div style={{ display: "flex", flexDirection: "column", gap: "4px", maxWidth: "260px" }}>
-                              <span className="badge-category-tag" title={getCategoryLabel(item.category)}>
-                                {getCategoryLabel(item.category)}
-                              </span>
+                              <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                                <span className="badge-category-tag" title={getCategoryLabel(item.category)}>
+                                  {getCategoryLabel(item.category)}
+                                </span>
+                                {item.category === "issuing_charge_sheet" && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveTab("disciplinary_inspection");
+                                      setInspectionSearchQuery(item.caseNo);
+                                    }}
+                                    className="badge-proper-inspection"
+                                    style={{ cursor: "pointer", border: "none" }}
+                                    title="View in Proper Disciplinary Inspection"
+                                  >
+                                    <ShieldAlert size={11} />
+                                    <span>{lang === "si" ? "විධිමත් විනය පරීක්ෂණ" : "Proper Inspection"}</span>
+                                  </button>
+                                )}
+                              </div>
                               <span style={{ fontSize: "12px", fontWeight: 600, color: "#334155", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={item.title || item.recommendationText}>
                                 {item.title || item.recommendationText || "Formal Recommendation"}
                               </span>
@@ -5434,6 +5498,20 @@ export default function SubjectOfficerDashboard() {
                               >
                                 {item.status === "Draft" ? "Edit Draft" : "View / Edit"}
                               </Link>
+                              {item.category === "issuing_charge_sheet" && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveTab("disciplinary_inspection");
+                                    setInspectionSearchQuery(item.caseNo);
+                                  }}
+                                  className="btn-quick-view"
+                                  style={{ backgroundColor: "#ede9fe", color: "#5b21b6", border: "1px solid #c4b5fd" }}
+                                  title="Open in Proper Disciplinary Inspection"
+                                >
+                                  <ShieldAlert size={13} />
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => setSelectedRecModal(item)}
@@ -5747,6 +5825,44 @@ export default function SubjectOfficerDashboard() {
                 )}
               </div>
 
+              {/* Charge Sheet & Disciplinary Order Details */}
+              {(selectedInspectionModal.issuedChargeSheet || selectedInspectionModal.chargeSheetIssuedDate || selectedInspectionModal.chargeSheetResponseDate || selectedInspectionModal.disciplinaryOrder) && (
+                <div className="inquiry-dossier-section" style={{ backgroundColor: "#f0fdf4", borderColor: "#86efac" }}>
+                  <div className="inquiry-dossier-section-title" style={{ color: "#15803d" }}>
+                    <FileCheck size={14} style={{ color: "#16a34a" }} />
+                    <span>Formal Charge Sheet & Disciplinary Order Details (චෝදනා පත්‍ර සහ විනය නියෝග විස්තර)</span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "10px", fontSize: "12.5px" }}>
+                    {selectedInspectionModal.issuedChargeSheet && (
+                      <div>
+                        <span style={{ color: "#166534", fontSize: "11px", fontWeight: 700, display: "block" }}>Issued Charge Sheet:</span>
+                        <strong style={{ color: "#14532d" }}>{selectedInspectionModal.issuedChargeSheet}</strong>
+                      </div>
+                    )}
+                    {selectedInspectionModal.chargeSheetIssuedDate && (
+                      <div>
+                        <span style={{ color: "#166534", fontSize: "11px", fontWeight: 700, display: "block" }}>Charge Sheet Issue Date:</span>
+                        <span style={{ color: "#14532d", fontWeight: 600 }}>{selectedInspectionModal.chargeSheetIssuedDate}</span>
+                      </div>
+                    )}
+                    {selectedInspectionModal.chargeSheetResponseDate && (
+                      <div>
+                        <span style={{ color: "#166534", fontSize: "11px", fontWeight: 700, display: "block" }}>Defense Response Date:</span>
+                        <span style={{ color: "#14532d", fontWeight: 600 }}>{selectedInspectionModal.chargeSheetResponseDate}</span>
+                      </div>
+                    )}
+                    {selectedInspectionModal.disciplinaryOrder && (
+                      <div style={{ gridColumn: "1 / -1", marginTop: "4px" }}>
+                        <span style={{ color: "#166534", fontSize: "11px", fontWeight: 700, display: "block" }}>Final Disciplinary Order:</span>
+                        <div style={{ backgroundColor: "#ffffff", padding: "8px 12px", borderRadius: "6px", border: "1px solid #bbf7d0", color: "#14532d", fontWeight: 600 }}>
+                          {selectedInspectionModal.disciplinaryOrder}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Enforcement Timelines & Disciplinary Orders */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px" }}>
                 <div className="inquiry-dossier-section">
@@ -6036,7 +6152,7 @@ export default function SubjectOfficerDashboard() {
 
             </div>
 
-            <footer style={{ padding: "14px 24px", borderTop: "1px solid #e2e8f0", backgroundColor: "#f8fafc", display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+            <footer style={{ padding: "14px 24px", borderTop: "1px solid #e2e8f0", backgroundColor: "#f8fafc", display: "flex", justifyContent: "flex-end", gap: "10px", flexWrap: "wrap" }}>
               <button
                 type="button"
                 onClick={() => setSelectedRecModal(null)}
@@ -6044,6 +6160,22 @@ export default function SubjectOfficerDashboard() {
               >
                 Close
               </button>
+              {selectedRecModal?.category === "issuing_charge_sheet" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const targetCaseNo = selectedRecModal.caseNo;
+                    setSelectedRecModal(null);
+                    setActiveTab("disciplinary_inspection");
+                    setInspectionSearchQuery(targetCaseNo);
+                  }}
+                  className="btn-create-rec"
+                  style={{ padding: "8px 16px", fontSize: "13px", background: "linear-gradient(135deg, #6366f1 0%, #4338ca 100%)" }}
+                >
+                  <ShieldAlert size={14} />
+                  <span>{lang === "si" ? "විධිමත් විනය පරීක්ෂණ වෙත යන්න" : "Go to Disciplinary Inspection"}</span>
+                </button>
+              )}
               <Link
                 href={`/subject/recommendation?caseNo=${selectedRecModal.caseNo}`}
                 className="btn-create-rec"
@@ -6068,3 +6200,12 @@ export default function SubjectOfficerDashboard() {
     </div>
   );
 }
+
+export default function SubjectOfficerDashboard() {
+  return (
+    <Suspense fallback={<div style={{ padding: "40px", textAlign: "center", color: "#64748b" }}>Loading Dashboard...</div>}>
+      <SubjectOfficerDashboardContent />
+    </Suspense>
+  );
+}
+

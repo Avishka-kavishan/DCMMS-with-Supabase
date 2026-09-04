@@ -4689,6 +4689,26 @@ export async function getCaseDetailsForRecommendationServer(caseRef: string) {
           if (r.title) existingRec.title = r.title;
           if (r.forward_to) existingRec.forwardTo = r.forward_to;
           if (r.issued_charge_sheet) existingRec.issuedChargeSheet = r.issued_charge_sheet;
+          if (r.charge_sheet_issued_date) existingRec.chargeSheetIssuedDate = new Date(r.charge_sheet_issued_date).toISOString().slice(0, 10);
+          if (r.charge_sheet_response_date) existingRec.chargeSheetResponseDate = new Date(r.charge_sheet_response_date).toISOString().slice(0, 10);
+          if (r.disciplinary_order) existingRec.disciplinaryOrder = r.disciplinary_order;
+        }
+      }
+    } catch (dcmmsFetchErr) {
+      console.warn("dcmms_recommendations fetch error:", dcmmsFetchErr);
+    }
+
+    // 6. Query and merge charge sheet details from charge_sheet_table
+    try {
+      const csRows: any[] = await prisma.$queryRaw`
+        SELECT * FROM public.charge_sheet_table
+        WHERE LOWER(TRIM(ref_number)) = LOWER(${clean})
+           OR LOWER(TRIM(ref_number)) = LOWER(${matchedRef})
+        LIMIT 1;
+      `;
+      if (csRows && csRows.length > 0) {
+        const cs = csRows[0];
+        if (existingRec) {
           if (cs.issued_charge_sheet) existingRec.issuedChargeSheet = cs.issued_charge_sheet;
           if (cs.date_the_charge_sheet_issued) existingRec.chargeSheetIssuedDate = new Date(cs.date_the_charge_sheet_issued).toISOString().slice(0, 10);
           if (cs.date_the_response_to_the_charge_sheet_was_given) existingRec.chargeSheetResponseDate = new Date(cs.date_the_response_to_the_charge_sheet_was_given).toISOString().slice(0, 10);
@@ -4846,6 +4866,15 @@ export async function saveRecommendationServer(recData: any) {
             date_the_response_to_the_charge_sheet_was_given = EXCLUDED.date_the_response_to_the_charge_sheet_was_given,
             disciplinary_order = EXCLUDED.disciplinary_order,
             updated_at = NOW();
+        `;
+
+        // Update subject_officer_form_table future_action to reflect Proper Disciplinary Inspection progression
+        await prisma.$executeRaw`
+          UPDATE subject_officer_form_table
+          SET future_action = 'Proper Disciplinary Inspection - Formal Charge Sheet Issued',
+              updated_at = NOW()
+          WHERE LOWER(TRIM(ref_number)) = LOWER(${matchedRef})
+             OR LOWER(TRIM(subject_file_no)) = LOWER(${caseNo});
         `;
       }
     } catch (csErr) {

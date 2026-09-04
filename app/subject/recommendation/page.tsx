@@ -602,6 +602,26 @@ function RecommendationFormContent() {
           updatedAt: now
         });
         localStorage.setItem("dcmms_recommendations", JSON.stringify(recList));
+
+        // If category is issuing_charge_sheet, synchronize draft stage in cases and assignments
+        if (recommendationCategory === "issuing_charge_sheet") {
+          const storedCases = localStorage.getItem("dcmms_cases") || "[]";
+          let caseList = [];
+          try { caseList = JSON.parse(storedCases); } catch (e) {}
+          caseList = caseList.map((c: any) => {
+            if (String(c.caseNo || c.refNo || "").trim().toLowerCase() === caseNo.trim().toLowerCase()) {
+              return {
+                ...c,
+                stage: "Formal Charge Sheet Issued",
+                stageKey: "charge_sheet",
+                isProperDisciplinary: true,
+              };
+            }
+            return c;
+          });
+          localStorage.setItem("dcmms_cases", JSON.stringify(caseList));
+        }
+
         window.dispatchEvent(new Event("storage"));
       }
 
@@ -700,6 +720,9 @@ function RecommendationFormContent() {
         });
         localStorage.setItem("dcmms_recommendations", JSON.stringify(recList));
 
+        const isChargeSheetCategory = recommendationCategory === "issuing_charge_sheet";
+        const targetStatus = isChargeSheetCategory ? "Formal Charge Sheet Issued" : "Implementation of Recommendations";
+
         const storedAsgns = localStorage.getItem("dcmms_subject_assignments") || "[]";
         let asgnList = [];
         try { asgnList = JSON.parse(storedAsgns); } catch (e) {}
@@ -707,10 +730,18 @@ function RecommendationFormContent() {
           if (String(a.caseNo || a.case_no || "").trim().toLowerCase() === caseNo.trim().toLowerCase()) {
             return {
               ...a,
-              status: "Implementation of Recommendations",
+              status: targetStatus,
+              stage: isChargeSheetCategory ? "Formal Charge Sheet Issued" : a.stage,
+              stageKey: isChargeSheetCategory ? "charge_sheet" : a.stageKey,
+              isProperDisciplinary: isChargeSheetCategory ? true : a.isProperDisciplinary,
               recommendationSubmitted: true,
               recommendationSubmittedAt: now,
-              recommendationText
+              recommendationText,
+              recommendationCategory,
+              issuedChargeSheet: isChargeSheetCategory ? issuedChargeSheet : a.issuedChargeSheet,
+              chargeSheetIssuedDate: isChargeSheetCategory ? chargeSheetIssuedDate : a.chargeSheetIssuedDate,
+              chargeSheetResponseDate: isChargeSheetCategory ? chargeSheetResponseDate : a.chargeSheetResponseDate,
+              disciplinaryOrder: isChargeSheetCategory ? disciplinaryOrder : a.disciplinaryOrder,
             };
           }
           return a;
@@ -724,7 +755,10 @@ function RecommendationFormContent() {
           if (String(c.caseNo || c.refNo || "").trim().toLowerCase() === caseNo.trim().toLowerCase()) {
             return {
               ...c,
-              status: "Implementation of Recommendations"
+              status: targetStatus,
+              stage: isChargeSheetCategory ? "Formal Charge Sheet Issued" : c.stage,
+              stageKey: isChargeSheetCategory ? "charge_sheet" : c.stageKey,
+              isProperDisciplinary: isChargeSheetCategory ? true : c.isProperDisciplinary,
             };
           }
           return c;
@@ -733,14 +767,29 @@ function RecommendationFormContent() {
 
         window.dispatchEvent(new Event("storage"));
         window.dispatchEvent(new CustomEvent("dcmms_assignment_updated"));
+        window.dispatchEvent(new CustomEvent("dcmms_recommendation_updated"));
       }
 
-      showToast(lang === "si" ? "නිර්දේශය සාර්ථකව ඉදිරිපත් කරන ලදී!" : "Recommendation submitted successfully!");
+      if (recommendationCategory === "issuing_charge_sheet") {
+        showToast(
+          lang === "si"
+            ? "චෝදනා පත්‍ර නිර්දේශය සාර්ථකයි! නඩුව විධිමත් විනය පරීක්ෂණ (Proper Disciplinary Inspection) වෙත යොමු කරන ලදී."
+            : lang === "ta"
+            ? "குற்றப்பத்திரிகை பரிந்துரை சமர்ப்பிக்கப்பட்டது! வழக்கு சரியான ஒழுங்கு நடவடிக்கை ஆய்வுக்கு நகர்த்தப்பட்டது."
+            : "Charge sheet recommendation submitted! Case moved to Proper Disciplinary Inspection section."
+        );
+      } else {
+        showToast(lang === "si" ? "නිර්දේශය සාර්ථකව ඉදිරිපත් කරන ලදී!" : "Recommendation submitted successfully!");
+      }
       loadCasesAndRecommendationsList();
 
       setTimeout(() => {
-        setViewMode("list");
-      }, 1000);
+        if (recommendationCategory === "issuing_charge_sheet") {
+          router.push(`/subject?tab=disciplinary_inspection&caseNo=${encodeURIComponent(caseNo)}`);
+        } else {
+          setViewMode("list");
+        }
+      }, 1200);
     } catch (err) {
       console.error("Submit recommendation error:", err);
       showToast("Recommendation saved locally.");
@@ -1122,6 +1171,31 @@ function RecommendationFormContent() {
                       />
                     </div>
                   </div>
+
+                  {/* Informative routing alert when 'issuing_charge_sheet' is selected */}
+                  {recommendationCategory === "issuing_charge_sheet" && (
+                    <div className="charge-sheet-routing-alert">
+                      <div className="charge-sheet-alert-icon">
+                        <ShieldAlert size={20} />
+                      </div>
+                      <div className="charge-sheet-alert-text">
+                        <strong>
+                          {lang === "si"
+                            ? "🛡️ මෙම නඩුව 'විධිමත් විනය පරීක්ෂණ (Proper Disciplinary Inspection)' අංශය වෙත ස්වයංක්‍රීයව යොමු කෙරේ"
+                            : lang === "ta"
+                            ? "🛡️ இந்த வழக்கு தானாகவே 'சரியான ஒழுங்கு நடவடிக்கை ஆய்வு (Proper Disciplinary Inspection)' பகுதிக்கு நகர்த்தப்படும்"
+                            : "🛡️ This case will automatically move to the 'Proper Disciplinary Inspection' workflow upon submission"}
+                        </strong>
+                        <p>
+                          {lang === "si"
+                            ? "නිර්දේශ වර්ගය ලෙස 'චෝදනා පත්‍රයක් නිකුත් කිරීම' තෝරාගෙන ඇති බැවින්, චෝදනා පත්‍ර විස්තර සහ ඉදිරි ක්‍රියාමාර්ග ආයතන සංග්‍රහය සහ රාජ්‍ය සේවා කොමිෂන් සභා නීතිරීති යටතේ විධිමත් විනය පරීක්ෂණ අංශයේ සටහන් වේ."
+                            : lang === "ta"
+                            ? "பரிந்துரை வகையாக 'குற்றப்பத்திரிகை வழங்குதல்' தேர்ந்தெடுக்கப்பட்டுள்ளதால், நிறுவனக் குறியீட்டின் கீழ் இந்த வழக்கு முறையான ஒழுங்கு நடவடிக்கை ஆய்வுக்கு நகர்த்தப்படும்."
+                            : "Selecting 'Issuing a charge sheet' transitions this case to formal disciplinary proceedings under the Establishment Code & PSC rules. Charge sheet parameters will be tracked in the Proper Disciplinary Inspection dossier."}
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </section>
 
                 {/* Conditional Section: Charge Sheet & Disciplinary Order Details (Displayed ONLY when 'issuing a charge sheet' is selected) */}
@@ -1764,9 +1838,21 @@ function RecommendationFormContent() {
                                   </>
                                 ) : (
                                   <>
-                                    <span className="badge-category-tag" title={getCategoryLabel(item.category)}>
-                                      {getCategoryLabel(item.category)}
-                                    </span>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                                      <span className="badge-category-tag" title={getCategoryLabel(item.category)}>
+                                        {getCategoryLabel(item.category)}
+                                      </span>
+                                      {item.category === "issuing_charge_sheet" && (
+                                        <Link
+                                          href={`/subject?tab=disciplinary_inspection&caseNo=${encodeURIComponent(item.caseNo)}`}
+                                          className="badge-proper-inspection"
+                                          title="View in Proper Disciplinary Inspection"
+                                        >
+                                          <ShieldAlert size={11} />
+                                          <span>{lang === "si" ? "විධිමත් විනය පරීක්ෂණ" : "Proper Inspection"}</span>
+                                        </Link>
+                                      )}
+                                    </div>
                                     <span style={{ fontSize: "12px", fontWeight: 600, color: "#334155", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={item.title || item.recommendationText}>
                                       {item.title || item.recommendationText || "Formal Recommendation"}
                                     </span>
@@ -1858,6 +1944,16 @@ function RecommendationFormContent() {
                                     >
                                       {isDraft ? (lang === "si" ? "කෙටුම්පත සංස්කරණය" : "Edit Draft") : (lang === "si" ? "බලන්න / සංස්කරණය" : "View / Edit")}
                                     </button>
+                                    {item.category === "issuing_charge_sheet" && (
+                                      <Link
+                                        href={`/subject?tab=disciplinary_inspection&caseNo=${encodeURIComponent(item.caseNo)}`}
+                                        className="btn-view-inspection"
+                                        title="Open Proper Disciplinary Inspection Dossier"
+                                      >
+                                        <ShieldAlert size={12} />
+                                        <span>{lang === "si" ? "විනය පරීක්ෂණ" : "Inspection"}</span>
+                                      </Link>
+                                    )}
                                     <button
                                       type="button"
                                       onClick={() => setSelectedRecModal(item)}
@@ -2084,7 +2180,7 @@ function RecommendationFormContent() {
                   )}
                 </div>
 
-                <footer style={{ padding: "14px 24px", borderTop: "1px solid #e2e8f0", backgroundColor: "#f8fafc", display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+                <footer style={{ padding: "14px 24px", borderTop: "1px solid #e2e8f0", backgroundColor: "#f8fafc", display: "flex", justifyContent: "flex-end", gap: "10px", flexWrap: "wrap" }}>
                   <button
                     type="button"
                     onClick={() => setSelectedRecModal(null)}
@@ -2092,6 +2188,16 @@ function RecommendationFormContent() {
                   >
                     Close
                   </button>
+                  {selectedRecModal?.category === "issuing_charge_sheet" && (
+                    <Link
+                      href={`/subject?tab=disciplinary_inspection&caseNo=${encodeURIComponent(selectedRecModal.caseNo)}`}
+                      className="btn-view-inspection"
+                      style={{ padding: "8px 16px", fontSize: "13px" }}
+                    >
+                      <ShieldAlert size={14} />
+                      <span>{lang === "si" ? "විධිමත් විනය පරීක්ෂණ වෙත යන්න" : "Go to Disciplinary Inspection"}</span>
+                    </Link>
+                  )}
                   <button
                     type="button"
                     onClick={() => {
