@@ -88,10 +88,29 @@ model SubjectOfficerFormTable {
   subject_category                               String?                                      @db.VarChar(255)
   accused_officer_subject_officer_form_table     accused_officer_subject_officer_form_table[]
   case_by_date_extention                         case_by_date_extention[]
+  investigation_table                            investigation_table[]
   accused_officer                                accused_officer_table?                       @relation(fields: [accused_officer_id], references: [id], onUpdate: NoAction)
   daily_mail_letter                              DailyMailLetterTable?                        @relation(fields: [daily_mail_letter_id], references: [id], onUpdate: NoAction)
 
   @@map("subject_officer_form_table")
+}
+
+model investigation_table {
+  id                           BigInt                   @id @default(autoincrement())
+  ref_number                   String                   @db.VarChar(100)
+  category_recommendation      String?                  @db.VarChar(255)
+  case_status                  String?                  @default("Pending") @db.VarChar(100)
+  target_implementation_date  DateTime?                @db.Date
+  investigation_recommendation String?
+  circular_reference           String?                  @db.VarChar(255)
+  minute_ref                   String?                  @db.VarChar(255)
+  date_approved_by_secretory   DateTime?                @db.Date
+  secretory_recommendation     String?
+  created_at                   DateTime?                @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime?                @default(now()) @db.Timestamptz(6)
+  subject_officer_form_table   SubjectOfficerFormTable  @relation(fields: [ref_number], references: [ref_number], onDelete: Cascade, onUpdate: Cascade)
+
+  @@map("investigation_table")
 }
 
 model accused_officer_subject_officer_form_table {

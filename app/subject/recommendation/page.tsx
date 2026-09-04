@@ -86,6 +86,8 @@ interface RecommendationRecord {
   accusedDesignation?: string;
   schoolName?: string;
   officerName?: string;
+  subject?: string;
+  initialCompletedDate?: string;
 }
 
 function RecommendationFormContent() {
@@ -273,17 +275,29 @@ function RecommendationFormContent() {
               const cNo = c.caseNo || c.refNo || c.id;
               if (!cNo) return;
               const key = cNo.trim().toLowerCase();
-              const existing: CaseOption = casesMap.get(key) || { caseNo: cNo };
-              casesMap.set(key, {
-                ...existing,
-                caseNo: cNo,
-                letterNo: c.letterNo || c.letter_no || existing.letterNo,
-                subject: c.subject || existing.subject,
-                accusedName: c.accusedName || c.accusedOfficer || c.officerName || existing.accusedName,
-                accusedDesignation: c.designation || existing.accusedDesignation,
-                schoolName: c.schoolName || c.instituteName || existing.schoolName,
-                initialCompletedDate: c.initialCompletedDate || c.initialInvestigationCompletedAt || existing.initialCompletedDate,
-              });
+              const isInitialComplete = !!(
+                c.initialInvestigationComplete ||
+                c.initial_investigation_complete ||
+                c.status === "Informing Officer In Charge - Initial Investigation Complete" ||
+                c.status === "Investigation Completed" ||
+                c.status === "Implementation of Recommendations" ||
+                c.initialCompletedDate
+              );
+              
+              // Only add new case if investigation was completed/submitted by admin, or if already exists in casesMap (e.g. from DB)
+              if (isInitialComplete || casesMap.has(key)) {
+                const existing: CaseOption = casesMap.get(key) || { caseNo: cNo };
+                casesMap.set(key, {
+                  ...existing,
+                  caseNo: cNo,
+                  letterNo: c.letterNo || c.letter_no || existing.letterNo,
+                  subject: c.subject || existing.subject,
+                  accusedName: c.accusedName || c.accusedOfficer || c.officerName || existing.accusedName,
+                  accusedDesignation: c.designation || existing.accusedDesignation,
+                  schoolName: c.schoolName || c.instituteName || existing.schoolName,
+                  initialCompletedDate: c.initialCompletedDate || c.initialInvestigationCompletedAt || existing.initialCompletedDate,
+                });
+              }
             });
           }
         }
@@ -296,13 +310,27 @@ function RecommendationFormContent() {
               const cNo = a.caseNo || a.case_no;
               if (!cNo) return;
               const key = cNo.trim().toLowerCase();
-              const existing: CaseOption = casesMap.get(key) || { caseNo: cNo };
-              casesMap.set(key, {
-                ...existing,
-                caseNo: cNo,
-                initialCompletedDate: a.initialInvestigationCompletedAt || a.initial_investigation_completed_at || existing.initialCompletedDate,
-                hasRecommendation: a.recommendationSubmitted || a.recommendation_submitted || existing.hasRecommendation,
-              });
+              const isInitialComplete = !!(
+                a.initialInvestigationComplete ||
+                a.initial_investigation_complete ||
+                a.status === "Informing Officer In Charge - Initial Investigation Complete" ||
+                a.status === "Investigation Completed" ||
+                a.status === "Implementation of Recommendations" ||
+                a.reportSubmitDate ||
+                a.reportContent ||
+                a.initialInvestigationCompletedAt
+              );
+
+              // Only add new case if investigation was completed/submitted by admin, or if already exists in casesMap
+              if (isInitialComplete || casesMap.has(key)) {
+                const existing: CaseOption = casesMap.get(key) || { caseNo: cNo };
+                casesMap.set(key, {
+                  ...existing,
+                  caseNo: cNo,
+                  initialCompletedDate: a.initialInvestigationCompletedAt || a.initial_investigation_completed_at || existing.initialCompletedDate,
+                  hasRecommendation: a.recommendationSubmitted || a.recommendation_submitted || existing.hasRecommendation,
+                });
+              }
             });
           }
         }
@@ -311,7 +339,63 @@ function RecommendationFormContent() {
 
     const casesArr = Array.from(casesMap.values());
     setAvailableCases(casesArr);
-    setAllRecommendations(recsList);
+
+    // Merge casesMap and recsList so ALL cases are present in the list view
+    const mergedList: RecommendationRecord[] = [];
+    const processedKeys = new Set<string>();
+
+    // 1. Process all existing recommendations
+    recsList.forEach((r) => {
+      const key = (r.caseNo || "").trim().toLowerCase();
+      if (!key) return;
+      processedKeys.add(key);
+
+      const caseMeta = casesMap.get(key);
+      mergedList.push({
+        ...r,
+        letterNo: r.letterNo || caseMeta?.letterNo || "",
+        accusedName: r.accusedName || caseMeta?.accusedName || "",
+        accusedDesignation: r.accusedDesignation || caseMeta?.accusedDesignation || "",
+        schoolName: r.schoolName || caseMeta?.schoolName || "",
+        subject: r.title || caseMeta?.subject || "Preliminary Investigation Completed",
+        initialCompletedDate: caseMeta?.initialCompletedDate || "",
+      });
+    });
+
+    // 2. Include all available cases that do not have a formulated recommendation yet
+    casesMap.forEach((c, key) => {
+      if (!processedKeys.has(key)) {
+        processedKeys.add(key);
+        mergedList.push({
+          caseNo: c.caseNo,
+          letterNo: c.letterNo || c.caseNo,
+          category: "issuing_charge_sheet",
+          urgency: "normal",
+          title: c.subject || "Preliminary Investigation Completed",
+          recommendationText: "",
+          disciplinaryAction: "",
+          forwardTo: "disciplinary_branch",
+          targetDate: "",
+          referenceNotes: "",
+          issuedChargeSheet: "",
+          chargeSheetIssuedDate: "",
+          chargeSheetResponseDate: "",
+          disciplinaryOrder: "",
+          secretaryApprovalDate: "",
+          secretaryApprovedRecommendation: "",
+          status: "Awaiting Recommendation",
+          submittedAt: "",
+          updatedAt: c.initialCompletedDate || "",
+          accusedName: c.accusedName || "",
+          accusedDesignation: c.accusedDesignation || "",
+          schoolName: c.schoolName || "",
+          subject: c.subject || "Preliminary Investigation Completed",
+          initialCompletedDate: c.initialCompletedDate || "",
+        });
+      }
+    });
+
+    setAllRecommendations(mergedList);
 
     // If no caseNo currently set, select the first available case
     if (!caseNoParam && casesArr.length > 0) {
@@ -453,27 +537,36 @@ function RecommendationFormContent() {
     setIsSaving(true);
     const now = new Date().toISOString().slice(0, 10);
     const payload: any = {
+      ref_number: caseNo,
       case_no: caseNo,
       letter_no: letterNo || null,
+      category_recommendation: recommendationCategory,
       category: recommendationCategory,
+      case_status: "Draft",
+      status: "Draft",
+      target_implementation_date: targetDate || null,
+      target_date: targetDate || null,
+      investigation_recommendation: recommendationText,
+      recommendation_text: recommendationText,
+      circular_reference: disciplinaryAction || null,
+      disciplinary_action: disciplinaryAction || null,
+      minute_ref: referenceNotes || null,
+      reference_notes: referenceNotes || null,
+      date_approved_by_secretory: secretaryApprovalDate || null,
+      secretary_approval_date: secretaryApprovalDate || null,
+      secretory_recommendation: secretaryApprovedRecommendation || null,
+      secretary_approved_recommendation: secretaryApprovedRecommendation || null,
       urgency: recommendationUrgency,
       title: recommendationTitle || "Preliminary Investigation Recommendation",
-      recommendation_text: recommendationText,
-      disciplinary_action: disciplinaryAction,
       forward_to: forwardTo,
-      target_date: targetDate || null,
-      reference_notes: referenceNotes,
       issued_charge_sheet: recommendationCategory === "issuing_charge_sheet" ? issuedChargeSheet : null,
       charge_sheet_issued_date: recommendationCategory === "issuing_charge_sheet" ? (chargeSheetIssuedDate || null) : null,
       charge_sheet_response_date: recommendationCategory === "issuing_charge_sheet" ? (chargeSheetResponseDate || null) : null,
       disciplinary_order: recommendationCategory === "issuing_charge_sheet" ? disciplinaryOrder : null,
-      secretary_approval_date: secretaryApprovalDate || null,
-      secretary_approved_recommendation: secretaryApprovedRecommendation || null,
-      status: "Draft",
     };
 
     try {
-      // 1. Save to PostgreSQL via Server Action
+      // 1. Save to PostgreSQL (investigation_table) via Server Action
       await saveRecommendationServer(payload);
 
       // 2. Audit logging
@@ -536,28 +629,38 @@ function RecommendationFormContent() {
 
     setIsSaving(true);
     const now = new Date().toISOString().slice(0, 10);
+    const statusToSave = recommendationStatus || "Submitted";
     const payload: any = {
+      ref_number: caseNo,
       case_no: caseNo,
       letter_no: letterNo || null,
+      category_recommendation: recommendationCategory,
       category: recommendationCategory,
+      case_status: statusToSave,
+      status: statusToSave,
+      target_implementation_date: targetDate || null,
+      target_date: targetDate || null,
+      investigation_recommendation: recommendationText,
+      recommendation_text: recommendationText,
+      circular_reference: disciplinaryAction || null,
+      disciplinary_action: disciplinaryAction || null,
+      minute_ref: referenceNotes || null,
+      reference_notes: referenceNotes || null,
+      date_approved_by_secretory: secretaryApprovalDate || null,
+      secretary_approval_date: secretaryApprovalDate || null,
+      secretory_recommendation: secretaryApprovedRecommendation || null,
+      secretary_approved_recommendation: secretaryApprovedRecommendation || null,
       urgency: recommendationUrgency,
       title: recommendationTitle || "Formal Preliminary Recommendation",
-      recommendation_text: recommendationText,
-      disciplinary_action: disciplinaryAction,
       forward_to: forwardTo,
-      target_date: targetDate || null,
-      reference_notes: referenceNotes,
       issued_charge_sheet: recommendationCategory === "issuing_charge_sheet" ? issuedChargeSheet : null,
       charge_sheet_issued_date: recommendationCategory === "issuing_charge_sheet" ? (chargeSheetIssuedDate || null) : null,
       charge_sheet_response_date: recommendationCategory === "issuing_charge_sheet" ? (chargeSheetResponseDate || null) : null,
       disciplinary_order: recommendationCategory === "issuing_charge_sheet" ? disciplinaryOrder : null,
-      secretary_approval_date: secretaryApprovalDate || null,
-      secretary_approved_recommendation: secretaryApprovedRecommendation || null,
-      status: "Submitted",
     };
 
     try {
-      // 1. Save to PostgreSQL via Server Action
+      // 1. Save to PostgreSQL (investigation_table) via Server Action
       await saveRecommendationServer(payload);
 
       // 2. Audit logging
@@ -685,20 +788,28 @@ function RecommendationFormContent() {
   const filteredRecommendations = allRecommendations.filter((item) => {
     if (recCategoryFilter !== "all" && item.category !== recCategoryFilter) return false;
     if (recUrgencyFilter !== "all" && item.urgency !== recUrgencyFilter) return false;
-    if (recStatusFilter !== "all" && item.status !== recStatusFilter) return false;
+    if (recStatusFilter !== "all") {
+      if (recStatusFilter === "Awaiting Recommendation" && item.status !== "Awaiting Recommendation") return false;
+      if (recStatusFilter === "Draft" && item.status !== "Draft") return false;
+      if (recStatusFilter === "Submitted" && item.status !== "Submitted" && item.status !== "Implementation of Recommendations") return false;
+      if (recStatusFilter === "Approved" && item.status !== "Approved") return false;
+    }
 
     if (recSearchQuery.trim()) {
       const q = recSearchQuery.toLowerCase();
       const matchNo = (item.caseNo || "").toLowerCase().includes(q);
+      const matchLetter = (item.letterNo || "").toLowerCase().includes(q);
       const matchTitle = (item.title || "").toLowerCase().includes(q);
       const matchText = (item.recommendationText || "").toLowerCase().includes(q);
       const matchAcc = (item.accusedName || item.officerName || "").toLowerCase().includes(q);
-      return matchNo || matchTitle || matchText || matchAcc;
+      const matchSchool = (item.schoolName || "").toLowerCase().includes(q);
+      const matchSubject = (item.subject || "").toLowerCase().includes(q);
+      return matchNo || matchLetter || matchTitle || matchText || matchAcc || matchSchool || matchSubject;
     }
     return true;
   });
 
-  const pendingCases = availableCases.filter((c) => !c.hasRecommendation);
+  const pendingCases = allRecommendations.filter((r) => r.status === "Awaiting Recommendation" || !r.recommendationText);
 
   if (!mounted) {
     return (
@@ -1506,134 +1617,11 @@ function RecommendationFormContent() {
                 </div>
               </div>
 
-              {/* Dedicated Section: Completed Investigation Cases Assigned for Recommendation */}
-              {availableCases.length > 0 && (
-                <div style={{ marginBottom: "24px", backgroundColor: "#ffffff", borderRadius: "16px", border: "1px solid #e2e8f0", padding: "20px 24px", boxShadow: "0 2px 4px rgba(0,0,0,0.02)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "8px" }}>
-                    <div>
-                      <h4 style={{ margin: 0, fontSize: "16px", fontWeight: 800, color: "#1e1b4b", display: "flex", alignItems: "center", gap: "8px" }}>
-                        <CheckCircle size={18} style={{ color: "#16a34a" }} />
-                        <span>{lang === "si" ? "විමර්ශනය අවසන් නඩු සඳහා නිර්දේශ ඉදිරිපත් කිරීම" : "Investigation Cases Ready for Recommendation"}</span>
-                        <span style={{ fontSize: "11px", fontWeight: 700, backgroundColor: "#dcfce7", color: "#15803d", padding: "2px 8px", borderRadius: "12px" }}>
-                          {availableCases.length} {lang === "si" ? "නඩු" : "Cases"}
-                        </span>
-                      </h4>
-                      <p style={{ margin: "3px 0 0 0", fontSize: "12px", color: "#64748b" }}>
-                        {lang === "si"
-                          ? "මූලික විමර්ශන අවසන් කර ඇති නඩුවක් තෝරා නිර්දේශ පෝරමයට පිවිසෙන්න."
-                          : "Select any case to open the recommendation form and submit formal disciplinary action."}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "14px" }}>
-                    {availableCases.map((c) => {
-                      const rec = allRecommendations.find((r) => (r.caseNo || "").trim().toLowerCase() === (c.caseNo || "").trim().toLowerCase());
-                      const isSubmitted = rec && (rec.status === "Submitted" || rec.status === "Approved");
-                      const isDraft = rec && rec.status === "Draft";
-
-                      return (
-                        <div
-                          key={`case-card-${c.caseNo}`}
-                          style={{
-                            backgroundColor: isSubmitted ? "#f8fafc" : "#ffffff",
-                            borderRadius: "14px",
-                            border: isSubmitted ? "1px solid #cbd5e1" : "1px solid #818cf8",
-                            padding: "16px",
-                            display: "flex",
-                            flexDirection: "column",
-                            justifyContent: "space-between",
-                            gap: "12px",
-                            boxShadow: isSubmitted ? "none" : "0 4px 6px -1px rgba(79, 70, 229, 0.08)"
-                          }}
-                        >
-                          <div>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
-                              <div>
-                                <span style={{ fontWeight: 800, color: "#1e1b4b", fontSize: "15px" }}>{c.caseNo}</span>
-                                {c.accusedName && (
-                                  <div style={{ fontSize: "12px", color: "#475569", fontWeight: 600, marginTop: "2px" }}>
-                                    {c.accusedName} {c.schoolName ? `• ${c.schoolName}` : ""}
-                                  </div>
-                                )}
-                              </div>
-
-                              {isSubmitted ? (
-                                <span style={{ fontSize: "11px", fontWeight: 700, color: "#15803d", backgroundColor: "#dcfce7", padding: "3px 10px", borderRadius: "12px", border: "1px solid #bbf7d0" }}>
-                                  ✓ {lang === "si" ? "යොමු කළා" : "Submitted"}
-                                </span>
-                              ) : isDraft ? (
-                                <span style={{ fontSize: "11px", fontWeight: 700, color: "#854d0e", backgroundColor: "#fef9c3", padding: "3px 10px", borderRadius: "12px", border: "1px solid #fef08a" }}>
-                                  📝 {lang === "si" ? "කෙටුම්පත" : "Draft Saved"}
-                                </span>
-                              ) : (
-                                <span style={{ fontSize: "11px", fontWeight: 700, color: "#b91c1c", backgroundColor: "#fee2e2", padding: "3px 10px", borderRadius: "12px", border: "1px solid #fecaca" }}>
-                                  ⚡ {lang === "si" ? "නිර්දේශය අපේක්ෂිතයි" : "Action Required"}
-                                </span>
-                              )}
-                            </div>
-
-                            <p style={{ margin: "6px 0 0 0", fontSize: "13px", color: "#334155", lineHeight: 1.4, fontWeight: 500 }}>
-                              {c.subject || "Formal Preliminary Investigation Completed"}
-                            </p>
-                          </div>
-
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: "10px", borderTop: "1px solid #f1f5f9" }}>
-                            <span style={{ fontSize: "11px", color: "#64748b" }}>
-                              {c.initialCompletedDate || "Recently updated"}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setCaseNo(c.caseNo);
-                                fetchCaseDetails(c.caseNo);
-                                setViewMode("form");
-                              }}
-                              style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "6px",
-                                fontSize: "12px",
-                                fontWeight: 700,
-                                color: isSubmitted ? "#4f46e5" : "#ffffff",
-                                backgroundColor: isSubmitted ? "#e0e7ff" : "#4f46e5",
-                                padding: "6px 14px",
-                                borderRadius: "8px",
-                                border: "none",
-                                cursor: "pointer",
-                                transition: "all 0.15s ease"
-                              }}
-                            >
-                              {isSubmitted ? (
-                                <>
-                                  <span>{lang === "si" ? "නිර්දේශය බලන්න" : "View Recommendation"}</span>
-                                  <ArrowRight size={12} />
-                                </>
-                              ) : isDraft ? (
-                                <>
-                                  <span>{lang === "si" ? "කෙටුම්පත සංස්කරණය" : "Edit Draft"}</span>
-                                  <ArrowRight size={12} />
-                                </>
-                              ) : (
-                                <>
-                                  <Plus size={13} />
-                                  <span>{lang === "si" ? "+ නිර්දේශය එක් කරන්න" : "+ Add Recommendation"}</span>
-                                </>
-                              )}
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
               {/* Filter and Search Bar */}
               <div className="letters-list-header" style={{ marginBottom: "16px", backgroundColor: "#ffffff", padding: "12px 18px", borderRadius: "12px", border: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: 700, color: "#1e1b4b", fontSize: "14px" }}>
                   <Filter size={16} style={{ color: "#4f46e5" }} />
-                  <span>{lang === "si" ? "නිර්දේශ පෙරහන" : "Filter Recommendations"}</span>
+                  <span>{lang === "si" ? "නඩු සහ නිර්දේශ පෙරහන" : "Filter Cases & Recommendations"}</span>
                 </div>
 
                 <div className="letters-filters-group" style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", margin: 0 }}>
@@ -1643,7 +1631,7 @@ function RecommendationFormContent() {
                       type="text"
                       value={recSearchQuery}
                       onChange={(e) => setRecSearchQuery(e.target.value)}
-                      placeholder={lang === "si" ? "නිර්දේශ සොයන්න..." : "Search recommendations..."}
+                      placeholder={lang === "si" ? "නඩු හෝ නිර්දේශ සොයන්න..." : "Search cases or recommendations..."}
                       className="search-input"
                     />
                   </div>
@@ -1687,9 +1675,10 @@ function RecommendationFormContent() {
                       className="filter-priority-select"
                     >
                       <option value="all">{lang === "si" ? "සියලු තත්ත්ව" : "All Statuses"}</option>
-                      <option value="Submitted">Submitted</option>
-                      <option value="Draft">Draft</option>
-                      <option value="Approved">Approved</option>
+                      <option value="Awaiting Recommendation">{lang === "si" ? "⚡ නිර්දේශ අපේක්ෂිත (Action Required)" : "⚡ Awaiting Recommendation"}</option>
+                      <option value="Draft">{lang === "si" ? "📝 කෙටුම්පත් (Draft)" : "📝 Draft"}</option>
+                      <option value="Submitted">{lang === "si" ? "✈️ යොමු කළා (Submitted)" : "✈️ Submitted"}</option>
+                      <option value="Approved">{lang === "si" ? "✓ අනුමතයි (Approved)" : "✓ Approved"}</option>
                     </select>
                   </div>
 
@@ -1718,7 +1707,7 @@ function RecommendationFormContent() {
                     <tr>
                       <th scope="col">{t("caseNo", "Case No")}</th>
                       <th scope="col">{lang === "si" ? "චෝදනා ලත් නිලධාරියා / ආයතනය" : "Accused Officer / Institution"}</th>
-                      <th scope="col">{lang === "si" ? "නිර්දේශ වර්ගය සහ මාතෘකාව" : "Category & Recommendation"}</th>
+                      <th scope="col">{lang === "si" ? "නිර්දේශ වර්ගය සහ විස්තරය" : "Category & Recommendation"}</th>
                       <th scope="col">{lang === "si" ? "ප්‍රමුඛතාව" : "Urgency"}</th>
                       <th scope="col">{lang === "si" ? "තත්ත්වය" : "Status"}</th>
                       <th scope="col">{lang === "si" ? "යොමු කළ අංශය" : "Forwarded To"}</th>
@@ -1728,115 +1717,158 @@ function RecommendationFormContent() {
                   </thead>
                   <tbody>
                     {filteredRecommendations.length > 0 ? (
-                      filteredRecommendations.map((item, idx) => (
-                        <tr key={item.id ? `${item.id}-${idx}` : `rec-${item.caseNo}-${idx}`} className="letter-table-row">
-                          <td className="font-semibold" style={{ color: "#1e1b4b" }}>
-                            <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-                              <span style={{ fontWeight: 700 }}>{item.caseNo}</span>
-                              {item.letterNo && item.letterNo !== item.caseNo && (
-                                <span style={{ fontSize: "11px", color: "#64748b" }}>Letter: {item.letterNo}</span>
-                              )}
-                            </div>
-                          </td>
-                          <td>
-                            <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-                              <span style={{ fontWeight: 600, color: "#1e293b", display: "flex", alignItems: "center", gap: "4px" }}>
-                                <User size={13} style={{ color: "#64748b" }} />
-                                {item.accusedName || item.officerName || "—"}
-                              </span>
-                              {(item.schoolName || item.accusedDesignation) && (
-                                <span style={{ fontSize: "11px", color: "#64748b", display: "flex", alignItems: "center", gap: "4px" }}>
-                                  <Building size={11} style={{ color: "#94a3b8" }} />
-                                  {[item.accusedDesignation, item.schoolName].filter(Boolean).join(" • ")}
+                      filteredRecommendations.map((item, idx) => {
+                        const isAwaiting = item.status === "Awaiting Recommendation" || !item.recommendationText;
+                        const isDraft = item.status === "Draft";
+                        const isApproved = item.status === "Approved";
+                        const isSubmitted = item.status === "Submitted" || item.status === "Implementation of Recommendations";
+
+                        return (
+                          <tr key={item.id ? `${item.id}-${idx}` : `rec-${item.caseNo}-${idx}`} className="letter-table-row">
+                            <td className="font-semibold" style={{ color: "#1e1b4b" }}>
+                              <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                                <span style={{ fontWeight: 700 }}>{item.caseNo}</span>
+                                {item.letterNo && item.letterNo !== item.caseNo && (
+                                  <span style={{ fontSize: "11px", color: "#64748b" }}>Letter: {item.letterNo}</span>
+                                )}
+                              </div>
+                            </td>
+                            <td>
+                              <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                                <span style={{ fontWeight: 600, color: "#1e293b", display: "flex", alignItems: "center", gap: "4px" }}>
+                                  <User size={13} style={{ color: "#64748b" }} />
+                                  {item.accusedName || item.officerName || "—"}
+                                </span>
+                                {(item.schoolName || item.accusedDesignation) && (
+                                  <span style={{ fontSize: "11px", color: "#64748b", display: "flex", alignItems: "center", gap: "4px" }}>
+                                    <Building size={11} style={{ color: "#94a3b8" }} />
+                                    {[item.accusedDesignation, item.schoolName].filter(Boolean).join(" • ")}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td>
+                              <div style={{ display: "flex", flexDirection: "column", gap: "4px", maxWidth: "260px" }}>
+                                {isAwaiting ? (
+                                  <>
+                                    <span style={{ fontSize: "11px", fontWeight: 700, color: "#b91c1c", backgroundColor: "#fee2e2", padding: "2px 8px", borderRadius: "10px", width: "fit-content" }}>
+                                      {lang === "si" ? "නිර්දේශ අපේක්ෂිතයි" : "Awaiting Recommendation"}
+                                    </span>
+                                    <span style={{ fontSize: "12px", fontWeight: 600, color: "#334155", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={item.subject || item.title}>
+                                      {item.subject || item.title || (lang === "si" ? "මූලික විමර්ශනය අවසන් - නිර්දේශය එක් කරන්න" : "Investigation Completed - Add Recommendation")}
+                                    </span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span className="badge-category-tag" title={getCategoryLabel(item.category)}>
+                                      {getCategoryLabel(item.category)}
+                                    </span>
+                                    <span style={{ fontSize: "12px", fontWeight: 600, color: "#334155", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={item.title || item.recommendationText}>
+                                      {item.title || item.recommendationText || "Formal Recommendation"}
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                            <td>
+                              {item.urgency === "high" ? (
+                                <span className="badge-urgency-high">
+                                  🔴 {lang === "si" ? "ඉහළ" : "High"}
+                                </span>
+                              ) : item.urgency === "low" ? (
+                                <span className="badge-urgency-low">
+                                  🟢 {lang === "si" ? "අඩු" : "Low"}
+                                </span>
+                              ) : (
+                                <span className="badge-urgency-normal">
+                                  🟡 {lang === "si" ? "සාමාන්‍ය" : "Normal"}
                                 </span>
                               )}
-                            </div>
-                          </td>
-                          <td>
-                            <div style={{ display: "flex", flexDirection: "column", gap: "4px", maxWidth: "260px" }}>
-                              <span className="badge-category-tag" title={getCategoryLabel(item.category)}>
-                                {getCategoryLabel(item.category)}
-                              </span>
-                              <span style={{ fontSize: "12px", fontWeight: 600, color: "#334155", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={item.title || item.recommendationText}>
-                                {item.title || item.recommendationText || "Formal Recommendation"}
-                              </span>
-                            </div>
-                          </td>
-                          <td>
-                            {item.urgency === "high" ? (
-                              <span className="badge-urgency-high">
-                                🔴 {lang === "si" ? "ඉහළ" : "High"}
-                              </span>
-                            ) : item.urgency === "low" ? (
-                              <span className="badge-urgency-low">
-                                🟢 {lang === "si" ? "අඩු" : "Low"}
-                              </span>
-                            ) : (
-                              <span className="badge-urgency-normal">
-                                🟡 {lang === "si" ? "සාමාන්‍ය" : "Normal"}
-                              </span>
-                            )}
-                          </td>
-                          <td>
-                            {item.status === "Draft" ? (
-                              <span className="badge-status-draft-rec">
-                                📝 {lang === "si" ? "කෙටුම්පත" : "Draft"}
-                              </span>
-                            ) : item.status === "Approved" ? (
-                              <span className="badge-status-submitted-rec" style={{ backgroundColor: "#dcfce7", color: "#166534", borderColor: "#bbf7d0" }}>
-                                <CheckCircle size={12} /> {lang === "si" ? "අනුමතයි" : "Approved"}
-                              </span>
-                            ) : (
-                              <span className="badge-status-submitted-rec">
-                                <Send size={12} /> {lang === "si" ? "යොමු කරන ලදී" : "Submitted"}
-                              </span>
-                            )}
-                          </td>
-                          <td>
-                            <span style={{ fontSize: "12px", color: "#475569", fontWeight: 500 }}>
-                              {getForwardToLabel(item.forwardTo)}
-                            </span>
-                          </td>
-                          <td>
-                            <div style={{ display: "flex", flexDirection: "column", gap: "2px", fontSize: "12px", color: "#64748b" }}>
-                              {item.targetDate && (
-                                <span>Target: <strong>{item.targetDate}</strong></span>
-                              )}
-                              <span>{item.submittedAt ? item.submittedAt.slice(0, 10) : item.updatedAt ? item.updatedAt.slice(0, 10) : "—"}</span>
-                              {item.secretaryApprovalDate && (
-                                <span style={{ fontSize: "10.5px", color: "#92400e", backgroundColor: "#fef3c7", padding: "1px 6px", borderRadius: "4px", fontWeight: 600, border: "1px solid #fde68a", display: "inline-flex", alignItems: "center", gap: "3px", width: "fit-content", marginTop: "2px" }} title={`Secretary Approved: ${item.secretaryApprovedRecommendation || item.secretaryApprovalDate}`}>
-                                  ✓ Sec: {item.secretaryApprovalDate}
+                            </td>
+                            <td>
+                              {isAwaiting ? (
+                                <span style={{ fontSize: "11px", fontWeight: 700, color: "#b91c1c", backgroundColor: "#fee2e2", padding: "3px 10px", borderRadius: "12px", border: "1px solid #fecaca", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                  ⚡ {lang === "si" ? "අපේක්ෂිතයි" : "Action Required"}
+                                </span>
+                              ) : isDraft ? (
+                                <span className="badge-status-draft-rec">
+                                  📝 {lang === "si" ? "කෙටුම්පත" : "Draft"}
+                                </span>
+                              ) : isApproved ? (
+                                <span className="badge-status-submitted-rec" style={{ backgroundColor: "#dcfce7", color: "#166534", borderColor: "#bbf7d0" }}>
+                                  <CheckCircle size={12} /> {lang === "si" ? "අනුමතයි" : "Approved"}
+                                </span>
+                              ) : (
+                                <span className="badge-status-submitted-rec">
+                                  <Send size={12} /> {lang === "si" ? "යොමු කළා" : "Submitted"}
                                 </span>
                               )}
-                            </div>
-                          </td>
-                          <td className="text-center actions-cell">
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setCaseNo(item.caseNo);
-                                  fetchCaseDetails(item.caseNo);
-                                  setViewMode("form");
-                                }}
-                                className="add-details-link"
-                                style={{ padding: "4px 12px", fontSize: "11px", cursor: "pointer", border: "none" }}
-                                title="Open full recommendation form"
-                              >
-                                {item.status === "Draft" ? (lang === "si" ? "කෙටුම්පත සංස්කරණය" : "Edit Draft") : (lang === "si" ? "බලන්න / සංස්කරණය" : "View / Edit")}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setSelectedRecModal(item)}
-                                className="btn-quick-view"
-                                title="Quick Preview"
-                              >
-                                <Eye size={13} />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
+                            </td>
+                            <td>
+                              <span style={{ fontSize: "12px", color: "#475569", fontWeight: 500 }}>
+                                {getForwardToLabel(item.forwardTo)}
+                              </span>
+                            </td>
+                            <td>
+                              <div style={{ display: "flex", flexDirection: "column", gap: "2px", fontSize: "12px", color: "#64748b" }}>
+                                {item.targetDate && (
+                                  <span>Target: <strong>{item.targetDate}</strong></span>
+                                )}
+                                <span>{item.submittedAt ? item.submittedAt.slice(0, 10) : item.updatedAt ? item.updatedAt.slice(0, 10) : item.initialCompletedDate || "—"}</span>
+                                {item.secretaryApprovalDate && (
+                                  <span style={{ fontSize: "10.5px", color: "#92400e", backgroundColor: "#fef3c7", padding: "1px 6px", borderRadius: "4px", fontWeight: 600, border: "1px solid #fde68a", display: "inline-flex", alignItems: "center", gap: "3px", width: "fit-content", marginTop: "2px" }} title={`Secretary Approved: ${item.secretaryApprovedRecommendation || item.secretaryApprovalDate}`}>
+                                    ✓ Sec: {item.secretaryApprovalDate}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="text-center actions-cell">
+                              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+                                {isAwaiting ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setCaseNo(item.caseNo);
+                                      fetchCaseDetails(item.caseNo);
+                                      setViewMode("form");
+                                    }}
+                                    className="btn-submit-recommendation"
+                                    style={{ padding: "5px 12px", fontSize: "11.5px", cursor: "pointer", border: "none", display: "inline-flex", alignItems: "center", gap: "4px", borderRadius: "6px" }}
+                                    title="Add Recommendation"
+                                  >
+                                    <Plus size={12} />
+                                    <span>{lang === "si" ? "නිර්දේශය එක් කරන්න" : "+ Add Rec"}</span>
+                                  </button>
+                                ) : (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setCaseNo(item.caseNo);
+                                        fetchCaseDetails(item.caseNo);
+                                        setViewMode("form");
+                                      }}
+                                      className="add-details-link"
+                                      style={{ padding: "4px 12px", fontSize: "11px", cursor: "pointer", border: "none" }}
+                                      title="Open full recommendation form"
+                                    >
+                                      {isDraft ? (lang === "si" ? "කෙටුම්පත සංස්කරණය" : "Edit Draft") : (lang === "si" ? "බලන්න / සංස්කරණය" : "View / Edit")}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedRecModal(item)}
+                                      className="btn-quick-view"
+                                      title="Quick Preview"
+                                    >
+                                      <Eye size={13} />
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
                     ) : (
                       <tr>
                         <td colSpan={8} className="text-center py-5 text-muted" style={{ padding: "40px 20px" }}>
@@ -1844,8 +1876,8 @@ function RecommendationFormContent() {
                             <Sparkles size={44} style={{ color: "#cbd5e1" }} />
                             <span style={{ fontSize: "15px", fontWeight: 600, color: "#64748b" }}>
                               {recSearchQuery || recCategoryFilter !== "all" || recUrgencyFilter !== "all" || recStatusFilter !== "all"
-                                ? (lang === "si" ? "සෙවීමට ගැළපෙන විමර්ශන නිර්දේශ හමු නොවිණි" : "No recommendations found matching search criteria")
-                                : (lang === "si" ? "තවම විමර්ශන නිර්දේශ ඉදිරිපත් කර නොමැත" : "No investigation recommendations registered yet")}
+                                ? (lang === "si" ? "සෙවීමට ගැළපෙන විමර්ශන නිර්දේශ හමු නොවිණි" : "No cases or recommendations found matching search criteria")
+                                : (lang === "si" ? "තවම විමර්ශන නිර්දේශ ඉදිරිපත් කර නොමැත" : "No cases or investigation recommendations registered yet")}
                             </span>
                             <button
                               type="button"
