@@ -369,7 +369,6 @@
   "excelAuditHistoryDesc": "Immutable audit records of all Excel export password modifications and reset operations.",
   "eventTimestamp": "Event Timestamp",
   "adminUser": "Admin User",
-  "action": "Action",
   "auditDetails": "Audit Details",
   "noEventsRecorded": "No password change events recorded yet.",
   "excelPasswordUpdated": "Excel export protection password updated successfully!",
