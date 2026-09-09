@@ -1445,18 +1445,49 @@ function SubjectOfficerDashboardContent() {
   const [committeeOfficers, setCommitteeOfficers] = useState<Array<{ id: string; fullName: string; email?: string; position?: string }>>([]);
 
   useEffect(() => {
-    getCommitteeOfficersWithSchoolsServer().then((res) => {
-      if (res && res.success && Array.isArray(res.data)) {
-        setCommitteeOfficers(
-          res.data.map((o: any) => ({
-            id: o.id,
-            fullName: o.full_name || o.fullName || "",
-            email: o.email || "",
-            position: o.position || o.officer_role || "Member",
-          }))
-        );
+    getCommitteeOfficersWithSchoolsServer().then(async (res) => {
+      let list: any[] = [];
+      if (res && res.success && Array.isArray(res.data) && res.data.length > 0) {
+        list = res.data.map((o: any) => ({
+          id: o.id,
+          fullName: o.full_name || o.fullName || "",
+          email: o.email || "",
+          position: o.position || o.officer_role || "Member",
+        }));
       }
-    }).catch(() => {});
+      if (list.length === 0 && isSupabaseConfigured) {
+        try {
+          const { data: dbComm } = await supabase.from("commitee_table").select("*");
+          if (dbComm && dbComm.length > 0) {
+            list = dbComm.map((o: any) => ({
+              id: o.id,
+              fullName: o.full_name || o.fullName || "",
+              email: o.email || "",
+              position: o.position || o.officer_role || "Member",
+            }));
+          }
+        } catch (e) {}
+      }
+      if (list.length > 0) {
+        setCommitteeOfficers(list);
+      }
+    }).catch(async () => {
+      if (isSupabaseConfigured) {
+        try {
+          const { data: dbComm } = await supabase.from("commitee_table").select("*");
+          if (dbComm && dbComm.length > 0) {
+            setCommitteeOfficers(
+              dbComm.map((o: any) => ({
+                id: o.id,
+                fullName: o.full_name || o.fullName || "",
+                email: o.email || "",
+                position: o.position || o.officer_role || "Member",
+              }))
+            );
+          }
+        } catch (e) {}
+      }
+    });
   }, []);
 
   // Proper Disciplinary Inspection state
@@ -2903,9 +2934,26 @@ function SubjectOfficerDashboardContent() {
     // Asynchronously fetch Chairman & Members directly from chairment_by_case and members_by_case tables
     const caseRef = item.caseNo || item.refNo || "";
     if (caseRef) {
-      getChairmanByCaseServer(caseRef).then((chairRes) => {
-        if (chairRes && chairRes.success && chairRes.data) {
-          const chair = chairRes.data;
+      getChairmanByCaseServer(caseRef).then(async (chairRes) => {
+        let chair = chairRes && chairRes.success && chairRes.data ? chairRes.data : null;
+        if (!chair && isSupabaseConfigured) {
+          try {
+            const { data: supaChair } = await supabase
+              .from("chairment_by_case")
+              .select("*")
+              .ilike("ref_number", caseRef.trim())
+              .maybeSingle();
+            if (supaChair) {
+              chair = {
+                full_name: supaChair.full_name,
+                email: supaChair.email,
+                position: supaChair.position,
+              };
+            }
+          } catch (e) {}
+        }
+
+        if (chair) {
           setConductInquiryForm((prev) => {
             if (prev.caseNo === item.caseNo || prev.refNo === item.caseNo) {
               return {
@@ -2920,24 +2968,42 @@ function SubjectOfficerDashboardContent() {
         }
       }).catch(() => {});
 
-      getMembersByCaseServer(caseRef).then((memRes) => {
+      getMembersByCaseServer(caseRef).then(async (memRes) => {
+        let memList: any[] = [];
         if (memRes && memRes.success && Array.isArray(memRes.data) && memRes.data.length > 0) {
-          const memList = memRes.data.map((m: any) => ({
+          memList = memRes.data.map((m: any) => ({
             name: m.full_name || "",
             email: m.email || "",
             idNo: m.email || m.position || "",
           })).filter((m: any) => m.name.trim() !== "");
-          if (memList.length > 0) {
-            setConductInquiryForm((prev) => {
-              if (prev.caseNo === item.caseNo || prev.refNo === item.caseNo) {
-                return {
-                  ...prev,
-                  members: memList,
-                };
-              }
-              return prev;
-            });
-          }
+        }
+
+        if (memList.length === 0 && isSupabaseConfigured) {
+          try {
+            const { data: supaMems } = await supabase
+              .from("members_by_case")
+              .select("*")
+              .ilike("ref_number", caseRef.trim());
+            if (supaMems && supaMems.length > 0) {
+              memList = supaMems.map((m: any) => ({
+                name: m.full_name || m.fullName || "",
+                email: m.email || "",
+                idNo: m.email || m.position || "",
+              })).filter((m: any) => m.name.trim() !== "");
+            }
+          } catch (e) {}
+        }
+
+        if (memList.length > 0) {
+          setConductInquiryForm((prev) => {
+            if (prev.caseNo === item.caseNo || prev.refNo === item.caseNo) {
+              return {
+                ...prev,
+                members: memList,
+              };
+            }
+            return prev;
+          });
         }
       }).catch(() => {});
     }
@@ -3096,6 +3162,47 @@ function SubjectOfficerDashboardContent() {
             }, { onConflict: "ref_number" });
           } else {
             await supabase.from("chairment_by_case").delete().eq("ref_number", caseNo.trim());
+          }
+        } catch (e) {}
+
+        // 4.2. Save Committee Members to Supabase members_by_case Table
+        try {
+          await supabase.from("members_by_case").delete().eq("ref_number", caseNo.trim());
+          if (validMembers.length > 0) {
+            const memberRowsToInsert = [];
+            for (const m of validMembers) {
+              const fName = (m.fullName || m.name || "").trim();
+              if (!fName) continue;
+              let validEmail = m.email ? m.email.trim() : null;
+              if (validEmail) {
+                const { data: commData } = await supabase
+                  .from("commitee_table")
+                  .select("email")
+                  .ilike("email", validEmail)
+                  .maybeSingle();
+                if (commData?.email) validEmail = commData.email;
+              } else if (fName) {
+                const { data: commByName } = await supabase
+                  .from("commitee_table")
+                  .select("email")
+                  .ilike("full_name", fName)
+                  .maybeSingle();
+                if (commByName?.email) validEmail = commByName.email;
+              }
+
+              memberRowsToInsert.push({
+                ref_number: caseNo.trim(),
+                full_name: fName,
+                position: "Member",
+                email: validEmail,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              });
+            }
+
+            if (memberRowsToInsert.length > 0) {
+              await supabase.from("members_by_case").insert(memberRowsToInsert);
+            }
           }
         } catch (e) {}
 
@@ -6413,7 +6520,7 @@ function SubjectOfficerDashboardContent() {
                     <div key={mIdx} className="conduct-inquiry-member-row">
                       <div style={{ flex: 1 }}>
                         <label className="conduct-inquiry-label" style={{ fontSize: "11px", marginBottom: "4px" }}>
-                          {t("memberName", "Member Name")} :
+                          {t("memberName", "Member Name")} #{mIdx + 1} :
                         </label>
                         <input
                           type="text"

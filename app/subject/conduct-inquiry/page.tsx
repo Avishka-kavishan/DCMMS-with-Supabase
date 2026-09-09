@@ -191,18 +191,49 @@ function ConductInquiryContent() {
   const [committeeOfficers, setCommitteeOfficers] = useState<Array<{ id: string; fullName: string; email?: string; position?: string }>>([]);
 
   useEffect(() => {
-    getCommitteeOfficersWithSchoolsServer().then((res) => {
-      if (res && res.success && Array.isArray(res.data)) {
-        setCommitteeOfficers(
-          res.data.map((o: any) => ({
-            id: o.id,
-            fullName: o.full_name || o.fullName || "",
-            email: o.email || "",
-            position: o.position || o.officer_role || "Member",
-          }))
-        );
+    getCommitteeOfficersWithSchoolsServer().then(async (res) => {
+      let list: any[] = [];
+      if (res && res.success && Array.isArray(res.data) && res.data.length > 0) {
+        list = res.data.map((o: any) => ({
+          id: o.id,
+          fullName: o.full_name || o.fullName || "",
+          email: o.email || "",
+          position: o.position || o.officer_role || "Member",
+        }));
       }
-    }).catch(() => {});
+      if (list.length === 0 && isSupabaseConfigured) {
+        try {
+          const { data: dbComm } = await supabase.from("commitee_table").select("*");
+          if (dbComm && dbComm.length > 0) {
+            list = dbComm.map((o: any) => ({
+              id: o.id,
+              fullName: o.full_name || o.fullName || "",
+              email: o.email || "",
+              position: o.position || o.officer_role || "Member",
+            }));
+          }
+        } catch (e) {}
+      }
+      if (list.length > 0) {
+        setCommitteeOfficers(list);
+      }
+    }).catch(async () => {
+      if (isSupabaseConfigured) {
+        try {
+          const { data: dbComm } = await supabase.from("commitee_table").select("*");
+          if (dbComm && dbComm.length > 0) {
+            setCommitteeOfficers(
+              dbComm.map((o: any) => ({
+                id: o.id,
+                fullName: o.full_name || o.fullName || "",
+                email: o.email || "",
+                position: o.position || o.officer_role || "Member",
+              }))
+            );
+          }
+        } catch (e) {}
+      }
+    });
   }, []);
 
   // Load User Profile
@@ -365,6 +396,13 @@ function ConductInquiryContent() {
     const committee = asgn ? parseCommitteeDetails(asgn) : { chairmanName: "", chairmanEmail: "", memberList: [] };
 
     let membersList = committee.memberList;
+    if (membersList.length === 0 && foundCase?.members && Array.isArray(foundCase.members) && foundCase.members.length > 0) {
+      membersList = foundCase.members.map((m: any) => ({
+        name: m.name || m.fullName || m.full_name || "",
+        email: m.email || "",
+        idNo: m.email || m.position || "",
+      })).filter((m: any) => m.name.trim() !== "");
+    }
     if (membersList.length === 0) {
       membersList = [{ name: "", email: "", idNo: "" }];
     }
@@ -378,9 +416,9 @@ function ConductInquiryContent() {
       subject: foundCase?.subject && foundCase.subject !== "—" ? foundCase.subject : `Inquiry Case ${cleanCaseNo}`,
       stage: foundCase?.stage || "Conducting an Inquiry",
       priority: foundCase?.priority || "medium",
-      chairmanName: committee.chairmanName || "",
-      chairmanEmail: committee.chairmanEmail || "",
-      chairmanId: committee.chairmanEmail || "",
+      chairmanName: committee.chairmanName || (foundCase?.chairman?.name || foundCase?.chairman?.fullName || ""),
+      chairmanEmail: committee.chairmanEmail || (foundCase?.chairman?.email || ""),
+      chairmanId: committee.chairmanEmail || (foundCase?.chairman?.email || ""),
       members: membersList,
       appointmentLetterDate: formatToInputDate(asgn?.appointmentDate || asgn?.appointment_date),
       reportDueDate: formatToInputDate(asgn?.reportDueDate || asgn?.report_due_date),
@@ -395,6 +433,8 @@ function ConductInquiryContent() {
       const res = await getConductInquiryCaseDetailsServer(cleanCaseNo);
       if (res && res.success && res.data) {
         const d = res.data;
+        const validFetchedMembers = (d.members && Array.isArray(d.members) && d.members.length > 0 && d.members[0].name) ? d.members : null;
+
         setFormState((prev) => ({
           ...prev,
           caseNo: cleanCaseNo,
@@ -405,7 +445,7 @@ function ConductInquiryContent() {
           chairmanName: d.chairmanName || prev.chairmanName,
           chairmanEmail: d.chairmanEmail || d.chairmanId || prev.chairmanEmail,
           chairmanId: d.chairmanEmail || d.chairmanId || prev.chairmanId,
-          members: (d.members && d.members.length > 0 && d.members[0].name) ? d.members : prev.members,
+          members: validFetchedMembers || prev.members,
           appointmentLetterDate: formatToInputDate(d.appointmentLetterDate) || prev.appointmentLetterDate,
           reportDueDate: formatToInputDate(d.reportDueDate) || prev.reportDueDate,
           extensionTerm: d.extensionTerm && d.extensionTerm !== "None" ? d.extensionTerm : prev.extensionTerm,
@@ -413,6 +453,31 @@ function ConductInquiryContent() {
           extensionEndDate: formatToInputDate(d.extensionEndDate) || prev.extensionEndDate,
           recommendation: d.recommendation || prev.recommendation,
         }));
+
+        // Supabase Fallback for members if server returned empty
+        if (!validFetchedMembers && isSupabaseConfigured) {
+          try {
+            const { data: supaMems } = await supabase
+              .from("members_by_case")
+              .select("*")
+              .ilike("ref_number", cleanCaseNo);
+            if (supaMems && supaMems.length > 0) {
+              const mapped = supaMems.map((m: any) => ({
+                name: m.full_name || m.fullName || "",
+                email: m.email || "",
+                idNo: m.email || m.position || "",
+              })).filter((m: any) => m.name.trim() !== "");
+              if (mapped.length > 0) {
+                setFormState((prev) => {
+                  if (prev.caseNo.toLowerCase() === cleanCaseNo.toLowerCase()) {
+                    return { ...prev, members: mapped };
+                  }
+                  return prev;
+                });
+              }
+            }
+          } catch (e) {}
+        }
 
         // Also update availableCases state so dropdown options show updated officer names
         setAvailableCases((prevList) =>
@@ -592,6 +657,47 @@ function ConductInquiryContent() {
             }, { onConflict: "ref_number" });
           } else {
             await supabase.from("chairment_by_case").delete().eq("ref_number", caseNo.trim());
+          }
+        } catch (e) {}
+
+        // 3.2. Save Committee Members to Supabase members_by_case Table
+        try {
+          await supabase.from("members_by_case").delete().eq("ref_number", caseNo.trim());
+          if (validMembers.length > 0) {
+            const memberRowsToInsert = [];
+            for (const m of validMembers) {
+              const fName = (m.fullName || m.name || "").trim();
+              if (!fName) continue;
+              let validEmail = m.email ? m.email.trim() : null;
+              if (validEmail) {
+                const { data: commData } = await supabase
+                  .from("commitee_table")
+                  .select("email")
+                  .ilike("email", validEmail)
+                  .maybeSingle();
+                if (commData?.email) validEmail = commData.email;
+              } else if (fName) {
+                const { data: commByName } = await supabase
+                  .from("commitee_table")
+                  .select("email")
+                  .ilike("full_name", fName)
+                  .maybeSingle();
+                if (commByName?.email) validEmail = commByName.email;
+              }
+
+              memberRowsToInsert.push({
+                ref_number: caseNo.trim(),
+                full_name: fName,
+                position: "Member",
+                email: validEmail,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              });
+            }
+
+            if (memberRowsToInsert.length > 0) {
+              await supabase.from("members_by_case").insert(memberRowsToInsert);
+            }
           }
         } catch (e) {}
 
@@ -1046,7 +1152,7 @@ function ConductInquiryContent() {
                           type="email"
                           className="ci-input"
                           placeholder={lang === "si" ? "සාමාජික විද්‍යුත් තැපෑල (member@moe.gov.lk)" : lang === "ta" ? "உறுப்பினர் மின்னஞ்சல் (member@moe.gov.lk)" : "Enter Member's email (e.g. member@moe.gov.lk)"}
-                          value={member.email}
+                          value={member.email || member.idNo || ""}
                           onChange={(e) => {
                             const updated = [...formState.members];
                             updated[mIdx].email = e.target.value;

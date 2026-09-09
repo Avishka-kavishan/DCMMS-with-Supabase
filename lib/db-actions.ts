@@ -2723,7 +2723,7 @@ export async function saveMembersByCaseServer(
     const cleanRefNo = resolved.clean;
     const actualSubNo = resolved.subjectFileNo;
     const refNum = resolved.refNumber;
-    const targetRef = actualSubNo || cleanRefNo || refNum;
+    const targetRef = actualSubNo || cleanRefNo || refNum || refNumber.trim();
     const now = new Date();
 
     try {
@@ -2747,7 +2747,8 @@ export async function saveMembersByCaseServer(
       WHERE LOWER(ref_number) = LOWER(${cleanRefNo})
          OR LOWER(ref_number) = LOWER(${actualSubNo})
          OR LOWER(ref_number) = LOWER(${refNum})
-         OR LOWER(ref_number) = LOWER(${targetRef});
+         OR LOWER(ref_number) = LOWER(${targetRef})
+         OR LOWER(ref_number) = LOWER(${refNumber.trim()});
     `;
 
     if (!members || !Array.isArray(members) || members.length === 0) {
@@ -2825,6 +2826,7 @@ export async function getMembersByCaseServer(refNumber: string) {
       WHERE LOWER(ref_number) = LOWER(${cleanRefNo})
          OR LOWER(ref_number) = LOWER(${actualSubNo})
          OR LOWER(ref_number) = LOWER(${refNum})
+         OR LOWER(ref_number) = LOWER(${refNumber.trim()})
       ORDER BY id ASC;
     `;
 
@@ -5755,6 +5757,45 @@ export async function getAvailableConductInquiryCasesServer() {
         });
       }
     } catch (e) {}
+
+    // 3. Attach Chairman and Members from chairment_by_case and members_by_case
+    for (const c of list) {
+      try {
+        const chairRows: any[] = await prisma.$queryRaw`
+          SELECT full_name, position, email FROM chairment_by_case
+          WHERE LOWER(ref_number) = LOWER(${c.caseNo})
+             OR LOWER(ref_number) = LOWER(${c.letterNo || ""})
+          LIMIT 1;
+        `;
+        if (chairRows && chairRows.length > 0 && chairRows[0].full_name) {
+          c.chairman = {
+            name: chairRows[0].full_name,
+            fullName: chairRows[0].full_name,
+            email: chairRows[0].email || "",
+            position: chairRows[0].position || "Chairman",
+          };
+        }
+      } catch (e) {}
+
+      try {
+        const memberRows: any[] = await prisma.$queryRaw`
+          SELECT full_name, position, email FROM members_by_case
+          WHERE LOWER(ref_number) = LOWER(${c.caseNo})
+             OR LOWER(ref_number) = LOWER(${c.letterNo || ""})
+          ORDER BY id ASC;
+        `;
+        if (memberRows && memberRows.length > 0) {
+          c.members = memberRows
+            .map((m) => ({
+              name: m.full_name || "",
+              fullName: m.full_name || "",
+              email: m.email || "",
+              position: m.position || "Member",
+            }))
+            .filter((m) => m.name.trim() !== "");
+        }
+      } catch (e) {}
+    }
 
     return serializeForServerAction({ success: true, data: list });
   } catch (error: any) {
