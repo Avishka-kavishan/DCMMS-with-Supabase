@@ -15,9 +15,11 @@ import { getCurrentProfile, signOut, UserProfile } from "@/lib/auth";
 import { 
   updateCaseByDateExtensionApprovalServer, 
   saveCaseByAppointmentAndReportDueDateServer, 
+  saveCaseByDateExtensionServer,
+  getCaseByDateExtensionServer,
   getRecommendationsListServer, 
   saveChairmanByCaseServer, 
-  getChairmanByCaseServer,
+  getChairmanByCaseServer, 
   saveMembersByCaseServer, 
   getMembersByCaseServer,
   getCommitteeOfficersWithSchoolsServer 
@@ -3006,6 +3008,48 @@ function SubjectOfficerDashboardContent() {
           });
         }
       }).catch(() => {});
+
+      // Asynchronously fetch Date Extension from case_by_date_extention table
+      getCaseByDateExtensionServer(caseRef).then(async (extRes) => {
+        let ext = extRes && extRes.success && extRes.data ? extRes.data : null;
+        if (!ext && isSupabaseConfigured) {
+          try {
+            const { data: supaExt } = await supabase
+              .from("case_by_date_extention")
+              .select("*")
+              .or(`subject_file_no.ilike.${caseRef.trim()},sub_file_no.ilike.${caseRef.trim()}`)
+              .order("created_at", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            if (supaExt) {
+              ext = supaExt;
+            }
+          } catch (e) {}
+        }
+
+        if (ext) {
+          let term = ext.extention_term || ext.extension_term || "None";
+          if (term.includes("1") || term.toLowerCase().includes("first")) term = "1st Extension";
+          else if (term.includes("2") || term.toLowerCase().includes("second")) term = "2nd Extension";
+          else if (term.includes("3") || term.toLowerCase().includes("third")) term = "3rd Extension";
+          else if (term.includes("4") || term.toLowerCase().includes("fourth")) term = "4th Extension";
+
+          const sDate = formatToInputDate(ext.start_date || ext.startDate);
+          const eDate = formatToInputDate(ext.end_date || ext.endDate);
+
+          setConductInquiryForm((prev) => {
+            if (prev.caseNo === item.caseNo || prev.refNo === item.caseNo) {
+              return {
+                ...prev,
+                extensionTerm: term,
+                extensionStartDate: sDate || prev.extensionStartDate,
+                extensionEndDate: eDate || prev.extensionEndDate,
+              };
+            }
+            return prev;
+          });
+        }
+      }).catch(() => {});
     }
   };
 
@@ -3140,6 +3184,28 @@ function SubjectOfficerDashboardContent() {
         );
       } catch (e) {}
 
+      try {
+        if (extTerm && extTerm !== "None" && (extStart || extEnd)) {
+          await saveCaseByDateExtensionServer({
+            subject_file_no: caseNo,
+            sub_file_no: caseNo,
+            extention_term: extTerm,
+            start_date: extStart,
+            end_date: extEnd,
+            approval_status: "Pending",
+          });
+        } else if (extTerm === "None" && !extStart && !extEnd) {
+          await saveCaseByDateExtensionServer({
+            subject_file_no: caseNo,
+            sub_file_no: caseNo,
+            extention_term: "None",
+            start_date: null,
+            end_date: null,
+            approval_status: "None",
+          });
+        }
+      } catch (e) {}
+
       // 4. Supabase table upsert
       if (isSupabaseConfigured) {
         try {
@@ -3203,6 +3269,55 @@ function SubjectOfficerDashboardContent() {
             if (memberRowsToInsert.length > 0) {
               await supabase.from("members_by_case").insert(memberRowsToInsert);
             }
+          }
+        } catch (e) {}
+
+        // 4.3. Save Date Extension to Supabase case_by_date_extention Table
+        try {
+          if (extTerm && extTerm !== "None" && (extStart || extEnd)) {
+            const { data: existingExt } = await supabase
+              .from("case_by_date_extention")
+              .select("id")
+              .or(`subject_file_no.ilike.${caseNo.trim()},sub_file_no.ilike.${caseNo.trim()}`)
+              .limit(1)
+              .maybeSingle();
+
+            const extPayload: any = {
+              subject_file_no: caseNo.trim(),
+              sub_file_no: caseNo.trim(),
+              extention_term: extTerm,
+              start_date: extStart,
+              end_date: extEnd,
+              approval_status: "Pending",
+              updated_at: new Date().toISOString(),
+            };
+
+            if (existingExt && existingExt.id) {
+              await supabase
+                .from("case_by_date_extention")
+                .update(extPayload)
+                .eq("id", existingExt.id);
+            } else {
+              extPayload.created_at = new Date().toISOString();
+              const { error: insErr } = await supabase
+                .from("case_by_date_extention")
+                .insert(extPayload);
+              if (insErr) {
+                await supabase.from("case_by_date_extention").insert({
+                  subject_file_no: caseNo.trim(),
+                  extention_term: extTerm,
+                  start_date: extStart,
+                  end_date: extEnd,
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                });
+              }
+            }
+          } else if (extTerm === "None" && !extStart && !extEnd) {
+            await supabase
+              .from("case_by_date_extention")
+              .delete()
+              .or(`subject_file_no.ilike.${caseNo.trim()},sub_file_no.ilike.${caseNo.trim()}`);
           }
         } catch (e) {}
 

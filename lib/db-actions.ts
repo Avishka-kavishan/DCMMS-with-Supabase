@@ -2903,7 +2903,10 @@ export async function saveCaseByDateExtensionServer(payload: {
     }
 
     const resolved = await resolveSubjectFileDetails(payload.subject_file_no);
+    const cleanRef = resolved.clean;
     const actualSubNo = resolved.subjectFileNo;
+    const refNum = resolved.refNumber;
+    const formId = resolved.formId;
     const term = payload.extention_term || "First Extension (1st)";
     const start = payload.start_date ? new Date(payload.start_date) : null;
     const end = payload.end_date ? new Date(payload.end_date) : null;
@@ -2926,31 +2929,99 @@ export async function saveCaseByDateExtensionServer(payload: {
           updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         );
       `);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_date_extention ADD COLUMN IF NOT EXISTS sub_file_no VARCHAR(100);`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_date_extention ADD COLUMN IF NOT EXISTS subject_officer_form_id BIGINT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_date_extention ADD COLUMN IF NOT EXISTS approval_status VARCHAR(50) DEFAULT 'Pending';`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_date_extention ADD COLUMN IF NOT EXISTS decision_date DATE;`);
     } catch (e) {}
 
-    await prisma.$executeRaw`
-      INSERT INTO public.case_by_date_extention (
-        subject_file_no,
-        sub_file_no,
-        subject_officer_form_id,
-        extention_term,
-        start_date,
-        end_date,
-        approval_status,
-        created_at,
-        updated_at
-      ) VALUES (
-        ${actualSubNo},
-        ${actualSubNo},
-        ${resolved.formId ? Number(resolved.formId) : null}::bigint,
-        ${term},
-        ${start},
-        ${end},
-        ${status},
-        ${now},
-        ${now}
-      );
+    // If extension term is None or empty and no dates, delete any existing record
+    if ((!payload.extention_term || payload.extention_term === "None" || payload.extention_term === "none") && !start && !end) {
+      if (formId) {
+        await prisma.$executeRaw`
+          DELETE FROM public.case_by_date_extention
+          WHERE LOWER(subject_file_no) = LOWER(${cleanRef})
+             OR LOWER(subject_file_no) = LOWER(${actualSubNo})
+             OR LOWER(subject_file_no) = LOWER(${refNum})
+             OR LOWER(sub_file_no) = LOWER(${cleanRef})
+             OR LOWER(sub_file_no) = LOWER(${actualSubNo})
+             OR LOWER(sub_file_no) = LOWER(${refNum})
+             OR subject_officer_form_id = ${Number(formId)}::bigint;
+        `;
+      } else {
+        await prisma.$executeRaw`
+          DELETE FROM public.case_by_date_extention
+          WHERE LOWER(subject_file_no) = LOWER(${cleanRef})
+             OR LOWER(subject_file_no) = LOWER(${actualSubNo})
+             OR LOWER(subject_file_no) = LOWER(${refNum})
+             OR LOWER(sub_file_no) = LOWER(${cleanRef})
+             OR LOWER(sub_file_no) = LOWER(${actualSubNo})
+             OR LOWER(sub_file_no) = LOWER(${refNum});
+        `;
+      }
+      return serializeForServerAction({ success: true, message: "Date extension cleared from PostgreSQL" });
+    }
+
+    const existing: any[] = formId ? await prisma.$queryRaw`
+      SELECT id FROM public.case_by_date_extention
+      WHERE LOWER(subject_file_no) = LOWER(${cleanRef})
+         OR LOWER(subject_file_no) = LOWER(${actualSubNo})
+         OR LOWER(subject_file_no) = LOWER(${refNum})
+         OR LOWER(sub_file_no) = LOWER(${cleanRef})
+         OR LOWER(sub_file_no) = LOWER(${actualSubNo})
+         OR LOWER(sub_file_no) = LOWER(${refNum})
+         OR subject_officer_form_id = ${Number(formId)}::bigint
+      LIMIT 1;
+    ` : await prisma.$queryRaw`
+      SELECT id FROM public.case_by_date_extention
+      WHERE LOWER(subject_file_no) = LOWER(${cleanRef})
+         OR LOWER(subject_file_no) = LOWER(${actualSubNo})
+         OR LOWER(subject_file_no) = LOWER(${refNum})
+         OR LOWER(sub_file_no) = LOWER(${cleanRef})
+         OR LOWER(sub_file_no) = LOWER(${actualSubNo})
+         OR LOWER(sub_file_no) = LOWER(${refNum})
+      LIMIT 1;
     `;
+
+    if (existing && existing.length > 0) {
+      await prisma.$executeRaw`
+        UPDATE public.case_by_date_extention
+        SET 
+          subject_file_no = ${actualSubNo},
+          sub_file_no = ${actualSubNo},
+          subject_officer_form_id = ${formId ? Number(formId) : null}::bigint,
+          extention_term = ${term},
+          start_date = ${start},
+          end_date = ${end},
+          approval_status = ${status},
+          updated_at = ${now}
+        WHERE id = ${existing[0].id};
+      `;
+    } else {
+      await prisma.$executeRaw`
+        INSERT INTO public.case_by_date_extention (
+          subject_file_no,
+          sub_file_no,
+          subject_officer_form_id,
+          extention_term,
+          start_date,
+          end_date,
+          approval_status,
+          created_at,
+          updated_at
+        ) VALUES (
+          ${actualSubNo},
+          ${actualSubNo},
+          ${formId ? Number(formId) : null}::bigint,
+          ${term},
+          ${start},
+          ${end},
+          ${status},
+          ${now},
+          ${now}
+        );
+      `;
+    }
 
     return serializeForServerAction({ success: true, message: "Date extension saved to PostgreSQL" });
   } catch (error: any) {
