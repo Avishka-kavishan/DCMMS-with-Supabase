@@ -1908,9 +1908,7 @@ export async function getAccusedOfficerByRefServer(refNumber: string) {
         sof.id as form_id,
         sof.ref_number,
         sof.subject_file_no,
-        sof.file_name,
         sof.future_action,
-        sof.description,
         sof.date_prepared_and_submitted_for_signature,
         sof.classification_of_complaint_letter,
         sof.name_of_the_presenting_the_complain,
@@ -2544,11 +2542,12 @@ export async function getSchoolSuggestionsServer() {
 }
 
 // -------------------------------------------------------------
+// -------------------------------------------------------------
 // Chairman By Case Table Operations (chairment_by_case)
 // -------------------------------------------------------------
 export async function saveChairmanByCaseServer(
   refNumber: string,
-  chairman: { fullName?: string; full_name?: string; position?: string; email?: string } | null
+  chairman: { fullName?: string; full_name?: string; name?: string; position?: string; email?: string } | null
 ) {
   try {
     if (!refNumber || !refNumber.trim()) {
@@ -2559,35 +2558,60 @@ export async function saveChairmanByCaseServer(
     const cleanRefNo = resolved.clean;
     const actualSubNo = resolved.subjectFileNo;
     const refNum = resolved.refNumber;
+    const targetRef = actualSubNo || cleanRefNo || refNum;
     const now = new Date();
 
     try {
       await prisma.$executeRawUnsafe(`ALTER TABLE public.chairment_by_case DROP CONSTRAINT IF EXISTS chairment_by_case_ref_number_fkey;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.chairment_by_case DROP CONSTRAINT IF EXISTS chairment_by_case_email_fkey;`);
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS chairment_by_case (
+          id BIGSERIAL PRIMARY KEY,
+          ref_number VARCHAR(100),
+          full_name VARCHAR(255),
+          position VARCHAR(255),
+          email VARCHAR(255),
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
     } catch (e) {}
 
     // If chairman is null/empty, clear chairman record for this case
-    if (!chairman || (!chairman.fullName && !chairman.full_name)) {
+    if (!chairman || (!chairman.fullName && !chairman.full_name && !chairman.name)) {
       await prisma.$executeRaw`
         DELETE FROM chairment_by_case 
         WHERE LOWER(ref_number) = LOWER(${cleanRefNo})
            OR LOWER(ref_number) = LOWER(${actualSubNo})
-           OR LOWER(ref_number) = LOWER(${refNum});
+           OR LOWER(ref_number) = LOWER(${refNum})
+           OR LOWER(ref_number) = LOWER(${targetRef});
       `;
       return serializeForServerAction({ success: true, message: "Chairman removed for case" });
     }
 
-    const fullName = (chairman.fullName || chairman.full_name || "").trim();
+    const fullName = (chairman.fullName || chairman.full_name || chairman.name || "").trim();
     const position = (chairman.position || "Chairman").trim();
     const rawEmail = (chairman.email || "").trim();
 
-    let validEmail = null;
+    let validEmail = rawEmail || null;
     if (rawEmail) {
-      const commCheck: any[] = await prisma.$queryRaw`
-        SELECT email FROM commitee_table WHERE LOWER(email) = LOWER(${rawEmail}) LIMIT 1;
-      `;
-      if (commCheck && commCheck.length > 0) {
-        validEmail = commCheck[0].email;
-      }
+      try {
+        const commCheck: any[] = await prisma.$queryRaw`
+          SELECT email FROM commitee_table WHERE LOWER(email) = LOWER(${rawEmail}) LIMIT 1;
+        `;
+        if (commCheck && commCheck.length > 0 && commCheck[0].email) {
+          validEmail = commCheck[0].email;
+        }
+      } catch (e) {}
+    } else if (fullName) {
+      try {
+        const commByName: any[] = await prisma.$queryRaw`
+          SELECT email FROM commitee_table WHERE LOWER(full_name) = LOWER(${fullName}) AND email IS NOT NULL LIMIT 1;
+        `;
+        if (commByName && commByName.length > 0 && commByName[0].email) {
+          validEmail = commByName[0].email;
+        }
+      } catch (e) {}
     }
 
     const existing: any[] = await prisma.$queryRaw`
@@ -2595,13 +2619,14 @@ export async function saveChairmanByCaseServer(
       WHERE LOWER(ref_number) = LOWER(${cleanRefNo})
          OR LOWER(ref_number) = LOWER(${actualSubNo})
          OR LOWER(ref_number) = LOWER(${refNum})
+         OR LOWER(ref_number) = LOWER(${targetRef})
       LIMIT 1;
     `;
 
     if (existing && existing.length > 0) {
       await prisma.$executeRaw`
         UPDATE chairment_by_case
-        SET ref_number = ${actualSubNo},
+        SET ref_number = ${targetRef},
             full_name = ${fullName},
             position = ${position},
             email = ${validEmail},
@@ -2611,13 +2636,13 @@ export async function saveChairmanByCaseServer(
     } else {
       await prisma.$executeRaw`
         INSERT INTO chairment_by_case (ref_number, full_name, position, email, created_at, updated_at)
-        VALUES (${actualSubNo}, ${fullName}, ${position}, ${validEmail}, ${now}, ${now});
+        VALUES (${targetRef}, ${fullName}, ${position}, ${validEmail}, ${now}, ${now});
       `;
     }
 
     return serializeForServerAction({
       success: true,
-      data: { ref_number: actualSubNo, full_name: fullName, position, email: validEmail },
+      data: { ref_number: targetRef, full_name: fullName, position, email: validEmail },
     });
   } catch (error: any) {
     console.error("Error saving chairman by case:", error);
@@ -2657,7 +2682,18 @@ export async function getChairmanByCaseServer(refNumber: string) {
     `;
 
     if (records && records.length > 0) {
-      return serializeForServerAction({ success: true, data: records[0] });
+      const rec = records[0];
+      if (!rec.email && rec.full_name) {
+        try {
+          const commByName: any[] = await prisma.$queryRaw`
+            SELECT email FROM commitee_table WHERE LOWER(full_name) = LOWER(${rec.full_name}) AND email IS NOT NULL LIMIT 1;
+          `;
+          if (commByName && commByName.length > 0 && commByName[0].email) {
+            rec.email = commByName[0].email;
+          }
+        } catch (e) {}
+      }
+      return serializeForServerAction({ success: true, data: rec });
     }
 
     return serializeForServerAction({ success: true, data: null });
@@ -2687,10 +2723,12 @@ export async function saveMembersByCaseServer(
     const cleanRefNo = resolved.clean;
     const actualSubNo = resolved.subjectFileNo;
     const refNum = resolved.refNumber;
+    const targetRef = actualSubNo || cleanRefNo || refNum;
     const now = new Date();
 
     try {
       await prisma.$executeRawUnsafe(`ALTER TABLE public.members_by_case DROP CONSTRAINT IF EXISTS members_by_case_ref_number_fkey;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.members_by_case DROP CONSTRAINT IF EXISTS members_by_case_email_fkey;`);
       await prisma.$executeRawUnsafe(`
         CREATE TABLE IF NOT EXISTS members_by_case (
           id BIGSERIAL PRIMARY KEY,
@@ -2708,7 +2746,8 @@ export async function saveMembersByCaseServer(
       DELETE FROM members_by_case 
       WHERE LOWER(ref_number) = LOWER(${cleanRefNo})
          OR LOWER(ref_number) = LOWER(${actualSubNo})
-         OR LOWER(ref_number) = LOWER(${refNum});
+         OR LOWER(ref_number) = LOWER(${refNum})
+         OR LOWER(ref_number) = LOWER(${targetRef});
     `;
 
     if (!members || !Array.isArray(members) || members.length === 0) {
@@ -2722,21 +2761,30 @@ export async function saveMembersByCaseServer(
       const position = (member.position || member.officerRole || "Member").trim();
       const rawEmail = (member.email || "").trim();
 
-      let validEmail = null;
+      let validEmail = rawEmail || null;
       if (rawEmail) {
         try {
           const commCheck: any[] = await prisma.$queryRaw`
             SELECT email FROM commitee_table WHERE LOWER(email) = LOWER(${rawEmail}) LIMIT 1;
           `;
-          if (commCheck && commCheck.length > 0) {
+          if (commCheck && commCheck.length > 0 && commCheck[0].email) {
             validEmail = commCheck[0].email;
+          }
+        } catch (e) {}
+      } else if (fullName) {
+        try {
+          const commByName: any[] = await prisma.$queryRaw`
+            SELECT email FROM commitee_table WHERE LOWER(full_name) = LOWER(${fullName}) AND email IS NOT NULL LIMIT 1;
+          `;
+          if (commByName && commByName.length > 0 && commByName[0].email) {
+            validEmail = commByName[0].email;
           }
         } catch (e) {}
       }
 
       await prisma.$executeRaw`
         INSERT INTO members_by_case (ref_number, full_name, position, email, created_at, updated_at)
-        VALUES (${actualSubNo}, ${fullName}, ${position}, ${validEmail}, ${now}, ${now});
+        VALUES (${targetRef}, ${fullName}, ${position}, ${validEmail}, ${now}, ${now});
       `;
     }
 
@@ -2779,6 +2827,21 @@ export async function getMembersByCaseServer(refNumber: string) {
          OR LOWER(ref_number) = LOWER(${refNum})
       ORDER BY id ASC;
     `;
+
+    if (records && records.length > 0) {
+      for (const rec of records) {
+        if (!rec.email && rec.full_name) {
+          try {
+            const commByName: any[] = await prisma.$queryRaw`
+              SELECT email FROM commitee_table WHERE LOWER(full_name) = LOWER(${rec.full_name}) AND email IS NOT NULL LIMIT 1;
+            `;
+            if (commByName && commByName.length > 0 && commByName[0].email) {
+              rec.email = commByName[0].email;
+            }
+          } catch (e) {}
+        }
+      }
+    }
 
     return serializeForServerAction({ success: true, data: records || [] });
   } catch (error: any) {
@@ -5467,6 +5530,236 @@ export async function getAllReplyLetterDetailsServer() {
   } catch (err: any) {
     console.error("Error in getAllReplyLetterDetailsServer:", err);
     return serializeForServerAction({ success: false, error: err?.message || "Failed to get all reply letter details", data: [] });
+  }
+}
+
+// -------------------------------------------------------------
+// Conduct Inquiry Dedicated Auto-Fill Actions
+// -------------------------------------------------------------
+export async function getConductInquiryCaseDetailsServer(caseNo: string) {
+  try {
+    if (!caseNo || !String(caseNo).trim()) {
+      return serializeForServerAction({ success: false, error: "Case number is required", data: null });
+    }
+    const cleanNo = String(caseNo).trim();
+
+    // 1. Accused officer & school details
+    let accusedOfficerName = "";
+    let accusedDesignation = "";
+    let accusedNic = "";
+    let schoolName = "";
+    let subjectMatter = "";
+    let futureAction = "";
+    let subFileNo = "";
+
+    try {
+      const accRes = await getAccusedOfficerByRefServer(cleanNo);
+      if (accRes && accRes.success && accRes.data) {
+        const d = accRes.data;
+        subFileNo = d.subject_file_no || "";
+        futureAction = d.future_action || "";
+        subjectMatter = d.reply_letter_details?.description || d.description || d.future_action || "";
+        
+        if (d.accused_officer) {
+          accusedOfficerName = d.accused_officer.accused_officer_name || d.accused_officer.officer_name || "";
+          accusedDesignation = d.accused_officer.position || "";
+          accusedNic = d.accused_officer.nic_no || d.accused_officer.nic || "";
+          schoolName = d.accused_officer.accused_school_name || d.accused_officer.institute_name || "";
+        }
+        if (!schoolName && d.accused_school) {
+          schoolName = d.accused_school.accused_school_name || "";
+        }
+      }
+    } catch (e) {}
+
+    // 2. Chairman details
+    let chairmanName = "";
+    let chairmanEmail = "";
+    let chairmanId = "";
+    try {
+      const chairRes = await getChairmanByCaseServer(cleanNo);
+      if (chairRes && chairRes.success && chairRes.data) {
+        chairmanName = chairRes.data.full_name || "";
+        chairmanEmail = chairRes.data.email || "";
+        chairmanId = chairRes.data.email || chairRes.data.position || "";
+      }
+    } catch (e) {}
+
+    // 3. Members details
+    let membersList: Array<{ name: string; email: string; idNo: string }> = [];
+    try {
+      const memRes = await getMembersByCaseServer(cleanNo);
+      if (memRes && memRes.success && Array.isArray(memRes.data) && memRes.data.length > 0) {
+        membersList = memRes.data.map((m: any) => ({
+          name: m.full_name || m.name || "",
+          email: m.email || "",
+          idNo: m.email || m.position || "",
+        })).filter((m: any) => m.name.trim() !== "");
+      }
+    } catch (e) {}
+
+    // 4. Appointment letter date & Report due date
+    let appointmentLetterDate = "";
+    let reportDueDate = "";
+    try {
+      const apptRes = await getCaseByAppointmentAndReportDueDateServer(cleanNo);
+      if (apptRes && apptRes.success && apptRes.data) {
+        if (apptRes.data.appointment_letter_date) {
+          appointmentLetterDate = String(apptRes.data.appointment_letter_date).slice(0, 10);
+        }
+        if (apptRes.data.report_due_date) {
+          reportDueDate = String(apptRes.data.report_due_date).slice(0, 10);
+        }
+      }
+    } catch (e) {}
+
+    // 5. Date Extension
+    let extensionTerm = "None";
+    let extensionStartDate = "";
+    let extensionEndDate = "";
+    try {
+      const extRes = await getCaseByDateExtensionServer(cleanNo);
+      if (extRes && extRes.success && extRes.data) {
+        const rawTerm = extRes.data.extention_term || "";
+        if (rawTerm.includes("1") || rawTerm.toLowerCase().includes("first")) {
+          extensionTerm = "1st Extension";
+        } else if (rawTerm.includes("2") || rawTerm.toLowerCase().includes("second")) {
+          extensionTerm = "2nd Extension";
+        } else if (rawTerm.includes("3") || rawTerm.toLowerCase().includes("third")) {
+          extensionTerm = "3rd Extension";
+        } else if (rawTerm.includes("4") || rawTerm.toLowerCase().includes("fourth")) {
+          extensionTerm = "4th Extension";
+        } else if (rawTerm) {
+          extensionTerm = rawTerm;
+        }
+
+        if (extRes.data.start_date) {
+          extensionStartDate = String(extRes.data.start_date).slice(0, 10);
+        }
+        if (extRes.data.end_date) {
+          extensionEndDate = String(extRes.data.end_date).slice(0, 10);
+        }
+      }
+    } catch (e) {}
+
+    // 6. Daily mail letter details for subject fallback
+    if (!subjectMatter) {
+      try {
+        const letters: any[] = await prisma.$queryRaw`
+          SELECT subject_of_letter, senders_party
+          FROM daily_mail_letter_table
+          WHERE LOWER(ref_number) = LOWER(${cleanNo})
+             OR LOWER(letter_number) = LOWER(${cleanNo})
+          LIMIT 1;
+        `;
+        if (letters && letters.length > 0) {
+          subjectMatter = letters[0].subject_of_letter || "";
+        }
+      } catch (e) {}
+    }
+
+    return serializeForServerAction({
+      success: true,
+      data: {
+        caseNo: cleanNo,
+        subFileNo,
+        accusedName: accusedOfficerName,
+        accusedDesignation: accusedDesignation || "Educational Officer",
+        accusedNic,
+        schoolName,
+        subject: subjectMatter || futureAction || `Disciplinary inspection inquiry regarding ${cleanNo}`,
+        stage: "Conducting an Inquiry",
+        priority: "medium",
+        chairmanName,
+        chairmanEmail: chairmanEmail || chairmanId,
+        chairmanId: chairmanEmail || chairmanId,
+        members: membersList.length > 0 ? membersList : [{ name: "", email: "", idNo: "" }],
+        appointmentLetterDate,
+        reportDueDate,
+        extensionTerm,
+        extensionStartDate,
+        extensionEndDate,
+        recommendation: futureAction ? `Observation: ${futureAction}` : "",
+      }
+    });
+  } catch (error: any) {
+    console.error("Error in getConductInquiryCaseDetailsServer:", error);
+    return serializeForServerAction({ success: false, error: error?.message, data: null });
+  }
+}
+
+export async function getAvailableConductInquiryCasesServer() {
+  try {
+    const list: any[] = [];
+    const seen = new Set<string>();
+
+    // 1. From subject_officer_form_table with accused officer & school join
+    try {
+      const forms: any[] = await prisma.$queryRaw`
+        SELECT 
+          sof.ref_number,
+          sof.subject_file_no,
+          sof.future_action,
+          ao.accused_officer_name,
+          ao.position as accused_designation,
+          sch.accused_school_name as school_name
+        FROM subject_officer_form_table sof
+        LEFT JOIN accused_officer_subject_officer_form_table j ON sof.id = j.subject_officer_form_id
+        LEFT JOIN accused_officer_table ao ON j.accused_officer_id = ao.id
+        LEFT JOIN accused_school_table sch ON ao.accused_school_id = sch.id
+        ORDER BY sof.created_at DESC;
+      `;
+      if (forms && forms.length > 0) {
+        forms.forEach((f) => {
+          const key = (f.ref_number || f.subject_file_no || "").trim();
+          if (key && !seen.has(key.toLowerCase())) {
+            seen.add(key.toLowerCase());
+            list.push({
+              caseNo: key,
+              letterNo: f.subject_file_no || key,
+              accusedName: f.accused_officer_name || "",
+              accusedDesignation: f.accused_designation || "Educational Officer",
+              schoolName: f.school_name || "",
+              subject: f.future_action || `Inquiry Case ${key}`,
+              stage: "Conducting an Inquiry",
+              priority: "medium",
+            });
+          }
+        });
+      }
+    } catch (e) {}
+
+    // 2. From daily_mail_letter_table
+    try {
+      const letters: any[] = await prisma.$queryRaw`
+        SELECT ref_number, letter_number, subject_of_letter, senders_party
+        FROM daily_mail_letter_table
+        ORDER BY created_at DESC;
+      `;
+      if (letters && letters.length > 0) {
+        letters.forEach((l) => {
+          const key = (l.ref_number || l.letter_number || "").trim();
+          if (key && !seen.has(key.toLowerCase())) {
+            seen.add(key.toLowerCase());
+            list.push({
+              caseNo: key,
+              letterNo: l.letter_number || key,
+              accusedName: "",
+              accusedDesignation: "Educational Officer",
+              schoolName: "",
+              subject: l.subject_of_letter || `Inquiry Case ${key}`,
+              stage: "Conducting an Inquiry",
+              priority: "medium",
+            });
+          }
+        });
+      }
+    } catch (e) {}
+
+    return serializeForServerAction({ success: true, data: list });
+  } catch (error: any) {
+    console.error("Error in getAvailableConductInquiryCasesServer:", error);
+    return serializeForServerAction({ success: false, error: error?.message, data: [] });
   }
 }
 

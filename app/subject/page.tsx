@@ -12,7 +12,16 @@ import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { getCurrentProfile, signOut, UserProfile } from "@/lib/auth";
-import { updateCaseByDateExtensionApprovalServer, saveCaseByAppointmentAndReportDueDateServer, getRecommendationsListServer } from "@/lib/db-actions";
+import { 
+  updateCaseByDateExtensionApprovalServer, 
+  saveCaseByAppointmentAndReportDueDateServer, 
+  getRecommendationsListServer, 
+  saveChairmanByCaseServer, 
+  getChairmanByCaseServer,
+  saveMembersByCaseServer, 
+  getMembersByCaseServer,
+  getCommitteeOfficersWithSchoolsServer 
+} from "@/lib/db-actions";
 import { CheckCircle, XCircle, FileText, Send, Clock, X, AlertCircle, ShieldCheck, Calendar as CalendarIcon, ChevronDown, ChevronUp, Bell, Eye, MoreHorizontal, Filter, Check, MailCheck, ClipboardList, Plus, Sparkles, ExternalLink, User, Building, ArrowRight, ShieldAlert, FileCheck, Layers, UserCheck } from "lucide-react";
 
 interface Case {
@@ -57,19 +66,23 @@ export const formatToInputDate = (dateStr?: string | null): string => {
 
 export function parseCommitteeDetails(asgn: any) {
   let chairmanName = "";
+  let chairmanEmail = "";
   let chairmanNic = "";
   let memberList: string[] = [];
+  let memberDetailsList: Array<{ name: string; email: string; idNo?: string }> = [];
 
   if (asgn?.chairman) {
     if (typeof asgn.chairman === "object" && asgn.chairman !== null) {
       chairmanName = asgn.chairman.fullName || asgn.chairman.name || asgn.chairman.officer_name || "";
-      chairmanNic = asgn.chairman.nicNo || asgn.chairman.nic || asgn.chairman.nic_no || "";
+      chairmanEmail = asgn.chairman.email || asgn.chairman.nicNo || asgn.chairman.nic || asgn.chairman.nic_no || "";
+      chairmanNic = chairmanEmail;
     } else if (typeof asgn.chairman === "string") {
       if (asgn.chairman.startsWith("{")) {
         try {
           const parsed = JSON.parse(asgn.chairman);
           chairmanName = parsed.fullName || parsed.name || parsed.officer_name || "";
-          chairmanNic = parsed.nicNo || parsed.nic || parsed.nic_no || "";
+          chairmanEmail = parsed.email || parsed.nicNo || parsed.nic || parsed.nic_no || "";
+          chairmanNic = chairmanEmail;
         } catch (e) {
           chairmanName = asgn.chairman;
         }
@@ -87,16 +100,29 @@ export function parseCommitteeDetails(asgn: any) {
         }
         return String(m || "");
       }).filter(Boolean);
+      memberDetailsList = asgn.members.map((m: any) => {
+        if (typeof m === "object" && m !== null) {
+          return {
+            name: m.fullName || m.name || m.officer_name || "",
+            email: m.email || m.idNo || m.nic || m.nicNo || "",
+            idNo: m.idNo || m.nic || m.email || "",
+          };
+        }
+        return { name: String(m || ""), email: "", idNo: "" };
+      }).filter((m: any) => m.name.trim() !== "");
     } else if (typeof asgn.members === "string") {
       try {
         const parsed = JSON.parse(asgn.members);
         if (Array.isArray(parsed)) {
           memberList = parsed.map((m: any) => (typeof m === "object" ? m.fullName || m.name || m.officer_name : String(m))).filter(Boolean);
+          memberDetailsList = parsed.map((m: any) => (typeof m === "object" ? { name: m.fullName || m.name || m.officer_name || "", email: m.email || m.idNo || m.nic || "", idNo: m.idNo || m.nic || m.email || "" } : { name: String(m), email: "", idNo: "" })).filter((m: any) => m.name.trim() !== "");
         } else {
           memberList = asgn.members.split(",").map((s: string) => s.trim()).filter(Boolean);
+          memberDetailsList = memberList.map((s) => ({ name: s, email: "", idNo: "" }));
         }
       } catch (e) {
         memberList = asgn.members.split(",").map((s: string) => s.trim()).filter(Boolean);
+        memberDetailsList = memberList.map((s) => ({ name: s, email: "", idNo: "" }));
       }
     }
   }
@@ -132,8 +158,10 @@ export function parseCommitteeDetails(asgn: any) {
 
   return {
     chairmanName,
+    chairmanEmail,
     chairmanNic,
     memberList,
+    memberDetailsList,
     rawText: isPlaceholder ? "" : rawText,
     hasDetails
   };
@@ -1370,6 +1398,66 @@ function SubjectOfficerDashboardContent() {
   const [inquiryStageFilter, setInquiryStageFilter] = useState("all");
   const [inquiryPriorityFilter, setInquiryPriorityFilter] = useState<"all" | "high" | "medium" | "low">("all");
   const [selectedInquiryModal, setSelectedInquiryModal] = useState<any | null>(null);
+  const [conductInquiryModalOpen, setConductInquiryModalOpen] = useState(false);
+  const [savingInquiryForm, setSavingInquiryForm] = useState(false);
+  const [conductInquiryForm, setConductInquiryForm] = useState<{
+    caseNo: string;
+    refNo: string;
+    accusedName: string;
+    accusedDesignation: string;
+    schoolName: string;
+    subject: string;
+    stage: string;
+    priority: string;
+    chairmanName: string;
+    chairmanEmail: string;
+    chairmanId?: string;
+    members: Array<{ name: string; email: string; idNo?: string }>;
+    appointmentLetterDate: string;
+    reportDueDate: string;
+    extensionTerm: string;
+    extensionStartDate: string;
+    extensionEndDate: string;
+    recommendation: string;
+    originalItem?: any;
+  }>({
+    caseNo: "",
+    refNo: "",
+    accusedName: "",
+    accusedDesignation: "",
+    schoolName: "",
+    subject: "",
+    stage: "Conducting an Inquiry",
+    priority: "medium",
+    chairmanName: "",
+    chairmanEmail: "",
+    chairmanId: "",
+    members: [{ name: "", email: "", idNo: "" }],
+    appointmentLetterDate: "",
+    reportDueDate: "",
+    extensionTerm: "None",
+    extensionStartDate: "",
+    extensionEndDate: "",
+    recommendation: "",
+  });
+
+  // Registered Committee Officers for Chairman & Members Autocomplete / Auto-fill
+  const [committeeOfficers, setCommitteeOfficers] = useState<Array<{ id: string; fullName: string; email?: string; position?: string }>>([]);
+
+  useEffect(() => {
+    getCommitteeOfficersWithSchoolsServer().then((res) => {
+      if (res && res.success && Array.isArray(res.data)) {
+        setCommitteeOfficers(
+          res.data.map((o: any) => ({
+            id: o.id,
+            fullName: o.full_name || o.fullName || "",
+            email: o.email || "",
+            position: o.position || o.officer_role || "Member",
+          }))
+        );
+      }
+    }).catch(() => {});
+  }, []);
 
   // Proper Disciplinary Inspection state
   const [inspectionSearchQuery, setInspectionSearchQuery] = useState("");
@@ -2632,8 +2720,8 @@ function SubjectOfficerDashboardContent() {
           extensionCount: asgn?.extensionTerm || asgn?.extension_term || "None",
           proceedingsStatus: proceedings,
           chairman: committee?.chairmanName
-            ? { name: committee.chairmanName, nic: committee.chairmanNic || "—" }
-            : { name: "Assigned Subject Officer", nic: "—" },
+            ? { name: committee.chairmanName, email: committee.chairmanEmail || committee.chairmanNic || "—" }
+            : { name: "Assigned Subject Officer", email: "—" },
           members: committee?.memberList && committee.memberList.length > 0
             ? committee.memberList
             : [],
@@ -2670,7 +2758,7 @@ function SubjectOfficerDashboardContent() {
           reportDueDate: "Pending Schedule",
           extensionCount: "None",
           proceedingsStatus: r.description || "Inspection proceedings initiated by Subject Officer",
-          chairman: { name: "Assigned Subject Officer", nic: "—" },
+          chairman: { name: "Assigned Subject Officer", email: "—" },
           members: [],
           notes: r.description || "Conduct an inspection action initiated"
         });
@@ -2705,6 +2793,341 @@ function SubjectOfficerDashboardContent() {
       return matchesSearch && matchesStage && matchesPriority;
     });
   }, [conductingInquiryCases, inquirySearchQuery, inquiryStageFilter, inquiryPriorityFilter]);
+
+  // ── Open Conduct an Inquiry Form Modal (Paper Sketch) ──
+  const openConductInquiryModal = (item?: any) => {
+    if (!item) {
+      const defaultCase = conductingInquiryCases[0];
+      if (defaultCase) {
+        openConductInquiryModal(defaultCase);
+      } else {
+        setConductInquiryForm({
+          caseNo: "",
+          refNo: "",
+          accusedName: "",
+          accusedDesignation: "",
+          schoolName: "",
+          subject: "",
+          stage: "Conducting an Inquiry",
+          priority: "medium",
+          chairmanName: "",
+          chairmanEmail: "",
+          chairmanId: "",
+          members: [{ name: "", email: "", idNo: "" }],
+          appointmentLetterDate: "",
+          reportDueDate: "",
+          extensionTerm: "None",
+          extensionStartDate: "",
+          extensionEndDate: "",
+          recommendation: "",
+          originalItem: null,
+        });
+        setConductInquiryModalOpen(true);
+      }
+      return;
+    }
+
+    const cNoKey = (item.caseNo || "").trim().toLowerCase();
+    const asgn = assignments.find((a: any) => (a.caseNo || a.case_no || "").trim().toLowerCase() === cNoKey);
+    const committee = asgn ? parseCommitteeDetails(asgn) : null;
+
+    let initialChairmanName = "";
+    let initialChairmanEmail = "";
+    if (item.chairman?.name && item.chairman.name !== "Assigned Subject Officer" && item.chairman.name !== "—") {
+      initialChairmanName = item.chairman.name;
+      initialChairmanEmail = item.chairman.email || (item.chairman.nic !== "—" ? item.chairman.nic : "");
+    } else if (committee?.chairmanName) {
+      initialChairmanName = committee.chairmanName;
+      initialChairmanEmail = committee.chairmanEmail || committee.chairmanNic || "";
+    }
+
+    let initialMembers: Array<{ name: string; email: string; idNo?: string }> = [];
+    if (asgn?.members && Array.isArray(asgn.members)) {
+      initialMembers = asgn.members.map((m: any) => {
+        if (typeof m === "object" && m !== null) {
+          return {
+            name: m.name || m.fullName || m.officer_name || "",
+            email: m.email || m.idNo || m.nic || m.nicNo || m.employeeNo || "",
+            idNo: m.idNo || m.nic || m.nicNo || m.employeeNo || m.email || "",
+          };
+        }
+        return { name: String(m || ""), email: "", idNo: "" };
+      }).filter((m: any) => m.name.trim() !== "");
+    } else if (item.members && Array.isArray(item.members)) {
+      initialMembers = item.members.map((m: any) => {
+        if (typeof m === "object" && m !== null) {
+          return {
+            name: m.name || m.fullName || "",
+            email: m.email || m.idNo || m.nic || "",
+            idNo: m.idNo || m.nic || m.email || "",
+          };
+        }
+        return { name: String(m || ""), email: "", idNo: "" };
+      }).filter((m: any) => m.name.trim() !== "");
+    }
+
+    if (initialMembers.length === 0) {
+      initialMembers = [{ name: "", email: "", idNo: "" }];
+    }
+
+    const apptDate = formatToInputDate(item.appointmentDate || asgn?.appointmentDate || asgn?.appointment_date);
+    const dueDate = formatToInputDate(item.reportDueDate || asgn?.reportDueDate || asgn?.report_due_date);
+    const extTerm = asgn?.extensionTerm || asgn?.extension_term || item.extensionCount || "None";
+    const extStart = formatToInputDate(asgn?.extensionStartDate || asgn?.extension_start_date);
+    const extEnd = formatToInputDate(asgn?.extensionEndDate || asgn?.extension_end_date);
+    const recText = asgn?.recommendation || asgn?.recommendationText || asgn?.notes || item.notes || "";
+
+    setConductInquiryForm({
+      caseNo: item.caseNo || "",
+      refNo: item.refNo || item.caseNo || "",
+      accusedName: item.accusedName || "—",
+      accusedDesignation: item.accusedDesignation || "—",
+      schoolName: item.schoolName || "—",
+      subject: item.subject || "—",
+      stage: item.stage || "Conducting an Inquiry",
+      priority: item.priority || "medium",
+      chairmanName: initialChairmanName,
+      chairmanEmail: initialChairmanEmail,
+      chairmanId: initialChairmanEmail,
+      members: initialMembers,
+      appointmentLetterDate: apptDate,
+      reportDueDate: dueDate,
+      extensionTerm: extTerm,
+      extensionStartDate: extStart,
+      extensionEndDate: extEnd,
+      recommendation: recText,
+      originalItem: item,
+    });
+    setConductInquiryModalOpen(true);
+
+    // Asynchronously fetch Chairman & Members directly from chairment_by_case and members_by_case tables
+    const caseRef = item.caseNo || item.refNo || "";
+    if (caseRef) {
+      getChairmanByCaseServer(caseRef).then((chairRes) => {
+        if (chairRes && chairRes.success && chairRes.data) {
+          const chair = chairRes.data;
+          setConductInquiryForm((prev) => {
+            if (prev.caseNo === item.caseNo || prev.refNo === item.caseNo) {
+              return {
+                ...prev,
+                chairmanName: chair.full_name || prev.chairmanName,
+                chairmanEmail: chair.email || prev.chairmanEmail,
+                chairmanId: chair.email || prev.chairmanId,
+              };
+            }
+            return prev;
+          });
+        }
+      }).catch(() => {});
+
+      getMembersByCaseServer(caseRef).then((memRes) => {
+        if (memRes && memRes.success && Array.isArray(memRes.data) && memRes.data.length > 0) {
+          const memList = memRes.data.map((m: any) => ({
+            name: m.full_name || "",
+            email: m.email || "",
+            idNo: m.email || m.position || "",
+          })).filter((m: any) => m.name.trim() !== "");
+          if (memList.length > 0) {
+            setConductInquiryForm((prev) => {
+              if (prev.caseNo === item.caseNo || prev.refNo === item.caseNo) {
+                return {
+                  ...prev,
+                  members: memList,
+                };
+              }
+              return prev;
+            });
+          }
+        }
+      }).catch(() => {});
+    }
+  };
+
+  // ── Save Conduct an Inquiry Form Data (Supabase, Postgres, LocalStorage) ──
+  const handleSaveConductInquiry = async () => {
+    setSavingInquiryForm(true);
+    try {
+      const caseNo = conductInquiryForm.caseNo;
+      if (!caseNo) {
+        showToast("Please select a valid case number.");
+        setSavingInquiryForm(false);
+        return;
+      }
+
+      const chairmanObj = conductInquiryForm.chairmanName.trim()
+        ? {
+            name: conductInquiryForm.chairmanName.trim(),
+            fullName: conductInquiryForm.chairmanName.trim(),
+            email: (conductInquiryForm.chairmanEmail || conductInquiryForm.chairmanId || "").trim() || undefined,
+            nic: (conductInquiryForm.chairmanEmail || conductInquiryForm.chairmanId || "").trim() || undefined,
+            nicNo: (conductInquiryForm.chairmanEmail || conductInquiryForm.chairmanId || "").trim() || undefined,
+          }
+        : null;
+
+      const validMembers = conductInquiryForm.members
+        .filter((m) => m.name.trim() !== "")
+        .map((m) => ({
+          name: m.name.trim(),
+          fullName: m.name.trim(),
+          email: (m.email || m.idNo || "").trim() || undefined,
+          nic: (m.email || m.idNo || "").trim() || undefined,
+          idNo: (m.email || m.idNo || "").trim() || undefined,
+        }));
+
+      const apptDate = conductInquiryForm.appointmentLetterDate || null;
+      const dueDate = conductInquiryForm.reportDueDate || null;
+      const extTerm = conductInquiryForm.extensionTerm || "None";
+      const extStart = conductInquiryForm.extensionStartDate || null;
+      const extEnd = conductInquiryForm.extensionEndDate || null;
+      const recommendationText = conductInquiryForm.recommendation || "";
+
+      // 1. Update localStorage: dcmms_subject_assignments
+      if (typeof window !== "undefined") {
+        try {
+          const stored = localStorage.getItem("dcmms_subject_assignments") || "[]";
+          let list = JSON.parse(stored);
+          const idx = list.findIndex((a: any) => String(a.caseNo || a.case_no || "").trim().toLowerCase() === caseNo.trim().toLowerCase());
+          
+          const updatedRecord = {
+            ...(idx >= 0 ? list[idx] : {}),
+            id: idx >= 0 && list[idx].id ? list[idx].id : `asgn-${caseNo}`,
+            caseNo: caseNo,
+            case_no: caseNo,
+            subjectOfficerName: "Assigned Subject Officer",
+            chairman: chairmanObj,
+            members: validMembers,
+            appointmentDate: apptDate,
+            appointment_date: apptDate,
+            reportDueDate: dueDate,
+            report_due_date: dueDate,
+            datesSubmittedBySubject: true,
+            extensionTerm: extTerm,
+            extension_term: extTerm,
+            extensionStartDate: extStart,
+            extension_start_date: extStart,
+            extensionEndDate: extEnd,
+            extension_end_date: extEnd,
+            recommendation: recommendationText,
+            recommendationText: recommendationText,
+            notes: recommendationText || (idx >= 0 ? list[idx].notes : ""),
+            status: "Conducting an Inquiry",
+            updatedAt: new Date().toISOString(),
+          };
+
+          if (idx >= 0) {
+            list[idx] = updatedRecord;
+          } else {
+            list.push(updatedRecord);
+          }
+          localStorage.setItem("dcmms_subject_assignments", JSON.stringify(list));
+        } catch (e) {}
+
+        // 2. Update localStorage: dcmms_cases
+        try {
+          const storedCases = localStorage.getItem("dcmms_cases") || "[]";
+          let casesList = JSON.parse(storedCases);
+          const cIdx = casesList.findIndex((c: any) => String(c.caseNo || c.refNo || "").trim().toLowerCase() === caseNo.trim().toLowerCase());
+          if (cIdx >= 0) {
+            casesList[cIdx].appointmentDate = apptDate;
+            casesList[cIdx].reportDueDate = dueDate;
+            casesList[cIdx].targetDate = dueDate;
+            casesList[cIdx].status = "Conducting an Inquiry";
+            casesList[cIdx].stage = "Conducting an Inquiry";
+            if (recommendationText) {
+              casesList[cIdx].recommendation = recommendationText;
+            }
+            localStorage.setItem("dcmms_cases", JSON.stringify(casesList));
+          }
+        } catch (e) {}
+
+        window.dispatchEvent(new CustomEvent("dcmms_assignment_updated"));
+        window.dispatchEvent(new Event("storage"));
+      }
+
+      // 3. PostgreSQL Server Actions
+      try {
+        await saveCaseByAppointmentAndReportDueDateServer({
+          subject_file_no: caseNo,
+          sub_file_no: caseNo,
+          appointment_letter_date: apptDate,
+          report_due_date: dueDate,
+          dates_submitted_by_subject: true,
+        });
+      } catch (e) {}
+
+      try {
+        await saveChairmanByCaseServer(caseNo, chairmanObj ? {
+          fullName: chairmanObj.name,
+          email: chairmanObj.email,
+          position: "Chairman",
+        } : null);
+      } catch (e) {}
+
+      try {
+        await saveMembersByCaseServer(
+          caseNo,
+          validMembers.map((m) => ({
+            fullName: m.fullName,
+            email: m.email,
+            position: "Member",
+          }))
+        );
+      } catch (e) {}
+
+      // 4. Supabase table upsert
+      if (isSupabaseConfigured) {
+        try {
+          if (chairmanObj) {
+            let validEmail = null;
+            if (chairmanObj.email) {
+              const { data: commData } = await supabase
+                .from("commitee_table")
+                .select("email")
+                .ilike("email", chairmanObj.email.trim())
+                .maybeSingle();
+              if (commData) validEmail = commData.email;
+            }
+            await supabase.from("chairment_by_case").upsert({
+              ref_number: caseNo.trim(),
+              full_name: chairmanObj.name,
+              position: "Chairman",
+              email: validEmail,
+              updated_at: new Date().toISOString(),
+            }, { onConflict: "ref_number" });
+          } else {
+            await supabase.from("chairment_by_case").delete().eq("ref_number", caseNo.trim());
+          }
+        } catch (e) {}
+
+        try {
+          await supabase.from("dcmms_subject_assignments").upsert({
+            case_no: caseNo,
+            subject_officer_name: "Assigned Subject Officer",
+            chairman: chairmanObj,
+            members: validMembers,
+            appointment_date: apptDate,
+            report_due_date: dueDate,
+            extension_term: extTerm,
+            extension_start_date: extStart,
+            extension_end_date: extEnd,
+            recommendation: recommendationText,
+            notes: recommendationText,
+            status: "Conducting an Inquiry",
+            updated_at: new Date().toISOString(),
+          });
+        } catch (e) {}
+      }
+
+      showToast(t("inquiryDetailsSavedSuccess", "Inquiry details saved successfully!"));
+      setConductInquiryModalOpen(false);
+      fetchAssignments();
+    } catch (error: any) {
+      console.error("Error saving inquiry details:", error);
+      showToast("Error saving inquiry details: " + (error?.message || "Unknown error"));
+    } finally {
+      setSavingInquiryForm(false);
+    }
+  };
 
   // ── Proper Disciplinary Inspection Case List ──
   const disciplinaryInspectionCases = useMemo(() => {
@@ -4447,7 +4870,7 @@ function SubjectOfficerDashboardContent() {
 
                 <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
                   <Link
-                    href="/subject/add-details"
+                    href="/subject/conduct-inquiry"
                     className="btn-create-rec"
                     style={{ background: "linear-gradient(135deg, #0284c7 0%, #0369a1 100%)" }}
                   >
@@ -4739,10 +5162,10 @@ function SubjectOfficerDashboardContent() {
                             <td className="text-center actions-cell">
                               <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
                                 <Link
-                                  href={`/subject/add-details?caseNo=${item.caseNo}`}
+                                  href={`/subject/conduct-inquiry?caseNo=${encodeURIComponent(item.caseNo)}`}
                                   className="add-details-link"
-                                  style={{ padding: "4px 10px", fontSize: "11px" }}
-                                  title="Add details or case notes"
+                                  style={{ padding: "4px 12px", fontSize: "11px" }}
+                                  title="Open Conduct an Inquiry Form"
                                 >
                                   {t("addDetails", "Add Details")}
                                 </Link>
@@ -5791,12 +6214,12 @@ function SubjectOfficerDashboardContent() {
                 Close
               </button>
               <Link
-                href={`/subject/add-details?caseNo=${selectedInquiryModal.caseNo}`}
+                href={`/subject/conduct-inquiry?caseNo=${encodeURIComponent(selectedInquiryModal.caseNo)}`}
                 className="btn-create-rec"
-                style={{ padding: "8px 16px", fontSize: "13px", backgroundColor: "#4f46e5" }}
+                style={{ padding: "8px 16px", fontSize: "13px", backgroundColor: "#0284c7" }}
               >
                 <Plus size={14} />
-                <span>Add Details / Step</span>
+                <span>{lang === "si" ? "විස්තර එක් කරන්න" : "Add Details / Step"}</span>
               </Link>
               <Link
                 href={`/subject/recommendation?caseNo=${selectedInquiryModal.caseNo}`}
@@ -5807,6 +6230,411 @@ function SubjectOfficerDashboardContent() {
                 <span>Recommendation</span>
               </Link>
             </footer>
+
+          </div>
+        </div>
+      )}
+
+      {/* ==================== CONDUCT AN INQUIRY FORM MODAL (PAPER SKETCH DESIGN) ==================== */}
+      {conductInquiryModalOpen && (
+        <div className="conduct-inquiry-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="conduct-inquiry-modal-title">
+          <div className="conduct-inquiry-modal-content">
+            
+            {/* Modal Header */}
+            <div className="conduct-inquiry-header">
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div style={{ width: "40px", height: "40px", borderRadius: "10px", backgroundColor: "rgba(255,255,255,0.18)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <ShieldCheck size={22} style={{ color: "#ffffff" }} />
+                </div>
+                <div>
+                  <h3 id="conduct-inquiry-modal-title" style={{ margin: 0, fontSize: "18px", fontWeight: 800, letterSpacing: "-0.2px" }}>
+                    {t("conductInquiryTitle", "Conduct an inquiry")}
+                  </h3>
+                  <div style={{ fontSize: "12px", opacity: 0.9, marginTop: "2px" }}>
+                    {conductInquiryForm.caseNo ? (
+                      <span>Case Reference: <strong>{conductInquiryForm.caseNo}</strong></span>
+                    ) : (
+                      <span>{t("conductingInquiryTab", "Conducting an inquiry proceedings")}</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setConductInquiryModalOpen(false)}
+                style={{ background: "transparent", border: "none", color: "#ffffff", opacity: 0.85, cursor: "pointer", padding: "4px" }}
+                title="Close"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="conduct-inquiry-body">
+              
+              {/* SECTION 1: Case Current Details (From paper sketch: "case current details.") */}
+              <div className="conduct-inquiry-card" style={{ borderColor: "#bae6fd", backgroundColor: "#f0f9ff" }}>
+                <div className="conduct-inquiry-card-header" style={{ borderColor: "#e0f2fe" }}>
+                  <div className="conduct-inquiry-card-title" style={{ color: "#0369a1" }}>
+                    <FileText size={16} style={{ color: "#0284c7" }} />
+                    <span>{t("caseCurrentDetails", "Case Current Details")}</span>
+                  </div>
+                  {conductingInquiryCases.length > 1 && (
+                    <select
+                      value={conductInquiryForm.caseNo}
+                      onChange={(e) => {
+                        const target = conductingInquiryCases.find((c: any) => c.caseNo === e.target.value);
+                        if (target) openConductInquiryModal(target);
+                      }}
+                      className="conduct-inquiry-select"
+                      style={{ width: "auto", padding: "4px 10px", fontSize: "12px", backgroundColor: "#ffffff" }}
+                    >
+                      {conductingInquiryCases.map((c: any) => (
+                        <option key={c.caseNo} value={c.caseNo}>
+                          {c.caseNo} - {c.accusedName || "Officer"}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                <div className="case-current-details-box">
+                  <div className="case-current-detail-item">
+                    <span className="case-current-detail-label">{t("caseNo", "Case / Letter No")}:</span>
+                    <span className="case-current-detail-val" style={{ color: "#0284c7", fontWeight: 800 }}>
+                      {conductInquiryForm.caseNo || "—"}
+                    </span>
+                  </div>
+                  <div className="case-current-detail-item">
+                    <span className="case-current-detail-label">{t("accusedOfficer", "Accused Officer")}:</span>
+                    <span className="case-current-detail-val">
+                      {conductInquiryForm.accusedName || "—"}
+                    </span>
+                  </div>
+                  <div className="case-current-detail-item">
+                    <span className="case-current-detail-label">{t("designation", "Designation")}:</span>
+                    <span className="case-current-detail-val">
+                      {conductInquiryForm.accusedDesignation || "—"}
+                    </span>
+                  </div>
+                  <div className="case-current-detail-item">
+                    <span className="case-current-detail-label">{t("institute", "Institution / School")}:</span>
+                    <span className="case-current-detail-val">
+                      {conductInquiryForm.schoolName || "—"}
+                    </span>
+                  </div>
+                  <div className="case-current-detail-item" style={{ gridColumn: "1 / -1" }}>
+                    <span className="case-current-detail-label">{t("subjectText", "Subject / Matter of the letter")}:</span>
+                    <span className="case-current-detail-val" style={{ fontWeight: 500, color: "#334155" }}>
+                      {conductInquiryForm.subject || "—"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION 2: Inquiry Committee Details (From paper sketch: "Inquiry committee details.") */}
+              <div className="conduct-inquiry-card">
+                <div className="conduct-inquiry-card-header">
+                  <div className="conduct-inquiry-card-title">
+                    <UserCheck size={16} style={{ color: "#0284c7" }} />
+                    <span>{t("inquiryCommitteeDetails", "Inquiry Committee Details")}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConductInquiryForm((prev) => ({
+                        ...prev,
+                        members: [...prev.members, { name: "", email: "", idNo: "" }],
+                      }));
+                    }}
+                    className="btn-add-member"
+                    title="Add another committee member"
+                  >
+                    <Plus size={14} />
+                    <span>{t("addMember", "Add Member")}</span>
+                  </button>
+                </div>
+
+                {/* Chairman details row */}
+                <div className="conduct-inquiry-grid-2" style={{ marginBottom: "16px" }}>
+                  <div className="conduct-inquiry-input-group">
+                    <label className="conduct-inquiry-label">
+                      <span>👑 {t("chairmanName", "Chairman Name")} :</span>
+                    </label>
+                    <input
+                      type="text"
+                      list="conduct-inquiry-chairman-datalist"
+                      className="conduct-inquiry-input"
+                      placeholder={lang === "si" ? "සභාපති නිලධාරීගේ නම ඇතුළත් කරන්න" : "Enter Chairman's full name"}
+                      value={conductInquiryForm.chairmanName}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const matched = committeeOfficers.find((o) => o.fullName.toLowerCase().trim() === val.toLowerCase().trim());
+                        setConductInquiryForm((prev) => ({
+                          ...prev,
+                          chairmanName: val,
+                          chairmanEmail: matched?.email ? matched.email : prev.chairmanEmail,
+                          chairmanId: matched?.email ? matched.email : prev.chairmanId,
+                        }));
+                      }}
+                    />
+                    <datalist id="conduct-inquiry-chairman-datalist">
+                      {committeeOfficers.map((o) => (
+                        <option key={o.id || o.fullName} value={o.fullName}>
+                          {o.position ? `${o.fullName} (${o.position})` : o.fullName} {o.email ? `- ${o.email}` : ""}
+                        </option>
+                      ))}
+                    </datalist>
+                  </div>
+
+                  <div className="conduct-inquiry-input-group">
+                    <label className="conduct-inquiry-label">
+                      <span>✉️ {t("chairmanEmail", "Chairman Email")} :</span>
+                    </label>
+                    <input
+                      type="email"
+                      className="conduct-inquiry-input"
+                      placeholder={lang === "si" ? "සභාපති විද්‍යුත් තැපෑල (chairman@moe.gov.lk)" : lang === "ta" ? "தலைவர் மின்னஞ்சல் (chairman@moe.gov.lk)" : "Enter Chairman's email (e.g. chairman@moe.gov.lk)"}
+                      value={conductInquiryForm.chairmanEmail || conductInquiryForm.chairmanId || ""}
+                      onChange={(e) =>
+                        setConductInquiryForm((prev) => ({ ...prev, chairmanEmail: e.target.value, chairmanId: e.target.value }))
+                      }
+                    />
+                  </div>
+                </div>
+
+                {/* Dynamic Committee Members Rows */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                  <span style={{ fontSize: "12px", fontWeight: 700, color: "#64748b", marginBottom: "2px" }}>
+                    👥 {lang === "si" ? "කමිටු සාමාජිකයින් (Committee Members):" : "Committee Members:"}
+                  </span>
+                  {conductInquiryForm.members.map((member, mIdx) => (
+                    <div key={mIdx} className="conduct-inquiry-member-row">
+                      <div style={{ flex: 1 }}>
+                        <label className="conduct-inquiry-label" style={{ fontSize: "11px", marginBottom: "4px" }}>
+                          {t("memberName", "Member Name")} :
+                        </label>
+                        <input
+                          type="text"
+                          list={`conduct-inquiry-member-datalist-${mIdx}`}
+                          className="conduct-inquiry-input"
+                          placeholder={lang === "si" ? `සාමාජික #${mIdx + 1} නම` : `Member #${mIdx + 1} name`}
+                          value={member.name}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const matched = committeeOfficers.find((o) => o.fullName.toLowerCase().trim() === val.toLowerCase().trim());
+                            const updatedMembers = [...conductInquiryForm.members];
+                            updatedMembers[mIdx].name = val;
+                            if (matched?.email) {
+                              updatedMembers[mIdx].email = matched.email;
+                              updatedMembers[mIdx].idNo = matched.email;
+                            }
+                            setConductInquiryForm((prev) => ({ ...prev, members: updatedMembers }));
+                          }}
+                        />
+                        <datalist id={`conduct-inquiry-member-datalist-${mIdx}`}>
+                          {committeeOfficers.map((o) => (
+                            <option key={o.id || o.fullName} value={o.fullName}>
+                              {o.position ? `${o.fullName} (${o.position})` : o.fullName} {o.email ? `- ${o.email}` : ""}
+                            </option>
+                          ))}
+                        </datalist>
+                      </div>
+
+                      <div style={{ flex: 1 }}>
+                        <label className="conduct-inquiry-label" style={{ fontSize: "11px", marginBottom: "4px" }}>
+                          ✉️ {t("memberEmail", "Member Email")} :
+                        </label>
+                        <input
+                          type="email"
+                          className="conduct-inquiry-input"
+                          placeholder={lang === "si" ? "සාමාජික විද්‍යුත් තැපෑල (member@moe.gov.lk)" : lang === "ta" ? "உறுப்பினர் மின்னஞ்சல் (member@moe.gov.lk)" : "Enter Member's email (e.g. member@moe.gov.lk)"}
+                          value={member.email || member.idNo || ""}
+                          onChange={(e) => {
+                            const updatedMembers = [...conductInquiryForm.members];
+                            updatedMembers[mIdx].email = e.target.value;
+                            updatedMembers[mIdx].idNo = e.target.value;
+                            setConductInquiryForm((prev) => ({ ...prev, members: updatedMembers }));
+                          }}
+                        />
+                      </div>
+
+                      {conductInquiryForm.members.length > 1 && (
+                        <div style={{ alignSelf: "flex-end", marginBottom: "2px" }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setConductInquiryForm((prev) => ({
+                                ...prev,
+                                members: prev.members.filter((_, idx) => idx !== mIdx),
+                              }));
+                            }}
+                            className="btn-remove-member"
+                            title="Remove member"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* SECTION 3: Appointment letter date & Report due date (From paper sketch) */}
+              <div className="conduct-inquiry-card">
+                <div className="conduct-inquiry-card-header">
+                  <div className="conduct-inquiry-card-title">
+                    <CalendarIcon size={16} style={{ color: "#0284c7" }} />
+                    <span>{t("appointmentLetterDateAndReportDueDate", "Appointment letter date & Report due date")}</span>
+                  </div>
+                </div>
+
+                <div className="conduct-inquiry-grid-2">
+                  <div className="conduct-inquiry-input-group">
+                    <label className="conduct-inquiry-label">
+                      <span>📅 {t("appointmentLetterDate", "Appointment letter date")} :</span>
+                    </label>
+                    <input
+                      type="date"
+                      className="conduct-inquiry-input"
+                      value={conductInquiryForm.appointmentLetterDate}
+                      onChange={(e) =>
+                        setConductInquiryForm((prev) => ({ ...prev, appointmentLetterDate: e.target.value }))
+                      }
+                    />
+                  </div>
+
+                  <div className="conduct-inquiry-input-group">
+                    <label className="conduct-inquiry-label">
+                      <span>🎯 {t("reportDueDate", "Report due date")} :</span>
+                    </label>
+                    <input
+                      type="date"
+                      className="conduct-inquiry-input"
+                      value={conductInquiryForm.reportDueDate}
+                      onChange={(e) =>
+                        setConductInquiryForm((prev) => ({ ...prev, reportDueDate: e.target.value }))
+                      }
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION 4: Extension of days (From paper sketch: "Extension of days.") */}
+              <div className="conduct-inquiry-card">
+                <div className="conduct-inquiry-card-header">
+                  <div className="conduct-inquiry-card-title">
+                    <Clock size={16} style={{ color: "#d97706" }} />
+                    <span>{t("extensionOfDays", "Extension of days")}</span>
+                  </div>
+                </div>
+
+                <div className="conduct-inquiry-grid-3">
+                  <div className="conduct-inquiry-input-group">
+                    <label className="conduct-inquiry-label">
+                      <span>⏱ {t("extensionTerm", "Extension term")} :</span>
+                    </label>
+                    <select
+                      className="conduct-inquiry-select"
+                      value={conductInquiryForm.extensionTerm}
+                      onChange={(e) =>
+                        setConductInquiryForm((prev) => ({ ...prev, extensionTerm: e.target.value }))
+                      }
+                    >
+                      <option value="None">{lang === "si" ? "නැත (None)" : "None"}</option>
+                      <option value="1st Extension">{lang === "si" ? "1 වන දිගුව (1st Extension)" : "1st Extension"}</option>
+                      <option value="2nd Extension">{lang === "si" ? "2 වන දිගුව (2nd Extension)" : "2nd Extension"}</option>
+                      <option value="3rd Extension">{lang === "si" ? "3 වන දිගුව (3rd Extension)" : "3rd Extension"}</option>
+                      <option value="4th Extension">{lang === "si" ? "4 වන දිගුව (4th Extension)" : "4th Extension"}</option>
+                    </select>
+                  </div>
+
+                  <div className="conduct-inquiry-input-group">
+                    <label className="conduct-inquiry-label">
+                      <span>📅 {t("extensionStartDate", "Extension start date")} :</span>
+                    </label>
+                    <input
+                      type="date"
+                      className="conduct-inquiry-input"
+                      value={conductInquiryForm.extensionStartDate}
+                      onChange={(e) =>
+                        setConductInquiryForm((prev) => ({ ...prev, extensionStartDate: e.target.value }))
+                      }
+                    />
+                  </div>
+
+                  <div className="conduct-inquiry-input-group">
+                    <label className="conduct-inquiry-label">
+                      <span>📅 {t("extensionEndDate", "Extension end date")} :</span>
+                    </label>
+                    <input
+                      type="date"
+                      className="conduct-inquiry-input"
+                      value={conductInquiryForm.extensionEndDate}
+                      onChange={(e) =>
+                        setConductInquiryForm((prev) => ({ ...prev, extensionEndDate: e.target.value }))
+                      }
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION 5: Recommendation (From paper sketch: "Recommendation.") */}
+              <div className="conduct-inquiry-card">
+                <div className="conduct-inquiry-card-header">
+                  <div className="conduct-inquiry-card-title">
+                    <Sparkles size={16} style={{ color: "#6366f1" }} />
+                    <span>{t("recommendation", "Recommendation")}</span>
+                  </div>
+                </div>
+
+                <div className="conduct-inquiry-input-group">
+                  <textarea
+                    rows={4}
+                    className="conduct-inquiry-textarea"
+                    placeholder={t("recommendationPlaceholder", "Enter detailed inquiry findings, observations, and recommendations...")}
+                    value={conductInquiryForm.recommendation}
+                    onChange={(e) =>
+                      setConductInquiryForm((prev) => ({ ...prev, recommendation: e.target.value }))
+                    }
+                  />
+                </div>
+              </div>
+
+            </div>
+
+            {/* Modal Footer */}
+            <div className="conduct-inquiry-footer">
+              <button
+                type="button"
+                className="btn-conduct-cancel"
+                onClick={() => setConductInquiryModalOpen(false)}
+                disabled={savingInquiryForm}
+              >
+                {t("cancel", "Cancel")}
+              </button>
+
+              <button
+                type="button"
+                className="btn-conduct-save"
+                onClick={handleSaveConductInquiry}
+                disabled={savingInquiryForm}
+              >
+                {savingInquiryForm ? (
+                  <>
+                    <Clock size={16} className="animate-spin" />
+                    <span>{lang === "si" ? "සුරකිමින් පවතී..." : "Saving Details..."}</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle size={16} />
+                    <span>{t("saveInquiryDetails", "Save Inquiry Details")}</span>
+                  </>
+                )}
+              </button>
+            </div>
 
           </div>
         </div>

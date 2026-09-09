@@ -701,7 +701,28 @@
   "description": "Description",
   "actionInitialInvestigation": "Initial investigation",
   "actionConductInspection": "Conduct an inspection",
-  "actionFinalizeFileAccordingToSecretary": "Finalize the file according to the additional secretary's instruction"
+  "actionFinalizeFileAccordingToSecretary": "Finalize the file according to the additional secretary's instruction",
+  "conductInquiryTitle": "Conduct an inquiry",
+  "caseCurrentDetails": "Case Current Details",
+  "inquiryCommitteeDetails": "Inquiry Committee Details",
+  "chairmanName": "Chairman Name",
+  "chairmanEmail": "Chairman Email",
+  "chairmanIdNo": "Chairman Email",
+  "memberName": "Member Name",
+  "memberEmail": "Member Email",
+  "memberIdNo": "Member Email",
+  "addMember": "Add Member",
+  "appointmentLetterDateAndReportDueDate": "Appointment Letter Date & Report Due Date",
+  "appointmentLetterDate": "Appointment Letter Date",
+  "reportDueDate": "Report Due Date",
+  "extensionOfDays": "Extension of Days",
+  "extensionTerm": "Extension Term",
+  "extensionStartDate": "Extension Start Date",
+  "extensionEndDate": "Extension End Date",
+  "recommendation": "Recommendation",
+  "recommendationPlaceholder": "Enter detailed inquiry findings, observations, and recommendations...",
+  "saveInquiryDetails": "Save Inquiry Details",
+  "inquiryDetailsSavedSuccess": "Inquiry details saved successfully!"
 }
 
 

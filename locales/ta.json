@@ -698,7 +698,28 @@
   "description": "விவரம்",
   "actionInitialInvestigation": "ஆரம்ப விசாரணை",
   "actionConductInspection": "ஆய்வு நடத்துதல்",
-  "actionFinalizeFileAccordingToSecretary": "கூடுதல் செயலாளரின் அறிவுறுத்தலின்படி கோப்பை இறுதி செய்தல்"
+  "actionFinalizeFileAccordingToSecretary": "கூடுதல் செயலாளரின் அறிவுறுத்தலின்படி கோப்பை இறுதி செய்தல்",
+  "conductInquiryTitle": "விசாரணை நடத்துதல் (Conduct an inquiry)",
+  "caseCurrentDetails": "வழக்கின் தற்போதைய விவரங்கள் (Case current details)",
+  "inquiryCommitteeDetails": "விசாரணைக் குழு விவரங்கள் (Inquiry committee details)",
+  "chairmanName": "தலைவர் பெயர் (Chairman name)",
+  "chairmanEmail": "தலைவர் மின்னஞ்சல் (Chairman Email)",
+  "chairmanIdNo": "தலைவர் மின்னஞ்சல் (Chairman Email)",
+  "memberName": "உறுப்பினர் பெயர் (Member name)",
+  "memberEmail": "உறுப்பினர் மின்னஞ்சல் (Member Email)",
+  "memberIdNo": "உறுப்பினர் மின்னஞ்சல் (Member Email)",
+  "addMember": "உறுப்பினரைச் சேர்க்கவும் (+)",
+  "appointmentLetterDateAndReportDueDate": "நியமனக் கடிதத் தேதி & அறிக்கை நிலுவைத் தேதி (Appointment letter date & Report due date)",
+  "appointmentLetterDate": "நியமனக் கடிதத் தேதி (Appointment letter date)",
+  "reportDueDate": "அறிக்கை நிலুவைத் தேதி (Report due date)",
+  "extensionOfDays": "நாட்கள் நீட்டிப்பு (Extension of days)",
+  "extensionTerm": "நீட்டிப்பு தவணை (Extension term)",
+  "extensionStartDate": "நீட்டிப்பு தொடக்க தேதி (Extension start date)",
+  "extensionEndDate": "நீட்டிப்பு முடிவு தேதி (Extension end date)",
+  "recommendation": "பரிந்துரை (Recommendation)",
+  "recommendationPlaceholder": "விசாரணைக் கண்டுபிடிப்புகள், அவதானிப்புகள் மற்றும் பரிந்துரைகளை உள்ளிடவும்...",
+  "saveInquiryDetails": "விவரங்களைச் சேமிக்கவும் (Save Details)",
+  "inquiryDetailsSavedSuccess": "விசாரணை விவரங்கள் வெற்றிகரமாகப் புதுப்பிக்கப்பட்டன!"
 }
 
 
