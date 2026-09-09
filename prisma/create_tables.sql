@@ -302,6 +302,22 @@ CREATE TABLE IF NOT EXISTS charge_sheet_table (
 );
 CREATE INDEX IF NOT EXISTS idx_charge_sheet_ref_number ON charge_sheet_table(ref_number);
 
+-- Reply Letter Details Table
+CREATE TABLE IF NOT EXISTS reply_letter_details_table (
+    id BIGSERIAL PRIMARY KEY,
+    ref_number VARCHAR(100) NOT NULL REFERENCES subject_officer_form_table(ref_number) ON DELETE CASCADE ON UPDATE CASCADE,
+    file_name VARCHAR(255),
+    file_no VARCHAR(100),
+    upcoming_action TEXT,
+    date DATE,
+    description TEXT,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_reply_letter_details_ref_number ON reply_letter_details_table(ref_number);
+CREATE INDEX IF NOT EXISTS idx_reply_letter_details_file_no ON reply_letter_details_table(file_no);
+CREATE INDEX IF NOT EXISTS idx_reply_letter_details_date ON reply_letter_details_table(date);
+
 -- =============================================================
 -- PART 6: SYSTEM AUDIT & DOCUMENTS MODULE
 -- =============================================================

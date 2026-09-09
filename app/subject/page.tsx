@@ -31,6 +31,7 @@ interface Case {
   schoolName?: string;
   stage?: string;
   stageKey?: string;
+  upcomingAction?: string;
   isProperDisciplinary?: boolean;
   disciplinaryCharge?: string;
 }
@@ -475,10 +476,22 @@ export function collectAnswerLetters(
   subsequentData: any[],
   assignedRefNos: string[],
   activeNameClean: string,
-  isOfficerMatchedFn: (name: string) => boolean
+  isOfficerMatchedFn: (name: string) => boolean,
+  inquiryCaseNos: string[] = []
 ) {
   const list: any[] = [];
   const assignedRefNosClean = (assignedRefNos || []).map((r) => String(r || "").trim().toLowerCase());
+  const inquirySet = new Set((inquiryCaseNos || []).map((r) => String(r || "").trim().toLowerCase()));
+
+  const isCaseAlreadyMovedToInquiry = (targetCaseNo: string, itemObj: any) => {
+    const cleanCase = String(targetCaseNo || "").trim().toLowerCase();
+    if (!cleanCase) return false;
+    if (inquirySet.has(cleanCase)) return true;
+    if (itemObj?.isProcessedAnswer === true || itemObj?.isProcessedAnswer === "true") return true;
+    const upAction = String(itemObj?.upcoming_action || itemObj?.upcomingAction || itemObj?.future_action || itemObj?.report_state || "").toLowerCase();
+    if (upAction.includes("inspection") || upAction.includes("inquiry") || upAction.includes("පරීක්ෂණ")) return true;
+    return false;
+  };
 
   if (Array.isArray(subsequentData)) {
     subsequentData.forEach((m: any) => {
@@ -486,7 +499,7 @@ export function collectAnswerLetters(
       const mailOfficer = m.mail_officer_name || m.officer_name || "";
       const targetCaseNo = m.case_no || m.ref_no || "";
       const isMatch = isOfficerMatchedFn(mailOfficer) || (targetCaseNo && assignedRefNosClean.includes(String(targetCaseNo).trim().toLowerCase()));
-      if (isAnswer && isMatch) {
+      if (isAnswer && isMatch && !isCaseAlreadyMovedToInquiry(targetCaseNo, m)) {
         list.push({
           id: m.id || `sub-${targetCaseNo}-${m.received_date || m.created_at}`,
           caseNo: targetCaseNo,
@@ -508,7 +521,7 @@ export function collectAnswerLetters(
       const mailOfficer = l.officer_name || "";
       const targetCaseNo = l.ref_no || l.case_no || "";
       const isMatch = isOfficerMatchedFn(mailOfficer) || (targetCaseNo && assignedRefNosClean.includes(String(targetCaseNo).trim().toLowerCase()));
-      if (isAnswer && isMatch) {
+      if (isAnswer && isMatch && !isCaseAlreadyMovedToInquiry(targetCaseNo, l)) {
         list.push({
           id: l.id || `daily-${targetCaseNo}`,
           caseNo: targetCaseNo,
@@ -533,7 +546,7 @@ export function collectAnswerLetters(
           const mailOfficer = sm.mailOfficerName || sm.officerName || "";
           const targetCaseNo = sm.caseNo || sm.case_no || sm.refNo || "";
           const isMatch = isOfficerMatchedFn(mailOfficer) || (targetCaseNo && assignedRefNosClean.includes(String(targetCaseNo).trim().toLowerCase()));
-          if (isAnswer && isMatch) {
+          if (isAnswer && isMatch && !isCaseAlreadyMovedToInquiry(targetCaseNo, sm)) {
             list.push({
               id: sm.id || `local-sub-${targetCaseNo}-${sm.receivedDate || sm.createdAt}`,
               caseNo: targetCaseNo,
@@ -556,7 +569,7 @@ export function collectAnswerLetters(
           const mailOfficer = sm.mailOfficerName || sm.officerName || "";
           const targetCaseNo = sm.caseNo || sm.case_no || sm.refNo || "";
           const isMatch = isOfficerMatchedFn(mailOfficer) || (targetCaseNo && assignedRefNosClean.includes(String(targetCaseNo).trim().toLowerCase()));
-          if (isAnswer && isMatch) {
+          if (isAnswer && isMatch && !isCaseAlreadyMovedToInquiry(targetCaseNo, sm)) {
             list.push({
               id: sm.id || `local-case-mail-${targetCaseNo}-${sm.receivedDate || sm.createdAt}`,
               caseNo: targetCaseNo,
@@ -579,7 +592,7 @@ export function collectAnswerLetters(
           const mailOfficer = l.officerName || "";
           const targetCaseNo = l.refNo || l.caseNo || "";
           const isMatch = isOfficerMatchedFn(mailOfficer) || (targetCaseNo && assignedRefNosClean.includes(String(targetCaseNo).trim().toLowerCase()));
-          if (isAnswer && isMatch) {
+          if (isAnswer && isMatch && !isCaseAlreadyMovedToInquiry(targetCaseNo, l)) {
             list.push({
               id: l.id || `local-daily-${targetCaseNo}`,
               caseNo: targetCaseNo,
@@ -886,12 +899,88 @@ function SubjectOfficerDashboardContent() {
                 return dateB - dateA;
               });
 
+              // Fetch reply letters from API / Supabase
+              let fetchedReplyLetters: any[] = [];
+              try {
+                const repRes = await fetch("/api/reply-letter-details");
+                if (repRes.ok) {
+                  const repJson = await repRes.json();
+                  if (repJson.data && Array.isArray(repJson.data)) {
+                    fetchedReplyLetters = repJson.data;
+                  }
+                }
+              } catch (e) {}
+
+              if (fetchedReplyLetters.length === 0 && isSupabaseConfigured) {
+                try {
+                  const { data: supaReply } = await supabase.from("reply_letter_details_table").select("*");
+                  if (supaReply) fetchedReplyLetters = supaReply;
+                } catch (e) {}
+              }
+
+              // Also check localStorage actions
+              if (typeof window !== "undefined") {
+                try {
+                  const localNewActions = JSON.parse(localStorage.getItem("dcmms_new_letter_current_case") || "[]");
+                  if (Array.isArray(localNewActions)) {
+                    localNewActions.forEach((la: any) => {
+                      if (!fetchedReplyLetters.some((fr: any) => (fr.ref_number || fr.file_no) === la.caseNo)) {
+                        fetchedReplyLetters.push({
+                          ref_number: la.caseNo,
+                          file_no: la.specialNotes || la.caseNo,
+                          upcoming_action: la.upcomingAction || la.reportState || "",
+                          date: la.receivedDate,
+                          description: la.description || "",
+                        });
+                      }
+                    });
+                  }
+                } catch (e) {}
+              }
+              setReplyLettersList(fetchedReplyLetters);
+
+              // Fetch concerned officers from dcmms_concerned_officers
+              let cMap: Record<string, any> = {};
+              try {
+                const { data: cOfficers } = await supabase.from("dcmms_concerned_officers").select("*");
+                if (cOfficers && Array.isArray(cOfficers)) {
+                  cOfficers.forEach((co: any) => {
+                    if (co.case_no && !cMap[co.case_no.toLowerCase()]) {
+                      cMap[co.case_no.toLowerCase()] = co;
+                    }
+                  });
+                }
+              } catch (e) {}
+
+              if (typeof window !== "undefined") {
+                try {
+                  const localCO = JSON.parse(localStorage.getItem("dcmms_officer_concerned") || "{}");
+                  if (localCO && typeof localCO === "object") {
+                    Object.keys(localCO).forEach((k) => {
+                      if (!cMap[k.toLowerCase()]) {
+                        cMap[k.toLowerCase()] = localCO[k];
+                      }
+                    });
+                  }
+                } catch (e) {}
+              }
+              setConcernedOfficersMap(cMap);
+
+              // Calculate case numbers that moved to inquiry
+              const inquiryCaseNos = fetchedReplyLetters
+                .filter((r: any) => {
+                  const act = String(r.upcoming_action || "").toLowerCase();
+                  return act.includes("inspection") || act.includes("inquiry") || act.includes("පරීක්ෂණ");
+                })
+                .map((r: any) => String(r.ref_number || r.file_no || "").trim().toLowerCase());
+
               const answerList = collectAnswerLetters(
                 letters || [],
                 subsequentData || [],
                 assignedRefNos,
                 activeNameClean,
-                isOfficerMatched
+                isOfficerMatched,
+                inquiryCaseNos
               );
               setAssignedAnswerLetters(answerList);
               setCases(mapped);
@@ -1024,43 +1113,7 @@ function SubjectOfficerDashboardContent() {
               }
             });
 
-            if (filtered.length === 0) {
-              filtered = [
-                {
-                  id: "case-INQ/2026/001",
-                  caseNo: "INQ/2026/001",
-                  assignedDate: "2026-07-28",
-                  receivedDate: "2026-07-28",
-                  letterDate: "2026-07-28",
-                  subject: "Formal disciplinary inquiry - Student misconduct at Royal College",
-                  priority: "high",
-                  status: "In Progress",
-                  isOld: true,
-                },
-                {
-                  id: "case-INQ/2026/002",
-                  caseNo: "INQ/2026/002",
-                  assignedDate: "2026-08-05",
-                  receivedDate: "2026-08-05",
-                  letterDate: "2026-08-05",
-                  subject: "Preliminary investigation on teacher absenteeism - Jaffna Office",
-                  priority: "medium",
-                  status: "In Progress",
-                  isOld: false,
-                },
-                {
-                  id: "case-INQ/2026/003",
-                  caseNo: "INQ/2026/003",
-                  assignedDate: "2026-08-12",
-                  receivedDate: "2026-08-12",
-                  letterDate: "2026-08-12",
-                  subject: "Inquiry into safety guidelines violation - Annual Sports Meet",
-                  priority: "low",
-                  status: "In Progress",
-                  isOld: false,
-                },
-              ];
-            }
+
 
             filtered.sort((a: any, b: any) => {
               const timeA = new Date(a.createdAt || a.created_at || 0).getTime();
@@ -1072,6 +1125,43 @@ function SubjectOfficerDashboardContent() {
               const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).getTime();
               return dateB - dateA;
             });
+
+            // Fetch reply letters from localStorage
+            let fallbackReplyLetters: any[] = [];
+            try {
+              const localNewActions = JSON.parse(localStorage.getItem("dcmms_new_letter_current_case") || "[]");
+              if (Array.isArray(localNewActions)) {
+                localNewActions.forEach((la: any) => {
+                  fallbackReplyLetters.push({
+                    ref_number: la.caseNo,
+                    file_no: la.specialNotes || la.caseNo,
+                    upcoming_action: la.upcomingAction || la.reportState || "",
+                    date: la.receivedDate,
+                    description: la.description || "",
+                  });
+                });
+              }
+            } catch (e) {}
+            setReplyLettersList(fallbackReplyLetters);
+
+            let fallbackCMap: Record<string, any> = {};
+            try {
+              const localCO = JSON.parse(localStorage.getItem("dcmms_officer_concerned") || "{}");
+              if (localCO && typeof localCO === "object") {
+                Object.keys(localCO).forEach((k) => {
+                  fallbackCMap[k.toLowerCase()] = localCO[k];
+                });
+              }
+            } catch (e) {}
+            setConcernedOfficersMap(fallbackCMap);
+
+            const fallbackInquiryCaseNos = fallbackReplyLetters
+              .filter((r: any) => {
+                const act = String(r.upcoming_action || "").toLowerCase();
+                return act.includes("inspection") || act.includes("inquiry") || act.includes("පරීක්ෂණ");
+              })
+              .map((r: any) => String(r.ref_number || r.file_no || "").trim().toLowerCase());
+
             const fallbackAnswerList = collectAnswerLetters(
               lettersList || [],
               [],
@@ -1082,7 +1172,8 @@ function SubjectOfficerDashboardContent() {
                 if (!targetName || typeof targetName !== "string" || !targetName.trim()) return false;
                 const cleanTarget = targetName.trim().toLowerCase();
                 return cleanTarget === activeNameClean || cleanTarget.includes(activeNameClean) || activeNameClean.includes(cleanTarget);
-              }
+              },
+              fallbackInquiryCaseNos
             );
             setAssignedAnswerLetters(fallbackAnswerList);
             setCases(filtered);
@@ -1255,6 +1346,8 @@ function SubjectOfficerDashboardContent() {
   // Tab navigation state
   const [activeTab, setActiveTab] = useState<"cases" | "answer_letters" | "recommendations" | "conducting_inquiry" | "disciplinary_inspection">("cases");
   const [assignedAnswerLetters, setAssignedAnswerLetters] = useState<any[]>([]);
+  const [replyLettersList, setReplyLettersList] = useState<any[]>([]);
+  const [concernedOfficersMap, setConcernedOfficersMap] = useState<Record<string, any>>({});
   const [answerSearchQuery, setAnswerSearchQuery] = useState("");
 
   // Sync tab and search from URL search parameters if provided
@@ -1263,6 +1356,9 @@ function SubjectOfficerDashboardContent() {
       if (["cases", "answer_letters", "recommendations", "conducting_inquiry", "disciplinary_inspection"].includes(tabParam)) {
         setActiveTab(tabParam as any);
       }
+    }
+    if (caseNoParam && tabParam === "conducting_inquiry") {
+      setInquirySearchQuery(caseNoParam);
     }
     if (caseNoParam && tabParam === "disciplinary_inspection") {
       setInspectionSearchQuery(caseNoParam);
@@ -2450,103 +2546,41 @@ function SubjectOfficerDashboardContent() {
   const conductingInquiryCases = useMemo(() => {
     const inquiryMap = new Map<string, any>();
 
-    const seedInquiries = [
-      {
-        id: "inq-seed-001",
-        caseNo: "INQ/2026/001",
-        subject: "Preliminary investigation on teacher absenteeism - Jaffna Office",
-        accusedName: "Mrs. T. Shanmugam",
-        accusedDesignation: "Senior Assistant Teacher",
-        schoolName: "Hindu College, Jaffna",
-        priority: "medium",
-        stage: "Conducting an Inquiry",
-        stageKey: "inquiry",
-        appointmentDate: "2026-08-05",
-        hearingDate: "2026-09-08",
-        reportDueDate: "2026-09-28",
-        extensionCount: "None",
-        proceedingsStatus: "Witness depositions underway. Auditing attendance registers.",
-        chairman: { name: "Mr. K. Sivakumar", nic: "721987654V" },
-        members: ["Mrs. V. Nithyanandan"],
-        notes: "Inquiry sitting on 08th Sept. Notice served to respondent."
-      },
-      {
-        id: "inq-seed-002",
-        caseNo: "INQ/2026/002",
-        subject: "Inquiry into safety guidelines violation - Annual Sports Meet",
-        accusedName: "Mr. P. B. Dissanayake",
-        accusedDesignation: "Sectional Head (Sports & Activities)",
-        schoolName: "Ananda College, Colombo 10",
-        priority: "low",
-        stage: "Inquiry Hearing Scheduled",
-        stageKey: "scheduled",
-        appointmentDate: "2026-08-12",
-        hearingDate: "2026-09-18",
-        reportDueDate: "2026-10-05",
-        extensionCount: "None",
-        proceedingsStatus: "Preliminary evidence recorded. Formal panel hearing date notified.",
-        chairman: { name: "Mr. Nimal Senanayake", nic: "680123456V" },
-        members: ["Mr. M. F. M. Farook", "Mrs. D. K. Perera"],
-        notes: "Witness summon letters dispatched to physical education instructors."
-      },
-      {
-        id: "inq-seed-003",
-        caseNo: "INQ/2026/003",
-        subject: "Preliminary inquiry into laboratory equipment procurement discrepancy",
-        accusedName: "Mr. H. M. Bandara",
-        accusedDesignation: "Senior Science Teacher / Lab Custodian",
-        schoolName: "Dharmaraja College, Kandy",
-        priority: "medium",
-        stage: "Report Submission Pending",
-        stageKey: "report_pending",
-        appointmentDate: "2026-07-15",
-        hearingDate: "2026-08-20",
-        reportDueDate: "2026-09-15",
-        extensionCount: "1st Extension",
-        proceedingsStatus: "Panel inquiries complete. Draft investigation report under finalization.",
-        chairman: { name: "Dr. Anura Gunawardena", nic: "601239874V" },
-        members: ["Mrs. K. Jayakody"],
-        notes: "Draft report review scheduled with Zonal Director."
-      },
-      {
-        id: "inq-seed-004",
-        caseNo: "INQ/2026/004",
-        subject: "Fact-finding inquiry on administrative irregular leave records",
-        accusedName: "Mr. S. Wickramasinghe",
-        accusedDesignation: "Development Officer / Grade II",
-        schoolName: "Zonal Education Office, Galle",
-        priority: "high",
-        stage: "Preliminary Inquiry",
-        stageKey: "prelim",
-        appointmentDate: "2026-08-25",
-        hearingDate: "2026-09-22",
-        reportDueDate: "2026-10-12",
-        extensionCount: "None",
-        proceedingsStatus: "Appointment letter issued. Initial statement recorded from Branch Head.",
-        chairman: { name: "Mrs. M. K. Alwis", nic: "750982341V" },
-        members: ["Mr. T. Samarajeewa"],
-        notes: "Call for audit files and leave approval sheets."
-      }
-    ];
-
-    seedInquiries.forEach((item) => {
-      inquiryMap.set(item.caseNo.toLowerCase(), item);
-    });
-
-    // Merge live cases & assignments
+    // Merge live cases & assignments & reply letters
     cases.forEach((c) => {
       const cNoKey = (c.caseNo || "").trim().toLowerCase();
+      if (!cNoKey) return;
+
       const asgn = assignments.find((a: any) => (a.caseNo || a.case_no || "").trim().toLowerCase() === cNoKey);
       const committee = asgn ? parseCommitteeDetails(asgn) : null;
+      const replyItem = replyLettersList.find((r: any) => (r.ref_number || r.file_no || "").trim().toLowerCase() === cNoKey);
+      const concernedOff = concernedOfficersMap[cNoKey] || {};
 
-      const isEligible =
-        cNoKey.includes("inq") ||
-        (c.subject || "").toLowerCase().includes("inquiry") ||
-        (c.subject || "").toLowerCase().includes("investigation") ||
-        (asgn && committee && committee.hasDetails);
+      const hasInspectionAction =
+        (replyItem && replyItem.upcoming_action && (
+          String(replyItem.upcoming_action).toLowerCase().includes("inspection") ||
+          String(replyItem.upcoming_action).toLowerCase().includes("inquiry") ||
+          String(replyItem.upcoming_action).includes("පරීක්ෂණ") ||
+          String(replyItem.upcoming_action).includes("විමර්ශන") ||
+          String(replyItem.upcoming_action).includes("ஆய்வு")
+        )) ||
+        c.status === "Conducting an Inquiry" ||
+        c.status === "Conduct an inspection" ||
+        c.stage === "Conducting an Inquiry" ||
+        c.stageKey === "inquiry" ||
+        (c.upcomingAction && (
+          String(c.upcomingAction).toLowerCase().includes("inspection") ||
+          String(c.upcomingAction).toLowerCase().includes("inquiry") ||
+          String(c.upcomingAction).includes("පරීක්ෂණ") ||
+          String(c.upcomingAction).includes("විමර්ශන") ||
+          String(c.upcomingAction).includes("ஆய்வு")
+        ));
+
+      const hasInquiryCommittee = asgn && (asgn.hearingDate || asgn.hearing_date || (committee && (committee.chairmanName || (committee.memberList && committee.memberList.length > 0))));
+
+      const isEligible = hasInspectionAction || hasInquiryCommittee;
 
       if (isEligible) {
-        const existing = inquiryMap.get(cNoKey) || {};
         const stage = (asgn?.hearingDate || asgn?.hearing_date)
           ? "Inquiry Hearing Scheduled"
           : (asgn?.initialInvestigationComplete || asgn?.initial_investigation_complete)
@@ -2559,34 +2593,92 @@ function SubjectOfficerDashboardContent() {
           ? "report_pending"
           : "inquiry";
 
+        const proceedings =
+          replyItem?.description ||
+          (hasInspectionAction ? "Inspection proceedings initiated by Subject Officer" : "Inquiry proceedings active");
+
+        const accusedName =
+          concernedOff?.officer_name ||
+          concernedOff?.officerName ||
+          (concernedOff?.persons && concernedOff.persons[0]?.name) ||
+          c.accusedName ||
+          "—";
+
+        const accusedDesignation =
+          concernedOff?.position ||
+          (concernedOff?.persons && concernedOff.persons[0]?.position) ||
+          c.accusedDesignation ||
+          "Educational Officer";
+
+        const schoolName =
+          concernedOff?.institute_name ||
+          concernedOff?.instituteName ||
+          c.schoolName ||
+          "—";
+
         inquiryMap.set(cNoKey, {
-          id: existing.id || c.id || `inq-${c.caseNo}`,
+          id: c.id || `inq-${c.caseNo}`,
           caseNo: c.caseNo,
-          subject: c.subject || existing.subject || `Inquiry Case ${c.caseNo}`,
-          accusedName: existing.accusedName || "Concerned Officer",
-          accusedDesignation: existing.accusedDesignation || "Educational Officer",
-          schoolName: existing.schoolName || "Government Educational Institute",
-          priority: c.priority || existing.priority || "medium",
-          stage: existing.stage || stage,
-          stageKey: existing.stageKey || stageKey,
-          appointmentDate: asgn?.appointmentDate || asgn?.appointment_date || existing.appointmentDate || c.assignedDate || c.receivedDate,
-          hearingDate: asgn?.hearingDate || asgn?.hearing_date || existing.hearingDate || "Pending Date",
-          reportDueDate: asgn?.reportDueDate || asgn?.report_due_date || existing.reportDueDate || "Pending Schedule",
-          extensionCount: asgn?.extensionTerm || asgn?.extension_term || existing.extensionCount || "None",
-          proceedingsStatus: existing.proceedingsStatus || "Inquiry proceedings active",
+          subject: c.subject || replyItem?.description || `Inquiry Case ${c.caseNo}`,
+          accusedName: accusedName,
+          accusedDesignation: accusedDesignation,
+          schoolName: schoolName,
+          priority: c.priority || "medium",
+          stage: stage,
+          stageKey: stageKey,
+          appointmentDate: asgn?.appointmentDate || asgn?.appointment_date || replyItem?.date || c.assignedDate || c.receivedDate,
+          hearingDate: asgn?.hearingDate || asgn?.hearing_date || "Pending Date",
+          reportDueDate: asgn?.reportDueDate || asgn?.report_due_date || "Pending Schedule",
+          extensionCount: asgn?.extensionTerm || asgn?.extension_term || "None",
+          proceedingsStatus: proceedings,
           chairman: committee?.chairmanName
             ? { name: committee.chairmanName, nic: committee.chairmanNic || "—" }
-            : existing.chairman || { name: "Assigned Inquiry Officer", nic: "—" },
+            : { name: "Assigned Subject Officer", nic: "—" },
           members: committee?.memberList && committee.memberList.length > 0
             ? committee.memberList
-            : existing.members || [],
-          notes: asgn?.notes || existing.notes || c.subject
+            : [],
+          notes: replyItem?.description || asgn?.notes || c.subject
+        });
+      }
+    });
+
+    // Also add reply letters with upcoming_action: "Conduct an inspection" if not in cases yet
+    replyLettersList.forEach((r: any) => {
+      const rRef = (r.ref_number || r.file_no || "").trim().toLowerCase();
+      if (!rRef) return;
+      const isInspectionAction = r.upcoming_action && (
+        String(r.upcoming_action).toLowerCase().includes("inspection") ||
+        String(r.upcoming_action).toLowerCase().includes("inquiry") ||
+        String(r.upcoming_action).includes("පරීක්ෂණ") ||
+        String(r.upcoming_action).includes("විමර්ශන") ||
+        String(r.upcoming_action).includes("ஆய்வு")
+      );
+      if (isInspectionAction && !inquiryMap.has(rRef)) {
+        const concernedOff = concernedOfficersMap[rRef] || {};
+        inquiryMap.set(rRef, {
+          id: `inq-reply-${r.id || r.ref_number}`,
+          caseNo: r.ref_number || r.file_no,
+          subject: r.description || `Inquiry / Inspection on Case ${r.ref_number}`,
+          accusedName: concernedOff?.officer_name || concernedOff?.officerName || (concernedOff?.persons && concernedOff.persons[0]?.name) || "Concerned Officer",
+          accusedDesignation: concernedOff?.position || (concernedOff?.persons && concernedOff.persons[0]?.position) || "Educational Officer",
+          schoolName: concernedOff?.institute_name || concernedOff?.instituteName || "Government Educational Institute",
+          priority: "medium",
+          stage: "Conducting an Inquiry",
+          stageKey: "inquiry",
+          appointmentDate: r.date || new Date().toISOString().split("T")[0],
+          hearingDate: "Pending Date",
+          reportDueDate: "Pending Schedule",
+          extensionCount: "None",
+          proceedingsStatus: r.description || "Inspection proceedings initiated by Subject Officer",
+          chairman: { name: "Assigned Subject Officer", nic: "—" },
+          members: [],
+          notes: r.description || "Conduct an inspection action initiated"
         });
       }
     });
 
     return Array.from(inquiryMap.values());
-  }, [cases, assignments]);
+  }, [cases, assignments, replyLettersList, concernedOfficersMap]);
 
   // Filtered conducting inquiry cases
   const filteredInquiryCases = useMemo(() => {
@@ -4168,6 +4260,10 @@ function SubjectOfficerDashboardContent() {
                               <span className="badge-badge badge-status-closed" style={{ backgroundColor: "#e0e7ff", color: "#3730a3", border: "1px solid #c7d2fe", fontWeight: 700, padding: "4px 10px", borderRadius: "12px", fontSize: "11px" }}>
                                 {lang === "si" ? "පවරන ලද පිළිතුරු ලිපිය" : "Assigned Answer Letter"}
                               </span>
+                            ) : item.status === "Conducting an Inquiry" || item.status === "Conduct an inspection" ? (
+                              <span className="badge-badge" style={{ backgroundColor: "#e0f2fe", color: "#0369a1", border: "1px solid #bae6fd", fontWeight: 700, padding: "4px 10px", borderRadius: "12px", fontSize: "11px" }}>
+                                {lang === "si" ? "පරීක්ෂණයක් සිදු කිරීම" : lang === "ta" ? "விசாரணை" : "Conducting Inquiry"}
+                              </span>
                             ) : item.status === "In Progress" ? t("statusInProgress") :
                               item.status === "Closed" ? t("statusClosed") : t("statusPending")}
                           </td>
@@ -4200,7 +4296,7 @@ function SubjectOfficerDashboardContent() {
                           </td>
                           <td className="text-center actions-cell">
                             <Link
-                              href={`/subject/add-details?caseNo=${item.caseNo}`}
+                              href={`/subject/add-details?caseNo=${item.caseNo}${item.status === "assigned answer letter" || item.status === "Assigned Answer Letter" ? "&isAnswerLetter=true" : ""}`}
                               className="add-details-link"
                             >
                               {t("addDetails")}
@@ -4306,7 +4402,7 @@ function SubjectOfficerDashboardContent() {
                           </td>
                           <td className="text-center actions-cell">
                             <Link
-                              href={`/subject/add-details?caseNo=${item.caseNo}`}
+                              href={`/subject/add-details?caseNo=${item.caseNo}&isAnswerLetter=true`}
                               className="add-details-link"
                             >
                               {t("addDetails", "Add Details / View Case")}

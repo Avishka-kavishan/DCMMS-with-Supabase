@@ -1835,6 +1835,51 @@ export async function saveAccusedOfficerServer(officerData: any) {
           `;
         }
       }
+
+      // 6. Ensure and synchronize with reply_letter_details_table
+      try {
+        await ensureReplyLetterDetailsTable();
+        const existingReply: any[] = await prisma.$queryRaw`
+          SELECT id FROM public.reply_letter_details_table WHERE ref_number = ${refTrimmed} LIMIT 1;
+        `;
+        if (existingReply && existingReply.length > 0) {
+          await prisma.$executeRaw`
+            UPDATE public.reply_letter_details_table
+            SET
+              file_name = ${fileNameVal},
+              file_no = ${subject_file_no || null},
+              upcoming_action = ${future_action || null},
+              date = ${prepDateVal},
+              description = ${descVal},
+              updated_at = NOW()
+            WHERE id = ${existingReply[0].id};
+          `;
+        } else {
+          await prisma.$executeRaw`
+            INSERT INTO public.reply_letter_details_table (
+              ref_number,
+              file_name,
+              file_no,
+              upcoming_action,
+              date,
+              description,
+              created_at,
+              updated_at
+            ) VALUES (
+              ${refTrimmed},
+              ${fileNameVal},
+              ${subject_file_no || null},
+              ${future_action || null},
+              ${prepDateVal},
+              ${descVal},
+              NOW(),
+              NOW()
+            );
+          `;
+        }
+      } catch (replySyncErr) {
+        console.warn("Could not sync reply_letter_details_table in saveAccusedOfficerServer:", replySyncErr);
+      }
     }
 
     return serializeForServerAction({
@@ -2023,22 +2068,49 @@ export async function getAccusedOfficerByRefServer(refNumber: string) {
 
     const primaryOfficer = officerList.length > 0 ? officerList[0] : null;
 
+    // Fetch reply_letter_details if available
+    let replyDetails: any = null;
+    try {
+      await ensureReplyLetterDetailsTable();
+      const replyRows: any[] = await prisma.$queryRaw`
+        SELECT 
+          id,
+          ref_number,
+          file_name,
+          file_no,
+          upcoming_action,
+          date,
+          description,
+          created_at,
+          updated_at
+        FROM public.reply_letter_details_table
+        WHERE LOWER(ref_number) = LOWER(${refTrimmed})
+           OR LOWER(file_no) = LOWER(${refTrimmed})
+        ORDER BY updated_at DESC
+        LIMIT 1;
+      `;
+      if (replyRows && replyRows.length > 0) {
+        replyDetails = replyRows[0];
+      }
+    } catch (e) {}
+
     return serializeForServerAction({
       success: true,
       data: {
         form_id: form.form_id ? String(form.form_id) : null,
         ref_number: form.ref_number,
-        subject_file_no: form.subject_file_no,
-        file_name: form.file_name,
-        future_action: form.future_action,
-        description: form.description,
-        date_prepared_and_submitted_for_signature: form.date_prepared_and_submitted_for_signature,
+        subject_file_no: form.subject_file_no || replyDetails?.file_no || null,
+        file_name: form.file_name || replyDetails?.file_name || null,
+        future_action: form.future_action || replyDetails?.upcoming_action || null,
+        description: form.description || replyDetails?.description || null,
+        date_prepared_and_submitted_for_signature: form.date_prepared_and_submitted_for_signature || replyDetails?.date || null,
         classification_of_complaint_letter: form.classification_of_complaint_letter,
         name_of_the_presenting_the_complain: form.name_of_the_presenting_the_complain,
         address_of_the_person_presenting_the_complaint: form.address_of_the_person_presenting_the_complaint,
         accused_officer: primaryOfficer,
         accused_officers: officerList,
         accused_school: schoolInfo,
+        reply_letter_details: replyDetails,
       }
     });
   } catch (error: any) {
@@ -5229,6 +5301,175 @@ export async function saveChargeSheetDetailsServer(data: {
     return serializeForServerAction({ success: false, error: err?.message || "Failed to save charge sheet details" });
   }
 }
+
+// -------------------------------------------------------------
+// 23. Reply Letter Details Operations (reply_letter_details_table)
+// -------------------------------------------------------------
+async function ensureReplyLetterDetailsTable() {
+  try {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS public.reply_letter_details_table (
+        id BIGSERIAL PRIMARY KEY,
+        ref_number VARCHAR(100) NOT NULL REFERENCES public.subject_officer_form_table(ref_number) ON DELETE CASCADE ON UPDATE CASCADE,
+        file_name VARCHAR(255),
+        file_no VARCHAR(100),
+        upcoming_action TEXT,
+        date DATE,
+        description TEXT,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE INDEX IF NOT EXISTS idx_reply_letter_details_ref_number ON public.reply_letter_details_table(ref_number);
+      `);
+      await prisma.$executeRawUnsafe(`
+        CREATE INDEX IF NOT EXISTS idx_reply_letter_details_file_no ON public.reply_letter_details_table(file_no);
+      `);
+      await prisma.$executeRawUnsafe(`
+        CREATE INDEX IF NOT EXISTS idx_reply_letter_details_date ON public.reply_letter_details_table(date);
+      `);
+    } catch (e) {}
+  } catch (e: any) {
+    console.warn("Table verification notice for reply_letter_details_table:", e?.message);
+  }
+}
+
+export async function saveReplyLetterDetailsServer(data: {
+  ref_number: string;
+  file_name?: string | null;
+  file_no?: string | null;
+  upcoming_action?: string | null;
+  date?: string | null;
+  description?: string | null;
+}) {
+  try {
+    await ensureReplyLetterDetailsTable();
+    const cleanRef = (data.ref_number || "").trim();
+    if (!cleanRef) return serializeForServerAction({ success: false, error: "Reference number is required" });
+
+    const fileName = data.file_name || null;
+    const fileNo = data.file_no || null;
+    const upcomingAction = data.upcoming_action || null;
+    const replyDate = parseSafeDate(data.date);
+    const desc = data.description || null;
+
+    // Ensure parent ref_number in subject_officer_form_table
+    await prisma.$executeRaw`
+      INSERT INTO subject_officer_form_table (ref_number, subject_file_no, created_at, updated_at)
+      VALUES (${cleanRef}, ${fileNo || cleanRef}, NOW(), NOW())
+      ON CONFLICT (ref_number) DO NOTHING;
+    `;
+
+    // Check if record exists for this ref_number
+    const existing = await prisma.$queryRaw<any[]>`
+      SELECT id FROM public.reply_letter_details_table WHERE ref_number = ${cleanRef} LIMIT 1;
+    `;
+
+    if (existing && existing.length > 0) {
+      await prisma.$executeRaw`
+        UPDATE public.reply_letter_details_table
+        SET
+          file_name = ${fileName},
+          file_no = ${fileNo},
+          upcoming_action = ${upcomingAction},
+          date = ${replyDate},
+          description = ${desc},
+          updated_at = NOW()
+        WHERE id = ${existing[0].id};
+      `;
+    } else {
+      await prisma.$executeRaw`
+        INSERT INTO public.reply_letter_details_table (
+          ref_number,
+          file_name,
+          file_no,
+          upcoming_action,
+          date,
+          description,
+          created_at,
+          updated_at
+        ) VALUES (
+          ${cleanRef},
+          ${fileName},
+          ${fileNo},
+          ${upcomingAction},
+          ${replyDate},
+          ${desc},
+          NOW(),
+          NOW()
+        );
+      `;
+    }
+
+    return serializeForServerAction({ success: true, ref_number: cleanRef });
+  } catch (err: any) {
+    console.error("Error in saveReplyLetterDetailsServer:", err);
+    return serializeForServerAction({ success: false, error: err?.message || "Failed to save reply letter details" });
+  }
+}
+
+export async function getReplyLetterDetailsByRefServer(refNumber: string) {
+  try {
+    await ensureReplyLetterDetailsTable();
+    const cleanRef = (refNumber || "").trim();
+    if (!cleanRef) return serializeForServerAction({ success: false, error: "Reference number is required" });
+
+    const rows = await prisma.$queryRaw<any[]>`
+      SELECT 
+        id,
+        ref_number,
+        file_name,
+        file_no,
+        upcoming_action,
+        date,
+        description,
+        created_at,
+        updated_at
+      FROM public.reply_letter_details_table
+      WHERE LOWER(ref_number) = LOWER(${cleanRef})
+         OR LOWER(file_no) = LOWER(${cleanRef})
+      ORDER BY updated_at DESC
+      LIMIT 1;
+    `;
+
+    if (rows && rows.length > 0) {
+      return serializeForServerAction({ success: true, data: rows[0] });
+    }
+    return serializeForServerAction({ success: true, data: null });
+  } catch (err: any) {
+    console.error("Error in getReplyLetterDetailsByRefServer:", err);
+    return serializeForServerAction({ success: false, error: err?.message || "Failed to get reply letter details" });
+  }
+}
+
+export async function getAllReplyLetterDetailsServer() {
+  try {
+    await ensureReplyLetterDetailsTable();
+    const rows = await prisma.$queryRaw<any[]>`
+      SELECT 
+        id,
+        ref_number,
+        file_name,
+        file_no,
+        upcoming_action,
+        date,
+        description,
+        created_at,
+        updated_at
+      FROM public.reply_letter_details_table
+      ORDER BY updated_at DESC;
+    `;
+
+    return serializeForServerAction({ success: true, data: rows || [] });
+  } catch (err: any) {
+    console.error("Error in getAllReplyLetterDetailsServer:", err);
+    return serializeForServerAction({ success: false, error: err?.message || "Failed to get all reply letter details", data: [] });
+  }
+}
+
 
 
 

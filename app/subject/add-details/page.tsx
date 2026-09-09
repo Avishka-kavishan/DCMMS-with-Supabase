@@ -14,7 +14,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 import { getCurrentProfile, dashboardPath } from "@/lib/auth";
 import { CheckCircle, X, ShieldCheck, Users, UserCheck, CalendarClock, Calendar } from "lucide-react";
-import { getInstitutesServer, saveInstituteServer, saveAccusedOfficerServer, getAccusedOfficerByRefServer } from "@/lib/db-actions";
+import { getInstitutesServer, saveInstituteServer, saveAccusedOfficerServer, getAccusedOfficerByRefServer, saveReplyLetterDetailsServer, getReplyLetterDetailsByRefServer } from "@/lib/db-actions";
 const formatStepTaken = (step: string, t: any) => {
   if (!step) return "";
   if (step.startsWith("[EduSecApproval:")) {
@@ -237,12 +237,54 @@ function CaseDetailsForm() {
   const [complaintMatter, setComplaintMatter] = useState("");
   const [complaintAge, setComplaintAge] = useState<"new" | "old">("new");
 
+  const isAnswerLetter = searchParams.get("isAnswerLetter") === "true" ||
+    searchParams.get("type") === "answer_letter" ||
+    assignmentData?.status === "assigned answer letter" ||
+    assignmentData?.status === "Assigned Answer Letter" ||
+    assignmentData?.is_answer_letter === true ||
+    assignmentData?.letterType?.toLowerCase().includes("answer") ||
+    letterData?.letterType?.toLowerCase().includes("answer");
+
   const isUserEditingReportStateRef = useRef(false);
 
   const normalizeReportState = (val: string | null | undefined): string => {
     if (!val) return "";
     const trimmed = String(val).trim();
     if (!trimmed || trimmed.toUpperCase() === "N/A" || trimmed === "—" || trimmed === "-") return "";
+
+    const lower = trimmed.toLowerCase();
+
+    // Check inspection aliases
+    if (
+      lower === "conduct an inspection" ||
+      lower === "conducting an inspection" ||
+      lower === "actionconductinspection" ||
+      lower.includes("විමර්ශනයක් පැවැත්වීම") ||
+      lower.includes("ආய்வு நடத்துதல்") ||
+      lower === "conduct an inquiry" ||
+      lower === "conducting an inquiry" ||
+      lower === "statusinquiry" ||
+      lower === "inquiry"
+    ) {
+      return "Conduct an inspection";
+    }
+
+    if (
+      lower === "initial investigation" ||
+      lower === "actioninitialinvestigation" ||
+      lower.includes("මූලික විමර්ශනය") ||
+      lower.includes("ஆரம்ப விசாரணை")
+    ) {
+      return "Initial investigation";
+    }
+
+    if (
+      lower.includes("finalize the file according to the additional secretary's instruction") ||
+      lower.includes("actionfinalizefileaccordingtosecretary") ||
+      lower.includes("අතිරේක ලේකම්ගේ උපදෙස්")
+    ) {
+      return "Finalize the file according to the additional secretary's instruction";
+    }
 
     const optionMap: Record<string, string[]> = {
       statusCallingReports: [
@@ -293,7 +335,6 @@ function CaseDetailsForm() {
       ],
     };
 
-    const lower = trimmed.toLowerCase();
     for (const [key, aliases] of Object.entries(optionMap)) {
       if (key.toLowerCase() === lower || aliases.some((a) => a.toLowerCase() === lower)) {
         return key;
@@ -720,6 +761,26 @@ function CaseDetailsForm() {
               setReceivedDate(String(d.date_prepared_and_submitted_for_signature).split("T")[0]);
             }
 
+            if (d.reply_letter_details) {
+              const rld = d.reply_letter_details;
+              if (rld.file_name) {
+                const cleanFN = String(rld.file_name).trim().toLowerCase();
+                setFileName(cleanFN === "mail" ? "mail" : "discipline");
+              }
+              if (rld.file_no) {
+                setSpecialNotes(cleanVal(rld.file_no));
+              }
+              if (rld.upcoming_action && !isUserEditingReportStateRef.current) {
+                setReportState(normalizeReportState(rld.upcoming_action));
+              }
+              if (rld.date) {
+                setReceivedDate(String(rld.date).split("T")[0]);
+              }
+              if (rld.description) {
+                setComplaintMatter(cleanVal(rld.description));
+              }
+            }
+
             const officersList = Array.isArray(d.accused_officers) && d.accused_officers.length > 0
               ? d.accused_officers
               : (d.accused_officer ? [d.accused_officer] : []);
@@ -1076,23 +1137,84 @@ function CaseDetailsForm() {
           } catch (e) {}
         }
       }
+
+      // Explicit direct save to reply_letter_details_table
+      try {
+        await saveReplyLetterDetailsServer({
+          ref_number: refNo,
+          file_name: fileName,
+          file_no: specialNotes || fileRelated || refNo,
+          upcoming_action: reportState || "",
+          date: receivedDate || null,
+          description: complaintMatter || "",
+        });
+      } catch (replyActionErr) {
+        try {
+          await fetch("/api/reply-letter-details", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              ref_number: refNo,
+              file_name: fileName,
+              file_no: specialNotes || fileRelated || refNo,
+              upcoming_action: reportState || "",
+              date: receivedDate || null,
+              description: complaintMatter || "",
+            }),
+          });
+        } catch (e) {}
+      }
     } catch (postErr) {
       console.error("Failed to save data to PostgreSQL database tables:", postErr);
     }
 
     if (isSupabaseConfigured) {
       try {
-        // Ensure the case row exists (needed for FK constraint)
-        await supabase
-          .from("dcmms_subject")
-          .upsert({
-            id: `case-${refNo}`,
-            case_no: refNo,
-            subject_officer_name: subjectOfficer || null,
-            status: status || "In Progress",
-          }, { onConflict: "case_no", ignoreDuplicates: true });
+        const isInspectionOrInquiry =
+          reportState === "Conduct an inspection" ||
+          reportState === "statusInquiry" ||
+          reportState === "statusPreliminaryInvestigation" ||
+          (typeof reportState === "string" && (
+            reportState.toLowerCase().includes("inspection") ||
+            reportState.toLowerCase().includes("inquiry") ||
+            reportState.includes("පරීක්ෂණ") ||
+            reportState.includes("විමර්ශන") ||
+            reportState.includes("ஆய்வு")
+          ));
 
-        // Update the priority, complainant, school and classification in dcmms_daily_mail as well
+        const finalCaseStatus = isInspectionOrInquiry
+          ? "Conducting an Inquiry"
+          : (status || "In Progress");
+
+        // 1. Ensure the case row exists or is updated in dcmms_subject
+        const { data: existingCase } = await supabase
+          .from("dcmms_subject")
+          .select("*")
+          .eq("case_no", refNo)
+          .maybeSingle();
+
+        if (existingCase) {
+          await supabase
+            .from("dcmms_subject")
+            .update({
+              subject_officer_name: subjectOfficer || existingCase.subject_officer_name || existingCase.officer_name || "Subject Officer",
+              status: finalCaseStatus,
+            })
+            .eq("case_no", refNo);
+        } else {
+          await supabase
+            .from("dcmms_subject")
+            .insert({
+              id: `case-${refNo}`,
+              case_no: refNo,
+              subject_officer_name: subjectOfficer || "Subject Officer",
+              status: finalCaseStatus,
+              priority: priority || "medium",
+              assigned_date: receivedDate || new Date().toISOString().split("T")[0],
+            });
+        }
+
+        // 2. Update the priority, complainant, school, classification, and status in dcmms_daily_mail
         await supabase
           .from("dcmms_daily_mail")
           .update({
@@ -1102,17 +1224,18 @@ function CaseDetailsForm() {
             institute_name: schoolName || null,
             subject: complaintMatter || null,
             region_province: classification === "anonymous" ? "Anonymous" : "Nominal",
+            status: finalCaseStatus,
           })
           .eq("ref_no", refNo);
 
-        // Save action/letters details as a new row in dcmms_subject_details
+        // 3. Save action/letters details as a new row in dcmms_subject_details
         const { error: actionError } = await supabase
           .from("dcmms_subject_details")
           .insert({
             id: actionId,
             case_no: refNo,
             received_date: receivedDate || null,
-            report_state: status || "Pending",
+            report_state: finalCaseStatus,
             special_notes: specialNotes || null,
             subject_officer_name: subjectOfficer || null,
             step_taken: serializedStepTaken,
@@ -1150,28 +1273,23 @@ function CaseDetailsForm() {
           } catch (e) {}
         }
 
-        // Update main case status and subject_officer_name
-        const { data: caseData, error: fetchError } = await supabase
-          .from("dcmms_subject")
-          .select("*")
-          .eq("case_no", refNo)
-          .single();
-
-        if (!fetchError && caseData) {
-          await supabase
-            .from("dcmms_subject")
-            .upsert({
-              ...caseData,
-              subject_officer_name: subjectOfficer || caseData.subject_officer_name || caseData.officer_name,
-              status: status || caseData.status,
-            });
-        }
+        // 4. Sync to Supabase reply_letter_details_table if present
+        try {
+          await supabase.from("reply_letter_details_table").upsert({
+            ref_number: refNo,
+            file_name: fileName,
+            file_no: specialNotes || fileRelated || refNo,
+            upcoming_action: reportState || "Conduct an inspection",
+            date: receivedDate || null,
+            description: complaintMatter || "",
+          }, { onConflict: "ref_number" });
+        } catch (e) {}
 
         await logAuditEvent(
           "UPDATE_SUBJECT_CASE",
           "dcmms_subject",
           refNo,
-          { reportState: status, subjectOfficer }
+          { reportState: finalCaseStatus, upcomingAction: reportState, subjectOfficer }
         );
       } catch (err: any) {
         console.error("Supabase save failed, falling back to localStorage:", err?.message || err?.details || JSON.stringify(err) || err);
@@ -1180,6 +1298,20 @@ function CaseDetailsForm() {
 
     // Save to Local Storage fallbacks
     if (typeof window !== "undefined") {
+      const isInspectionOrInquiry =
+        reportState === "Conduct an inspection" ||
+        reportState === "statusInquiry" ||
+        reportState === "statusPreliminaryInvestigation" ||
+        (typeof reportState === "string" && (
+          reportState.toLowerCase().includes("inspection") ||
+          reportState.toLowerCase().includes("inquiry") ||
+          reportState.includes("පරීක්ෂණ") ||
+          reportState.includes("විමර්ශන") ||
+          reportState.includes("ஆய்வு")
+        ));
+
+      const localStatus = isInspectionOrInquiry ? "Conducting an Inquiry" : (status || "In Progress");
+
       // Save actions to a list
       const storedActions = localStorage.getItem("dcmms_new_letter_current_case") || "[]";
       let actionsList = [];
@@ -1193,11 +1325,13 @@ function CaseDetailsForm() {
         id: actionId,
         caseNo: refNo,
         subjectOfficerName: subjectOfficer,
-        reportState: status,
+        reportState: localStatus,
+        upcomingAction: reportState || "",
         receivedDate,
         stepTaken: serializedStepTaken,
         specialNotes,
         isDraft: isDraftMode,
+        description: complaintMatter || "",
       });
       localStorage.setItem("dcmms_new_letter_current_case", JSON.stringify(cleanList));
 
@@ -1219,20 +1353,45 @@ function CaseDetailsForm() {
       };
       localStorage.setItem("dcmms_officer_concerned", JSON.stringify(concernedMap));
 
-      // Update case status locally
+      // Update case status locally in dcmms_cases
       const storedCases = localStorage.getItem("dcmms_cases");
-      if (storedCases) {
-        try {
-          const casesList = JSON.parse(storedCases);
-          const updated = casesList.map((c: any) => {
-            if (c.caseNo === refNo) {
-              return { ...c, status: status || c.status, isOld: complaintAge === "old" };
-            }
-            return c;
-          });
-          localStorage.setItem("dcmms_cases", JSON.stringify(updated));
-        } catch (e) {}
+      let casesList = [];
+      try { casesList = storedCases ? JSON.parse(storedCases) : []; } catch (e) {}
+      if (!Array.isArray(casesList)) casesList = [];
+
+      let foundCase = false;
+      const updated = casesList.map((c: any) => {
+        if (c.caseNo === refNo || c.refNo === refNo) {
+          foundCase = true;
+          return {
+            ...c,
+            status: localStatus,
+            stage: isInspectionOrInquiry ? "Conducting an Inquiry" : c.stage,
+            stageKey: isInspectionOrInquiry ? "inquiry" : c.stageKey,
+            upcomingAction: reportState || c.upcomingAction,
+            isOld: complaintAge === "old",
+          };
+        }
+        return c;
+      });
+
+      if (!foundCase) {
+        updated.push({
+          id: `case-${refNo}`,
+          caseNo: refNo,
+          refNo: refNo,
+          subject: complaintMatter || `Assigned Case (${refNo})`,
+          status: localStatus,
+          stage: isInspectionOrInquiry ? "Conducting an Inquiry" : "In Progress",
+          stageKey: isInspectionOrInquiry ? "inquiry" : "in_progress",
+          upcomingAction: reportState || "",
+          priority: priority || "medium",
+          assignedDate: receivedDate || new Date().toISOString().split("T")[0],
+          receivedDate: receivedDate || new Date().toISOString().split("T")[0],
+          isOld: complaintAge === "old",
+        });
       }
+      localStorage.setItem("dcmms_cases", JSON.stringify(updated));
 
       // Also update daily mail letters details in localStorage
       const storedLetters = localStorage.getItem("dcmms_letters");
@@ -1240,20 +1399,43 @@ function CaseDetailsForm() {
         try {
           const lettersList = JSON.parse(storedLetters);
           const updatedLetters = lettersList.map((l: any) => {
-            if (l.refNo === refNo) {
+            if (l.refNo === refNo || l.caseNo === refNo) {
               return {
                 ...l,
                 priority: priority,
                 senderName: classification === "anonymous" ? "Anonymous" : complainantName,
                 senderAddress: classification === "anonymous" ? "N/A" : complainantAddress,
                 instituteName: schoolName,
-                subject: complaintMatter,
+                subject: complaintMatter || l.subject,
                 regionProvince: classification === "anonymous" ? "Anonymous" : "Nominal",
+                isProcessedAnswer: isAnswerLetter || isInspectionOrInquiry,
+                upcomingAction: reportState || "",
+                status: localStatus,
               };
             }
             return l;
           });
           localStorage.setItem("dcmms_letters", JSON.stringify(updatedLetters));
+        } catch (e) {}
+      }
+
+      // Update subsequent mails in localStorage if answer letter
+      const storedSubMails = localStorage.getItem("dcmms_subsequent_mails");
+      if (storedSubMails) {
+        try {
+          const subList = JSON.parse(storedSubMails);
+          const updatedSub = subList.map((sm: any) => {
+            if ((sm.caseNo || sm.case_no || sm.refNo) === refNo) {
+              return {
+                ...sm,
+                isProcessedAnswer: isAnswerLetter || isInspectionOrInquiry,
+                upcomingAction: reportState || "",
+                status: localStatus,
+              };
+            }
+            return sm;
+          });
+          localStorage.setItem("dcmms_subsequent_mails", JSON.stringify(updatedSub));
         } catch (e) {}
       }
     }
@@ -1272,13 +1454,39 @@ function CaseDetailsForm() {
       return;
     }
 
-    await saveCaseData(reportState || "In Progress", false);
+    const isConductInspectionOrInquiry =
+      reportState === "Conduct an inspection" ||
+      reportState === "statusInquiry" ||
+      reportState === "statusPreliminaryInvestigation" ||
+      (typeof reportState === "string" && (
+        reportState.toLowerCase().includes("inspection") ||
+        reportState.toLowerCase().includes("inquiry") ||
+        reportState.includes("පරීක්ෂණ") ||
+        reportState.includes("විමර්ශන") ||
+        reportState.includes("ஆய்வு")
+      ));
+
+    const finalStatus = isConductInspectionOrInquiry ? "Conducting an Inquiry" : (reportState || "In Progress");
+
+    await saveCaseData(finalStatus, false);
     if (typeof window !== "undefined") {
       window.dispatchEvent(new Event("dcmms_assignment_updated"));
       window.dispatchEvent(new Event("dcmms_data_updated"));
     }
-    alert("Case details updated successfully!");
-    router.push("/subject");
+
+    if (isConductInspectionOrInquiry) {
+      alert(
+        lang === "si"
+          ? "නඩුවේ විස්තර සාර්ථකව යාවත්කාලීන විය! නඩුව 'පරීක්ෂණයක් සිදු කිරීම' (Conducting an inquiry) ටැබ් එකට මාරු කරන ලදී."
+          : lang === "ta"
+          ? "வழக்கு விவரங்கள் வெற்றிகரமாக புதுப்பிக்கப்பட்டன! வழக்கு விசாரணை தாவலுக்கு மாற்றப்பட்டது."
+          : "Case details updated successfully! The case has been moved to the Conducting an inquiry tab."
+      );
+      router.push(`/subject?tab=conducting_inquiry&caseNo=${encodeURIComponent(refNo)}`);
+    } else {
+      alert("Case details updated successfully!");
+      router.push("/subject");
+    }
   };
 
   // Save as draft handler
@@ -1450,8 +1658,16 @@ function CaseDetailsForm() {
                 {/* Layout title area */}
                 <div className="add-details-header-container">
                   <div className="add-details-header-left">
-                    <h1 className="add-details-title">{t("addSubjectDetailsTitle")}</h1>
-                    <p className="add-details-subtitle">{t("addSubjectDetailsDesc")}</p>
+                    <h1 className="add-details-title">
+                      {isAnswerLetter
+                        ? (lang === "si" ? "පවරන ලද පිළිතුරු ලිපිය සඳහා විස්තර එක් කරන්න" : lang === "ta" ? "பதிலளிப்பு கடிதத்திற்கான விவரங்களைச் சேர்க்கவும்" : "Add Details for Assigned Answer Letter")
+                        : t("addSubjectDetailsTitle")}
+                    </h1>
+                    <p className="add-details-subtitle">
+                      {isAnswerLetter
+                        ? (lang === "si" ? "ලැබුණු පිළිතුරු ලිපියට අදාළ ක්‍රියාමාර්ග සහ තොරතුරු ඇතුළත් කරන්න." : "Enter actions and details related to the received answer letter.")
+                        : t("addSubjectDetailsDesc")}
+                    </p>
                   </div>
                   <div className="add-details-header-right-btns">
                     <Link href="/subject" className="btn-back-home">
@@ -1752,7 +1968,185 @@ function CaseDetailsForm() {
                   </div>
                 )}
 
-                <div className="add-details-cards-grid">
+{isAnswerLetter ? (
+                  /* ───────────────── Streamlined Case Details Form (Matching Handwritten Specification for Assigned Answer Letters) ───────────────── */
+                  <>
+                    <div className="sketch-form-container">
+                      {/* Row 1: File name (Left) & File No (Right) */}
+                      <div className="sketch-form-row-2col">
+                        {/* File Name Radio Group (Discipline / Mail) */}
+                        <div className="form-field-group">
+                          <label className="sketch-field-label">
+                            {t("fileName", "File name")} <span className="required-star">*</span>
+                          </label>
+                          <div className="sketch-radio-row" role="radiogroup" aria-label={t("fileName", "File name")}>
+                            <label
+                              className={`sketch-radio-pill ${fileName === "discipline" ? "active-discipline" : ""}`}
+                              onClick={() => setFileName("discipline")}
+                            >
+                              <input
+                                type="radio"
+                                name="fileNameRadio"
+                                id="fileNameDiscipline"
+                                value="discipline"
+                                checked={fileName === "discipline"}
+                                onChange={() => setFileName("discipline")}
+                                className="sketch-radio-native"
+                              />
+                              <span className="sketch-radio-dot-outer">
+                                <span className="sketch-radio-dot-inner" />
+                              </span>
+                              <span className="sketch-radio-text">{t("discipline", "Discipline")}</span>
+                            </label>
+
+                            <label
+                              className={`sketch-radio-pill ${fileName === "mail" ? "active-mail" : ""}`}
+                              onClick={() => setFileName("mail")}
+                            >
+                              <input
+                                type="radio"
+                                name="fileNameRadio"
+                                id="fileNameMail"
+                                value="mail"
+                                checked={fileName === "mail"}
+                                onChange={() => setFileName("mail")}
+                                className="sketch-radio-native"
+                              />
+                              <span className="sketch-radio-dot-outer">
+                                <span className="sketch-radio-dot-inner" />
+                              </span>
+                              <span className="sketch-radio-text">{t("mail", "Mail")}</span>
+                            </label>
+                          </div>
+                        </div>
+
+                        {/* File No : (Right) */}
+                        <div className="form-field-group">
+                          <label htmlFor="fileNoInput" className="sketch-field-label">
+                            {t("fileNo", "File No")} : <span className="required-star">*</span>
+                          </label>
+                          <input
+                            id="fileNoInput"
+                            type="text"
+                            required
+                            value={specialNotes || refNo}
+                            onChange={(e) => {
+                              setSpecialNotes(e.target.value);
+                              if (!refNo) setRefNo(e.target.value);
+                            }}
+                            className="sketch-field-input"
+                            placeholder="e.g. DMMS/T/02 / SUB/FILE/101"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Row 2: Upcoming actions to be taken (Left) & Date (Right) */}
+                      <div className="sketch-form-row-2col">
+                        {/* Upcoming actions to be taken : */}
+                        <div className="form-field-group">
+                          <label htmlFor="upcomingActionsSelect" className="sketch-field-label">
+                            {t("upcomingActions", "Upcoming actions to be taken")} : <span className="required-star">*</span>
+                          </label>
+                          <div className="sketch-select-wrapper">
+                            <select
+                              id="upcomingActionsSelect"
+                              value={reportState}
+                              onChange={(e) => {
+                                isUserEditingReportStateRef.current = true;
+                                setReportState(e.target.value);
+                              }}
+                              className="sketch-field-select"
+                              required
+                            >
+                              <option value="">
+                                {lang === "si" ? "ක්‍රියාමාර්ගයක් තෝරන්න..." : lang === "ta" ? "நடவடிக்கையைத் தேர்ந்தெடுக்கவும்..." : "Select upcoming action..."}
+                              </option>
+                              <option value="Initial investigation">
+                                {t("actionInitialInvestigation", "Initial investigation")}
+                              </option>
+                              <option value="Conduct an inspection">
+                                {t("actionConductInspection", "Conduct an inspection")}
+                              </option>
+                              <option value="Finalize the file according to the additional secretary's instruction">
+                                {t("actionFinalizeFileAccordingToSecretary", "Finalize the file according to the additional secretary's instruction")}
+                              </option>
+                              {reportState && ![
+                                "",
+                                "Initial investigation",
+                                "Conduct an inspection",
+                                "Finalize the file according to the additional secretary's instruction"
+                              ].includes(reportState) && (
+                                <option value={reportState}>
+                                  {t(reportState, reportState)}
+                                </option>
+                              )}
+                            </select>
+                            <div className="sketch-select-arrow-container">
+                              <svg className="sketch-select-arrow" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Date : */}
+                        <div className="form-field-group">
+                          <label htmlFor="actionDateInput" className="sketch-field-label">
+                            {t("date", "Date")} : <span className="required-star">*</span>
+                          </label>
+                          <div className="sketch-date-wrapper">
+                            <input
+                              id="actionDateInput"
+                              type="date"
+                              required
+                              value={receivedDate}
+                              onChange={(e) => setReceivedDate(e.target.value)}
+                              className="sketch-field-input sketch-date-input"
+                            />
+                            <svg className="sketch-date-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Row 3: Description */}
+                      <div className="form-field-group sketch-description-group">
+                        <label htmlFor="complaintDescription" className="sketch-field-label">
+                          {t("description", "Description")} :
+                        </label>
+                        <textarea
+                          id="complaintDescription"
+                          value={complaintMatter}
+                          onChange={(e) => setComplaintMatter(e.target.value)}
+                          className="sketch-field-textarea"
+                          placeholder={lang === "si" ? "පැමිණිල්ල / ගොනුව පිළිබඳ විස්තර ඇතුළත් කරන්න..." : lang === "ta" ? "வழக்கு பற்றிய விவரங்களை உள்ளிடவும்..." : "Enter details and description regarding this case file..."}
+                          rows={6}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Action Buttons Row: Cancel and Submit */}
+                    <div className="sketch-form-actions">
+                      <button
+                        type="button"
+                        className="sketch-btn-cancel"
+                        onClick={() => router.push("/subject")}
+                      >
+                        {t("cancelBtn", "Cancel")}
+                      </button>
+
+                      <button
+                        type="submit"
+                        className="sketch-btn-submit"
+                      >
+                        {t("submitBtn", "Submit")}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="add-details-cards-grid">
                   {/* ───────────────── Left Card ("Complaint Information" Flowchart) ───────────────── */}
                   <div className="add-details-card">
                     <h2 className="card-title-header">
@@ -1890,6 +2284,7 @@ function CaseDetailsForm() {
                                   required
                                 >
                                   <option value="">{t("Choose report state", "Select current status...")}</option>
+                                  <option value="Conduct an inspection">{t("actionConductInspection", "Conduct an inspection")}</option>
                                   <option value="statusCallingReports">{t("statusCallingReports")}</option>
                                   <option value="statusCallingCourtReports">{t("statusCallingCourtReports")}</option>
                                   <option value="statusPreliminaryInvestigation">{t("statusPreliminaryInvestigation")}</option>
@@ -1901,6 +2296,7 @@ function CaseDetailsForm() {
                                   {reportState &&
                                     ![
                                       "",
+                                      "Conduct an inspection",
                                       "statusCallingReports",
                                       "statusCallingCourtReports",
                                       "statusPreliminaryInvestigation",
@@ -2400,6 +2796,8 @@ function CaseDetailsForm() {
                   {t("submitToPrelimBtn")}
                 </button>
               </div>
+                  </>
+                )}
             </form>
             </div>
           </section>
