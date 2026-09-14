@@ -2558,7 +2558,7 @@ function RegisterComplaintForm() {
                     </div>
                   </div>
 
-                  {/* ── Card 2: Sender Details (යවන පාර්ශ්වයේ තොරතුරු) ── */}
+                  {/* ── Card 2: Sender Details (එවන පාර්ශ්වයේ තොරතුරු) ── */}
                   <div className="register-step-card">
                     <h3 className="register-step-title">{t("stepSenderDetails", "Sender Details")}</h3>
                     <div className="register-step-grid">
@@ -3210,7 +3210,7 @@ function RegisterComplaintForm() {
                         rows={3}
                         value={requestReason}
                         onChange={(e) => setRequestReason(e.target.value)}
-                        placeholder={lang === "si" ? "උදා: යවන පාර්ශ්වයේ තොරතුරු නිවැරදි කිරීම, විෂය ලිපිකරු සංශෝධනය..." : "e.g. Need to update sender details, rectify subject officer assignment..."}
+                        placeholder={lang === "si" ? "උදා: එවන පාර්ශ්වයේ තොරතුරු නිවැරදි කිරීම, විෂය ලිපිකරු සංශෝධනය..." : "e.g. Need to update sender details, rectify subject officer assignment..."}
                         className="field-input"
                         style={{ height: "80px", resize: "vertical", padding: "10px" }}
                         autoFocus
