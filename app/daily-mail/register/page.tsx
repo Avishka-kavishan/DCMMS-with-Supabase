@@ -49,6 +49,17 @@ const mapRegionProvince = (val?: string): "province" | "region" | null => {
 };
 
 
+const getOfficerName = (opt: any): string => {
+  if (!opt) return "";
+  if (typeof opt === "string") return opt.trim();
+  return (opt.name || opt.full_name || opt.fullName || "").trim();
+};
+
+const getOfficerSubjectType = (opt: any): string => {
+  if (!opt || typeof opt === "string") return "";
+  return (opt.subjectType || opt.subject_type || "").trim();
+};
+
 function RegisterComplaintForm() {
   const { t, i18n } = useTranslation();
   const router = useRouter();
@@ -172,7 +183,7 @@ function RegisterComplaintForm() {
   const [previousLetters, setPreviousLetters] = useState<any[]>([]);
 
   const [initialOfficerName, setInitialOfficerName] = useState<string>("");
-  const [officerOptions, setOfficerOptions] = useState<string[]>([]);
+  const [officerOptions, setOfficerOptions] = useState<Array<{ name: string; subjectType?: string }>>([]);
   const [officerSearchQuery, setOfficerSearchQuery] = useState("");
   const [isOfficerDropdownOpen, setIsOfficerDropdownOpen] = useState(false);
   const officerDropdownRef = useRef<HTMLDivElement>(null);
@@ -232,22 +243,63 @@ function RegisterComplaintForm() {
   // Load subject officers and institutes on mount
   useEffect(() => {
     const loadOfficers = async () => {
-      const namesSet = new Set<string>();
+      const officerMap = new Map<string, { name: string; subjectType?: string }>();
 
       // 1. Load from PostgreSQL via Prisma Server Action (register_officer_table filtered by subject officer role)
       try {
         const res = await getSubjectOfficersServer();
         if (res.success && res.data && res.data.length > 0) {
-          res.data.forEach((name: string) => {
-            if (name && name.trim()) namesSet.add(name.trim());
+          res.data.forEach((item: any) => {
+            const name = typeof item === "string" ? item.trim() : (item.name || item.full_name || item.fullName || "").trim();
+            const subjectType = typeof item === "object" ? (item.subjectType || item.subject_type || "").trim() : undefined;
+            if (name) {
+              officerMap.set(name.toLowerCase(), { name, subjectType: subjectType || undefined });
+            }
           });
         }
       } catch (e) {
         console.error("Failed to load subject officers from PostgreSQL", e);
       }
 
-      // 2. Load from Supabase profiles (role = subject_officer)
+      // Also query getRegisterOfficersServer for Subject officers
+      try {
+        const regRes = await getRegisterOfficersServer("Subject");
+        if (regRes.success && regRes.data && Array.isArray(regRes.data)) {
+          regRes.data.forEach((r: any) => {
+            const name = (r.full_name || "").trim();
+            const subjectType = (r.subject_type || "").trim();
+            if (name) {
+              const existing = officerMap.get(name.toLowerCase());
+              officerMap.set(name.toLowerCase(), {
+                name,
+                subjectType: subjectType || existing?.subjectType || undefined,
+              });
+            }
+          });
+        }
+      } catch (e) {}
+
+      // 2. Load from Supabase register_officer_table and dcmms_profiles (role = subject_officer)
       if (isSupabaseConfigured) {
+        try {
+          const { data, error } = await supabase
+            .from("register_officer_table")
+            .select("full_name, subject_type")
+            .ilike("role", "%subject%");
+          if (!error && data) {
+            data.forEach((d: any) => {
+              if (d.full_name) {
+                const name = d.full_name.trim();
+                const existing = officerMap.get(name.toLowerCase());
+                officerMap.set(name.toLowerCase(), {
+                  name,
+                  subjectType: (d.subject_type || "").trim() || existing?.subjectType || undefined,
+                });
+              }
+            });
+          }
+        } catch (e) {}
+
         try {
           const { data, error } = await supabase
             .from("dcmms_profiles")
@@ -255,7 +307,12 @@ function RegisterComplaintForm() {
             .ilike("role", "%subject%");
           if (!error && data) {
             data.forEach((d: any) => {
-              if (d.full_name) namesSet.add(d.full_name);
+              if (d.full_name) {
+                const name = d.full_name.trim();
+                if (!officerMap.has(name.toLowerCase())) {
+                  officerMap.set(name.toLowerCase(), { name });
+                }
+              }
             });
           }
         } catch (e) {
@@ -266,10 +323,17 @@ function RegisterComplaintForm() {
         try {
           const { data, error } = await supabase
             .from("dcmms_subject_assignments")
-            .select("subject_officer_name");
+            .select("subject_officer_name, subject_type");
           if (!error && data) {
             data.forEach((d: any) => {
-              if (d.subject_officer_name) namesSet.add(d.subject_officer_name);
+              if (d.subject_officer_name) {
+                const name = d.subject_officer_name.trim();
+                const existing = officerMap.get(name.toLowerCase());
+                officerMap.set(name.toLowerCase(), {
+                  name,
+                  subjectType: (d.subject_type || "").trim() || existing?.subjectType || undefined,
+                });
+              }
             });
           }
         } catch (e) {}
@@ -284,7 +348,15 @@ function RegisterComplaintForm() {
             list
               .filter((p: any) => !p.role || p.role.toLowerCase().includes("subject"))
               .forEach((p: any) => {
-                if (p.fullName) namesSet.add(p.fullName);
+                const name = (p.fullName || p.full_name || p.name || "").trim();
+                const subjectType = (p.subjectType || p.subject_type || "").trim();
+                if (name) {
+                  const existing = officerMap.get(name.toLowerCase());
+                  officerMap.set(name.toLowerCase(), {
+                    name,
+                    subjectType: subjectType || existing?.subjectType || undefined,
+                  });
+                }
               });
           } catch (e) {
             console.error("Failed to load custom profiles from localStorage", e);
@@ -298,14 +370,22 @@ function RegisterComplaintForm() {
             const list = JSON.parse(storedAsgns);
             if (Array.isArray(list)) {
               list.forEach((a: any) => {
-                if (a.subjectOfficerName) namesSet.add(a.subjectOfficerName);
+                const name = (a.subjectOfficerName || "").trim();
+                const subjectType = (a.subjectType || "").trim();
+                if (name) {
+                  const existing = officerMap.get(name.toLowerCase());
+                  officerMap.set(name.toLowerCase(), {
+                    name,
+                    subjectType: subjectType || existing?.subjectType || undefined,
+                  });
+                }
               });
             }
           } catch (e) {}
         }
       }
 
-      setOfficerOptions(Array.from(namesSet));
+      setOfficerOptions(Array.from(officerMap.values()));
     };
 
     const loadInstitutes = async () => {
@@ -2365,39 +2445,7 @@ function RegisterComplaintForm() {
 
                       {/* Serial / Letter Number */}
                       <div className="form-field-group">
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-                          <label htmlFor="letterNo" className="field-label" style={{ marginBottom: 0 }}>{t("letterNo")}</label>
-                          {!isFieldDisabled && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const targetDate = formState.receivedDate || new Date().toISOString().split("T")[0];
-                                const nextNo = generateLetterNumber(targetDate, existingLetterNosRef.current);
-                                setFormState((prev) => ({ ...prev, letterNo: nextNo }));
-                              }}
-                              className="text-xs font-medium"
-                              style={{
-                                background: "none",
-                                border: "none",
-                                cursor: "pointer",
-                                color: "#2563eb",
-                                fontSize: "12px",
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "4px",
-                                padding: "2px 4px",
-                                borderRadius: "4px",
-                                transition: "all 0.15s ease",
-                              }}
-                              title="Auto-generate Letter Number (e.g. 2026/10/9/1)"
-                            >
-                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
-                              </svg>
-                              <span>{lang === "si" ? "ජනනය කරන්න" : lang === "ta" ? "உருவாக்கு" : "Generate"}</span>
-                            </button>
-                          )}
-                        </div>
+                        <label htmlFor="letterNo" className="field-label">{t("letterNo")}</label>
                         <input
                           id="letterNo"
                           type="text"
@@ -2604,80 +2652,84 @@ function RegisterComplaintForm() {
                             id="receivedDate"
                             type="date"
                             required
-                            disabled={isFieldDisabled}
-                            readOnly={isFieldDisabled}
+                            disabled={isFieldDisabled || isSubsequentMode}
+                            readOnly={isFieldDisabled || isSubsequentMode}
                             value={formState.receivedDate}
                             onChange={(e) => handleReceivedDateChange(e.target.value)}
-                            className="field-input input-with-right-icon"
-                            style={isFieldDisabled ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
+                            className="field-input"
+                            style={(isFieldDisabled || isSubsequentMode) ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
                           />
-                          <div className="input-right-icons">
-                            <svg className="input-right-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                          </div>
                         </div>
                       </div>
 
-                      {/* Date Letter Handed Over to Disciplinary Branch * */}
+                      {/* Date of the Letter */}
                       <div className="form-field-group">
-                        <label htmlFor="letterDate" className="field-label">{t("letterDate")} <span className="required-star">*</span></label>
+                        <label htmlFor="letterDate" className="field-label">{t("letterDate")}</label>
                         <div className="input-icon-wrapper">
                           <input
                             id="letterDate"
                             type="date"
-                            required
-                            disabled={isFieldDisabled}
-                            readOnly={isFieldDisabled}
+                            disabled={isFieldDisabled || isSubsequentMode}
+                            readOnly={isFieldDisabled || isSubsequentMode}
                             value={formState.letterDate}
                             onChange={(e) => setFormState({ ...formState, letterDate: e.target.value })}
-                            className="field-input input-with-right-icon"
-                            style={isFieldDisabled ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
+                            className="field-input"
+                            style={(isFieldDisabled || isSubsequentMode) ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
                           />
-                          <div className="input-right-icons">
-                            <svg className="input-right-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                          </div>
                         </div>
                       </div>
 
                     </div>
                   </div>
 
-                  {/* ── Card 4: Assignment Details (පැවරීම් තොරතුරු) ── */}
+                  {/* ── Card 4: Officer & Priority (නිලධාරී සහ ප්‍රමුඛතාව) ── */}
                   <div className="register-step-card">
-                    <h3 className="register-step-title">{t("stepAssignmentDetails", "Assignment Details")}</h3>
+                    <h3 className="register-step-title">{t("stepOfficerPriority", "Officer & Priority")}</h3>
                     <div className="register-step-grid">
 
-                      {/* Subject Officer Name (Searchable & Filterable Select) */}
-                      <div className="form-field-group" ref={officerDropdownRef}>
-                        <label htmlFor="officerNameInput" className="field-label" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                          <span>{t("nameOfOfficer")} <span className="required-star">*</span></span>
+                      {/* Subject Officer Name - Searchable Custom Dropdown */}
+                      <div className="form-field-group" ref={officerDropdownRef} style={{ position: "relative" }}>
+                        <label htmlFor="officerNameInput" className="field-label">
+                          {t("subjectOfficer")}
                           {isOfficerLocked && (
-                            <span style={{ fontSize: "11px", fontWeight: 700, color: "#1e40af", backgroundColor: "#dbeafe", border: "1px solid #bfdbfe", padding: "2px 8px", borderRadius: "12px", display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                              <svg style={{ width: "12px", height: "12px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                              </svg>
-                              {lang === "si" ? "වෙනස් කළ නොහැක (Locked)" : lang === "ta" ? "பூட்டப்பட்டது (Locked)" : "Locked"}
+                            <span style={{ marginLeft: "8px", fontSize: "11px", color: "#64748b", fontWeight: "normal" }}>
+                              ({lang === "si" ? "ස්වයංක්‍රීයව පවරන ලදී" : lang === "ta" ? "தானாக ஒதுக்கப்பட்டது" : "Auto-assigned by Subject"})
                             </span>
                           )}
                         </label>
+
                         <div className="searchable-select-wrapper">
                           <div className="searchable-select-input-container">
-                            <input
-                              id="officerNameInput"
-                              type="text"
-                              readOnly
-                              disabled={isOfficerLocked}
-                              value={formState.officerName || ""}
-                              onClick={() => {
-                                if (!isOfficerLocked) setIsOfficerDropdownOpen(!isOfficerDropdownOpen);
-                              }}
-                              placeholder={t("selectSubjectOfficer")}
-                              className="field-input searchable-select-input"
-                              style={isOfficerLocked ? { backgroundColor: "#f1f5f9", cursor: "not-allowed", opacity: 0.9, fontWeight: 700, borderColor: "#cbd5e1" } : { cursor: "pointer" }}
-                            />
+                            {(() => {
+                              const targetOfficer = (formState.officerName || "").trim().toLowerCase();
+                              const selectedOfficerObj = officerOptions.find((opt) => {
+                                const oName = getOfficerName(opt).toLowerCase();
+                                return oName && oName === targetOfficer;
+                              });
+                              const oName = selectedOfficerObj ? getOfficerName(selectedOfficerObj) : formState.officerName || "";
+                              const oType = selectedOfficerObj ? getOfficerSubjectType(selectedOfficerObj) : "";
+                              const displayVal = oName ? (oType ? `${oName} — ${oType}` : oName) : "";
+
+                              return (
+                                <input
+                                  id="officerNameInput"
+                                  type="text"
+                                  readOnly
+                                  disabled={isOfficerLocked}
+                                  value={displayVal}
+                                  onClick={() => {
+                                    if (!isOfficerLocked) setIsOfficerDropdownOpen(!isOfficerDropdownOpen);
+                                  }}
+                                  placeholder={t("selectSubjectOfficer")}
+                                  className="field-input searchable-select-input"
+                                  style={
+                                    isOfficerLocked
+                                      ? { backgroundColor: "#f1f5f9", cursor: "not-allowed", opacity: 0.9, fontWeight: 700, borderColor: "#cbd5e1" }
+                                      : { cursor: "pointer", fontWeight: formState.officerName ? 600 : 400 }
+                                  }
+                                />
+                              );
+                            })()}
                             <div className="searchable-select-icons">
                               {formState.officerName && !isOfficerLocked && (
                                 <button
@@ -2736,7 +2788,7 @@ function RegisterComplaintForm() {
                                   type="text"
                                   value={officerSearchQuery}
                                   onChange={(e) => setOfficerSearchQuery(e.target.value)}
-                                  placeholder={lang === "si" ? "විෂය ලිපිකරු සොයන්න..." : lang === "ta" ? "தேடுக..." : "Search subject officer..."}
+                                  placeholder={lang === "si" ? "විෂය ලිපිකරු හෝ විෂය වර්ගය සොයන්න..." : lang === "ta" ? "அதிகாரி அல்லது விடய வகையைத் தேடுக..." : "Search officer name or subject type..."}
                                   className="searchable-select-filter-input"
                                   autoFocus
                                 />
@@ -2752,32 +2804,76 @@ function RegisterComplaintForm() {
                                 >
                                   <span style={{ color: "#64748b", fontStyle: "italic" }}>{t("selectSubjectOfficer")}</span>
                                 </div>
-                                {officerOptions.filter((opt) =>
-                                  opt.toLowerCase().includes(officerSearchQuery.toLowerCase())
-                                ).length > 0 ? (
+                                {officerOptions.filter((opt) => {
+                                  const oName = getOfficerName(opt);
+                                  const oType = getOfficerSubjectType(opt);
+                                  const q = officerSearchQuery.toLowerCase().trim();
+                                  if (!oName) return false;
+                                  return !q || oName.toLowerCase().includes(q) || oType.toLowerCase().includes(q);
+                                }).length > 0 ? (
                                   officerOptions
-                                    .filter((opt) => opt.toLowerCase().includes(officerSearchQuery.toLowerCase()))
-                                    .map((opt) => (
-                                      <div
-                                        key={opt}
-                                        className={`searchable-select-option ${formState.officerName === opt ? "selected" : ""}`}
-                                        onClick={() => {
-                                          setFormState((prev) => ({ ...prev, officerName: opt }));
-                                          setOfficerSearchQuery("");
-                                          setIsOfficerDropdownOpen(false);
-                                        }}
-                                      >
-                                        <span>{opt}</span>
-                                        {formState.officerName === opt && (
-                                          <svg style={{ width: "16px", height: "16px", color: "#2563eb" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                                          </svg>
-                                        )}
-                                      </div>
-                                    ))
+                                    .filter((opt) => {
+                                      const oName = getOfficerName(opt);
+                                      const oType = getOfficerSubjectType(opt);
+                                      const q = officerSearchQuery.toLowerCase().trim();
+                                      if (!oName) return false;
+                                      return !q || oName.toLowerCase().includes(q) || oType.toLowerCase().includes(q);
+                                    })
+                                    .map((opt, idx) => {
+                                      const oName = getOfficerName(opt);
+                                      const oType = getOfficerSubjectType(opt);
+                                      const isSelected = (formState.officerName || "").trim().toLowerCase() === oName.toLowerCase();
+                                      return (
+                                        <div
+                                          key={oName || idx}
+                                          className={`searchable-select-option ${isSelected ? "selected" : ""}`}
+                                          onClick={() => {
+                                            setFormState((prev) => ({ ...prev, officerName: oName }));
+                                            setOfficerSearchQuery("");
+                                            setIsOfficerDropdownOpen(false);
+                                          }}
+                                          style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "space-between",
+                                            padding: "10px 14px",
+                                            gap: "10px",
+                                            borderBottom: "1px solid #f1f5f9",
+                                            cursor: "pointer",
+                                          }}
+                                        >
+                                          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                                            <span style={{ fontWeight: 600, color: "#1e293b", fontSize: "14px" }}>
+                                              {oName}
+                                            </span>
+                                            {oType && (
+                                              <span
+                                                style={{
+                                                  fontSize: "12px",
+                                                  fontWeight: 600,
+                                                  color: "#1e40af",
+                                                  backgroundColor: "#eff6ff",
+                                                  border: "1px solid #bfdbfe",
+                                                  padding: "2px 8px",
+                                                  borderRadius: "6px",
+                                                  lineHeight: "1.4",
+                                                }}
+                                              >
+                                                {oType}
+                                              </span>
+                                            )}
+                                          </div>
+                                          {isSelected && (
+                                            <svg style={{ width: "16px", height: "16px", color: "#2563eb", flexShrink: 0 }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                            </svg>
+                                          )}
+                                        </div>
+                                      );
+                                    })
                                 ) : (
                                   <div className="searchable-select-no-options">
-                                    {lang === "si" ? "ගැලපෙන විෂය ලිපිකරුවන් හමු නොවුණි" : lang === "ta" ? "පொருந்தக்கூடிய அதிகாரிகள் இல்லை" : "No matching subject officers found"}
+                                    {lang === "si" ? "ගැලපෙන විෂය ලිපිකරුවන් හමු නොවුණි" : lang === "ta" ? "பொருந்தக்கூடிய அதிகாரிகள் இல்லை" : "No matching subject officers found"}
                                   </div>
                                 )}
                               </div>

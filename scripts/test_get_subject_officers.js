@@ -4,7 +4,7 @@ const prisma = new PrismaClient();
 async function main() {
   try {
     const regOfficers = await prisma.$queryRaw`
-      SELECT full_name, role, is_active FROM register_officer_table 
+      SELECT * FROM register_officer_table 
       WHERE role ILIKE '%subject%' AND (is_active IS NULL OR is_active = true)
       ORDER BY full_name ASC;
     `;

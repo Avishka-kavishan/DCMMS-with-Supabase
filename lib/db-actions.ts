@@ -1498,17 +1498,23 @@ export async function upsertPersonServer(personData: any) {
 // -------------------------------------------------------------
 export async function getSubjectOfficersServer() {
   try {
-    const namesSet = new Set<string>();
+    const officersMap = new Map<string, { name: string; subjectType?: string }>();
 
     // 1. From register_officer_table in PostgreSQL (ONLY subject officer role)
     try {
       const regOfficers: any[] = await prisma.$queryRaw`
-        SELECT full_name FROM register_officer_table 
+        SELECT full_name, subject_type FROM register_officer_table 
         WHERE role ILIKE '%subject%' AND (is_active IS NULL OR is_active = true)
         ORDER BY full_name ASC;
       `;
       regOfficers.forEach((o: any) => {
-        if (o.full_name && o.full_name.trim()) namesSet.add(o.full_name.trim());
+        if (o.full_name && o.full_name.trim()) {
+          const trimmed = o.full_name.trim();
+          officersMap.set(trimmed.toLowerCase(), {
+            name: trimmed,
+            subjectType: o.subject_type ? o.subject_type.trim() : undefined,
+          });
+        }
       });
     } catch (e) {
       console.error("Error fetching subject officers from register_officer_table:", e);
@@ -1523,11 +1529,16 @@ export async function getSubjectOfficersServer() {
         select: { full_name: true },
       });
       profiles.forEach((p: any) => {
-        if (p.full_name && p.full_name.trim()) namesSet.add(p.full_name.trim());
+        if (p.full_name && p.full_name.trim()) {
+          const trimmed = p.full_name.trim();
+          if (!officersMap.has(trimmed.toLowerCase())) {
+            officersMap.set(trimmed.toLowerCase(), { name: trimmed });
+          }
+        }
       });
     } catch (e) {}
 
-    return serializeForServerAction({ success: true, data: Array.from(namesSet) });
+    return serializeForServerAction({ success: true, data: Array.from(officersMap.values()) });
   } catch (error: any) {
     console.error("Error fetching subject officers from database:", error);
     return serializeForServerAction({ success: false, error: error?.message || "Failed to fetch subject officers", data: [] });
