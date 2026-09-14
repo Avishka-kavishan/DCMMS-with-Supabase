@@ -4207,7 +4207,7 @@ function SubjectOfficerDashboardContent() {
               onClick={() => setActiveTab("cases")}
             >
               <ClipboardList className="tab-icon" />
-              <span>{lang === "si" ? "පවරන ලද නඩු ලේඛනය" : "Assigned Cases"}</span>
+              <span>{lang === "si" ? "පවරන ලද පැමිණිලි ලේඛනය" : "Assigned Complaints / Cases"}</span>
             </button>
             <button
               type="button"
@@ -4255,28 +4255,6 @@ function SubjectOfficerDashboardContent() {
             </button>
             <button
               type="button"
-              className={`nav-tab-btn${activeTab === "disciplinary_inspection" ? " active" : ""}`}
-              onClick={() => setActiveTab("disciplinary_inspection")}
-            >
-              <ShieldAlert className="tab-icon" />
-              <span>{t("properDisciplinaryInspectionTab", "Proper disciplinary inspection")}</span>
-              {disciplinaryInspectionCases.length > 0 && (
-                <span style={{
-                  backgroundColor: activeTab === "disciplinary_inspection" ? "#6366f1" : "#94a3b8",
-                  color: "#ffffff",
-                  fontSize: "11px",
-                  fontWeight: 700,
-                  padding: "2px 8px",
-                  borderRadius: "12px",
-                  marginLeft: "4px",
-                  transition: "all 0.2s ease"
-                }}>
-                  {disciplinaryInspectionCases.length}
-                </span>
-              )}
-            </button>
-            <button
-              type="button"
               className={`nav-tab-btn${activeTab === "provincial_investigation" ? " active" : ""}`}
               onClick={() => setActiveTab("provincial_investigation")}
             >
@@ -4303,7 +4281,7 @@ function SubjectOfficerDashboardContent() {
               onClick={() => router.push("/subject/recommendation")}
             >
               <Sparkles className="tab-icon" />
-              <span>{lang === "si" ? "මූලික විමර්ශන නිර්දේශය" : lang === "ta" ? "விசாரணை பரிந்துரை" : "Investigation Recommendation"}</span>
+              <span>{lang === "si" ? "ආයතනික මූලික විමර්ශනයේ නිර්දේශය" : lang === "ta" ? "நிறுவன அடிப்படை விசாரணை பரிந்துரை" : "Institutional Basic Investigation Recommendation"}</span>
               {completedAwaitingRecCases.length > 0 ? (
                 <span style={{
                   backgroundColor: "#e11d48",
@@ -4332,6 +4310,28 @@ function SubjectOfficerDashboardContent() {
                   {recommendations.length}
                 </span>
               ) : null}
+            </button>
+            <button
+              type="button"
+              className={`nav-tab-btn${activeTab === "disciplinary_inspection" ? " active" : ""}`}
+              onClick={() => setActiveTab("disciplinary_inspection")}
+            >
+              <ShieldAlert className="tab-icon" />
+              <span>{t("properDisciplinaryInspectionTab", "Proper disciplinary inspection")}</span>
+              {disciplinaryInspectionCases.length > 0 && (
+                <span style={{
+                  backgroundColor: activeTab === "disciplinary_inspection" ? "#6366f1" : "#94a3b8",
+                  color: "#ffffff",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  padding: "2px 8px",
+                  borderRadius: "12px",
+                  marginLeft: "4px",
+                  transition: "all 0.2s ease"
+                }}>
+                  {disciplinaryInspectionCases.length}
+                </span>
+              )}
             </button>
           </div>
 
@@ -6327,7 +6327,7 @@ function SubjectOfficerDashboardContent() {
                 <div>
                   <h3 style={{ margin: 0, fontSize: "20px", fontWeight: 800, color: "#1e1b4b", display: "flex", alignItems: "center", gap: "10px" }}>
                     <Sparkles style={{ color: "#4f46e5", width: "24px", height: "24px" }} />
-                    <span>{lang === "si" ? "මූලික විමර්ශන නිර්දේශය (Investigation Recommendation)" : lang === "ta" ? "விசாரணை பரிந்துரை (Investigation Recommendation)" : "Investigation Recommendation"}</span>
+                    <span>{lang === "si" ? "ආයතනික මූලික විමර්ශනයේ නිර්දේශය (Institutional Basic Investigation Recommendation)" : lang === "ta" ? "நிறுவன அடிப்படை விசாரணை பரிந்துரை (Institutional Basic Investigation Recommendation)" : "Institutional Basic Investigation Recommendation"}</span>
                   </h3>
                   <p style={{ margin: "4px 0 0 0", fontSize: "13px", color: "#64748b" }}>
                     {t("recommendationsOverview", "Overview of all investigation recommendations and disciplinary actions registered for your assigned cases.")}

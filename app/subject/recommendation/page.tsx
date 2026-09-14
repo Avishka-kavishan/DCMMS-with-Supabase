@@ -173,7 +173,7 @@ function RecommendationFormContent() {
 
   // Sync document title
   useEffect(() => {
-    document.title = `${lang === "si" ? "මූලික විමර්ශන නිර්දේශය" : lang === "ta" ? "விசாரணை பரிந்துரை" : "Investigation Recommendation"} | DCMMS`;
+    document.title = `${lang === "si" ? "ආයතනික මූලික විමර්ශනයේ නිර්දේශය" : lang === "ta" ? "நிறுவன அடிப்படை விசாரணை பரிந்துரை" : "Institutional Basic Investigation Recommendation"} | DCMMS`;
   }, [lang]);
 
   // Load all available cases and registered recommendations
@@ -901,7 +901,7 @@ function RecommendationFormContent() {
               </Link>
               <ChevronRight size={14} style={{ color: "#94a3b8" }} />
               <span style={{ color: "#0f172a", fontWeight: 700 }} suppressHydrationWarning>
-                {lang === "si" ? "මූලික විමර්ශන නිර්දේශය" : lang === "ta" ? "விசாரணை பரிந்துரை" : "Investigation Recommendation"}
+                {lang === "si" ? "ආයතනික මූලික විමර්ශනයේ නිර්දේශය" : lang === "ta" ? "நிறுவன அடிப்படை விசாரணை பரிந்துரை" : "Institutional Basic Investigation Recommendation"}
               </span>
             </div>
           </div>
