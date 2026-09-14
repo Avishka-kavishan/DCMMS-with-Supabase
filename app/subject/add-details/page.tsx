@@ -212,6 +212,10 @@ function CaseDetailsForm() {
   const [fileName, setFileName] = useState<"discipline" | "mail">("discipline");
   const [subjectOfficer, setSubjectOfficer] = useState("");
   const [reportState, setReportState] = useState("");
+  const [preliminaryChecks, setPreliminaryChecks] = useState<{ institutional: boolean; provincial: boolean }>({
+    institutional: true,
+    provincial: false,
+  });
   const [receivedDate, setReceivedDate] = useState("2026-06-23");
   const [stepTaken, setStepTaken] = useState("");
   const [refNo, setRefNo] = useState(caseNoParam);
@@ -301,7 +305,21 @@ function CaseDetailsForm() {
       statusPreliminaryInvestigation: [
         "statuspreliminaryinvestigation",
         "conducting preliminary investigations",
+        "conducting preliminary investigation",
+        "preliminary investigation",
         "මූලික විමර්ශන සිදු කිරීම",
+        "මූලික විමර්ශන",
+        "මූලික විමර්ශනය",
+        "institutional basic investigation",
+        "provincial basic investigation",
+        "institutional preliminary investigation",
+        "provincial preliminary investigation",
+        "statusinstitutionalpreliminary",
+        "statusprovincialpreliminary",
+        "ආයතනික මූලික විමර්ශනය",
+        "පළාත් මූලික විමර්ශනය",
+        "நிறுவன அடிப்படை விசாரணை",
+        "மாகாண அடிப்படை விசாரணை",
       ],
       statusInquiry: [
         "statusinquiry",
@@ -343,6 +361,20 @@ function CaseDetailsForm() {
 
     return trimmed;
   };
+
+  const isPreliminaryInvestigation =
+    reportState === "statusPreliminaryInvestigation" ||
+    reportState === "statusInstitutionalPreliminary" ||
+    reportState === "statusProvincialPreliminary" ||
+    reportState === "Institutional Basic Investigation" ||
+    reportState === "Provincial Basic Investigation" ||
+    (typeof reportState === "string" && (
+      reportState.toLowerCase().includes("preliminary") ||
+      reportState.toLowerCase().includes("මූලික විමර්ශන") ||
+      reportState.toLowerCase().includes("විමර්ශන සිදු කිරීම") ||
+      reportState.toLowerCase().includes("முதற்கட்ட விசாரணை") ||
+      reportState.toLowerCase().includes("basic investigation")
+    ));
 
   // Institute Autocomplete States (from institute_table)
   const isUserEditingSchoolRef = useRef(false);
@@ -655,6 +687,16 @@ function CaseDetailsForm() {
                 setSubjectOfficer(latest.subjectOfficerName || "");
                 if (!isUserEditingReportStateRef.current) {
                   setReportState(normalizeReportState(latest.reportState));
+                  const rawStr = String(latest.reportState || "").toLowerCase();
+                  const hasProv = rawStr.includes("provincial") || rawStr.includes("පළාත්") || rawStr.includes("மாகாண");
+                  const hasInst = rawStr.includes("institutional") || rawStr.includes("ආයතනික") || rawStr.includes("நிறுவன");
+                  if (hasProv && hasInst) {
+                    setPreliminaryChecks({ institutional: true, provincial: true });
+                  } else if (hasProv) {
+                    setPreliminaryChecks({ institutional: false, provincial: true });
+                  } else if (hasInst) {
+                    setPreliminaryChecks({ institutional: true, provincial: false });
+                  }
                 }
                 setReceivedDate(latest.receivedDate || "2026-06-23");
                 
@@ -756,6 +798,16 @@ function CaseDetailsForm() {
             }
             if (!isUserEditingReportStateRef.current && d.future_action) {
               setReportState(normalizeReportState(d.future_action));
+              const rawStr = String(d.future_action || "").toLowerCase();
+              const hasProv = rawStr.includes("provincial") || rawStr.includes("පළාත්") || rawStr.includes("மாகாண");
+              const hasInst = rawStr.includes("institutional") || rawStr.includes("ආයතනික") || rawStr.includes("நிறுவன");
+              if (hasProv && hasInst) {
+                setPreliminaryChecks({ institutional: true, provincial: true });
+              } else if (hasProv) {
+                setPreliminaryChecks({ institutional: false, provincial: true });
+              } else if (hasInst) {
+                setPreliminaryChecks({ institutional: true, provincial: false });
+              }
             }
             if (d.date_prepared_and_submitted_for_signature) {
               setReceivedDate(String(d.date_prepared_and_submitted_for_signature).split("T")[0]);
@@ -772,6 +824,16 @@ function CaseDetailsForm() {
               }
               if (rld.upcoming_action && !isUserEditingReportStateRef.current) {
                 setReportState(normalizeReportState(rld.upcoming_action));
+                const rawStr = String(rld.upcoming_action || "").toLowerCase();
+                const hasProv = rawStr.includes("provincial") || rawStr.includes("පළාත්") || rawStr.includes("மாகாண");
+                const hasInst = rawStr.includes("institutional") || rawStr.includes("ආයතනික") || rawStr.includes("நிறுவன");
+                if (hasProv && hasInst) {
+                  setPreliminaryChecks({ institutional: true, provincial: true });
+                } else if (hasProv) {
+                  setPreliminaryChecks({ institutional: false, provincial: true });
+                } else if (hasInst) {
+                  setPreliminaryChecks({ institutional: true, provincial: false });
+                }
               }
               if (rld.date) {
                 setReceivedDate(String(rld.date).split("T")[0]);
@@ -863,6 +925,16 @@ function CaseDetailsForm() {
                 setSubjectOfficer(latest.subjectOfficerName || "");
                 if (!isUserEditingReportStateRef.current) {
                   setReportState(normalizeReportState(latest.reportState));
+                  const rawStr = String(latest.reportState || "").toLowerCase();
+                  const hasProv = rawStr.includes("provincial") || rawStr.includes("පළාත්") || rawStr.includes("மாகாண");
+                  const hasInst = rawStr.includes("institutional") || rawStr.includes("ආයතනික") || rawStr.includes("நிறுவன");
+                  if (hasProv && hasInst) {
+                    setPreliminaryChecks({ institutional: true, provincial: true });
+                  } else if (hasProv) {
+                    setPreliminaryChecks({ institutional: false, provincial: true });
+                  } else if (hasInst) {
+                    setPreliminaryChecks({ institutional: true, provincial: false });
+                  }
                 }
                 setReceivedDate(latest.receivedDate || "2026-06-23");
                 
@@ -1068,6 +1140,13 @@ function CaseDetailsForm() {
   const saveCaseData = async (status: string, isDraftMode = false) => {
     const actionId = `action-${refNo}-${Date.now()}`;
     const serializedStepTaken = `[EduSecApproval:${eduSecretaryApproval}${eduSecretaryApproval === "yes" && approvalDate ? `|Date:${approvalDate}` : ""}]`;
+    const computedFutureAction = isPreliminaryInvestigation
+      ? (preliminaryChecks.institutional && preliminaryChecks.provincial
+          ? "Institutional & Provincial Basic Investigation"
+          : preliminaryChecks.provincial
+          ? "Provincial Basic Investigation"
+          : "Institutional Basic Investigation")
+      : (reportState || "");
 
     // 1. Save directly into PostgreSQL database tables (subject_officer_form_table, accused_officer_table, accused_school_table, institute_table)
     try {
@@ -1104,7 +1183,7 @@ function CaseDetailsForm() {
         classification_of_complaint_letter: classification,
         name_of_the_presenting_the_complain: classification === "nominal" ? complainantName : "Anonymous",
         address_of_the_person_presenting_the_complaint: classification === "nominal" ? complainantAddress : "N/A",
-        future_action: reportState || "",
+        future_action: computedFutureAction,
       };
 
       let res: any = null;
@@ -1144,7 +1223,7 @@ function CaseDetailsForm() {
           ref_number: refNo,
           file_name: fileName,
           file_no: specialNotes || fileRelated || refNo,
-          upcoming_action: reportState || "",
+          upcoming_action: computedFutureAction,
           date: receivedDate || null,
           description: complaintMatter || "",
         });
@@ -1157,7 +1236,7 @@ function CaseDetailsForm() {
               ref_number: refNo,
               file_name: fileName,
               file_no: specialNotes || fileRelated || refNo,
-              upcoming_action: reportState || "",
+              upcoming_action: computedFutureAction,
               date: receivedDate || null,
               description: complaintMatter || "",
             }),
@@ -1173,7 +1252,7 @@ function CaseDetailsForm() {
         const isInspectionOrInquiry =
           reportState === "Conduct an inspection" ||
           reportState === "statusInquiry" ||
-          reportState === "statusPreliminaryInvestigation" ||
+          isPreliminaryInvestigation ||
           (typeof reportState === "string" && (
             reportState.toLowerCase().includes("inspection") ||
             reportState.toLowerCase().includes("inquiry") ||
@@ -1182,9 +1261,9 @@ function CaseDetailsForm() {
             reportState.includes("ஆய்வு")
           ));
 
-        const finalCaseStatus = isInspectionOrInquiry
-          ? "Conducting an Inquiry"
-          : (status || "In Progress");
+        const finalCaseStatus = isPreliminaryInvestigation
+          ? computedFutureAction
+          : (isInspectionOrInquiry ? "Conducting an Inquiry" : (status || "In Progress"));
 
         // 1. Ensure the case row exists or is updated in dcmms_subject
         const { data: existingCase } = await supabase
@@ -1279,7 +1358,7 @@ function CaseDetailsForm() {
             ref_number: refNo,
             file_name: fileName,
             file_no: specialNotes || fileRelated || refNo,
-            upcoming_action: reportState || "Conduct an inspection",
+            upcoming_action: computedFutureAction,
             date: receivedDate || null,
             description: complaintMatter || "",
           }, { onConflict: "ref_number" });
@@ -1289,7 +1368,7 @@ function CaseDetailsForm() {
           "UPDATE_SUBJECT_CASE",
           "dcmms_subject",
           refNo,
-          { reportState: finalCaseStatus, upcomingAction: reportState, subjectOfficer }
+          { reportState: finalCaseStatus, upcomingAction: computedFutureAction, subjectOfficer }
         );
       } catch (err: any) {
         console.error("Supabase save failed, falling back to localStorage:", err?.message || err?.details || JSON.stringify(err) || err);
@@ -1301,7 +1380,7 @@ function CaseDetailsForm() {
       const isInspectionOrInquiry =
         reportState === "Conduct an inspection" ||
         reportState === "statusInquiry" ||
-        reportState === "statusPreliminaryInvestigation" ||
+        isPreliminaryInvestigation ||
         (typeof reportState === "string" && (
           reportState.toLowerCase().includes("inspection") ||
           reportState.toLowerCase().includes("inquiry") ||
@@ -1310,7 +1389,9 @@ function CaseDetailsForm() {
           reportState.includes("ஆய்வு")
         ));
 
-      const localStatus = isInspectionOrInquiry ? "Conducting an Inquiry" : (status || "In Progress");
+      const localStatus = isPreliminaryInvestigation
+        ? computedFutureAction
+        : (isInspectionOrInquiry ? "Conducting an Inquiry" : (status || "In Progress"));
 
       // Save actions to a list
       const storedActions = localStorage.getItem("dcmms_new_letter_current_case") || "[]";
@@ -1326,7 +1407,7 @@ function CaseDetailsForm() {
         caseNo: refNo,
         subjectOfficerName: subjectOfficer,
         reportState: localStatus,
-        upcomingAction: reportState || "",
+        upcomingAction: computedFutureAction,
         receivedDate,
         stepTaken: serializedStepTaken,
         specialNotes,
@@ -1368,7 +1449,7 @@ function CaseDetailsForm() {
             status: localStatus,
             stage: isInspectionOrInquiry ? "Conducting an Inquiry" : c.stage,
             stageKey: isInspectionOrInquiry ? "inquiry" : c.stageKey,
-            upcomingAction: reportState || c.upcomingAction,
+            upcomingAction: computedFutureAction,
             isOld: complaintAge === "old",
           };
         }
@@ -1384,7 +1465,7 @@ function CaseDetailsForm() {
           status: localStatus,
           stage: isInspectionOrInquiry ? "Conducting an Inquiry" : "In Progress",
           stageKey: isInspectionOrInquiry ? "inquiry" : "in_progress",
-          upcomingAction: reportState || "",
+          upcomingAction: computedFutureAction,
           priority: priority || "medium",
           assignedDate: receivedDate || new Date().toISOString().split("T")[0],
           receivedDate: receivedDate || new Date().toISOString().split("T")[0],
@@ -1409,7 +1490,7 @@ function CaseDetailsForm() {
                 subject: complaintMatter || l.subject,
                 regionProvince: classification === "anonymous" ? "Anonymous" : "Nominal",
                 isProcessedAnswer: isAnswerLetter || isInspectionOrInquiry,
-                upcomingAction: reportState || "",
+                upcomingAction: computedFutureAction,
                 status: localStatus,
               };
             }
@@ -1429,7 +1510,7 @@ function CaseDetailsForm() {
               return {
                 ...sm,
                 isProcessedAnswer: isAnswerLetter || isInspectionOrInquiry,
-                upcomingAction: reportState || "",
+                upcomingAction: computedFutureAction,
                 status: localStatus,
               };
             }
@@ -1457,7 +1538,7 @@ function CaseDetailsForm() {
     const isConductInspectionOrInquiry =
       reportState === "Conduct an inspection" ||
       reportState === "statusInquiry" ||
-      reportState === "statusPreliminaryInvestigation" ||
+      isPreliminaryInvestigation ||
       (typeof reportState === "string" && (
         reportState.toLowerCase().includes("inspection") ||
         reportState.toLowerCase().includes("inquiry") ||
@@ -1466,7 +1547,17 @@ function CaseDetailsForm() {
         reportState.includes("ஆய்வு")
       ));
 
-    const finalStatus = isConductInspectionOrInquiry ? "Conducting an Inquiry" : (reportState || "In Progress");
+    const computedAction = isPreliminaryInvestigation
+      ? (preliminaryChecks.institutional && preliminaryChecks.provincial
+          ? "Institutional & Provincial Basic Investigation"
+          : preliminaryChecks.provincial
+          ? "Provincial Basic Investigation"
+          : "Institutional Basic Investigation")
+      : (reportState || "");
+
+    const finalStatus = isPreliminaryInvestigation
+      ? computedAction
+      : (isConductInspectionOrInquiry ? "Conducting an Inquiry" : (reportState || "In Progress"));
 
     await saveCaseData(finalStatus, false);
     if (typeof window !== "undefined") {
@@ -1474,7 +1565,27 @@ function CaseDetailsForm() {
       window.dispatchEvent(new Event("dcmms_data_updated"));
     }
 
-    if (isConductInspectionOrInquiry) {
+    if (isPreliminaryInvestigation) {
+      if (preliminaryChecks.provincial && !preliminaryChecks.institutional) {
+        alert(
+          lang === "si"
+            ? "නඩුවේ විස්තර සාර්ථකව යාවත්කාලීන විය! පළාත් මූලික විමර්ශනය (Provincial Basic Investigation) පිටුව වෙත යොමු කෙරේ."
+            : lang === "ta"
+            ? "வழக்கு விவரங்கள் வெற்றிகரமாக புதுப்பிக்கப்பட்டன! மாகாண அடிப்படை விசாரணை பக்கத்திற்கு வழிநடத்தப்படுகிறது."
+            : "Case details updated successfully! Redirecting to Provincial Basic Investigation..."
+        );
+        router.push(`/subject/provincial-preliminary?caseNo=${encodeURIComponent(refNo)}`);
+      } else {
+        alert(
+          lang === "si"
+            ? "නඩුවේ විස්තර සාර්ථකව යාවත්කාලීන විය! නඩුව ආයතනික මූලික විමර්ශනය (Institutional Basic Investigation) සඳහා 'පරීක්ෂණයක් සිදු කිරීම' ටැබ් එකට මාරු කරන ලදී."
+            : lang === "ta"
+            ? "வழக்கு விவரங்கள் வெற்றிகரமாக புதுப்பிக்கப்பட்டன! நிறுவன அடிப்படை விசாரணைக்காக வழக்கு விசாரணை தாவலுக்கு மாற்றப்பட்டது."
+            : "Case details updated successfully! The case has been moved to Institutional Basic Investigation (Conducting Inquiry tab)."
+        );
+        router.push(`/subject?tab=conducting_inquiry&caseNo=${encodeURIComponent(refNo)}`);
+      }
+    } else if (isConductInspectionOrInquiry) {
       alert(
         lang === "si"
           ? "නඩුවේ විස්තර සාර්ථකව යාවත්කාලීන විය! නඩුව 'පරීක්ෂණයක් සිදු කිරීම' (Conducting an inquiry) ටැබ් එකට මාරු කරන ලදී."
@@ -2337,6 +2448,76 @@ function CaseDetailsForm() {
                                 </svg>
                               </div>
                             </div>
+
+                            {/* Preliminary Investigation Type Checkboxes (Institutional Basic Investigation vs Provincial Basic Investigation) */}
+                            {isPreliminaryInvestigation && (
+                              <div className="form-field-group animated-fade-in" style={{ gridColumn: "1 / -1", marginTop: "4px" }}>
+                                <label className="field-label" style={{ display: "block", marginBottom: "8px", fontWeight: 700 }}>
+                                  {lang === "si"
+                                    ? "මූලික විමර්ශන වර්ගය තෝරන්න (Select Preliminary Investigation Type)"
+                                    : lang === "ta"
+                                    ? "முதற்கட்ட விசாரணை வகையைத் தேர்ந்தெடுக்கவும்"
+                                    : t("preliminaryInvestigationType", "Select Preliminary Investigation Type")} <span className="required-star">*</span>
+                                </label>
+                                <div className="preliminary-checkbox-group" role="group" aria-label="Preliminary Investigation Type">
+                                  <label className={`checkbox-option-card ${preliminaryChecks.institutional ? "selected" : ""}`}>
+                                    <input
+                                      type="checkbox"
+                                      id="chkInstitutionalInvestigation"
+                                      checked={preliminaryChecks.institutional}
+                                      onChange={(e) => {
+                                        const checked = e.target.checked;
+                                        if (!checked && !preliminaryChecks.provincial) return; // Keep at least one checked
+                                        setPreliminaryChecks(prev => ({ ...prev, institutional: checked }));
+                                      }}
+                                      className="checkbox-option-input"
+                                    />
+                                    <div className="checkbox-custom-indicator">
+                                      {preliminaryChecks.institutional && (
+                                        <svg viewBox="0 0 20 20" fill="currentColor" className="checkbox-check-icon">
+                                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                        </svg>
+                                      )}
+                                    </div>
+                                    <span className="checkbox-option-label">
+                                      {lang === "si"
+                                        ? "ආයතනික මූලික විමර්ශනය (Institutional Basic Investigation)"
+                                        : lang === "ta"
+                                        ? "நிறுவன அடிப்படை விசாரணை (Institutional Basic Investigation)"
+                                        : t("institutionalBasicInvestigation", "Institutional Basic Investigation")}
+                                    </span>
+                                  </label>
+
+                                  <label className={`checkbox-option-card ${preliminaryChecks.provincial ? "selected" : ""}`}>
+                                    <input
+                                      type="checkbox"
+                                      id="chkProvincialInvestigation"
+                                      checked={preliminaryChecks.provincial}
+                                      onChange={(e) => {
+                                        const checked = e.target.checked;
+                                        if (!checked && !preliminaryChecks.institutional) return; // Keep at least one checked
+                                        setPreliminaryChecks(prev => ({ ...prev, provincial: checked }));
+                                      }}
+                                      className="checkbox-option-input"
+                                    />
+                                    <div className="checkbox-custom-indicator">
+                                      {preliminaryChecks.provincial && (
+                                        <svg viewBox="0 0 20 20" fill="currentColor" className="checkbox-check-icon">
+                                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                        </svg>
+                                      )}
+                                    </div>
+                                    <span className="checkbox-option-label">
+                                      {lang === "si"
+                                        ? "පළාත් මූලික විමර්ශනය (Provincial Basic Investigation)"
+                                        : lang === "ta"
+                                        ? "மாகாண அடிப்படை விசாரணை (Provincial Basic Investigation)"
+                                        : t("provincialBasicInvestigation", "Provincial Basic Investigation")}
+                                    </span>
+                                  </label>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
