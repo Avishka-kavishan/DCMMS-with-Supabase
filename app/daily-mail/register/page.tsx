@@ -833,6 +833,9 @@ function RegisterComplaintForm() {
         status: newLetter.status || "Pending",
         document_url: uploadedUrl,
         document_name: uploadedName,
+        is_answer_letter: formState.isAnswerLetter === "true" || formState.isAnswerLetter === true,
+        institute_name: newLetter.instituteName,
+        region_province: newLetter.regionProvince,
       });
     } catch (pgErr) {
       console.error("Failed to save daily mail to PostgreSQL database:", pgErr);

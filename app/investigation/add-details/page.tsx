@@ -13,7 +13,7 @@ import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 import { getCurrentProfile, signOut } from "@/lib/auth";
-import { getAccusedOfficerByRefServer, getCommitteeOfficersWithSchoolsServer, saveChairmanByCaseServer, getChairmanByCaseServer, saveMembersByCaseServer, getMembersByCaseServer, saveCaseByDateExtensionServer, getCaseByDateExtensionServer, saveCaseByAppointmentAndReportDueDateServer, getCaseByAppointmentAndReportDueDateServer } from "@/lib/db-actions";
+import { getAccusedOfficerByRefServer, getCommitteeOfficersWithSchoolsServer, saveChairmanByCaseServer, getChairmanByCaseServer, saveMembersByCaseServer, getMembersByCaseServer, saveCaseByDateExtensionServer, getCaseByDateExtensionServer, saveCaseByAppointmentAndReportDueDateServer, getCaseByAppointmentAndReportDueDateServer, saveSubjectOfficerAssignmentServer } from "@/lib/db-actions";
 import { 
   Shield, User, Calendar as CalendarIcon, FileCheck, Send, Clock, 
   CheckCircle, ArrowLeft, RefreshCw, AlertCircle, Award, Building, 
@@ -1272,6 +1272,13 @@ function InvestigationCaseDetailsContent() {
         window.dispatchEvent(new Event("dcmms_notifications_updated"));
         window.dispatchEvent(new Event("dcmms_data_updated"));
         window.dispatchEvent(new Event("storage"));
+      }
+
+      // Direct save to PostgreSQL database for multi-device real-time synchronization
+      try {
+        saveSubjectOfficerAssignmentServer(updated).then();
+      } catch (pgErr) {
+        console.warn("PostgreSQL saveSubjectAssignment error:", pgErr);
       }
 
       if (isSupabaseConfigured) {

@@ -22,7 +22,9 @@ import {
   getChairmanByCaseServer, 
   saveMembersByCaseServer, 
   getMembersByCaseServer,
-  getCommitteeOfficersWithSchoolsServer 
+  getCommitteeOfficersWithSchoolsServer,
+  getSubjectOfficerDashboardCasesServer,
+  saveSubjectOfficerAssignmentServer
 } from "@/lib/db-actions";
 import { CheckCircle, XCircle, FileText, Send, Clock, X, AlertCircle, ShieldCheck, Calendar as CalendarIcon, ChevronDown, ChevronUp, Bell, Eye, MoreHorizontal, Filter, Check, MailCheck, ClipboardList, Plus, Sparkles, ExternalLink, User, Building, ArrowRight, ShieldAlert, FileCheck, Layers, UserCheck } from "lucide-react";
 
@@ -746,280 +748,36 @@ function SubjectOfficerDashboardContent() {
   // Load cases dynamically from database on mount or when profile is updated
   useEffect(() => {
     const fetchCases = async () => {
-      if (isSupabaseConfigured) {
-        try {
-          let activeProfile = profile;
-          if (!activeProfile) {
-            activeProfile = await getCurrentProfile();
+      let activeProfile = profile;
+      if (!activeProfile) {
+        activeProfile = await getCurrentProfile();
+      }
+      const activeName = activeProfile?.full_name || "";
+
+      // 1. Live PostgreSQL Database Fetch for multi-device synchronization
+      try {
+        const res = await getSubjectOfficerDashboardCasesServer(activeName);
+        if (res && res.success && res.data) {
+          if (Array.isArray(res.data.cases)) {
+            setCases(res.data.cases);
+          }
+          if (Array.isArray(res.data.answerLetters)) {
+            setAssignedAnswerLetters(res.data.answerLetters);
+          }
+          if (Array.isArray(res.data.replyLetters)) {
+            setReplyLettersList(res.data.replyLetters);
+          }
+          if (res.data.concernedOfficers && typeof res.data.concernedOfficers === "object") {
+            setConcernedOfficersMap(res.data.concernedOfficers);
+          }
+          if (Array.isArray(res.data.assignments)) {
+            setAssignments(res.data.assignments);
           }
 
-          if (activeProfile) {
-            const activeNameClean = (activeProfile.full_name || "").trim().toLowerCase();
-
-            // 1. Fetch letters from dcmms_daily_mail
-            const { data: letters, error: lettersError } = await supabase
-              .from("dcmms_daily_mail")
-              .select("*");
-
-            if (lettersError) throw lettersError;
-
-            // 2. Fetch assignments from dcmms_subject_assignments
-            const { data: assignmentsData } = await supabase
-              .from("dcmms_subject_assignments")
-              .select("*");
-
-            // 3. Fetch subsequent mails from dcmms_subsequent_mails
-            const { data: subsequentData } = await supabase
-              .from("dcmms_subsequent_mails")
-              .select("*");
-
-            const refToReceivedDate = new Map<string, string>();
-            const refToLetterDate = new Map<string, string>();
-            const refToCreatedAt = new Map<string, string>();
-            const refToMailMeta = new Map<string, { subject?: string; priority?: string }>();
-
-            const isOfficerMatched = (targetName: string) => {
-              if (!activeNameClean) return true;
-              if (!targetName || typeof targetName !== "string" || !targetName.trim()) return false;
-              const cleanTarget = targetName.trim().toLowerCase();
-              const isGenericTarget =
-                cleanTarget === "subject officer" ||
-                cleanTarget === "විෂය නිලධාරී" ||
-                cleanTarget === "පවරන ලද විෂය භාර නිලධාරී" ||
-                cleanTarget === "assigned subject officer" ||
-                cleanTarget === "unassigned";
-              const isGenericActive =
-                activeNameClean === "subject officer" ||
-                activeNameClean === "විෂය නිලධාරී" ||
-                activeNameClean === "පවරන ලද විෂය භාර නිලධාරී" ||
-                activeNameClean === "assigned subject officer";
-
-              if (isGenericTarget || isGenericActive) return true;
-
-              return (
-                cleanTarget === activeNameClean ||
-                cleanTarget.includes(activeNameClean) ||
-                activeNameClean.includes(cleanTarget)
-              );
-            };
-
-            if (letters) {
-              letters.forEach((l: any) => {
-                if (l.ref_no && isOfficerMatched(l.officer_name)) {
-                  refToReceivedDate.set(l.ref_no, l.received_date);
-                  if (l.letter_date) refToLetterDate.set(l.ref_no, l.letter_date);
-                  if (l.created_at) refToCreatedAt.set(l.ref_no, l.created_at);
-                  refToMailMeta.set(l.ref_no, { subject: l.subject, priority: l.priority });
-                }
-              });
-            }
-
-            if (assignmentsData) {
-              assignmentsData.forEach((a: any) => {
-                const asgnOfficer = a.subject_officer_name || a.subjectOfficerName || "";
-                const isMatch = isOfficerMatched(asgnOfficer);
-
-                if (a.case_no && isMatch) {
-                  if (!refToReceivedDate.has(a.case_no)) {
-                    refToReceivedDate.set(a.case_no, new Date().toISOString().split("T")[0]);
-                  }
-                }
-              });
-            }
-
-            if (subsequentData) {
-              subsequentData.forEach((m: any) => {
-                if (m.case_no && isOfficerMatched(m.mail_officer_name)) {
-                  if (!refToReceivedDate.has(m.case_no)) {
-                    refToReceivedDate.set(m.case_no, m.received_date || new Date().toISOString().split("T")[0]);
-                  }
-                }
-              });
-            }
-
-            // 4. Fetch dcmms_subject directly for matching cases
-            const { data: directCases } = await supabase
-              .from("dcmms_subject")
-              .select("*");
-
-            if (directCases) {
-              directCases.forEach((item: any) => {
-                const sOfficer = item.officer_name || item.assigned_officer || item.subject_officer || item.subject_officer_name || "";
-                if (item.case_no && isOfficerMatched(sOfficer)) {
-                  if (!refToReceivedDate.has(item.case_no)) {
-                    refToReceivedDate.set(item.case_no, item.assigned_date || new Date().toISOString().split("T")[0]);
-                  }
-                }
-              });
-            }
-
-            const assignedRefNos = Array.from(refToReceivedDate.keys());
-
-            if (assignedRefNos.length > 0) {
-              const { data: casesData, error: casesError } = await supabase
-                .from("dcmms_subject")
-                .select("*")
-                .in("case_no", assignedRefNos)
-                .order("case_no", { ascending: true });
-
-              if (casesError) throw casesError;
-
-              // Fetch details to check if there are actions taken
-              const { data: detailsData } = await supabase
-                .from("dcmms_subject_details")
-                .select("case_no")
-                .in("case_no", assignedRefNos);
-
-              const casesWithDetails = new Set(detailsData ? detailsData.map((d: any) => d.case_no) : []);
-              const fetchedCaseNos = new Set(casesData ? casesData.map((c: any) => c.case_no) : []);
-
-              const mapped: Case[] = [];
-
-              if (casesData) {
-                casesData.forEach((item: any) => {
-                  mapped.push({
-                    id: item.id,
-                    caseNo: item.case_no,
-                    assignedDate: item.assigned_date,
-                    receivedDate: refToReceivedDate.get(item.case_no) || item.assigned_date,
-                    letterDate: refToLetterDate.get(item.case_no) || item.letter_date || refToReceivedDate.get(item.case_no) || item.assigned_date,
-                    createdAt: item.created_at || refToCreatedAt.get(item.case_no),
-                    subject: item.subject,
-                    priority: item.priority,
-                    status: item.status,
-                    isOld: (typeof window !== "undefined" && (() => {
-                      try {
-                        const localCases = JSON.parse(localStorage.getItem("dcmms_cases") || "[]");
-                        const found = localCases.find((lc: any) => lc.caseNo === item.case_no);
-                        if (found && found.isOld !== undefined) return found.isOld;
-                      } catch (e) {}
-                      return casesWithDetails.has(item.case_no) || item.status === "Closed" || item.status === "Pending";
-                    })()),
-                  });
-                });
-              }
-
-              // Fallback for ref_nos that are assigned to this officer but don't have a row in dcmms_subject yet
-              assignedRefNos.forEach((refNo) => {
-                if (!fetchedCaseNos.has(refNo)) {
-                  const meta = refToMailMeta.get(refNo) || {};
-                  mapped.push({
-                    id: `case-${refNo}`,
-                    caseNo: refNo,
-                    assignedDate: refToReceivedDate.get(refNo) || new Date().toISOString().split("T")[0],
-                    receivedDate: refToReceivedDate.get(refNo) || new Date().toISOString().split("T")[0],
-                    letterDate: refToLetterDate.get(refNo) || refToReceivedDate.get(refNo) || new Date().toISOString().split("T")[0],
-                    createdAt: refToCreatedAt.get(refNo) || new Date().toISOString(),
-                    subject: meta.subject || `Assigned Case (${refNo})`,
-                    priority: (meta.priority as any) || "medium",
-                    status: "In Progress",
-                    isOld: casesWithDetails.has(refNo),
-                  });
-                }
-              });
-
-              mapped.sort((a: any, b: any) => {
-                const timeA = new Date(a.createdAt || 0).getTime();
-                const timeB = new Date(b.createdAt || 0).getTime();
-                if (timeA !== timeB) {
-                  return timeB - timeA;
-                }
-                const dateA = new Date(a.letterDate || a.receivedDate || a.assignedDate || 0).getTime();
-                const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).getTime();
-                return dateB - dateA;
-              });
-
-              // Fetch reply letters from API / Supabase
-              let fetchedReplyLetters: any[] = [];
-              try {
-                const repRes = await fetch("/api/reply-letter-details");
-                if (repRes.ok) {
-                  const repJson = await repRes.json();
-                  if (repJson.data && Array.isArray(repJson.data)) {
-                    fetchedReplyLetters = repJson.data;
-                  }
-                }
-              } catch (e) {}
-
-              if (fetchedReplyLetters.length === 0 && isSupabaseConfigured) {
-                try {
-                  const { data: supaReply } = await supabase.from("reply_letter_details_table").select("*");
-                  if (supaReply) fetchedReplyLetters = supaReply;
-                } catch (e) {}
-              }
-
-              // Also check localStorage actions
-              if (typeof window !== "undefined") {
-                try {
-                  const localNewActions = JSON.parse(localStorage.getItem("dcmms_new_letter_current_case") || "[]");
-                  if (Array.isArray(localNewActions)) {
-                    localNewActions.forEach((la: any) => {
-                      if (!fetchedReplyLetters.some((fr: any) => (fr.ref_number || fr.file_no) === la.caseNo)) {
-                        fetchedReplyLetters.push({
-                          ref_number: la.caseNo,
-                          file_no: la.specialNotes || la.caseNo,
-                          upcoming_action: la.upcomingAction || la.reportState || "",
-                          date: la.receivedDate,
-                          description: la.description || "",
-                        });
-                      }
-                    });
-                  }
-                } catch (e) {}
-              }
-              setReplyLettersList(fetchedReplyLetters);
-
-              // Fetch concerned officers from dcmms_concerned_officers
-              let cMap: Record<string, any> = {};
-              try {
-                const { data: cOfficers } = await supabase.from("dcmms_concerned_officers").select("*");
-                if (cOfficers && Array.isArray(cOfficers)) {
-                  cOfficers.forEach((co: any) => {
-                    if (co.case_no && !cMap[co.case_no.toLowerCase()]) {
-                      cMap[co.case_no.toLowerCase()] = co;
-                    }
-                  });
-                }
-              } catch (e) {}
-
-              if (typeof window !== "undefined") {
-                try {
-                  const localCO = JSON.parse(localStorage.getItem("dcmms_officer_concerned") || "{}");
-                  if (localCO && typeof localCO === "object") {
-                    Object.keys(localCO).forEach((k) => {
-                      if (!cMap[k.toLowerCase()]) {
-                        cMap[k.toLowerCase()] = localCO[k];
-                      }
-                    });
-                  }
-                } catch (e) {}
-              }
-              setConcernedOfficersMap(cMap);
-
-              // Calculate case numbers that moved to inquiry
-              const inquiryCaseNos = fetchedReplyLetters
-                .filter((r: any) => {
-                  const act = String(r.upcoming_action || "").toLowerCase();
-                  return act.includes("inspection") || act.includes("inquiry") || act.includes("පරීක්ෂණ");
-                })
-                .map((r: any) => String(r.ref_number || r.file_no || "").trim().toLowerCase());
-
-              const answerList = collectAnswerLetters(
-                letters || [],
-                subsequentData || [],
-                assignedRefNos,
-                activeNameClean,
-                isOfficerMatched,
-                inquiryCaseNos
-              );
-              setAssignedAnswerLetters(answerList);
-              setCases(mapped);
-              return;
-            }
-          }
-        } catch (e) {
-          console.error("Failed to fetch cases from Supabase, falling back to localStorage", e);
+          return; // Successfully populated from PostgreSQL database
         }
+      } catch (pgErr) {
+        console.warn("PostgreSQL fetchCases failed, checking local storage fallback:", pgErr);
       }
 
       // Local storage fallback
@@ -1344,8 +1102,8 @@ function SubjectOfficerDashboardContent() {
       .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_recommendations" }, handleSyncAll)
       .subscribe();
 
-    const interval = setInterval(handleSyncAll, 15_000);
-
+    // Fast 3-second polling for real-time multi-device sync
+    const interval = setInterval(handleSyncAll, 3_000);
 
     const handleStorageEvent = (e: StorageEvent) => {
       if (
@@ -1360,6 +1118,14 @@ function SubjectOfficerDashboardContent() {
       }
     };
 
+    const handleVisibilityChange = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        handleSyncAll();
+      }
+    };
+
+    window.addEventListener("focus", handleSyncAll);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("storage", handleStorageEvent);
     window.addEventListener("dcmms_assignment_updated", handleSyncAll);
     window.addEventListener("dcmms_recommendation_updated", handleSyncAll);
@@ -1367,6 +1133,8 @@ function SubjectOfficerDashboardContent() {
     return () => {
       supabase.removeChannel(channel);
       clearInterval(interval);
+      window.removeEventListener("focus", handleSyncAll);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("storage", handleStorageEvent);
       window.removeEventListener("dcmms_assignment_updated", handleSyncAll);
       window.removeEventListener("dcmms_recommendation_updated", handleSyncAll);
@@ -1623,7 +1391,23 @@ function SubjectOfficerDashboardContent() {
 
   const fetchAssignments = async () => {
     let list: any[] = [];
-    if (isSupabaseConfigured) {
+    let activeProfile = profile;
+    if (!activeProfile) {
+      activeProfile = await getCurrentProfile();
+    }
+    const activeName = activeProfile?.full_name || "";
+
+    // 1. Live PostgreSQL Database Fetch for multi-device synchronization
+    try {
+      const res = await getSubjectOfficerDashboardCasesServer(activeName);
+      if (res && res.success && res.data && Array.isArray(res.data.assignments) && res.data.assignments.length > 0) {
+        list = [...res.data.assignments];
+      }
+    } catch (pgErr) {
+      console.warn("PostgreSQL fetchAssignments error:", pgErr);
+    }
+
+    if (isSupabaseConfigured && list.length === 0) {
       try {
         const { data: dbAsgns } = await supabase.from("dcmms_subject_assignments").select("*");
         const { data: dbDetails } = await supabase.from("dcmms_subject_details").select("*");
@@ -1808,8 +1592,8 @@ function SubjectOfficerDashboardContent() {
       } catch (e) {}
     }
 
-    let activeName = profile?.full_name || t("subjectName");
-    const activeNameClean = (activeName || "").trim().toLowerCase();
+    const fallbackActiveName = profile?.full_name || activeName || t("subjectName");
+    const activeNameClean = (fallbackActiveName || "").trim().toLowerCase();
 
     // Auto-synthesize assignment directives from dcmms_cases / cases state if not in list
     if (typeof window !== "undefined") {
@@ -2033,8 +1817,8 @@ function SubjectOfficerDashboardContent() {
       .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subject" }, fetchAssignments)
       .subscribe();
 
-    const interval = setInterval(fetchAssignments, 15000);
-
+    // Fast 3-second polling for real-time multi-device sync
+    const interval = setInterval(fetchAssignments, 3_000);
 
     const handleStorageEvent = (e: StorageEvent) => {
       if (e.key === "dcmms_subject_assignments" || e.key === "dcmms_cases" || e.key === "dcmms_letters") {
@@ -2042,6 +1826,14 @@ function SubjectOfficerDashboardContent() {
       }
     };
 
+    const handleVisibilityChange = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        fetchAssignments();
+      }
+    };
+
+    window.addEventListener("focus", fetchAssignments);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("storage", handleStorageEvent);
     window.addEventListener("dcmms_assignment_updated", fetchAssignments);
     window.addEventListener("dcmms_notifications_updated", fetchAssignments);
@@ -2050,6 +1842,8 @@ function SubjectOfficerDashboardContent() {
     return () => {
       supabase.removeChannel(channel);
       clearInterval(interval);
+      window.removeEventListener("focus", fetchAssignments);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("storage", handleStorageEvent);
       window.removeEventListener("dcmms_assignment_updated", fetchAssignments);
       window.removeEventListener("dcmms_notifications_updated", fetchAssignments);
@@ -2128,7 +1922,7 @@ function SubjectOfficerDashboardContent() {
       window.dispatchEvent(new Event("storage"));
     }
 
-    // Save into dedicated PostgreSQL case_by_appointment_and_report_due_date table
+    // Save into dedicated PostgreSQL case_by_appointment_and_report_due_date table & dcmms_subject_assignments
     try {
       saveCaseByAppointmentAndReportDueDateServer({
         subject_file_no: updated.caseNo || caseKey,
@@ -2136,6 +1930,16 @@ function SubjectOfficerDashboardContent() {
         appointment_letter_date: finalAppt,
         report_due_date: finalDue,
         dates_submitted_by_subject: true,
+      }).then();
+
+      saveSubjectOfficerAssignmentServer({
+        case_no: updated.caseNo || caseKey,
+        subject_officer_name: updated.subjectOfficerName,
+        appointment_date: finalAppt,
+        report_due_date: finalDue,
+        appointment_letter_date: finalAppt,
+        dates_submitted_by_subject: true,
+        status: updated.status,
       }).then();
     } catch (e) {}
 
@@ -2278,12 +2082,29 @@ function SubjectOfficerDashboardContent() {
       window.dispatchEvent(new Event("storage"));
     }
 
-    // Update dedicated case_by_date_extention table in local PostgreSQL
+    // Update dedicated case_by_date_extention table & dcmms_subject_assignments in local PostgreSQL
     try {
       await updateCaseByDateExtensionApprovalServer(caseNo, status, today, {
         extention_term: asgn.extensionTerm || asgn.extension_term,
         start_date: asgn.extensionStartDate || asgn.extension_start_date,
         end_date: asgn.extensionEndDate || asgn.extension_end_date,
+      });
+
+      await saveSubjectOfficerAssignmentServer({
+        case_no: caseNo,
+        subject_officer_name: updated.subjectOfficerName || updated.subject_officer_name,
+        assigned_officers: updated.assignedOfficers || updated.assigned_officers,
+        chairman: updated.chairman,
+        members: updated.members,
+        appointment_date: updated.appointmentDate || updated.appointment_date,
+        report_due_date: (approved && extEnd) ? extEnd : (updated.reportDueDate || updated.report_due_date),
+        extension_term: updated.extensionTerm || updated.extension_term,
+        extension_start_date: updated.extensionStartDate || updated.extension_start_date,
+        extension_end_date: updated.extensionEndDate || updated.extension_end_date,
+        extension_requested_by_admin: true,
+        extension_approval_status: status,
+        extension_decision_date: today,
+        status: updated.status,
       });
     } catch (err) {
       console.error("Failed to update case_by_date_extention in PostgreSQL:", err);
@@ -5727,12 +5548,12 @@ function SubjectOfficerDashboardContent() {
                             <td className="text-center actions-cell">
                               <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
                                 <Link
-                                  href={`/subject/recommendation?caseNo=${item.caseNo}`}
+                                  href={`/subject/disciplinary-inspection?caseNo=${encodeURIComponent(item.caseNo)}`}
                                   className="add-details-link"
-                                  style={{ padding: "4px 10px", fontSize: "11px", backgroundColor: "#4f46e5" }}
-                                  title="Review Disciplinary Recommendation"
+                                  style={{ padding: "4px 12px", fontSize: "11px", backgroundColor: "#4f46e5" }}
+                                  title="Open Formal Disciplinary Inspection Form"
                                 >
-                                  {lang === "si" ? "නිර්දේශය" : "Minute"}
+                                  {t("addDetails", "Add Details")}
                                 </Link>
                                 <button
                                   type="button"
@@ -7045,12 +6866,12 @@ function SubjectOfficerDashboardContent() {
                 Close
               </button>
               <Link
-                href={`/subject/add-details?caseNo=${selectedInspectionModal.caseNo}`}
+                href={`/subject/disciplinary-inspection?caseNo=${encodeURIComponent(selectedInspectionModal.caseNo)}`}
                 className="btn-create-rec"
                 style={{ padding: "8px 16px", fontSize: "13px", backgroundColor: "#4f46e5" }}
               >
                 <Plus size={14} />
-                <span>Add Details / Step</span>
+                <span>Add Details / Inspection Form</span>
               </Link>
               <Link
                 href={`/subject/recommendation?caseNo=${selectedInspectionModal.caseNo}`}

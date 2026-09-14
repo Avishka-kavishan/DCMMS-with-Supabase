@@ -249,16 +249,25 @@ export default function DailyMailPage() {
       .subscribe();
 
     const handleLocalUpdate = () => fetchLetters();
+    const handleVisibilityChange = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        fetchLetters();
+      }
+    };
+
+    window.addEventListener("focus", handleLocalUpdate);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("storage", handleLocalUpdate);
     window.addEventListener("dcmms_data_updated", handleLocalUpdate);
     window.addEventListener("dcmms_assignment_updated", handleLocalUpdate);
 
-    // Fallback: background refresh every 15 seconds
-    const interval = setInterval(fetchLetters, 15000);
-
+    // Fast 3-second background polling for live multi-device synchronization
+    const interval = setInterval(fetchLetters, 3_000);
 
     return () => {
       supabase.removeChannel(channel);
+      window.removeEventListener("focus", handleLocalUpdate);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("storage", handleLocalUpdate);
       window.removeEventListener("dcmms_data_updated", handleLocalUpdate);
       window.removeEventListener("dcmms_assignment_updated", handleLocalUpdate);
