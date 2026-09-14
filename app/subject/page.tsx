@@ -774,6 +774,18 @@ function SubjectOfficerDashboardContent() {
             setAssignments(res.data.assignments);
           }
 
+          if (typeof window !== "undefined") {
+            if (Array.isArray(res.data.cases) && res.data.cases.length === 0) {
+              localStorage.removeItem("dcmms_cases");
+              localStorage.removeItem("dcmms_letters");
+              localStorage.removeItem("dcmms_subject_assignments");
+              localStorage.removeItem("dcmms_new_letter_current_case");
+              localStorage.removeItem("dcmms_new_mail_current_case");
+              localStorage.removeItem("dcmms_recommendations");
+              localStorage.removeItem("dcmms_daily_mail");
+            }
+          }
+
           return; // Successfully populated from PostgreSQL database
         }
       } catch (pgErr) {

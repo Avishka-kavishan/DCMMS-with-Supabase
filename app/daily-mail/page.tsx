@@ -160,7 +160,7 @@ export default function DailyMailPage() {
       // Fetch from local PostgreSQL via Prisma Server Action
       try {
         const res = await getDailyMailRecordsServer();
-        if (res.success && res.data && res.data.length > 0) {
+        if (res.success && Array.isArray(res.data)) {
           const mapped = res.data
             .filter((db: any) => !db.serial_no?.startsWith("__SECURITY_"))
             .map((db: any) => ({
@@ -183,6 +183,18 @@ export default function DailyMailPage() {
               documentName: db.document_name || "",
             }));
           setLetters(mapped);
+
+          if (typeof window !== "undefined") {
+            localStorage.setItem("dcmms_letters", JSON.stringify(mapped));
+            if (mapped.length === 0) {
+              localStorage.removeItem("dcmms_new_letter_current_case");
+              localStorage.removeItem("dcmms_new_mail_current_case");
+              localStorage.removeItem("dcmms_daily_mail");
+              setCasesWithDetails(new Set());
+              setSubjectSubmissions([]);
+              setSubsequentMailIds(new Set());
+            }
+          }
           return;
         }
       } catch (err) {

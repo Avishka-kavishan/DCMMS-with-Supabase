@@ -10,7 +10,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 import { signOut, getCurrentProfile } from "@/lib/auth";
-import { getInvestigationOfficersServer, assignOfficerToInvestigationServer, logAuditEventServer, getAccusedOfficerByRefServer, getCommitteeOfficersWithSchoolsServer, saveChairmanByCaseServer, getChairmanByCaseServer, saveMembersByCaseServer, getMembersByCaseServer, saveCaseByDateExtensionServer } from "@/lib/db-actions";
+import { getInvestigationOfficersServer, assignOfficerToInvestigationServer, logAuditEventServer, getAccusedOfficerByRefServer, getCommitteeOfficersWithSchoolsServer, saveChairmanByCaseServer, getChairmanByCaseServer, saveMembersByCaseServer, getMembersByCaseServer, saveCaseByDateExtensionServer, getSubjectOfficerDashboardCasesServer } from "@/lib/db-actions";
 import { 
   UserPlus, X, Edit, Trash2, Check, Eye, ClipboardList, 
   UserCheck, Shield, ChevronRight, Calendar as CalendarIcon, 
@@ -633,6 +633,41 @@ export default function InvestigationPage() {
   // ── Fetch Inquiries & Officers ────────────────────────────────────────────
   // ── Fetch Inquiries & Officers ────────────────────────────────────────────
   const fetchInquiries = async () => {
+    // 1. Live PostgreSQL Database Fetch for multi-device synchronization
+    try {
+      const res = await getSubjectOfficerDashboardCasesServer("");
+      if (res && res.success && res.data && Array.isArray(res.data.cases)) {
+        const mappedInquiries = res.data.cases.map((item: any) => ({
+          id: item.id || `case-${item.caseNo}`,
+          inquiryNo: item.caseNo || item.inquiryNo || item.case_no,
+          subject: item.subject,
+          targetDate: item.targetDate || item.assignedDate || "2026-07-30",
+          status: item.status as Inquiry["status"],
+          assignedOfficer: item.assignedOfficer || item.assignedTo || item.officerName,
+          subjectOfficer: item.subjectOfficerName || item.subject_officer_name || item.subjectOfficer || "",
+          accusedOfficer: item.accusedOfficer || item.accused_officer_name || "",
+          appointmentDate: item.appointmentDate || "",
+          reportDueDate: item.reportDueDate || "",
+          createdAt: item.createdAt || new Date().toISOString(),
+        }));
+
+        setInquiries(mappedInquiries);
+        if (typeof window !== "undefined") {
+          if (mappedInquiries.length === 0) {
+            localStorage.removeItem("dcmms_cases");
+            localStorage.removeItem("dcmms_letters");
+            localStorage.removeItem("dcmms_subject_assignments");
+            localStorage.removeItem("dcmms_new_letter_current_case");
+            localStorage.removeItem("dcmms_new_mail_current_case");
+            localStorage.removeItem("dcmms_recommendations");
+          }
+        }
+        return;
+      }
+    } catch (pgErr) {
+      console.warn("PostgreSQL fetchInquiries failed, trying fallback:", pgErr);
+    }
+
     const datesMap = new Map<string, { appointmentDate?: string; reportDueDate?: string }>();
     const accusedMap = new Map<string, string>();
 
