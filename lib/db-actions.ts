@@ -200,10 +200,77 @@ export async function getDailyMailRecordsServer() {
   }
 }
 
+export async function getNextDailyMailLetterNoServer(dateStr?: string): Promise<{ success: boolean; nextLetterNo: string; error?: string }> {
+  try {
+    let d: Date;
+    if (dateStr) {
+      const cleanDate = String(dateStr).split("T")[0];
+      const parts = cleanDate.split("-");
+      if (parts.length === 3) {
+        d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+      } else {
+        d = new Date(dateStr);
+      }
+    } else {
+      d = new Date();
+    }
+    if (isNaN(d.getTime())) d = new Date();
+
+    const year = d.getFullYear();
+    const month = d.getMonth() + 1;
+    const day = d.getDate();
+    const prefix = `${year}/${month}/${day}/`;
+
+    const existingLetterNos = new Set<string>();
+
+    try {
+      const r1: any[] = await prisma.$queryRawUnsafe(`
+        SELECT letter_number FROM public.daily_mail_letter_table 
+        WHERE letter_number IS NOT NULL AND letter_number != ''
+      `);
+      if (Array.isArray(r1)) {
+        r1.forEach((row) => {
+          if (row.letter_number) existingLetterNos.add(String(row.letter_number).trim());
+        });
+      }
+    } catch (e) {}
+
+    try {
+      const r2: any[] = await prisma.$queryRawUnsafe(`
+        SELECT letter_no FROM public.dcmms_daily_mail 
+        WHERE letter_no IS NOT NULL AND letter_no != ''
+      `);
+      if (Array.isArray(r2)) {
+        r2.forEach((row) => {
+          if (row.letter_no) existingLetterNos.add(String(row.letter_no).trim());
+        });
+      }
+    } catch (e) {}
+
+    const regex = new RegExp(`^${year}\\/0?${month}\\/0?${day}\\/(\\d+)$`, "i");
+
+    let maxSeq = 0;
+    existingLetterNos.forEach((raw) => {
+      const match = raw.match(regex);
+      if (match && match[1]) {
+        const seq = parseInt(match[1], 10);
+        if (!isNaN(seq) && seq > maxSeq) {
+          maxSeq = seq;
+        }
+      }
+    });
+
+    const nextLetterNo = `${prefix}${maxSeq + 1}`;
+    return serializeForServerAction({ success: true, nextLetterNo });
+  } catch (error: any) {
+    console.error("Error calculating next letter number:", error);
+    const fallback = `${new Date().getFullYear()}/${new Date().getMonth() + 1}/${new Date().getDate()}/1`;
+    return serializeForServerAction({ success: false, nextLetterNo: fallback, error: error?.message });
+  }
+}
+
 export async function saveDailyMailRecordServer(mailData: any) {
   try {
-    let result;
-    const actionOfficer = mailData.action_officer || mailData.officer_name || mailData.officerName || null;
     const docUrl = mailData.document_url || mailData.documentUrl || null;
     const docName = mailData.document_name || mailData.documentName || null;
 
@@ -217,87 +284,42 @@ export async function saveDailyMailRecordServer(mailData: any) {
       `);
     } catch (e) {}
 
-    // Dual save to daily_mail & daily_mail_letter_table tables
-    try {
-      await saveDailyMailToNewTableServer({
-        letter_number: mailData.letter_no || mailData.letterNo || mailData.serial_no || mailData.refNo || `LT-${Date.now()}`,
-        received_letter_number: mailData.serial_no || mailData.refNo,
-        ref_number: mailData.serial_no || mailData.refNo,
-        mode_of_receipt: mailData.method || mailData.letterType || "Post",
-        sender_party: mailData.sender || mailData.senderName,
-        senders_party: mailData.sender || mailData.senderName,
-        nature_of_letter: mailData.type || mailData.letterType || mailData.regionProvince || "Complaint",
-        subject_category: mailData.classification || mailData.subjectCategory,
-        subject_of_letter: mailData.subject || "N/A",
-        date_received_by_additional_secretary: mailData.received_date || mailData.receivedDate,
-        date_received_by_add_secretary: mailData.received_date || mailData.receivedDate,
-        date_letter_handed_over_to_dicipline_branch: mailData.submitted_date || mailData.letterDate,
-        date_letter_handover_discipline: mailData.submitted_date || mailData.letterDate,
-        priority: mailData.priority || "Normal",
-        document_url: docUrl,
-        document_name: docName,
-      });
-    } catch (dmErr) {
-      console.warn("Save to daily mail tables failed in saveDailyMailRecordServer:", dmErr);
-    }
+    const res = await saveDailyMailToNewTableServer({
+      id: mailData.id,
+      letter_number: mailData.letter_no || mailData.letterNo || mailData.letter_number,
+      letter_no: mailData.letter_no || mailData.letterNo || mailData.letter_number,
+      received_letter_number: mailData.serial_no || mailData.refNo || mailData.ref_number,
+      ref_number: mailData.serial_no || mailData.refNo || mailData.ref_number,
+      serial_no: mailData.serial_no || mailData.refNo || mailData.ref_number,
+      mode_of_receipt: mailData.method || mailData.letterType || "Post",
+      method: mailData.method || mailData.letterType || "Post",
+      sender_party: mailData.sender || mailData.senderName,
+      senders_party: mailData.sender || mailData.senderName,
+      sender: mailData.sender || mailData.senderName,
+      nature_of_letter: mailData.type || mailData.letterType || mailData.regionProvince || "Complaint",
+      type: mailData.type || mailData.letterType || mailData.regionProvince || "Complaint",
+      subject_category: mailData.classification || mailData.subjectCategory,
+      classification: mailData.classification || mailData.subjectCategory,
+      subject_of_letter: mailData.subject || "N/A",
+      subject: mailData.subject || "N/A",
+      date_received_by_additional_secretary: mailData.received_date || mailData.receivedDate,
+      date_received_by_add_secretary: mailData.received_date || mailData.receivedDate,
+      received_date: mailData.received_date || mailData.receivedDate,
+      date_letter_handed_over_to_dicipline_branch: mailData.submitted_date || mailData.letterDate,
+      date_letter_handover_discipline: mailData.submitted_date || mailData.letterDate,
+      submitted_date: mailData.submitted_date || mailData.letterDate,
+      action_officer: mailData.action_officer || mailData.officer_name || mailData.officerName,
+      officer_name: mailData.action_officer || mailData.officer_name || mailData.officerName,
+      priority: mailData.priority || "Normal",
+      status: mailData.status || "Pending",
+      is_answer_letter: mailData.is_answer_letter === true || mailData.is_answer_letter === "true",
+      institute_name: mailData.institute_name || mailData.instituteName,
+      region_province: mailData.region_province || mailData.regionProvince,
+      document_url: docUrl,
+      document_name: docName,
+    });
 
-    // Save/Update in dcmms_daily_mail via raw SQL to ensure document_url & document_name are saved cleanly
-    const isUuid = typeof mailData.id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(mailData.id);
-    const recId = isUuid ? mailData.id : null;
-    const serialNo = mailData.serial_no || mailData.refNo;
-    const receivedDate = mailData.received_date ? new Date(mailData.received_date) : mailData.receivedDate ? new Date(mailData.receivedDate) : null;
-    const letterNo = mailData.letter_no || mailData.letterNo || null;
-    const submittedDate = mailData.submitted_date ? new Date(mailData.submitted_date) : mailData.letterDate ? new Date(mailData.letterDate) : null;
-    const subject = mailData.subject || "N/A";
-    const sender = mailData.sender || mailData.senderName || "N/A";
-    const method = mailData.method || mailData.letterType || "Post";
-    const lType = mailData.type || mailData.letterType || "Complaint";
-    const classification = mailData.classification || mailData.subjectCategory || null;
-    const status = mailData.status || "Pending";
-
-    try {
-      await prisma.$executeRawUnsafe(
-        `INSERT INTO public.dcmms_daily_mail (
-          id, serial_no, received_date, letter_no, submitted_date, subject, sender, method, type, classification, action_officer, status, document_url, document_name, created_at, updated_at
-        ) VALUES (
-          COALESCE($1::uuid, gen_random_uuid()), $2, $3::date, $4, $5::date, $6, $7, $8, $9, $10, $11, $12, $13, $14, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-        )
-        ON CONFLICT (id) DO UPDATE SET
-          serial_no = EXCLUDED.serial_no,
-          received_date = EXCLUDED.received_date,
-          letter_no = EXCLUDED.letter_no,
-          submitted_date = EXCLUDED.submitted_date,
-          subject = EXCLUDED.subject,
-          sender = EXCLUDED.sender,
-          method = EXCLUDED.method,
-          type = EXCLUDED.type,
-          classification = EXCLUDED.classification,
-          action_officer = EXCLUDED.action_officer,
-          status = EXCLUDED.status,
-          document_url = COALESCE(EXCLUDED.document_url, public.dcmms_daily_mail.document_url),
-          document_name = COALESCE(EXCLUDED.document_name, public.dcmms_daily_mail.document_name),
-          updated_at = CURRENT_TIMESTAMP`,
-        recId,
-        serialNo,
-        receivedDate,
-        letterNo,
-        submittedDate,
-        subject,
-        sender,
-        method,
-        lType,
-        classification,
-        actionOfficer,
-        status,
-        docUrl,
-        docName
-      );
-      result = { id: recId, serial_no: serialNo, document_url: docUrl, document_name: docName };
-    } catch (sqlErr) {
-      console.warn("Direct SQL insert to dcmms_daily_mail warning:", sqlErr);
-    }
-
-    return serializeForServerAction({ success: true, data: result });
+    return res;
   } catch (error: any) {
     console.error("Error saving daily mail record:", error);
     return serializeForServerAction({ success: false, error: error?.message || "Failed to save daily mail record" });
@@ -347,15 +369,15 @@ export async function saveDailyMailToNewTableServer(data: {
     else if (pInput.toLowerCase().includes('low')) validPriority = 'Low';
     else if (['Low', 'Normal', 'High', 'Urgent'].includes(pInput)) validPriority = pInput;
 
-    const letterNumber = data.letter_number?.trim() || `LT-${Date.now()}`;
-    const refNumber = data.ref_number || data.received_letter_number || null;
-    const modeOfReceipt = data.mode_of_receipt?.trim() || 'Post';
-    const sendersParty = data.senders_party || data.sender_party || null;
-    const natureOfLetter = data.nature_of_letter?.trim() || 'Complaint';
-    const subjectCategory = data.subject_category?.trim() || null;
-    const subjectOfLetter = data.subject_of_letter?.trim() || 'N/A';
-    const rawDateReceived = data.date_received_by_add_secretary || data.date_received_by_additional_secretary || null;
-    const rawDateHandover = data.date_letter_handover_discipline || data.date_letter_handed_over_to_dicipline_branch || null;
+    const refNumber = data.ref_number || data.received_letter_number || data.serial_no || null;
+    let letterNumber = (data.letter_number || data.letter_no || "").trim();
+    const modeOfReceipt = data.mode_of_receipt?.trim() || data.method?.trim() || 'Post';
+    const sendersParty = data.senders_party || data.sender_party || data.sender || null;
+    const natureOfLetter = data.nature_of_letter?.trim() || data.type?.trim() || 'Complaint';
+    const subjectCategory = data.subject_category?.trim() || data.classification?.trim() || null;
+    const subjectOfLetter = data.subject_of_letter?.trim() || data.subject?.trim() || 'N/A';
+    const rawDateReceived = data.date_received_by_add_secretary || data.date_received_by_additional_secretary || data.received_date || null;
+    const rawDateHandover = data.date_letter_handover_discipline || data.date_letter_handed_over_to_dicipline_branch || data.submitted_date || null;
     const documentUrl = data.document_url || null;
     const documentName = data.document_name || null;
 
@@ -376,150 +398,240 @@ export async function saveDailyMailToNewTableServer(data: {
     const isAnswer = data.is_answer_letter === true || data.is_answer_letter === "true" || String(data.status).toLowerCase().includes("answer");
 
     // Ensure database tables exist in PostgreSQL
-    try {
-      await prisma.$executeRawUnsafe(
-        `CREATE TABLE IF NOT EXISTS public.daily_mail_letter_table (
-          id BIGSERIAL PRIMARY KEY,
-          letter_number VARCHAR(100),
-          ref_number VARCHAR(100),
-          mode_of_receipt VARCHAR(100),
-          senders_party VARCHAR(255),
-          nature_of_letter VARCHAR(1000),
-          subject_category VARCHAR(500),
-          subject_of_letter TEXT,
-          date_received_by_add_secretary DATE,
-          date_letter_handover_discipline DATE,
-          document_url TEXT,
-          document_name VARCHAR(255),
-          action_officer VARCHAR(255),
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-        );
-        ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS action_officer VARCHAR(255);
+    const ddlStatements = [
+      `CREATE TABLE IF NOT EXISTS public.daily_mail_letter_table (
+        id BIGSERIAL PRIMARY KEY,
+        letter_number VARCHAR(100),
+        ref_number VARCHAR(100),
+        mode_of_receipt VARCHAR(100),
+        senders_party VARCHAR(255),
+        nature_of_letter VARCHAR(1000),
+        subject_category VARCHAR(500),
+        subject_of_letter TEXT,
+        date_received_by_add_secretary DATE,
+        date_letter_handover_discipline DATE,
+        document_url TEXT,
+        document_name VARCHAR(255),
+        action_officer VARCHAR(255),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )`,
+      `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS action_officer VARCHAR(255)`,
+      `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS document_url TEXT`,
+      `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS document_name VARCHAR(255)`,
+      `CREATE TABLE IF NOT EXISTS public.dcmms_daily_mail (
+        id VARCHAR(255) PRIMARY KEY,
+        serial_no VARCHAR(255),
+        letter_no VARCHAR(255),
+        sender VARCHAR(255),
+        method VARCHAR(100),
+        type VARCHAR(100),
+        classification VARCHAR(255),
+        subject TEXT,
+        received_date DATE,
+        submitted_date DATE,
+        priority VARCHAR(50),
+        action_officer VARCHAR(255),
+        status VARCHAR(100),
+        is_answer_letter BOOLEAN DEFAULT FALSE,
+        document_url TEXT,
+        document_name VARCHAR(255),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )`,
+      `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS action_officer VARCHAR(255)`,
+      `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS is_answer_letter BOOLEAN DEFAULT FALSE`,
+      `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS document_url TEXT`,
+      `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS document_name VARCHAR(255)`,
+      `CREATE TABLE IF NOT EXISTS public.dcmms_subject (
+        id VARCHAR(255) PRIMARY KEY,
+        case_no VARCHAR(255) UNIQUE,
+        subject TEXT,
+        priority VARCHAR(50),
+        status VARCHAR(100) DEFAULT 'In Progress',
+        officer_name VARCHAR(255),
+        assigned_date DATE,
+        letter_date DATE,
+        received_date DATE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )`,
+      `CREATE TABLE IF NOT EXISTS public.dcmms_subject_assignments (
+        id VARCHAR(255) PRIMARY KEY,
+        case_no VARCHAR(255) UNIQUE,
+        subject_officer_name VARCHAR(255),
+        assigned_officers TEXT,
+        status VARCHAR(100) DEFAULT 'In Progress',
+        assigned_date DATE,
+        chairman TEXT,
+        members TEXT,
+        appointment_date DATE,
+        report_due_date DATE,
+        appointment_letter_date DATE,
+        initial_investigation_complete BOOLEAN DEFAULT FALSE,
+        initial_investigation_completed_at TIMESTAMP WITH TIME ZONE,
+        extension_term VARCHAR(100),
+        extension_start_date DATE,
+        extension_end_date DATE,
+        extension_requested_by_admin BOOLEAN DEFAULT FALSE,
+        extension_approval_status VARCHAR(100),
+        dates_submitted_by_subject BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )`,
+      `CREATE TABLE IF NOT EXISTS public.dcmms_subsequent_mails (
+        id VARCHAR(255) PRIMARY KEY,
+        case_no VARCHAR(255),
+        mail_officer_name VARCHAR(255),
+        sender_name VARCHAR(255),
+        letter_title TEXT,
+        letter_type VARCHAR(100),
+        mail_date DATE,
+        received_date DATE,
+        is_answer_letter BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )`
+    ];
 
-        CREATE TABLE IF NOT EXISTS public.dcmms_daily_mail (
-          id VARCHAR(255) PRIMARY KEY,
-          serial_no VARCHAR(255),
-          letter_no VARCHAR(255),
-          sender VARCHAR(255),
-          method VARCHAR(100),
-          type VARCHAR(100),
-          classification VARCHAR(255),
-          subject TEXT,
-          received_date DATE,
-          submitted_date DATE,
-          priority VARCHAR(50),
-          action_officer VARCHAR(255),
-          status VARCHAR(100),
-          is_answer_letter BOOLEAN DEFAULT FALSE,
-          document_url TEXT,
-          document_name VARCHAR(255),
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-        );
-        ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS action_officer VARCHAR(255);
-        ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS is_answer_letter BOOLEAN DEFAULT FALSE;
-        ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS document_url TEXT;
-        ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS document_name VARCHAR(255);
-
-        CREATE TABLE IF NOT EXISTS public.dcmms_subject (
-          id VARCHAR(255) PRIMARY KEY,
-          case_no VARCHAR(255) UNIQUE,
-          subject TEXT,
-          priority VARCHAR(50),
-          status VARCHAR(100) DEFAULT 'In Progress',
-          officer_name VARCHAR(255),
-          assigned_date DATE,
-          letter_date DATE,
-          received_date DATE,
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS public.dcmms_subject_assignments (
-          id VARCHAR(255) PRIMARY KEY,
-          case_no VARCHAR(255) UNIQUE,
-          subject_officer_name VARCHAR(255),
-          assigned_officers TEXT,
-          status VARCHAR(100) DEFAULT 'In Progress',
-          assigned_date DATE,
-          chairman TEXT,
-          members TEXT,
-          appointment_date DATE,
-          report_due_date DATE,
-          appointment_letter_date DATE,
-          initial_investigation_complete BOOLEAN DEFAULT FALSE,
-          initial_investigation_completed_at TIMESTAMP WITH TIME ZONE,
-          extension_term VARCHAR(100),
-          extension_start_date DATE,
-          extension_end_date DATE,
-          extension_requested_by_admin BOOLEAN DEFAULT FALSE,
-          extension_approval_status VARCHAR(100),
-          dates_submitted_by_subject BOOLEAN DEFAULT TRUE,
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS public.dcmms_subsequent_mails (
-          id VARCHAR(255) PRIMARY KEY,
-          case_no VARCHAR(255),
-          mail_officer_name VARCHAR(255),
-          sender_name VARCHAR(255),
-          letter_title TEXT,
-          letter_type VARCHAR(100),
-          mail_date DATE,
-          received_date DATE,
-          is_answer_letter BOOLEAN DEFAULT FALSE,
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-        );`
-      );
-    } catch (tblErr) {
-      console.warn("Table creation warning:", tblErr);
+    for (const sql of ddlStatements) {
+      try {
+        await prisma.$executeRawUnsafe(sql);
+      } catch (e) {}
     }
 
-    // 1. Insert/Update daily_mail_letter_table
+    // Check if this letter already exists (by refNumber or ID)
+    let isExistingRecord = false;
+    let existingDailyMailId: string | null = null;
     try {
-      await prisma.$executeRawUnsafe(
-        `INSERT INTO public.daily_mail_letter_table (
-          letter_number,
-          ref_number,
-          mode_of_receipt,
-          senders_party,
-          nature_of_letter,
-          subject_category,
-          subject_of_letter,
-          date_received_by_add_secretary,
-          date_letter_handover_discipline,
-          document_url,
-          document_name,
-          action_officer,
-          created_at,
-          updated_at
-        ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7,
-          $8::date, $9::date,
-          $10, $11, $12,
-          CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-        )`,
-        letterNumber,
-        refNumber,
-        modeOfReceipt,
-        sendersParty,
-        natureOfLetter,
-        subjectCategory,
-        subjectOfLetter,
-        dateReceived,
-        dateHandover,
-        documentUrl,
-        documentName,
-        assignedOfficer || null
-      );
+      if (refNumber) {
+        const foundDml: any[] = await prisma.$queryRawUnsafe(`
+          SELECT id, letter_number FROM public.daily_mail_letter_table WHERE ref_number = $1 LIMIT 1
+        `, refNumber);
+        if (foundDml && foundDml.length > 0) {
+          isExistingRecord = true;
+          if (!letterNumber) letterNumber = foundDml[0].letter_number;
+        }
+
+        const foundDcmms: any[] = await prisma.$queryRawUnsafe(`
+          SELECT id, letter_no FROM public.dcmms_daily_mail WHERE serial_no = $1 LIMIT 1
+        `, refNumber);
+        if (foundDcmms && foundDcmms.length > 0) {
+          isExistingRecord = true;
+          existingDailyMailId = foundDcmms[0].id;
+          if (!letterNumber) letterNumber = foundDcmms[0].letter_no;
+        }
+      }
+    } catch (checkErr) {}
+
+    // If new record, guarantee letterNumber is unique and cannot duplicate
+    if (!isExistingRecord) {
+      let isDuplicate = false;
+      if (letterNumber) {
+        try {
+          const checkDml: any[] = await prisma.$queryRawUnsafe(`
+            SELECT id FROM public.daily_mail_letter_table WHERE letter_number = $1 LIMIT 1
+          `, letterNumber);
+          if (checkDml && checkDml.length > 0) isDuplicate = true;
+
+          const checkDcmms: any[] = await prisma.$queryRawUnsafe(`
+            SELECT id FROM public.dcmms_daily_mail WHERE letter_no = $1 LIMIT 1
+          `, letterNumber);
+          if (checkDcmms && checkDcmms.length > 0) isDuplicate = true;
+        } catch (e) {}
+      }
+
+      if (!letterNumber || isDuplicate) {
+        const freshGen = await getNextDailyMailLetterNoServer(dateReceived || new Date().toISOString().split("T")[0]);
+        letterNumber = freshGen.nextLetterNo;
+      }
+    } else {
+      if (!letterNumber) {
+        const freshGen = await getNextDailyMailLetterNoServer(dateReceived || new Date().toISOString().split("T")[0]);
+        letterNumber = freshGen.nextLetterNo;
+      }
+    }
+
+    // 1. Insert or Update daily_mail_letter_table
+    try {
+      if (refNumber) {
+        const existingRow: any[] = await prisma.$queryRawUnsafe(`
+          SELECT id FROM public.daily_mail_letter_table WHERE ref_number = $1 OR letter_number = $2 LIMIT 1
+        `, refNumber, letterNumber);
+
+        if (existingRow && existingRow.length > 0) {
+          await prisma.$executeRawUnsafe(
+            `UPDATE public.daily_mail_letter_table SET
+              letter_number = $1,
+              ref_number = $2,
+              mode_of_receipt = $3,
+              senders_party = $4,
+              nature_of_letter = $5,
+              subject_category = $6,
+              subject_of_letter = $7,
+              date_received_by_add_secretary = $8::date,
+              date_letter_handover_discipline = $9::date,
+              document_url = COALESCE($10, daily_mail_letter_table.document_url),
+              document_name = COALESCE($11, daily_mail_letter_table.document_name),
+              action_officer = $12,
+              updated_at = CURRENT_TIMESTAMP
+            WHERE ref_number = $2 OR letter_number = $1`,
+            letterNumber,
+            refNumber,
+            modeOfReceipt,
+            sendersParty,
+            natureOfLetter,
+            subjectCategory,
+            subjectOfLetter,
+            dateReceived,
+            dateHandover,
+            documentUrl,
+            documentName,
+            assignedOfficer || null
+          );
+        } else {
+          await prisma.$executeRawUnsafe(
+            `INSERT INTO public.daily_mail_letter_table (
+              letter_number,
+              ref_number,
+              mode_of_receipt,
+              senders_party,
+              nature_of_letter,
+              subject_category,
+              subject_of_letter,
+              date_received_by_add_secretary,
+              date_letter_handover_discipline,
+              document_url,
+              document_name,
+              action_officer,
+              created_at,
+              updated_at
+            ) VALUES (
+              $1, $2, $3, $4, $5, $6, $7,
+              $8::date, $9::date,
+              $10, $11, $12,
+              CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            )`,
+            letterNumber,
+            refNumber,
+            modeOfReceipt,
+            sendersParty,
+            natureOfLetter,
+            subjectCategory,
+            subjectOfLetter,
+            dateReceived,
+            dateHandover,
+            documentUrl,
+            documentName,
+            assignedOfficer || null
+          );
+        }
+      }
     } catch (lTableErr) {
-      console.warn("Insert into daily_mail_letter_table warning:", lTableErr);
+      console.warn("Insert/Update daily_mail_letter_table warning:", lTableErr);
     }
 
-    // 2. Insert/Update dcmms_daily_mail
-    const dcmmsId = data.id || `mail-${refNumber || letterNumber}-${Date.now()}`;
+    // 2. Insert or Update dcmms_daily_mail
+    const dcmmsId = existingDailyMailId || data.id || `mail-${refNumber || letterNumber}-${Date.now()}`;
     try {
       await prisma.$executeRawUnsafe(
         `INSERT INTO public.dcmms_daily_mail (
@@ -608,9 +720,10 @@ export async function saveDailyMailToNewTableServer(data: {
               $1, $2, $3, $4, $5, $6::date, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             )
             ON CONFLICT (case_no) DO UPDATE SET
-              subject_officer_name = COALESCE(EXCLUDED.subject_officer_name, dcmms_subject_assignments.subject_officer_name),
-              assigned_officers = COALESCE(EXCLUDED.assigned_officers, dcmms_subject_assignments.assigned_officers),
-              status = CASE WHEN EXCLUDED.status = 'assigned answer letter' THEN 'assigned answer letter' ELSE dcmms_subject_assignments.status END,
+              subject_officer_name = EXCLUDED.subject_officer_name,
+              assigned_officers = EXCLUDED.assigned_officers,
+              status = EXCLUDED.status,
+              assigned_date = EXCLUDED.assigned_date,
               updated_at = CURRENT_TIMESTAMP;`,
             `asgn-${refNumber}`,
             refNumber,
@@ -620,83 +733,12 @@ export async function saveDailyMailToNewTableServer(data: {
             dateReceived
           );
         } catch (asgnErr) {
-          console.warn("Upsert into dcmms_subject_assignments warning:", asgnErr);
-        }
-      }
-
-      if (isAnswer) {
-        try {
-          const subMailId = `sub-${refNumber}-${Date.now()}`;
-          await prisma.$executeRawUnsafe(
-            `INSERT INTO public.dcmms_subsequent_mails (
-              id, case_no, mail_officer_name, sender_name, letter_title, letter_type, mail_date, received_date, is_answer_letter, created_at
-            ) VALUES (
-              $1, $2, $3, $4, $5, $6, $7::date, $8::date, TRUE, CURRENT_TIMESTAMP
-            );`,
-            subMailId,
-            refNumber,
-            assignedOfficer || null,
-            sendersParty || "Unknown",
-            subjectOfLetter,
-            natureOfLetter,
-            dateHandover,
-            dateReceived
-          );
-        } catch (subMailErr) {
-          console.warn("Insert into dcmms_subsequent_mails warning:", subMailErr);
+          console.warn("dcmms_subject_assignments upsert warning:", asgnErr);
         }
       }
     }
 
-    // 4. Insert/Update daily_mail table
-    try {
-      await prisma.$executeRawUnsafe(
-        `INSERT INTO daily_mail (
-          letter_number,
-          received_letter_number,
-          mode_of_receipt,
-          sender_party,
-          nature_of_letter,
-          subject_category,
-          subject_of_letter,
-          date_received_by_additional_secretary,
-          date_letter_handed_over_to_dicipline_branch,
-          subject_officer_id,
-          priority
-        ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7,
-          $8::date, $9::date,
-          $10, $11
-        )
-        ON CONFLICT (letter_number) DO UPDATE SET
-          received_letter_number = EXCLUDED.received_letter_number,
-          mode_of_receipt = EXCLUDED.mode_of_receipt,
-          sender_party = EXCLUDED.sender_party,
-          nature_of_letter = EXCLUDED.nature_of_letter,
-          subject_category = EXCLUDED.subject_category,
-          subject_of_letter = EXCLUDED.subject_of_letter,
-          date_received_by_additional_secretary = EXCLUDED.date_received_by_additional_secretary,
-          date_letter_handed_over_to_dicipline_branch = EXCLUDED.date_letter_handed_over_to_dicipline_branch,
-          subject_officer_id = EXCLUDED.subject_officer_id,
-          priority = EXCLUDED.priority,
-          updated_at = CURRENT_TIMESTAMP`,
-        letterNumber,
-        refNumber,
-        modeOfReceipt,
-        sendersParty,
-        natureOfLetter,
-        subjectCategory,
-        subjectOfLetter,
-        dateReceived,
-        dateHandover,
-        data.subject_officer_id ? Number(data.subject_officer_id) : null,
-        validPriority
-      );
-    } catch (err1) {
-      console.warn("Insert into daily_mail warning:", err1);
-    }
-
-    // 5. Record business event into system audit logs
+    // 4. Record business event into system audit logs
     try {
       await recordAuditLogServer({
         username: data.officer_name || "Daily Mail Officer",
@@ -706,12 +748,23 @@ export async function saveDailyMailToNewTableServer(data: {
       });
     } catch (auditErr) {}
 
-    return serializeForServerAction({ success: true });
+    return serializeForServerAction({
+      success: true,
+      data: {
+        id: dcmmsId,
+        serial_no: refNumber,
+        letter_no: letterNumber,
+        letter_number: letterNumber,
+        document_url: documentUrl,
+        document_name: documentName,
+      },
+    });
   } catch (error: any) {
     console.error("Error inserting into daily mail tables:", error);
     return serializeForServerAction({ success: false, error: error?.message || "Failed to insert into daily mail tables" });
   }
 }
+
 
 /**
  * Direct PostgreSQL retrieval of all cases, assignments, and subsequent letters

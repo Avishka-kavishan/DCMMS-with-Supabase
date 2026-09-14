@@ -14,6 +14,7 @@ import { getCurrentProfile, UserProfile } from "@/lib/auth";
 import {
   saveDailyMailRecordServer,
   saveDailyMailToNewTableServer,
+  getNextDailyMailLetterNoServer,
   logAuditEventServer,
   getSubjectOfficersServer,
   getInstitutesServer,
@@ -497,14 +498,22 @@ function RegisterComplaintForm() {
     return `${prefix}${maxSeq + 1}`;
   };
 
-  const handleReceivedDateChange = (newDate: string) => {
-    // If not in edit mode and letterNo is empty or was auto-generated, auto-update letterNo according to the new date
-    const isAutoOrEmpty =
-      !formState.letterNo ||
-      /^\d{4}\/\d+\/\d+\/\d+$/.test(formState.letterNo.trim()) ||
-      /^\d+$/.test(formState.letterNo.trim());
-
-    if (!isEditMode && isAutoOrEmpty) {
+  const handleReceivedDateChange = async (newDate: string) => {
+    // If not in edit mode, recalculate next unique letterNo from server directly
+    if (!isEditMode) {
+      try {
+        const nextRes = await getNextDailyMailLetterNoServer(newDate);
+        if (nextRes && nextRes.success && nextRes.nextLetterNo) {
+          setFormState((prev) => ({
+            ...prev,
+            receivedDate: newDate,
+            letterNo: nextRes.nextLetterNo,
+          }));
+          return;
+        }
+      } catch (e) {
+        console.warn("Could not get next letter number from server:", e);
+      }
       const nextNo = generateLetterNumber(newDate, existingLetterNosRef.current);
       setFormState((prev) => ({
         ...prev,
@@ -577,10 +586,22 @@ function RegisterComplaintForm() {
 
         existingLetterNosRef.current = letterNos;
 
-        // Auto-generate using current receivedDate or today's date
+        // Auto-generate using current receivedDate or today's date directly from PostgreSQL server
         const targetDate = formState.receivedDate || new Date().toISOString().split("T")[0];
-        const nextNo = generateLetterNumber(targetDate, letterNos);
+        try {
+          const nextRes = await getNextDailyMailLetterNoServer(targetDate);
+          if (nextRes && nextRes.success && nextRes.nextLetterNo) {
+            setFormState((prev) => ({
+              ...prev,
+              letterNo: nextRes.nextLetterNo,
+            }));
+            return;
+          }
+        } catch (e) {
+          console.warn("Server letter number calculation fallback:", e);
+        }
 
+        const nextNo = generateLetterNumber(targetDate, letterNos);
         setFormState((prev) => ({
           ...prev,
           letterNo: nextNo,
@@ -953,6 +974,18 @@ function RegisterComplaintForm() {
       }
     }
 
+    let finalLetterNo = formState.letterNo;
+    if (!isEditMode) {
+      try {
+        const freshRes = await getNextDailyMailLetterNoServer(formState.receivedDate || new Date().toISOString().split("T")[0]);
+        if (freshRes && freshRes.success && freshRes.nextLetterNo) {
+          finalLetterNo = freshRes.nextLetterNo;
+        }
+      } catch (e) {
+        console.warn("Could not re-verify fresh letter number:", e);
+      }
+    }
+
     const newLetter = {
       id: formState.id || Date.now().toString(),
       refNo: formState.refNo,
@@ -964,7 +997,7 @@ function RegisterComplaintForm() {
       priority: formState.priority,
       status: formState.officerName ? ("assigned" as const) : ("registered" as const),
       // Extra fields captured
-      letterNo: formState.letterNo,
+      letterNo: finalLetterNo,
       letterType: formState.letterType,
       officerName: formState.officerName,
       subjectCategory: formState.subjectCategory,
@@ -977,7 +1010,7 @@ function RegisterComplaintForm() {
 
     // Always save directly to PostgreSQL database tables (dcmms_daily_mail, daily_mail, daily_mail_letter_table)
     try {
-      await saveDailyMailRecordServer({
+      const saveRes = await saveDailyMailRecordServer({
         id: newLetter.id,
         serial_no: newLetter.refNo,
         received_date: newLetter.receivedDate,
@@ -996,6 +1029,10 @@ function RegisterComplaintForm() {
         institute_name: newLetter.instituteName,
         region_province: newLetter.regionProvince,
       });
+      if (saveRes && saveRes.success && saveRes.data?.letter_no) {
+        newLetter.letterNo = saveRes.data.letter_no;
+        finalLetterNo = saveRes.data.letter_no;
+      }
     } catch (pgErr) {
       console.error("Failed to save daily mail to PostgreSQL database:", pgErr);
     }
