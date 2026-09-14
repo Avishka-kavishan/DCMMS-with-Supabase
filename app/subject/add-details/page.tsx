@@ -689,12 +689,9 @@ function CaseDetailsForm() {
                   setReportState(normalizeReportState(latest.reportState));
                   const rawStr = String(latest.reportState || "").toLowerCase();
                   const hasProv = rawStr.includes("provincial") || rawStr.includes("පළාත්") || rawStr.includes("மாகாண");
-                  const hasInst = rawStr.includes("institutional") || rawStr.includes("ආයතනික") || rawStr.includes("நிறுவன");
-                  if (hasProv && hasInst) {
-                    setPreliminaryChecks({ institutional: true, provincial: true });
-                  } else if (hasProv) {
+                  if (hasProv) {
                     setPreliminaryChecks({ institutional: false, provincial: true });
-                  } else if (hasInst) {
+                  } else {
                     setPreliminaryChecks({ institutional: true, provincial: false });
                   }
                 }
@@ -800,12 +797,9 @@ function CaseDetailsForm() {
               setReportState(normalizeReportState(d.future_action));
               const rawStr = String(d.future_action || "").toLowerCase();
               const hasProv = rawStr.includes("provincial") || rawStr.includes("පළාත්") || rawStr.includes("மாகாண");
-              const hasInst = rawStr.includes("institutional") || rawStr.includes("ආයතනික") || rawStr.includes("நிறுவன");
-              if (hasProv && hasInst) {
-                setPreliminaryChecks({ institutional: true, provincial: true });
-              } else if (hasProv) {
+              if (hasProv) {
                 setPreliminaryChecks({ institutional: false, provincial: true });
-              } else if (hasInst) {
+              } else {
                 setPreliminaryChecks({ institutional: true, provincial: false });
               }
             }
@@ -826,12 +820,9 @@ function CaseDetailsForm() {
                 setReportState(normalizeReportState(rld.upcoming_action));
                 const rawStr = String(rld.upcoming_action || "").toLowerCase();
                 const hasProv = rawStr.includes("provincial") || rawStr.includes("පළාත්") || rawStr.includes("மாகாண");
-                const hasInst = rawStr.includes("institutional") || rawStr.includes("ආයතනික") || rawStr.includes("நிறுவன");
-                if (hasProv && hasInst) {
-                  setPreliminaryChecks({ institutional: true, provincial: true });
-                } else if (hasProv) {
+                if (hasProv) {
                   setPreliminaryChecks({ institutional: false, provincial: true });
-                } else if (hasInst) {
+                } else {
                   setPreliminaryChecks({ institutional: true, provincial: false });
                 }
               }
@@ -927,12 +918,9 @@ function CaseDetailsForm() {
                   setReportState(normalizeReportState(latest.reportState));
                   const rawStr = String(latest.reportState || "").toLowerCase();
                   const hasProv = rawStr.includes("provincial") || rawStr.includes("පළාත්") || rawStr.includes("மாகாண");
-                  const hasInst = rawStr.includes("institutional") || rawStr.includes("ආයතනික") || rawStr.includes("நிறுவன");
-                  if (hasProv && hasInst) {
-                    setPreliminaryChecks({ institutional: true, provincial: true });
-                  } else if (hasProv) {
+                  if (hasProv) {
                     setPreliminaryChecks({ institutional: false, provincial: true });
-                  } else if (hasInst) {
+                  } else {
                     setPreliminaryChecks({ institutional: true, provincial: false });
                   }
                 }
@@ -1141,9 +1129,7 @@ function CaseDetailsForm() {
     const actionId = `action-${refNo}-${Date.now()}`;
     const serializedStepTaken = `[EduSecApproval:${eduSecretaryApproval}${eduSecretaryApproval === "yes" && approvalDate ? `|Date:${approvalDate}` : ""}]`;
     const computedFutureAction = isPreliminaryInvestigation
-      ? (preliminaryChecks.institutional && preliminaryChecks.provincial
-          ? "Institutional & Provincial Basic Investigation"
-          : preliminaryChecks.provincial
+      ? (preliminaryChecks.provincial
           ? "Provincial Basic Investigation"
           : "Institutional Basic Investigation")
       : (reportState || "");
@@ -1548,9 +1534,7 @@ function CaseDetailsForm() {
       ));
 
     const computedAction = isPreliminaryInvestigation
-      ? (preliminaryChecks.institutional && preliminaryChecks.provincial
-          ? "Institutional & Provincial Basic Investigation"
-          : preliminaryChecks.provincial
+      ? (preliminaryChecks.provincial
           ? "Provincial Basic Investigation"
           : "Institutional Basic Investigation")
       : (reportState || "");
@@ -2465,10 +2449,8 @@ function CaseDetailsForm() {
                                       type="checkbox"
                                       id="chkInstitutionalInvestigation"
                                       checked={preliminaryChecks.institutional}
-                                      onChange={(e) => {
-                                        const checked = e.target.checked;
-                                        if (!checked && !preliminaryChecks.provincial) return; // Keep at least one checked
-                                        setPreliminaryChecks(prev => ({ ...prev, institutional: checked }));
+                                      onChange={() => {
+                                        setPreliminaryChecks({ institutional: true, provincial: false });
                                       }}
                                       className="checkbox-option-input"
                                     />
@@ -2493,10 +2475,8 @@ function CaseDetailsForm() {
                                       type="checkbox"
                                       id="chkProvincialInvestigation"
                                       checked={preliminaryChecks.provincial}
-                                      onChange={(e) => {
-                                        const checked = e.target.checked;
-                                        if (!checked && !preliminaryChecks.institutional) return; // Keep at least one checked
-                                        setPreliminaryChecks(prev => ({ ...prev, provincial: checked }));
+                                      onChange={() => {
+                                        setPreliminaryChecks({ institutional: false, provincial: true });
                                       }}
                                       className="checkbox-option-input"
                                     />
