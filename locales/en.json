@@ -140,7 +140,7 @@
   "submitBtn": "Submit",
   "submitToPrelimBtn": "To Preliminary Investigation",
   "backToHome": "Back to Home",
-  "placeholderLetterNo": "Enter letter number",
+  "placeholderLetterNo": "e.g., 2026/10/9/1",
   "selectSubjectOfficer": "Select Subject Officer",
   "selectClassification": "Select Nature of Letter",
   "selectInstitute": "Select Institute",

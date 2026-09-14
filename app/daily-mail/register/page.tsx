@@ -375,15 +375,95 @@ function RegisterComplaintForm() {
     router.push("/");
   };
 
+  // Ref to hold all seen letter numbers for fast recalculation
+  const existingLetterNosRef = useRef<string[]>([]);
+
+  // Function to generate letter number in YYYY/M/D/Sequence format (e.g. "2026/10/9/1")
+  const generateLetterNumber = (dateStr?: string, existingList: string[] = []): string => {
+    let d: Date;
+    if (dateStr) {
+      const parts = dateStr.split("-");
+      if (parts.length === 3) {
+        d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+      } else {
+        d = new Date(dateStr);
+      }
+    } else {
+      d = new Date();
+    }
+    if (isNaN(d.getTime())) d = new Date();
+
+    const year = d.getFullYear();
+    const month = d.getMonth() + 1;
+    const day = d.getDate();
+    const prefix = `${year}/${month}/${day}/`;
+
+    // Match patterns like "2026/10/9/1", "2026/10/09/1", "2026/09/14/1"
+    const regex = new RegExp(`^${year}\\/0?${month}\\/0?${day}\\/(\\d+)$`, "i");
+
+    let maxSeq = 0;
+    existingList.forEach((raw) => {
+      if (!raw) return;
+      const str = String(raw).trim();
+      const match = str.match(regex);
+      if (match && match[1]) {
+        const seq = parseInt(match[1], 10);
+        if (!isNaN(seq) && seq > maxSeq) {
+          maxSeq = seq;
+        }
+      }
+    });
+
+    return `${prefix}${maxSeq + 1}`;
+  };
+
+  const handleReceivedDateChange = (newDate: string) => {
+    // If not in edit mode and letterNo is empty or was auto-generated, auto-update letterNo according to the new date
+    const isAutoOrEmpty =
+      !formState.letterNo ||
+      /^\d{4}\/\d+\/\d+\/\d+$/.test(formState.letterNo.trim()) ||
+      /^\d+$/.test(formState.letterNo.trim());
+
+    if (!isEditMode && isAutoOrEmpty) {
+      const nextNo = generateLetterNumber(newDate, existingLetterNosRef.current);
+      setFormState((prev) => ({
+        ...prev,
+        receivedDate: newDate,
+        letterNo: nextNo,
+      }));
+    } else {
+      setFormState((prev) => ({
+        ...prev,
+        receivedDate: newDate,
+      }));
+    }
+  };
+
   useEffect(() => {
     const id = searchParams.get("id");
     const caseNo = searchParams.get("caseNo");
     const subsequent = searchParams.get("subsequent") === "true";
 
-    // Auto-calculate next letterNo (අනු අංකය) starting from 1 if this is a new letter/entry (not edit mode)
+    // Auto-calculate next letterNo (අනු අංකය) in format "YYYY/M/D/1" (e.g. "2026/10/9/1") if this is a new letter/entry (not edit mode)
     if (!id) {
       const calculateNextLetterNo = async () => {
-        let maxNo = 0;
+        const letterNos: string[] = [];
+
+        // 1. Fetch from PostgreSQL server action
+        try {
+          const res = await getDailyMailRecordsServer();
+          if (res && res.success && Array.isArray(res.data)) {
+            res.data.forEach((d: any) => {
+              if (d.letter_no) letterNos.push(d.letter_no);
+              if (d.letter_number) letterNos.push(d.letter_number);
+              if (d.letterNo) letterNos.push(d.letterNo);
+            });
+          }
+        } catch (e) {
+          console.error("Failed to fetch daily mail from PostgreSQL", e);
+        }
+
+        // 2. Fetch from Supabase
         if (isSupabaseConfigured) {
           try {
             const { data, error } = await supabase
@@ -391,11 +471,7 @@ function RegisterComplaintForm() {
               .select("letter_no");
             if (!error && data) {
               data.forEach((d: any) => {
-                if (d.letter_no) {
-                  const match = String(d.letter_no).match(/\d+/);
-                  const no = match ? parseInt(match[0], 10) : 0;
-                  if (no > maxNo) maxNo = no;
-                }
+                if (d.letter_no) letterNos.push(d.letter_no);
               });
             }
           } catch (e) {
@@ -403,18 +479,15 @@ function RegisterComplaintForm() {
           }
         }
 
+        // 3. Fetch from localStorage
         if (typeof window !== "undefined") {
           const stored = localStorage.getItem("dcmms_letters");
           if (stored) {
             try {
               const list = JSON.parse(stored);
               list.forEach((item: any) => {
-                const letterVal = item.letterNo || item.letter_no;
-                if (letterVal) {
-                  const match = String(letterVal).match(/\d+/);
-                  const no = match ? parseInt(match[0], 10) : 0;
-                  if (no > maxNo) maxNo = no;
-                }
+                const letterVal = item.letterNo || item.letter_no || item.letter_number;
+                if (letterVal) letterNos.push(letterVal);
               });
             } catch (e) {
               console.error("Failed to parse local letters", e);
@@ -422,9 +495,15 @@ function RegisterComplaintForm() {
           }
         }
 
+        existingLetterNosRef.current = letterNos;
+
+        // Auto-generate using current receivedDate or today's date
+        const targetDate = formState.receivedDate || new Date().toISOString().split("T")[0];
+        const nextNo = generateLetterNumber(targetDate, letterNos);
+
         setFormState((prev) => ({
           ...prev,
-          letterNo: (maxNo + 1).toString(),
+          letterNo: nextNo,
         }));
       };
 
@@ -2286,17 +2365,52 @@ function RegisterComplaintForm() {
 
                       {/* Serial / Letter Number */}
                       <div className="form-field-group">
-                        <label htmlFor="letterNo" className="field-label">{t("letterNo")}</label>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                          <label htmlFor="letterNo" className="field-label" style={{ marginBottom: 0 }}>{t("letterNo")}</label>
+                          {!isFieldDisabled && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const targetDate = formState.receivedDate || new Date().toISOString().split("T")[0];
+                                const nextNo = generateLetterNumber(targetDate, existingLetterNosRef.current);
+                                setFormState((prev) => ({ ...prev, letterNo: nextNo }));
+                              }}
+                              className="text-xs font-medium"
+                              style={{
+                                background: "none",
+                                border: "none",
+                                cursor: "pointer",
+                                color: "#2563eb",
+                                fontSize: "12px",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "4px",
+                                padding: "2px 4px",
+                                borderRadius: "4px",
+                                transition: "all 0.15s ease",
+                              }}
+                              title="Auto-generate Letter Number (e.g. 2026/10/9/1)"
+                            >
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+                              </svg>
+                              <span>{lang === "si" ? "ජනනය කරන්න" : lang === "ta" ? "உருவாக்கு" : "Generate"}</span>
+                            </button>
+                          )}
+                        </div>
                         <input
                           id="letterNo"
                           type="text"
-                          disabled={isFieldDisabled}
-                          readOnly={isFieldDisabled}
+                          readOnly
                           value={formState.letterNo}
-                          onChange={(e) => setFormState({ ...formState, letterNo: e.target.value })}
                           placeholder={t("placeholderLetterNo")}
                           className="field-input"
-                          style={isFieldDisabled ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
+                          style={{
+                            backgroundColor: "#f1f5f9",
+                            cursor: "not-allowed",
+                            fontWeight: 600,
+                            color: "#334155",
+                          }}
                         />
                       </div>
 
@@ -2493,7 +2607,7 @@ function RegisterComplaintForm() {
                             disabled={isFieldDisabled}
                             readOnly={isFieldDisabled}
                             value={formState.receivedDate}
-                            onChange={(e) => setFormState({ ...formState, receivedDate: e.target.value })}
+                            onChange={(e) => handleReceivedDateChange(e.target.value)}
                             className="field-input input-with-right-icon"
                             style={isFieldDisabled ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
                           />
