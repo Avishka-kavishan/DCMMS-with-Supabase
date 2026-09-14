@@ -173,7 +173,7 @@ function RecommendationFormContent() {
 
   // Sync document title
   useEffect(() => {
-    document.title = `${lang === "si" ? "විමර්ශන නිර්දේශ" : lang === "ta" ? "விசாரணை பரிந்துரை" : "Investigation Recommendation"} | DCMMS`;
+    document.title = `${lang === "si" ? "මූලික විමර්ශන නිර්දේශය" : lang === "ta" ? "விசாரணை பரிந்துரை" : "Investigation Recommendation"} | DCMMS`;
   }, [lang]);
 
   // Load all available cases and registered recommendations
@@ -901,7 +901,7 @@ function RecommendationFormContent() {
               </Link>
               <ChevronRight size={14} style={{ color: "#94a3b8" }} />
               <span style={{ color: "#0f172a", fontWeight: 700 }} suppressHydrationWarning>
-                {lang === "si" ? "විමර්ශන නිර්දේශ" : lang === "ta" ? "விசாரணை பரிந்துரை" : "Investigation Recommendation"}
+                {lang === "si" ? "මූලික විමර්ශන නිර්දේශය" : lang === "ta" ? "விசாரணை பரிந்துரை" : "Investigation Recommendation"}
               </span>
             </div>
           </div>
@@ -946,7 +946,7 @@ function RecommendationFormContent() {
               <h1>
                 <ClipboardList size={28} style={{ color: "#059669" }} />
                 {lang === "si"
-                  ? "විමර්ශන නිර්දේශ සහ විනය ක්‍රියාමාර්ග පෝරමය"
+                  ? "මූලික විමර්ශන නිර්දේශ සහ විනය ක්‍රියාමාර්ග පෝරමය"
                   : lang === "ta"
                   ? "விசாரணை பரிந்துரை மற்றும் ஒழுங்கு நடவடிக்கை படிவம்"
                   : "Investigation Recommendation & Action Page"}
@@ -1976,8 +1976,8 @@ function RecommendationFormContent() {
                             <Sparkles size={44} style={{ color: "#cbd5e1" }} />
                             <span style={{ fontSize: "15px", fontWeight: 600, color: "#64748b" }}>
                               {recSearchQuery || recCategoryFilter !== "all" || recUrgencyFilter !== "all" || recStatusFilter !== "all"
-                                ? (lang === "si" ? "සෙවීමට ගැළපෙන විමර්ශන නිර්දේශ හමු නොවිණි" : "No cases or recommendations found matching search criteria")
-                                : (lang === "si" ? "තවම විමර්ශන නිර්දේශ ඉදිරිපත් කර නොමැත" : "No cases or investigation recommendations registered yet")}
+                                ? (lang === "si" ? "සෙවීමට ගැළපෙන මූලික විමර්ශන නිර්දේශ හමු නොවිණි" : "No cases or recommendations found matching search criteria")
+                                : (lang === "si" ? "තවම මූලික විමර්ශන නිර්දේශ ඉදිරිපත් කර නොමැත" : "No cases or investigation recommendations registered yet")}
                             </span>
                             <button
                               type="button"
@@ -2009,7 +2009,7 @@ function RecommendationFormContent() {
                     </div>
                     <div>
                       <h3 id="rec-modal-title" style={{ color: "#ffffff", margin: 0, fontSize: "17px", fontWeight: 700 }}>
-                        {lang === "si" ? "විමර්ශන නිර්දේශ විස්තරය" : "Investigation Recommendation Details"}
+                        {lang === "si" ? "මූලික විමර්ශන නිර්දේශ විස්තරය" : "Investigation Recommendation Details"}
                       </h3>
                       <span style={{ fontSize: "12px", color: "#cbd5e1" }}>
                         Case: <strong>{selectedRecModal.caseNo}</strong> {selectedRecModal.letterNo && selectedRecModal.letterNo !== selectedRecModal.caseNo ? `• Letter: ${selectedRecModal.letterNo}` : ""}

@@ -3962,7 +3962,7 @@ function SubjectOfficerDashboardContent() {
               onClick={() => router.push("/subject/recommendation")}
             >
               <Sparkles className="tab-icon" />
-              <span>{lang === "si" ? "විමර්ශන නිර්දේශ" : lang === "ta" ? "விசாரணை பரிந்துரை" : "Investigation Recommendation"}</span>
+              <span>{lang === "si" ? "මූලික විමර්ශන නිර්දේශය" : lang === "ta" ? "விசாரணை பரிந்துரை" : "Investigation Recommendation"}</span>
               {completedAwaitingRecCases.length > 0 ? (
                 <span style={{
                   backgroundColor: "#e11d48",
@@ -5609,7 +5609,7 @@ function SubjectOfficerDashboardContent() {
                 <div>
                   <h3 style={{ margin: 0, fontSize: "20px", fontWeight: 800, color: "#1e1b4b", display: "flex", alignItems: "center", gap: "10px" }}>
                     <Sparkles style={{ color: "#4f46e5", width: "24px", height: "24px" }} />
-                    <span>{lang === "si" ? "විමර්ශන නිර්දේශ (Investigation Recommendation)" : lang === "ta" ? "விசாரணை பரிந்துரை (Investigation Recommendation)" : "Investigation Recommendation"}</span>
+                    <span>{lang === "si" ? "මූලික විමර්ශන නිර්දේශය (Investigation Recommendation)" : lang === "ta" ? "விசாரணை பரிந்துரை (Investigation Recommendation)" : "Investigation Recommendation"}</span>
                   </h3>
                   <p style={{ margin: "4px 0 0 0", fontSize: "13px", color: "#64748b" }}>
                     {t("recommendationsOverview", "Overview of all investigation recommendations and disciplinary actions registered for your assigned cases.")}
@@ -6093,8 +6093,8 @@ function SubjectOfficerDashboardContent() {
                             <Sparkles size={44} style={{ color: "#cbd5e1" }} />
                             <span style={{ fontSize: "15px", fontWeight: 600, color: "#64748b" }}>
                               {recSearchQuery || recCategoryFilter !== "all" || recUrgencyFilter !== "all" || recStatusFilter !== "all"
-                                ? (lang === "si" ? "සෙවීමට ගැළපෙන විමර්ශන නිර්දේශ හමු නොවිණි" : "No recommendations found matching search criteria")
-                                : (lang === "si" ? "තවම විමර්ශන නිර්දේශ ඉදිරිපත් කර නොමැත" : "No investigation recommendations registered yet")}
+                                ? (lang === "si" ? "සෙවීමට ගැළපෙන මූලික විමර්ශන නිර්දේශ හමු නොවිණි" : "No recommendations found matching search criteria")
+                                : (lang === "si" ? "තවම මූලික විමර්ශන නිර්දේශ ඉදිරිපත් කර නොමැත" : "No investigation recommendations registered yet")}
                             </span>
                             <Link
                               href="/subject/recommendation"
@@ -6992,7 +6992,7 @@ function SubjectOfficerDashboardContent() {
                 </div>
                 <div>
                   <h3 id="rec-modal-title" style={{ color: "#ffffff", margin: 0, fontSize: "17px", fontWeight: 700 }}>
-                    {lang === "si" ? "විමර්ශන නිර්දේශ විස්තරය" : "Investigation Recommendation Details"}
+                    {lang === "si" ? "මූලික විමර්ශන නිර්දේශ විස්තරය" : "Investigation Recommendation Details"}
                   </h3>
                   <span style={{ fontSize: "12px", color: "#cbd5e1" }}>
                     Case: <strong>{selectedRecModal.caseNo}</strong> {selectedRecModal.letterNo && selectedRecModal.letterNo !== selectedRecModal.caseNo ? `• Letter: ${selectedRecModal.letterNo}` : ""}

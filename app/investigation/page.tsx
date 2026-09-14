@@ -3067,7 +3067,14 @@ export default function InvestigationPage() {
     // Status filter
     if (statusFilter !== "All") {
       if (statusFilter === "In Progress") {
-        const isProg = item.status === "In Progress" || item.status === "Preliminary Investigation" || item.status === "Conducting preliminary investigations" || item.status === "Under Investigation";
+        const isProg =
+          item.status === "In Progress" ||
+          item.status === "Preliminary Investigation" ||
+          item.status === "Conducting preliminary investigations" ||
+          item.status === "Institutional Basic Investigation" ||
+          item.status === "Institutional Preliminary Investigation" ||
+          item.status === "Conducting an Inquiry" ||
+          item.status === "Under Investigation";
         if (!isProg) return false;
       } else if (item.status !== statusFilter) {
         return false;

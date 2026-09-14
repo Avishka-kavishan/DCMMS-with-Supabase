@@ -1036,7 +1036,7 @@ function ConductInquiryContent() {
                 </h1>
                 <p suppressHydrationWarning>
                   {lang === "si"
-                    ? "පරීක්ෂණ කමිටු තොරතුරු, ලිපි දිනයන්, දින දීර්ඝ කිරීම් සහ විමර්ශන නිර්දේශ වාර්තා කිරීම."
+                    ? "පරීක්ෂණ කමිටු තොරතුරු, ලිපි දිනයන්, දින දීර්ඝ කිරීම් සහ මූලික විමර්ශන නිර්දේශ වාර්තා කිරීම."
                     : lang === "ta"
                     ? "விசாரணைக் குழு விவரங்கள், நியமன தேதிகள், நீட்டிப்பு காலங்கள் மற்றும் விரிவான பரிந்துரைகள்."
                     : "Appointed inquiry committee members, appointment & due dates, extension terms, and detailed recommendations."}

@@ -1263,6 +1263,7 @@ function CaseDetailsForm() {
             .from("dcmms_subject")
             .update({
               subject_officer_name: subjectOfficer || existingCase.subject_officer_name || existingCase.officer_name || "Subject Officer",
+              subject: complaintMatter || existingCase.subject || `Case ${refNo}`,
               status: finalCaseStatus,
             })
             .eq("case_no", refNo);
@@ -1272,12 +1273,23 @@ function CaseDetailsForm() {
             .insert({
               id: `case-${refNo}`,
               case_no: refNo,
+              subject: complaintMatter || `Case ${refNo}`,
               subject_officer_name: subjectOfficer || "Subject Officer",
               status: finalCaseStatus,
               priority: priority || "medium",
               assigned_date: receivedDate || new Date().toISOString().split("T")[0],
             });
         }
+
+        // Sync assignment status for Investigation Admin notifications
+        try {
+          await supabase.from("dcmms_subject_assignments").upsert({
+            case_no: refNo,
+            subject_officer_name: subjectOfficer || "Subject Officer",
+            status: finalCaseStatus,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: "case_no" });
+        } catch (asgnErr) {}
 
         // 2. Update the priority, complainant, school, classification, and status in dcmms_daily_mail
         await supabase
@@ -1562,10 +1574,10 @@ function CaseDetailsForm() {
       } else {
         alert(
           lang === "si"
-            ? "නඩුවේ විස්තර සාර්ථකව යාවත්කාලීන විය! නඩුව ආයතනික මූලික විමර්ශනය (Institutional Basic Investigation) සඳහා 'පරීක්ෂණයක් සිදු කිරීම' ටැබ් එකට මාරු කරන ලදී."
+            ? "නඩුවේ විස්තර සාර්ථකව යාවත්කාලීන විය! නඩුව ආයතනික මූලික විමර්ශනය (Institutional Basic Investigation) සඳහා විමර්ශන පරිපාලක (Investigation Admin) වෙත මාරු කරන ලදී."
             : lang === "ta"
-            ? "வழக்கு விவரங்கள் வெற்றிகரமாக புதுப்பிக்கப்பட்டன! நிறுவன அடிப்படை விசாரணைக்காக வழக்கு விசாரணை தாவலுக்கு மாற்றப்பட்டது."
-            : "Case details updated successfully! The case has been moved to Institutional Basic Investigation (Conducting Inquiry tab)."
+            ? "வழக்கு விவரங்கள் வெற்றிகரமாக புதுப்பிக்கப்பட்டன! நிறுவன அடிப்படை விசாரணைக்காக வழக்கு விசாரணை நிர்வாகிக்கு (Investigation Admin) நகர்த்தப்பட்டது."
+            : "Case details updated successfully! The case has been moved to Institutional Basic Investigation (Investigation Admin)."
         );
         router.push(`/subject?tab=conducting_inquiry&caseNo=${encodeURIComponent(refNo)}`);
       }
