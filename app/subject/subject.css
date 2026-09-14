@@ -1030,6 +1030,9 @@
 .inquiry-stage-charge { background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
 .inquiry-stage-psc { background-color: #fdf4ff; color: #86198f; border: 1px solid #f5d0fe; }
 .inquiry-stage-order { background-color: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
+.inquiry-stage-delegated { background-color: #ccfbf1; color: #0f766e; border: 1px solid #99f6e4; }
+.inquiry-stage-ongoing { background-color: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
+.inquiry-stage-oic { background-color: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
 
 .inquiry-dossier-modal-overlay {
   position: fixed;

@@ -18,6 +18,7 @@ import {
   saveCaseByDateExtensionServer,
   getCaseByDateExtensionServer,
   getRecommendationsListServer, 
+  getProvincialInvestigationsListServer,
   saveChairmanByCaseServer, 
   getChairmanByCaseServer, 
   saveMembersByCaseServer, 
@@ -1094,12 +1095,150 @@ function SubjectOfficerDashboardContent() {
       setRecommendations(recList);
     };
 
+    const fetchProvincialInvestigations = async () => {
+      let provList: any[] = [];
+      try {
+        const provRes = await getProvincialInvestigationsListServer();
+        if (provRes?.success && Array.isArray(provRes.data)) {
+          provList = provRes.data;
+        }
+      } catch (err) {
+        console.warn("Error fetching provincial investigations from PostgreSQL:", err);
+      }
+
+      // Also fetch from Supabase if configured
+      if (isSupabaseConfigured) {
+        try {
+          const { data: supaPrelims } = await supabase
+            .from("dcmms_preliminary_investigations")
+            .select("*")
+            .order("updated_at", { ascending: false });
+
+          if (supaPrelims && Array.isArray(supaPrelims)) {
+            supaPrelims.forEach((sp: any) => {
+              const cNo = (sp.case_no || "").trim().toLowerCase();
+              if (!cNo) return;
+              const existingIdx = provList.findIndex((p: any) => (p.caseNo || "").trim().toLowerCase() === cNo);
+
+              let committeeList: string[] = [];
+              if (Array.isArray(sp.committee_members)) {
+                committeeList = sp.committee_members.map((m: any) => typeof m === "string" ? m : (m.name || m.fullName || "")).filter(Boolean);
+              } else if (typeof sp.committee_members === "string") {
+                try {
+                  const parsed = JSON.parse(sp.committee_members);
+                  if (Array.isArray(parsed)) {
+                    committeeList = parsed.map((m: any) => typeof m === "string" ? m : (m.name || m.fullName || "")).filter(Boolean);
+                  }
+                } catch (e) {
+                  if (sp.committee_members.trim()) committeeList = [sp.committee_members.trim()];
+                }
+              }
+
+              let stageKey = "ongoing";
+              let stageLabel = sp.status || "Delegation of authority to conduct a provincial preliminary investigation";
+              const stLower = String(sp.status || "").toLowerCase();
+
+              if (stLower.includes("inform") || stLower.includes("complete") || stLower.includes("initial investigation complete")) {
+                stageKey = "oic_informed";
+                stageLabel = "Informing Officer In Charge - Initial Investigation Complete";
+              } else if (sp.report_received_date || stLower.includes("received")) {
+                stageKey = "report_received";
+                stageLabel = "Report Received";
+              } else if (stLower.includes("delegat") || stLower.includes("authority") || stLower.includes("පළාත් මූලික")) {
+                stageKey = "delegation";
+                stageLabel = "Delegation of Authority";
+              } else if (stLower.includes("concluded") || stLower.includes("closed")) {
+                stageKey = "completed";
+                stageLabel = "Investigation Concluded";
+              }
+
+              const item = {
+                id: sp.id || `prelim-${sp.case_no}`,
+                caseNo: sp.case_no,
+                letterNo: sp.case_no,
+                subject: sp.reason || `Provincial Basic Investigation #${sp.case_no}`,
+                complainantName: "—",
+                accusedName: "—",
+                accusedDesignation: "Educational Officer",
+                schoolName: "Government Educational Institute",
+                priority: "medium",
+                stage: stageLabel,
+                stageKey: stageKey,
+                appointmentDate: sp.appointment_date ? String(sp.appointment_date).slice(0, 10) : "",
+                dueDate: sp.report_due_date ? String(sp.report_due_date).slice(0, 10) : "",
+                reportReceivedDate: sp.report_received_date ? String(sp.report_received_date).slice(0, 10) : "",
+                approvedDate: sp.extension_decision_date ? String(sp.extension_decision_date).slice(0, 10) : "",
+                officers: committeeList,
+                recommendations: sp.recommendations || "",
+                nextStepsStatus: sp.status || "",
+                notes: sp.reason || "",
+                createdAt: sp.created_at || "",
+                updatedAt: sp.updated_at || "",
+              };
+
+              if (existingIdx >= 0) {
+                provList[existingIdx] = { ...provList[existingIdx], ...item };
+              } else {
+                provList.push(item);
+              }
+            });
+          }
+        } catch (e) {}
+      }
+
+      // Local storage fallback for provincial investigations
+      if (typeof window !== "undefined") {
+        try {
+          const storedPrelims = localStorage.getItem("dcmms_preliminary_investigations");
+          if (storedPrelims) {
+            const parsed = JSON.parse(storedPrelims);
+            if (Array.isArray(parsed)) {
+              parsed.forEach((lp: any) => {
+                const cNo = (lp.caseNo || lp.case_no || "").trim().toLowerCase();
+                if (!cNo) return;
+                const existingIdx = provList.findIndex((p: any) => (p.caseNo || "").trim().toLowerCase() === cNo);
+                if (existingIdx < 0) {
+                  provList.push({
+                    id: lp.id || `prelim-${lp.caseNo || lp.case_no}`,
+                    caseNo: lp.caseNo || lp.case_no,
+                    letterNo: lp.letterNo || lp.caseNo || lp.case_no,
+                    subject: lp.subject || lp.reason || `Provincial Basic Investigation #${lp.caseNo || lp.case_no}`,
+                    complainantName: lp.complainantName || "—",
+                    accusedName: lp.accusedName || "—",
+                    accusedDesignation: lp.accusedDesignation || "Educational Officer",
+                    schoolName: lp.schoolName || "Government Educational Institute",
+                    priority: lp.priority || "medium",
+                    stage: lp.stage || lp.status || "Delegation of authority to conduct a provincial preliminary investigation",
+                    stageKey: lp.stageKey || "delegation",
+                    appointmentDate: lp.appointmentDate || "",
+                    dueDate: lp.dueDate || lp.reportDueDate || "",
+                    reportReceivedDate: lp.reportReceivedDate || "",
+                    approvedDate: lp.approvedDate || "",
+                    officers: Array.isArray(lp.officers) ? lp.officers : [],
+                    recommendations: lp.recommendations || "",
+                    nextStepsStatus: lp.nextStepsStatus || lp.status || "",
+                    notes: lp.notes || lp.reason || "",
+                    createdAt: lp.createdAt || "",
+                    updatedAt: lp.updatedAt || "",
+                  });
+                }
+              });
+            }
+          }
+        } catch (e) {}
+      }
+
+      setProvincialInvestigationsData(provList);
+    };
+
     fetchCases();
     fetchRecommendations();
+    fetchProvincialInvestigations();
 
     const handleSyncAll = () => {
       fetchCases();
       fetchRecommendations();
+      fetchProvincialInvestigations();
       if (typeof fetchAssignments === "function") {
         fetchAssignments();
       }
@@ -1112,6 +1251,7 @@ function SubjectOfficerDashboardContent() {
       .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subject_assignments" }, handleSyncAll)
       .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subsequent_mails" }, handleSyncAll)
       .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_recommendations" }, handleSyncAll)
+      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_preliminary_investigations" }, handleSyncAll)
       .subscribe();
 
     // Fast 3-second polling for real-time multi-device sync
@@ -1124,6 +1264,8 @@ function SubjectOfficerDashboardContent() {
         e.key === "dcmms_letters" ||
         e.key === "dcmms_subsequent_mails" ||
         e.key === "dcmms_recommendations" ||
+        e.key === "dcmms_preliminary_investigations" ||
+        e.key === "dcmms_provincial_investigations" ||
         e.key === "dcmms_new_mail_current_case"
       ) {
         handleSyncAll();
@@ -1141,6 +1283,7 @@ function SubjectOfficerDashboardContent() {
     window.addEventListener("storage", handleStorageEvent);
     window.addEventListener("dcmms_assignment_updated", handleSyncAll);
     window.addEventListener("dcmms_recommendation_updated", handleSyncAll);
+    window.addEventListener("dcmms_provincial_updated", handleSyncAll);
 
     return () => {
       supabase.removeChannel(channel);
@@ -1150,11 +1293,12 @@ function SubjectOfficerDashboardContent() {
       window.removeEventListener("storage", handleStorageEvent);
       window.removeEventListener("dcmms_assignment_updated", handleSyncAll);
       window.removeEventListener("dcmms_recommendation_updated", handleSyncAll);
+      window.removeEventListener("dcmms_provincial_updated", handleSyncAll);
     };
   }, [profile, t]);
 
   // Tab navigation state
-  const [activeTab, setActiveTab] = useState<"cases" | "answer_letters" | "recommendations" | "conducting_inquiry" | "disciplinary_inspection">("cases");
+  const [activeTab, setActiveTab] = useState<"cases" | "answer_letters" | "recommendations" | "conducting_inquiry" | "disciplinary_inspection" | "provincial_investigation">("cases");
   const [assignedAnswerLetters, setAssignedAnswerLetters] = useState<any[]>([]);
   const [replyLettersList, setReplyLettersList] = useState<any[]>([]);
   const [concernedOfficersMap, setConcernedOfficersMap] = useState<Record<string, any>>({});
@@ -1163,7 +1307,7 @@ function SubjectOfficerDashboardContent() {
   // Sync tab and search from URL search parameters if provided
   useEffect(() => {
     if (tabParam) {
-      if (["cases", "answer_letters", "recommendations", "conducting_inquiry", "disciplinary_inspection"].includes(tabParam)) {
+      if (["cases", "answer_letters", "recommendations", "conducting_inquiry", "disciplinary_inspection", "provincial_investigation"].includes(tabParam)) {
         setActiveTab(tabParam as any);
       }
     }
@@ -1173,7 +1317,17 @@ function SubjectOfficerDashboardContent() {
     if (caseNoParam && tabParam === "disciplinary_inspection") {
       setInspectionSearchQuery(caseNoParam);
     }
+    if (caseNoParam && tabParam === "provincial_investigation") {
+      setProvincialSearchQuery(caseNoParam);
+    }
   }, [tabParam, caseNoParam]);
+
+  // Provincial Basic Investigation state
+  const [provincialInvestigationsData, setProvincialInvestigationsData] = useState<any[]>([]);
+  const [provincialSearchQuery, setProvincialSearchQuery] = useState("");
+  const [provincialStageFilter, setProvincialStageFilter] = useState("all");
+  const [provincialPriorityFilter, setProvincialPriorityFilter] = useState<"all" | "high" | "medium" | "low">("all");
+  const [selectedProvincialModal, setSelectedProvincialModal] = useState<any | null>(null);
 
   // Conducting an Inquiry state
   const [inquirySearchQuery, setInquirySearchQuery] = useState("");
@@ -3335,6 +3489,159 @@ function SubjectOfficerDashboardContent() {
     });
   }, [disciplinaryInspectionCases, inspectionSearchQuery, inspectionStageFilter, inspectionPriorityFilter]);
 
+  // ── Provincial Basic Investigation Case List ──
+  const provincialInvestigationCases = useMemo(() => {
+    const provMap = new Map<string, any>();
+
+    // 1. Add all direct database / Supabase provincial investigations
+    provincialInvestigationsData.forEach((item) => {
+      const cNo = (item.caseNo || item.subjectFileNo || "").trim();
+      const cNoKey = cNo.toLowerCase();
+      if (!cNoKey) return;
+
+      const matchingCase = cases.find((c) => (c.caseNo || "").trim().toLowerCase() === cNoKey);
+      const concernedOff = concernedOfficersMap[cNoKey] || {};
+
+      provMap.set(cNoKey, {
+        ...item,
+        id: item.id || matchingCase?.id || `prov-${cNo}`,
+        caseNo: cNo,
+        letterNo: item.letterNo || matchingCase?.caseNo || cNo,
+        subject: item.subject || matchingCase?.subject || `Provincial Basic Investigation #${cNo}`,
+        accusedName: item.accusedName && item.accusedName !== "—" ? item.accusedName : (concernedOff?.officer_name || matchingCase?.accusedName || "—"),
+        accusedDesignation: item.accusedDesignation && item.accusedDesignation !== "Educational Officer" ? item.accusedDesignation : (concernedOff?.position || matchingCase?.accusedDesignation || "Educational Officer"),
+        schoolName: item.schoolName && item.schoolName !== "Government Educational Institute" ? item.schoolName : (concernedOff?.institute_name || matchingCase?.schoolName || "—"),
+        complainantName: item.complainantName && item.complainantName !== "—" ? item.complainantName : "—",
+        priority: item.priority || matchingCase?.priority || "medium",
+        stage: item.stage || "Delegation of authority to conduct a provincial preliminary investigation",
+        stageKey: item.stageKey || "delegation",
+        appointmentDate: item.appointmentDate || matchingCase?.assignedDate || "",
+        dueDate: item.dueDate || "",
+        reportReceivedDate: item.reportReceivedDate || "",
+        approvedDate: item.approvedDate || "",
+        officers: Array.isArray(item.officers) ? item.officers : [],
+        recommendations: item.recommendations || "",
+        nextStepsStatus: item.nextStepsStatus || item.stage || "",
+        notes: item.notes || matchingCase?.subject || "",
+      });
+    });
+
+    // 2. Add cases from live cases list with provincial investigation markers
+    cases.forEach((c) => {
+      const cNoKey = (c.caseNo || "").trim().toLowerCase();
+      if (!cNoKey) return;
+
+      const isProvincialCase =
+        c.status === "Provincial Basic Investigation" ||
+        c.status === "statusProvincialPreliminary" ||
+        c.stage === "Provincial Basic Investigation" ||
+        c.stageKey === "provincial" ||
+        (c.upcomingAction && (
+          String(c.upcomingAction).toLowerCase().includes("provincial") ||
+          String(c.upcomingAction).includes("පළාත්") ||
+          String(c.upcomingAction).includes("மாகாண")
+        )) ||
+        (c.subject && (
+          String(c.subject).toLowerCase().includes("provincial basic") ||
+          String(c.subject).toLowerCase().includes("provincial preliminary") ||
+          String(c.subject).includes("පළාත් මූලික")
+        ));
+
+      if (isProvincialCase) {
+        const existing = provMap.get(cNoKey) || {};
+        const concernedOff = concernedOfficersMap[cNoKey] || {};
+        const replyItem = replyLettersList.find((r: any) => (r.ref_number || r.file_no || "").trim().toLowerCase() === cNoKey);
+
+        provMap.set(cNoKey, {
+          id: existing.id || c.id || `prov-${c.caseNo}`,
+          caseNo: c.caseNo,
+          letterNo: existing.letterNo || c.caseNo,
+          subject: existing.subject || c.subject || `Provincial Basic Investigation #${c.caseNo}`,
+          accusedName: existing.accusedName && existing.accusedName !== "—" ? existing.accusedName : (concernedOff?.officer_name || c.accusedName || "Concerned Officer"),
+          accusedDesignation: existing.accusedDesignation && existing.accusedDesignation !== "Educational Officer" ? existing.accusedDesignation : (concernedOff?.position || c.accusedDesignation || "Educational Officer"),
+          schoolName: existing.schoolName && existing.schoolName !== "Government Educational Institute" ? existing.schoolName : (concernedOff?.institute_name || c.schoolName || "Government Educational Institute"),
+          complainantName: existing.complainantName && existing.complainantName !== "—" ? existing.complainantName : "—",
+          priority: c.priority || existing.priority || "medium",
+          stage: existing.stage || "Delegation of authority to conduct a provincial preliminary investigation",
+          stageKey: existing.stageKey || "delegation",
+          appointmentDate: existing.appointmentDate || c.assignedDate || c.receivedDate || "",
+          dueDate: existing.dueDate || "",
+          reportReceivedDate: existing.reportReceivedDate || "",
+          approvedDate: existing.approvedDate || "",
+          officers: existing.officers || [],
+          recommendations: existing.recommendations || "",
+          nextStepsStatus: existing.nextStepsStatus || existing.stage || "",
+          notes: existing.notes || replyItem?.description || c.subject || "",
+        });
+      }
+    });
+
+    // 3. Add reply letters with upcoming_action: provincial
+    replyLettersList.forEach((r: any) => {
+      const rRef = (r.ref_number || r.file_no || "").trim().toLowerCase();
+      if (!rRef) return;
+      const isProvAction = r.upcoming_action && (
+        String(r.upcoming_action).toLowerCase().includes("provincial") ||
+        String(r.upcoming_action).includes("පළාත්") ||
+        String(r.upcoming_action).includes("மாகாண")
+      );
+      if (isProvAction && !provMap.has(rRef)) {
+        const concernedOff = concernedOfficersMap[rRef] || {};
+        provMap.set(rRef, {
+          id: `prov-reply-${r.id || rRef}`,
+          caseNo: r.ref_number || r.file_no,
+          letterNo: r.ref_number || r.file_no,
+          subject: r.description || `Provincial Investigation on Case #${r.ref_number}`,
+          accusedName: concernedOff?.officer_name || "Concerned Officer",
+          accusedDesignation: concernedOff?.position || "Educational Officer",
+          schoolName: concernedOff?.institute_name || "Government Educational Institute",
+          complainantName: "—",
+          priority: "medium",
+          stage: "Delegation of authority to conduct a provincial preliminary investigation",
+          stageKey: "delegation",
+          appointmentDate: r.date || new Date().toISOString().split("T")[0],
+          dueDate: "",
+          reportReceivedDate: "",
+          approvedDate: "",
+          officers: [],
+          recommendations: "",
+          nextStepsStatus: "Delegation of authority to conduct a provincial preliminary investigation",
+          notes: r.description || "Provincial preliminary investigation initiated.",
+        });
+      }
+    });
+
+    return Array.from(provMap.values());
+  }, [provincialInvestigationsData, cases, replyLettersList, concernedOfficersMap]);
+
+  // Filtered provincial basic investigation cases
+  const filteredProvincialCases = useMemo(() => {
+    return provincialInvestigationCases.filter((item) => {
+      const q = provincialSearchQuery.trim().toLowerCase();
+      const matchesSearch =
+        !q ||
+        (item.caseNo && item.caseNo.toLowerCase().includes(q)) ||
+        (item.letterNo && item.letterNo.toLowerCase().includes(q)) ||
+        (item.subject && item.subject.toLowerCase().includes(q)) ||
+        (item.accusedName && item.accusedName.toLowerCase().includes(q)) ||
+        (item.complainantName && item.complainantName.toLowerCase().includes(q)) ||
+        (item.schoolName && item.schoolName.toLowerCase().includes(q)) ||
+        (Array.isArray(item.officers) && item.officers.some((o: string) => o.toLowerCase().includes(q))) ||
+        (item.stage && item.stage.toLowerCase().includes(q));
+
+      const matchesStage =
+        provincialStageFilter === "all" ||
+        item.stageKey === provincialStageFilter ||
+        item.stage.toLowerCase().includes(provincialStageFilter.toLowerCase());
+
+      const matchesPriority =
+        provincialPriorityFilter === "all" ||
+        item.priority === provincialPriorityFilter;
+
+      return matchesSearch && matchesStage && matchesPriority;
+    });
+  }, [provincialInvestigationCases, provincialSearchQuery, provincialStageFilter, provincialPriorityFilter]);
+
   // Filter investigation recommendations list in real-time
   const filteredRecommendations = recommendations.filter((item) => {
     const q = recSearchQuery.trim().toLowerCase();
@@ -3965,6 +4272,28 @@ function SubjectOfficerDashboardContent() {
                   transition: "all 0.2s ease"
                 }}>
                   {disciplinaryInspectionCases.length}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              className={`nav-tab-btn${activeTab === "provincial_investigation" ? " active" : ""}`}
+              onClick={() => setActiveTab("provincial_investigation")}
+            >
+              <Layers className="tab-icon" />
+              <span>{lang === "si" ? "පළාත් මූලික විමර්ශනය" : lang === "ta" ? "மாகாண அடிப்படை விசாரணை" : "Provincial Basic Investigation"}</span>
+              {provincialInvestigationCases.length > 0 && (
+                <span style={{
+                  backgroundColor: activeTab === "provincial_investigation" ? "#0d9488" : "#94a3b8",
+                  color: "#ffffff",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  padding: "2px 8px",
+                  borderRadius: "12px",
+                  marginLeft: "4px",
+                  transition: "all 0.2s ease"
+                }}>
+                  {provincialInvestigationCases.length}
                 </span>
               )}
             </button>
@@ -5613,6 +5942,383 @@ function SubjectOfficerDashboardContent() {
             </section>
           )}
 
+          {/* ==================== TAB: PROVINCIAL BASIC INVESTIGATION ==================== */}
+          {activeTab === "provincial_investigation" && (
+            <section style={{ marginBottom: "30px" }}>
+              {/* Header Row with Action */}
+              <div className="section-header-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "12px" }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "20px", fontWeight: 800, color: "#1e1b4b", display: "flex", alignItems: "center", gap: "10px" }}>
+                    <Layers style={{ color: "#0d9488", width: "26px", height: "26px" }} />
+                    <span>{lang === "si" ? "පළාත් මූලික විමර්ශනය (Provincial Basic Investigation)" : lang === "ta" ? "மாகாண அடிப்படை விசாரணை (Provincial Basic Investigation)" : "Provincial Basic Investigation"}</span>
+                  </h3>
+                  <p style={{ margin: "4px 0 0 0", fontSize: "13px", color: "#64748b" }}>
+                    {t("provincialBasicInvestigationDesc", "Delegation of authority to provincial authorities, appointed investigating officers, progress tracking, and preliminary report deadlines.")}
+                  </p>
+                </div>
+
+                <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                  <Link
+                    href="/subject/provincial-preliminary"
+                    className="btn-create-rec"
+                    style={{ background: "linear-gradient(135deg, #0d9488 0%, #0f766e 100%)" }}
+                  >
+                    <Plus size={16} />
+                    <span>{lang === "si" ? "නව පළාත් විමර්ශන සටහන" : lang === "ta" ? "புதிய மாகாண விசாரணை பதிவு" : "New Provincial Investigation"}</span>
+                  </Link>
+                </div>
+              </div>
+
+              {/* Provincial Basic Investigation KPI Cards */}
+              <div className="inquiry-kpi-grid">
+                <div className="inquiry-kpi-card inquiry-card-teal">
+                  <div className="premium-card-top">
+                    <div className="premium-card-title-area">
+                      <Layers className="premium-card-icon" />
+                      <span>{t("totalProvincialInvestigationsCount", "Total Provincial Investigations")}</span>
+                    </div>
+                  </div>
+                  <div className="premium-card-bottom">
+                    <div className="premium-card-value-area">
+                      <span className="premium-card-value">{String(provincialInvestigationCases.length).padStart(2, "0")}</span>
+                      <span className="premium-card-label">{lang === "si" ? "විමර්ශන" : "investigations"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="inquiry-kpi-card inquiry-card-blue">
+                  <div className="premium-card-top">
+                    <div className="premium-card-title-area">
+                      <ShieldCheck className="premium-card-icon" />
+                      <span>{t("provincialDelegatedCount", "Authority Delegated")}</span>
+                    </div>
+                  </div>
+                  <div className="premium-card-bottom">
+                    <div className="premium-card-value-area">
+                      <span className="premium-card-value">
+                        {String(provincialInvestigationCases.filter((c: any) => c.stageKey === "delegation" || !c.reportReceivedDate).length).padStart(2, "0")}
+                      </span>
+                      <span className="premium-card-label">{lang === "si" ? "පවරන ලද" : "delegated"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="inquiry-kpi-card inquiry-card-amber">
+                  <div className="premium-card-top">
+                    <div className="premium-card-title-area">
+                      <CalendarIcon className="premium-card-icon" />
+                      <span>{t("provincialPendingReportsCount", "In Progress / Reports Due")}</span>
+                    </div>
+                  </div>
+                  <div className="premium-card-bottom">
+                    <div className="premium-card-value-area">
+                      <span className="premium-card-value">
+                        {String(provincialInvestigationCases.filter((c: any) => c.dueDate && !c.reportReceivedDate).length).padStart(2, "0")}
+                      </span>
+                      <span className="premium-card-label">{lang === "si" ? "වාර්තා ලැබිය යුතු" : "due"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="inquiry-kpi-card inquiry-card-emerald">
+                  <div className="premium-card-top">
+                    <div className="premium-card-title-area">
+                      <FileCheck className="premium-card-icon" />
+                      <span>{t("provincialCompletedCount", "Reports Received & OIC Informed")}</span>
+                    </div>
+                  </div>
+                  <div className="premium-card-bottom">
+                    <div className="premium-card-value-area">
+                      <span className="premium-card-value">
+                        {String(provincialInvestigationCases.filter((c: any) => c.stageKey === "report_received" || c.stageKey === "oic_informed" || c.stageKey === "completed" || c.reportReceivedDate).length).padStart(2, "0")}
+                      </span>
+                      <span className="premium-card-label">{lang === "si" ? "සම්පූර්ණ" : "completed"}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Filter and Search Bar */}
+              <div className="letters-list-header" style={{ marginBottom: "16px", backgroundColor: "#ffffff", padding: "12px 18px", borderRadius: "12px", border: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: 700, color: "#1e1b4b", fontSize: "14px" }}>
+                  <Filter size={16} style={{ color: "#0d9488" }} />
+                  <span>{lang === "si" ? "පළාත් විමර්ශන පෙරීම" : "Filter Provincial Investigations"}</span>
+                </div>
+
+                <div className="letters-filters-group" style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", margin: 0 }}>
+                  {/* Search Bar */}
+                  <div className="search-box" style={{ width: "240px" }}>
+                    <svg className="search-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    <input
+                      type="text"
+                      value={provincialSearchQuery}
+                      onChange={(e) => setProvincialSearchQuery(e.target.value)}
+                      placeholder={t("searchProvincialPlaceholder", "Search provincial investigation cases (Case No, Officer, Institute, Complainant)...")}
+                      className="search-input"
+                    />
+                  </div>
+
+                  {/* Stage Filter */}
+                  <div className="filter-dropdown-wrapper">
+                    <select
+                      value={provincialStageFilter}
+                      onChange={(e) => setProvincialStageFilter(e.target.value)}
+                      className="filter-priority-select"
+                      style={{ maxWidth: "220px" }}
+                    >
+                      <option value="all">{t("stageFilterProvincialAll", "All Provincial Investigation Stages")}</option>
+                      <option value="delegation">{t("stageFilterDelegated", "Authority Delegated")}</option>
+                      <option value="ongoing">{t("stageFilterOngoing", "Investigation Ongoing")}</option>
+                      <option value="report_received">{t("stageFilterReportReceived", "Report Received")}</option>
+                      <option value="oic_informed">{t("stageFilterOICInformed", "Officer In Charge Informed")}</option>
+                      <option value="completed">{t("stageFilterConcluded", "Investigation Concluded")}</option>
+                    </select>
+                  </div>
+
+                  {/* Priority Filter */}
+                  <div className="filter-dropdown-wrapper">
+                    <select
+                      value={provincialPriorityFilter}
+                      onChange={(e: any) => setProvincialPriorityFilter(e.target.value)}
+                      className="filter-priority-select"
+                    >
+                      <option value="all">{t("priorityAll", "All Priorities")}</option>
+                      <option value="high">🔴 {t("priorityHigh", "High Priority")}</option>
+                      <option value="medium">🟡 {t("priorityMedium", "Medium Priority")}</option>
+                      <option value="low">🟢 {t("priorityLow", "Low Priority")}</option>
+                    </select>
+                  </div>
+
+                  {(provincialSearchQuery || provincialStageFilter !== "all" || provincialPriorityFilter !== "all") && (
+                    <a
+                      href="#"
+                      className="view-all-reset-link"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setProvincialSearchQuery("");
+                        setProvincialStageFilter("all");
+                        setProvincialPriorityFilter("all");
+                      }}
+                    >
+                      {t("viewAll")} <span className="arrow-span">→</span>
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              {/* Provincial Basic Investigation Data Table */}
+              <div className="table-responsive-container">
+                <table className="letters-data-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">{t("caseNo", "Case No / Ref")}</th>
+                      <th scope="col">{t("accusedOfficerAndInstitute", "Accused Officer & Institution")}</th>
+                      <th scope="col">{t("complainantSender", "Complainant")}</th>
+                      <th scope="col">{t("subjectText", "Subject / Allegation Matter")}</th>
+                      <th scope="col">{t("stageStatus", "Investigation Stage")}</th>
+                      <th scope="col">{t("hearingDates", "Timeline & Due Dates")}</th>
+                      <th scope="col">{t("officers", "Investigating Officers")}</th>
+                      <th scope="col" className="text-center">{t("actions", "Actions")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredProvincialCases.length > 0 ? (
+                      filteredProvincialCases.map((item, idx) => {
+                        const hasOfficers = Array.isArray(item.officers) && item.officers.length > 0;
+
+                        return (
+                          <tr key={item.id ? `${item.id}-${idx}` : `prov-${item.caseNo}-${idx}`} className="letter-table-row">
+                            {/* Case No */}
+                            <td className="font-semibold" style={{ color: "#1e1b4b" }}>
+                              <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                                <span style={{ fontWeight: 800, color: "#0d9488", fontSize: "14px" }}>{item.caseNo}</span>
+                                {item.letterNo && item.letterNo !== item.caseNo && (
+                                  <span style={{ fontSize: "11px", color: "#64748b", fontWeight: 600 }}>
+                                    LTR: {item.letterNo}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Accused Officer & Institution */}
+                            <td>
+                              <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+                                <span style={{ fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: "5px", fontSize: "13px" }}>
+                                  <User size={13} style={{ color: "#0d9488" }} />
+                                  {item.accusedName || "—"}
+                                </span>
+                                {(item.accusedDesignation || item.schoolName) && (
+                                  <span style={{ fontSize: "11px", color: "#64748b", display: "flex", alignItems: "center", gap: "4px" }}>
+                                    <Building size={11} style={{ color: "#94a3b8" }} />
+                                    {[item.accusedDesignation, item.schoolName].filter(Boolean).join(" • ")}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Complainant */}
+                            <td>
+                              <div style={{ display: "flex", flexDirection: "column", gap: "2px", fontSize: "13px", color: "#334155" }}>
+                                <span style={{ display: "flex", alignItems: "center", gap: "5px", fontWeight: 600 }}>
+                                  <User size={12} style={{ color: "#64748b" }} />
+                                  {item.complainantName || "—"}
+                                </span>
+                              </div>
+                            </td>
+
+                            {/* Subject & Reason */}
+                            <td className="subject-cell" style={{ maxWidth: "240px" }}>
+                              <div style={{ fontSize: "13px", color: "#1e293b", lineHeight: "1.4" }}>
+                                {item.subject}
+                              </div>
+                              {item.notes && item.notes !== item.subject && (
+                                <div style={{ fontSize: "11px", color: "#475569", marginTop: "3px", fontStyle: "italic", backgroundColor: "#f0fdf4", padding: "2px 6px", borderRadius: "4px", border: "1px solid #dcfce7" }}>
+                                  📝 {item.notes}
+                                </div>
+                              )}
+                            </td>
+
+                            {/* Investigation Stage */}
+                            <td>
+                              {item.stageKey === "oic_informed" ? (
+                                <span className="inquiry-stage-pill inquiry-stage-oic">
+                                  <CheckCircle size={12} />
+                                  {lang === "si" ? "භාර නිලධාරියාට දැනුම් දී ඇත" : "OIC Informed"}
+                                </span>
+                              ) : item.stageKey === "report_received" ? (
+                                <span className="inquiry-stage-pill inquiry-stage-report">
+                                  <FileCheck size={12} />
+                                  {lang === "si" ? "වාර්තාව ලැබී ඇත" : "Report Received"}
+                                </span>
+                              ) : item.stageKey === "completed" ? (
+                                <span className="inquiry-stage-pill inquiry-stage-order">
+                                  <CheckCircle size={12} />
+                                  {lang === "si" ? "විමර්ශනය අවසන්" : "Concluded"}
+                                </span>
+                              ) : item.stageKey === "ongoing" ? (
+                                <span className="inquiry-stage-pill inquiry-stage-ongoing">
+                                  <Clock size={12} />
+                                  {lang === "si" ? "විමර්ශනය ක්‍රියාත්මකයි" : "In Progress"}
+                                </span>
+                              ) : (
+                                <span className="inquiry-stage-pill inquiry-stage-delegated">
+                                  <Layers size={12} />
+                                  {lang === "si" ? "බලය පවරන ලද" : "Authority Delegated"}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Timeline & Due Dates */}
+                            <td>
+                              <div style={{ display: "flex", flexDirection: "column", gap: "2px", fontSize: "12px", color: "#475569" }}>
+                                {item.appointmentDate && (
+                                  <span style={{ fontSize: "11.5px", color: "#1e1b4b" }}>
+                                    📅 {lang === "si" ? "පත්වීම" : "Appt"}: {item.appointmentDate}
+                                  </span>
+                                )}
+                                {item.dueDate && (
+                                  <span style={{ fontSize: "11px", color: "#b45309", fontWeight: 600 }}>
+                                    🎯 {lang === "si" ? "කාලසීමාව" : "Due"}: {item.dueDate}
+                                  </span>
+                                )}
+                                {item.reportReceivedDate && (
+                                  <span style={{ fontSize: "11px", color: "#15803d", fontWeight: 700 }}>
+                                    ✅ {lang === "si" ? "ලැබුණු දිනය" : "Received"}: {item.reportReceivedDate}
+                                  </span>
+                                )}
+                                {!item.appointmentDate && !item.dueDate && !item.reportReceivedDate && (
+                                  <span style={{ fontSize: "11px", color: "#94a3b8" }}>—</span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Investigating Officers */}
+                            <td>
+                              {hasOfficers ? (
+                                <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+                                  {item.officers.map((off: string, oIdx: number) => (
+                                    <span
+                                      key={oIdx}
+                                      style={{
+                                        fontSize: "11px",
+                                        fontWeight: 600,
+                                        backgroundColor: "#f0fdfa",
+                                        color: "#0f766e",
+                                        border: "1px solid #ccfbf1",
+                                        padding: "2px 7px",
+                                        borderRadius: "6px"
+                                      }}
+                                    >
+                                      👤 {off}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span style={{ fontSize: "11px", color: "#94a3b8", fontWeight: 500 }}>
+                                  — {lang === "si" ? "(පත්කිරීම අපේක්ෂිතයි)" : "(Pending Officers)"}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Actions */}
+                            <td className="text-center">
+                              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedProvincialModal(item)}
+                                  className="btn-quick-view"
+                                  title="View Provincial Investigation Dossier"
+                                  style={{ backgroundColor: "#ccfbf1", color: "#0f766e", border: "1px solid #99f6e4" }}
+                                >
+                                  <Eye size={13} />
+                                </button>
+                                <Link
+                                  href={`/subject/provincial-preliminary?caseNo=${encodeURIComponent(item.caseNo)}`}
+                                  className="btn-quick-view"
+                                  title="Open Provincial Investigation Form"
+                                  style={{ backgroundColor: "#f0fdf4", color: "#15803d", border: "1px solid #bbf7d0" }}
+                                >
+                                  <ExternalLink size={13} />
+                                </Link>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={8} className="text-center py-5 text-muted" style={{ padding: "40px 20px" }}>
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
+                            <Layers size={44} style={{ color: "#cbd5e1" }} />
+                            <span style={{ fontSize: "15px", fontWeight: 600, color: "#64748b" }}>
+                              {t("noProvincialInvestigationsFound", "No provincial basic investigation cases found matching search criteria.")}
+                            </span>
+                            {(provincialSearchQuery || provincialStageFilter !== "all" || provincialPriorityFilter !== "all") && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setProvincialSearchQuery("");
+                                  setProvincialStageFilter("all");
+                                  setProvincialPriorityFilter("all");
+                                }}
+                                className="btn-create-rec"
+                                style={{ marginTop: "4px", backgroundColor: "#f1f5f9", color: "#334155", border: "1px solid #cbd5e1" }}
+                              >
+                                {t("viewAll", "Reset Filters")}
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
           {/* ==================== TAB 3: INVESTIGATION RECOMMENDATIONS VIEW ==================== */}
           {activeTab === "recommendations" && (
             <section style={{ marginBottom: "30px" }}>
@@ -6892,6 +7598,166 @@ function SubjectOfficerDashboardContent() {
               >
                 <ExternalLink size={14} />
                 <span>Disciplinary Minute</span>
+              </Link>
+            </footer>
+
+          </div>
+        </div>
+      )}
+
+      {/* ==================== QUICK PROVINCIAL BASIC INVESTIGATION DOSSIER MODAL ==================== */}
+      {selectedProvincialModal && (
+        <div className="inquiry-dossier-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="provincial-dossier-title">
+          <div className="inquiry-dossier-modal-content" style={{ maxWidth: "780px" }}>
+            
+            {/* Modal Header */}
+            <div className="inquiry-dossier-header" style={{ background: "linear-gradient(135deg, #0f766e 0%, #0d9488 100%)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div style={{ width: "42px", height: "42px", borderRadius: "12px", backgroundColor: "rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Layers size={22} style={{ color: "#ccfbf1" }} />
+                </div>
+                <div>
+                  <h3 id="provincial-dossier-title" style={{ margin: 0, fontSize: "18px", fontWeight: 800, letterSpacing: "-0.2px" }}>
+                    {t("provincialDossierTitle", "Provincial Basic Investigation Dossier")}
+                  </h3>
+                  <div style={{ fontSize: "12px", opacity: 0.85, marginTop: "2px" }}>
+                    Case Ref: <strong>{selectedProvincialModal.caseNo}</strong> • Letter Ref: <strong>{selectedProvincialModal.letterNo || "—"}</strong> • Stage: {selectedProvincialModal.stage}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedProvincialModal(null)}
+                style={{ background: "transparent", border: "none", color: "#ffffff", opacity: 0.8, cursor: "pointer", padding: "4px" }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="inquiry-dossier-body">
+              {/* Accused Officer Profile Card */}
+              <div className="inquiry-dossier-section">
+                <div className="inquiry-dossier-section-title">
+                  <User size={14} style={{ color: "#0d9488" }} />
+                  <span>Accused Officer & Institution (චූදිත නිලධාරී සහ ආයතනය)</span>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px", fontSize: "13px" }}>
+                  <div>
+                    <span style={{ color: "#64748b", fontSize: "11px", fontWeight: 600, display: "block" }}>Full Name:</span>
+                    <strong style={{ color: "#1e293b" }}>{selectedProvincialModal.accusedName || "—"}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: "#64748b", fontSize: "11px", fontWeight: 600, display: "block" }}>Designation / Position:</span>
+                    <span style={{ color: "#334155", fontWeight: 600 }}>{selectedProvincialModal.accusedDesignation || "—"}</span>
+                  </div>
+                  <div>
+                    <span style={{ color: "#64748b", fontSize: "11px", fontWeight: 600, display: "block" }}>Educational Institute:</span>
+                    <span style={{ color: "#334155", fontWeight: 600 }}>{selectedProvincialModal.schoolName || "—"}</span>
+                  </div>
+                  <div>
+                    <span style={{ color: "#64748b", fontSize: "11px", fontWeight: 600, display: "block" }}>Complainant:</span>
+                    <span style={{ color: "#334155", fontWeight: 600 }}>{selectedProvincialModal.complainantName || "—"}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Investigation Authority & Officers */}
+              <div className="inquiry-dossier-section" style={{ backgroundColor: "#f0fdfa", borderColor: "#ccfbf1" }}>
+                <div className="inquiry-dossier-section-title" style={{ color: "#0f766e" }}>
+                  <ShieldCheck size={14} style={{ color: "#0d9488" }} />
+                  <span>Provincial Investigation Officers & Authority (විමර්ශන නිලධාරීන්)</span>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px", fontSize: "13px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span style={{ fontWeight: 700, color: "#0f766e" }}>🏛 Authority / Mandate:</span>
+                    <span style={{ fontWeight: 600, color: "#1e293b" }}>
+                      {lang === "si" ? "පළාත් මූලික විමර්ශනයක් සිදු කිරීමට බලය පැවරීම" : "Delegation of authority to conduct a provincial preliminary investigation"}
+                    </span>
+                  </div>
+                  {Array.isArray(selectedProvincialModal.officers) && selectedProvincialModal.officers.length > 0 ? (
+                    <div>
+                      <span style={{ fontWeight: 700, color: "#0f766e", display: "block", marginBottom: "4px" }}>👥 Appointed Investigating Officers:</span>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                        {selectedProvincialModal.officers.map((off: string, oIdx: number) => (
+                          <span
+                            key={oIdx}
+                            style={{
+                              backgroundColor: "#ffffff",
+                              border: "1px solid #99f6e4",
+                              color: "#0f766e",
+                              fontWeight: 700,
+                              fontSize: "12px",
+                              padding: "3px 10px",
+                              borderRadius: "8px"
+                            }}
+                          >
+                            👤 {off}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ color: "#64748b", fontSize: "12px", fontStyle: "italic" }}>
+                      — No individual officers recorded yet (Authority delegated to Provincial Directorate)
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Subject & Allegation Summary */}
+              <div className="inquiry-dossier-section">
+                <div className="inquiry-dossier-section-title">
+                  <FileText size={14} style={{ color: "#0d9488" }} />
+                  <span>Subject & Complaint Summary (විෂය කරුණු / චෝදනා සාරාංශය)</span>
+                </div>
+                <div style={{ fontSize: "13.5px", color: "#1e293b", lineHeight: "1.5" }}>
+                  {selectedProvincialModal.subject}
+                </div>
+                {selectedProvincialModal.notes && selectedProvincialModal.notes !== selectedProvincialModal.subject && (
+                  <div style={{ marginTop: "8px", fontSize: "12px", color: "#475569", backgroundColor: "#f8fafc", padding: "8px 12px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <strong>Notes / Reason:</strong> {selectedProvincialModal.notes}
+                  </div>
+                )}
+                {selectedProvincialModal.recommendations && (
+                  <div style={{ marginTop: "8px", fontSize: "12px", color: "#0f766e", backgroundColor: "#f0fdfa", padding: "8px 12px", borderRadius: "8px", border: "1px solid #ccfbf1" }}>
+                    <strong>Recommendations:</strong> {selectedProvincialModal.recommendations}
+                  </div>
+                )}
+              </div>
+
+              {/* Investigation Timeline */}
+              <div className="inquiry-dossier-section" style={{ backgroundColor: "#f8fafc", borderColor: "#e2e8f0" }}>
+                <div className="inquiry-dossier-section-title">
+                  <Clock size={14} style={{ color: "#0d9488" }} />
+                  <span>Investigation Timeline & Deadlines (කාලරාමු සහ නියමිත දින)</span>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px", fontSize: "12.5px" }}>
+                  <div>Appointment Date: <strong>{selectedProvincialModal.appointmentDate || "—"}</strong></div>
+                  <div>Report Due Date: <strong>{selectedProvincialModal.dueDate || "—"}</strong></div>
+                  <div>Approval / Decision Date: <strong>{selectedProvincialModal.approvedDate || "—"}</strong></div>
+                  <div>Report Received Date: <strong>{selectedProvincialModal.reportReceivedDate || "—"}</strong></div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <footer style={{ padding: "14px 24px", borderTop: "1px solid #e2e8f0", backgroundColor: "#f8fafc", display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+              <button
+                type="button"
+                onClick={() => setSelectedProvincialModal(null)}
+                style={{ padding: "8px 18px", borderRadius: "8px", backgroundColor: "#ffffff", border: "1px solid #cbd5e1", color: "#475569", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}
+              >
+                Close
+              </button>
+              <Link
+                href={`/subject/provincial-preliminary?caseNo=${encodeURIComponent(selectedProvincialModal.caseNo)}`}
+                className="btn-create-rec"
+                style={{ padding: "8px 16px", fontSize: "13px", background: "linear-gradient(135deg, #0d9488 0%, #0f766e 100%)" }}
+              >
+                <ExternalLink size={14} />
+                <span>Open Provincial Form</span>
               </Link>
             </footer>
 

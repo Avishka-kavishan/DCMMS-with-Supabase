@@ -1665,6 +1665,194 @@ export async function assignOfficerToInvestigationServer(investigationId: string
   }
 }
 
+export async function getProvincialInvestigationsListServer() {
+  try {
+    const listMap = new Map<string, any>();
+
+    // 1. Fetch from dcmms_preliminary_investigations (Primary PostgreSQL preliminary table)
+    try {
+      const rawPrelims: any[] = await prisma.$queryRaw`
+        SELECT 
+          dpi.id::text as id,
+          dpi.case_no as "caseNo",
+          dpi.appointment_date as "appointmentDate",
+          dpi.report_due_date as "dueDate",
+          dpi.report_received_date as "reportReceivedDate",
+          dpi.extension_decision_date as "approvedDate",
+          dpi.reason as "reason",
+          dpi.status as "status",
+          dpi.committee_members as "committeeMembers",
+          dpi.recommendations as "recommendations",
+          dpi.created_at as "createdAt",
+          dpi.updated_at as "updatedAt",
+          sof.subject_file_no as "subjectFileNo",
+          sof.classification_of_complaint_letter as "complaintClassification",
+          sof.complainant_name as "sofComplainant",
+          dml.letter_number as "letterNo",
+          dml.subject_of_letter as "mailSubject",
+          dml.sender_name as "dmlSender",
+          ao.accused_officer_name as "accusedName",
+          ao.position as "accusedDesignation",
+          sch.accused_school_name as "schoolName"
+        FROM public.dcmms_preliminary_investigations dpi
+        LEFT JOIN public.subject_officer_form_table sof ON LOWER(TRIM(dpi.case_no)) = LOWER(TRIM(sof.ref_number)) OR LOWER(TRIM(dpi.case_no)) = LOWER(TRIM(sof.subject_file_no))
+        LEFT JOIN public.daily_mail_letter_table dml ON sof.daily_mail_letter_id = dml.id
+        LEFT JOIN public.accused_officer_table ao ON sof.accused_officer_id = ao.id
+        LEFT JOIN public.accused_school_table sch ON ao.accused_school_id = sch.id
+        ORDER BY dpi.updated_at DESC;
+      `;
+
+      if (rawPrelims && Array.isArray(rawPrelims)) {
+        for (const item of rawPrelims) {
+          const key = (item.caseNo || "").trim().toLowerCase();
+          if (!key) continue;
+
+          let committeeList: string[] = [];
+          if (Array.isArray(item.committeeMembers)) {
+            committeeList = item.committeeMembers.map((m: any) => typeof m === "string" ? m : (m.name || m.fullName || "")).filter(Boolean);
+          } else if (typeof item.committeeMembers === "string") {
+            try {
+              const parsed = JSON.parse(item.committeeMembers);
+              if (Array.isArray(parsed)) {
+                committeeList = parsed.map((m: any) => typeof m === "string" ? m : (m.name || m.fullName || "")).filter(Boolean);
+              } else {
+                committeeList = [item.committeeMembers];
+              }
+            } catch (e) {
+              if (item.committeeMembers.trim()) committeeList = [item.committeeMembers.trim()];
+            }
+          }
+
+          let stageKey = "ongoing";
+          let stageLabel = item.status || "Delegation of authority to conduct a provincial preliminary investigation";
+          const stLower = String(item.status || "").toLowerCase();
+
+          if (stLower.includes("inform") || stLower.includes("complete") || stLower.includes("initial investigation complete")) {
+            stageKey = "oic_informed";
+            stageLabel = "Informing Officer In Charge - Initial Investigation Complete";
+          } else if (item.reportReceivedDate || stLower.includes("received")) {
+            stageKey = "report_received";
+            stageLabel = "Report Received";
+          } else if (stLower.includes("delegat") || stLower.includes("authority") || stLower.includes("පළාත් මූලික")) {
+            stageKey = "delegation";
+            stageLabel = "Delegation of Authority";
+          } else if (stLower.includes("concluded") || stLower.includes("closed")) {
+            stageKey = "completed";
+            stageLabel = "Investigation Concluded";
+          }
+
+          listMap.set(key, {
+            id: item.id || `prelim-${item.caseNo}`,
+            caseNo: item.caseNo,
+            letterNo: item.letterNo || item.caseNo,
+            subject: item.reason || item.mailSubject || `Provincial Basic Investigation #${item.caseNo}`,
+            complainantName: item.sofComplainant || item.dmlSender || "—",
+            accusedName: item.accusedName || "—",
+            accusedDesignation: item.accusedDesignation || "Educational Officer",
+            schoolName: item.schoolName || "Government Educational Institute",
+            priority: "medium",
+            stage: stageLabel,
+            stageKey: stageKey,
+            appointmentDate: item.appointmentDate ? String(item.appointmentDate).slice(0, 10) : "",
+            dueDate: item.dueDate ? String(item.dueDate).slice(0, 10) : "",
+            reportReceivedDate: item.reportReceivedDate ? String(item.reportReceivedDate).slice(0, 10) : "",
+            approvedDate: item.approvedDate ? String(item.approvedDate).slice(0, 10) : "",
+            officers: committeeList,
+            recommendations: item.recommendations || "",
+            nextStepsStatus: item.status || "",
+            notes: item.reason || "",
+            createdAt: item.createdAt ? String(item.createdAt) : "",
+            updatedAt: item.updatedAt ? String(item.updatedAt) : "",
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("dcmms_preliminary_investigations query warning:", err);
+    }
+
+    // 2. Also check provincial_investigations table in Prisma schema
+    try {
+      const provRows: any[] = await prisma.$queryRaw`
+        SELECT 
+          pi.provincial_id::text as "provincialId",
+          pi.investigation_id::text as "investigationId",
+          pi.recommendation as "recommendation",
+          pi.appointment_date as "appointmentDate",
+          pi.due_date as "dueDate",
+          pi.report_received_date as "reportReceivedDate",
+          pi.approved_date as "approvedDate",
+          pi.next_action as "nextAction",
+          inv.case_id as "caseId",
+          inv.investigation_no as "investigationNo",
+          inv.status as "status"
+        FROM public.provincial_investigations pi
+        LEFT JOIN public.investigations inv ON pi.investigation_id = inv.investigation_id
+        ORDER BY pi.appointment_date DESC;
+      `;
+
+      if (provRows && Array.isArray(provRows)) {
+        for (const prov of provRows) {
+          const caseRef = (prov.caseId || prov.investigationNo || "").trim();
+          const key = caseRef.toLowerCase();
+          if (!key) continue;
+
+          if (!listMap.has(key)) {
+            let stageKey = "delegation";
+            let stageLabel = prov.nextAction || prov.status || "Delegation of Authority";
+            const actLower = String(prov.nextAction || "").toLowerCase();
+
+            if (actLower.includes("inform") || actLower.includes("complete")) {
+              stageKey = "oic_informed";
+              stageLabel = "Informing Officer In Charge - Initial Investigation Complete";
+            } else if (prov.reportReceivedDate || actLower.includes("received")) {
+              stageKey = "report_received";
+              stageLabel = "Report Received";
+            }
+
+            listMap.set(key, {
+              id: prov.provincialId || `prov-${caseRef}`,
+              caseNo: caseRef,
+              letterNo: prov.investigationNo || caseRef,
+              subject: `Provincial Basic Investigation #${caseRef}`,
+              complainantName: "—",
+              accusedName: "—",
+              accusedDesignation: "Educational Officer",
+              schoolName: "Government Educational Institute",
+              priority: "medium",
+              stage: stageLabel,
+              stageKey: stageKey,
+              appointmentDate: prov.appointmentDate ? String(prov.appointmentDate).slice(0, 10) : "",
+              dueDate: prov.dueDate ? String(prov.dueDate).slice(0, 10) : "",
+              reportReceivedDate: prov.reportReceivedDate ? String(prov.reportReceivedDate).slice(0, 10) : "",
+              approvedDate: prov.approvedDate ? String(prov.approvedDate).slice(0, 10) : "",
+              officers: [],
+              recommendations: prov.recommendation || "",
+              nextStepsStatus: prov.nextAction || "",
+              notes: prov.recommendation || "",
+              createdAt: "",
+              updatedAt: "",
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("provincial_investigations query warning:", err);
+    }
+
+    return serializeForServerAction({
+      success: true,
+      data: Array.from(listMap.values()),
+    });
+  } catch (error: any) {
+    console.error("Error in getProvincialInvestigationsListServer:", error);
+    return serializeForServerAction({
+      success: false,
+      error: error?.message || "Failed to fetch provincial investigations",
+      data: [],
+    });
+  }
+}
+
 // -------------------------------------------------------------
 // 4. Audit Logging & Session Recording
 // -------------------------------------------------------------
