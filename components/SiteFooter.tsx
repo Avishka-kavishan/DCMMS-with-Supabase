@@ -87,7 +87,7 @@ export function SiteFooter() {
               </div>
               <div className="footer-info-details">
                 <span className="footer-info-label">{t("footerVersionLabel", "Version")}</span>
-                <span className="footer-info-value">1.2.0</span>
+                <span className="footer-info-value">2.0</span>
               </div>
             </li>
             <li>
