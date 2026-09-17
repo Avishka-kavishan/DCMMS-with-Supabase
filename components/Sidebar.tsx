@@ -169,17 +169,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         isActive: pathname === "/daily-mail" || pathname === "/daily-mail/",
       },
       {
-        id: "add-new-letter",
-        label: t("addNewLetter", "Add New Letter"),
-        href: `${basePath}/daily-mail/add-letter`,
-        icon: (
-          <svg className="menu-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-          </svg>
-        ),
-        isActive: pathname.includes("/daily-mail/add-letter"),
-      },
-      {
         id: "register-complaint",
         label: t("registerComplaintDetailed", "Full Complaint Registration"),
         href: `${basePath}/daily-mail/register`,
@@ -202,17 +191,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </svg>
         ),
         isActive: pathname === "/admin" || pathname === "/admin/",
-      },
-      {
-        id: "add-new-letter",
-        label: t("addNewLetter", "Add New Letter"),
-        href: `${basePath}/daily-mail/add-letter`,
-        icon: (
-          <svg className="menu-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-          </svg>
-        ),
-        isActive: pathname.includes("/daily-mail/add-letter"),
       },
       {
         id: "subject-officers",
