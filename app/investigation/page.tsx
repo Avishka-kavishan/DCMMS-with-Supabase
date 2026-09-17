@@ -5,12 +5,14 @@ import "../daily-mail/daily-mail.css";
 import "../dashboard-common.css";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useTranslation } from "react-i18next";
 import { Sidebar } from "@/components/Sidebar";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 import { signOut, getCurrentProfile, getRoleDisplayName, UserProfile } from "@/lib/auth";
-import { getInvestigationOfficersServer, assignOfficerToInvestigationServer, logAuditEventServer, getAccusedOfficerByRefServer, getCommitteeOfficersWithSchoolsServer, saveChairmanByCaseServer, getChairmanByCaseServer, saveMembersByCaseServer, getMembersByCaseServer, saveCaseByDateExtensionServer, getSubjectOfficerDashboardCasesServer } from "@/lib/db-actions";
+import { getInvestigationOfficersServer, assignOfficerToInvestigationServer, logAuditEventServer, getAccusedOfficerByRefServer, getCommitteeOfficersWithSchoolsServer, saveChairmanByCaseServer, getChairmanByCaseServer, saveMembersByCaseServer, getMembersByCaseServer, saveCaseByDateExtensionServer, getSubjectOfficerDashboardCasesServer, getDirectlyAssignedLettersServer } from "@/lib/db-actions";
+
 import { 
   UserPlus, X, Edit, Trash2, Check, Eye, ClipboardList, 
   UserCheck, Shield, ChevronRight, Calendar as CalendarIcon, 
@@ -142,7 +144,10 @@ export default function InvestigationPage() {
 
   // Subject Officer Date Notifications state
   const [subjectOfficerNotifications, setSubjectOfficerNotifications] = useState<any[]>([]);
+  const [directlyAssignedLetters, setDirectlyAssignedLetters] = useState<any[]>([]);
+  const [isDirectLettersMinimized, setIsDirectLettersMinimized] = useState(false);
   const [isNotifLoading, setIsNotifLoading] = useState(true);
+
   const [isNotificationsMinimized, setIsNotificationsMinimized] = useState(true);
   const [showAllNotifications, setShowAllNotifications] = useState(true);
   const [seenNotifIds, setSeenNotifIds] = useState<string[]>(() => {
@@ -648,6 +653,17 @@ export default function InvestigationPage() {
   // ── Fetch Inquiries & Officers ────────────────────────────────────────────
   // ── Fetch Inquiries & Officers ────────────────────────────────────────────
   const fetchInquiries = async () => {
+    // 0. Fetch directly assigned letters from Daily Mail for this investigation officer
+    try {
+      const prof = currentUserProfile || await getCurrentProfile();
+      const directRes = await getDirectlyAssignedLettersServer(prof?.full_name, "investigation");
+      if (directRes && directRes.success && Array.isArray(directRes.data)) {
+        setDirectlyAssignedLetters(directRes.data);
+      }
+    } catch (e) {
+      console.warn("getDirectlyAssignedLettersServer error:", e);
+    }
+
     // 1. Live PostgreSQL Database Fetch for multi-device synchronization
     try {
       const res = await getSubjectOfficerDashboardCasesServer("");
@@ -682,6 +698,7 @@ export default function InvestigationPage() {
     } catch (pgErr) {
       console.warn("PostgreSQL fetchInquiries failed, trying fallback:", pgErr);
     }
+
 
     const datesMap = new Map<string, { appointmentDate?: string; reportDueDate?: string }>();
     const accusedMap = new Map<string, string>();
@@ -3693,12 +3710,192 @@ export default function InvestigationPage() {
                 </div>
               </section>
 
+              {/* ==================== DIRECTLY ASSIGNED LETTERS FROM DAILY MAIL ==================== */}
+              {directlyAssignedLetters && directlyAssignedLetters.length > 0 && (
+                <section style={{ marginBottom: "24px" }} id="direct-assigned-letters-section">
+                  <div style={{
+                    backgroundColor: "#ffffff",
+                    borderRadius: "16px",
+                    border: "1px solid #e2e8f0",
+                    padding: "20px 24px",
+                    boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05)"
+                  }}>
+                    {/* Header */}
+                    <div style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      borderBottom: isDirectLettersMinimized ? "none" : "1px solid #f1f5f9",
+                      paddingBottom: isDirectLettersMinimized ? "0" : "16px",
+                      marginBottom: isDirectLettersMinimized ? "0" : "16px",
+                      flexWrap: "wrap",
+                      gap: "12px"
+                    }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                        <div style={{
+                          width: "44px",
+                          height: "44px",
+                          borderRadius: "12px",
+                          backgroundColor: "#f3e8ff",
+                          color: "#7c3aed",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          boxShadow: "0 2px 4px rgba(124, 58, 237, 0.15)"
+                        }}>
+                          <Mail size={22} />
+                        </div>
+                        <div>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <h3 style={{ margin: 0, fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>
+                              {lang === "si" ? "දෛනික තැපෑලෙන් පවරන ලද ලැබුණු ලිපි" : "Directly Assigned Letters from Daily Mail"}
+                            </h3>
+                            <span style={{
+                              padding: "2px 8px",
+                              borderRadius: "12px",
+                              backgroundColor: "#7c3aed",
+                              color: "#ffffff",
+                              fontSize: "12px",
+                              fontWeight: 700
+                            }}>
+                              {directlyAssignedLetters.length}
+                            </span>
+                          </div>
+                          <p style={{ margin: "3px 0 0 0", fontSize: "13px", color: "#64748b" }}>
+                            {lang === "si"
+                              ? "විමර්ශන අංශය වෙත සෘජුවම ක්‍රියාමාර්ග ගැනීම සඳහා පවරා ඇති ලැබුණු ලිපි — මූලික විමර්ශනය අරඹන්න."
+                              : "Letters assigned directly to Investigation Officers by Daily Mail. Start inquiry or preliminary review."}
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsDirectLettersMinimized(!isDirectLettersMinimized)}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          padding: "6px 14px",
+                          borderRadius: "8px",
+                          backgroundColor: "#f8fafc",
+                          border: "1px solid #cbd5e1",
+                          color: "#334155",
+                          fontSize: "12px",
+                          fontWeight: 600,
+                          cursor: "pointer"
+                        }}
+                      >
+                        {isDirectLettersMinimized ? (
+                          <>
+                            <ChevronDown size={16} />
+                            <span>{lang === "si" ? "විස්තර පෙන්වන්න" : "Expand"}</span>
+                          </>
+                        ) : (
+                          <>
+                            <ChevronUp size={16} />
+                            <span>{lang === "si" ? "හකුලන්න" : "Collapse"}</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Content Table */}
+                    {!isDirectLettersMinimized && (
+                      <div className="table-responsive-container">
+                        <table className="letters-data-table" style={{ width: "100%" }}>
+                          <thead>
+                            <tr>
+                              <th scope="col" style={{ width: "15%" }}>{t("letterNoLabel", "Letter No")}</th>
+                              <th scope="col" style={{ width: "15%" }}>{t("letterTypeLabel", "Letter Type")}</th>
+                              <th scope="col" style={{ width: "25%" }}>{t("sendByLabel", "Send By")}</th>
+                              <th scope="col" style={{ width: "12%" }}>{t("letterDateLabel", "Letter Date")}</th>
+                              <th scope="col" style={{ width: "12%" }}>{lang === "si" ? "ලැබුණු දිනය" : "Received Date"}</th>
+                              <th scope="col" style={{ width: "10%" }}>{t("status", "Status")}</th>
+                              <th scope="col" className="text-center" style={{ width: "11%" }}>{t("takeAction", "Action")}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {directlyAssignedLetters.map((l: any, idx: number) => (
+                              <tr key={l.id || l.letterNo || idx} className="letter-table-row" style={{ backgroundColor: idx % 2 === 0 ? "#ffffff" : "#f8fafc" }}>
+                                <td className="font-semibold" style={{ fontFamily: "monospace", color: "#0f172a" }}>
+                                  {l.letterNo || l.refNo}
+                                </td>
+                                <td>
+                                  <span style={{
+                                    display: "inline-block",
+                                    padding: "3px 8px",
+                                    borderRadius: "6px",
+                                    backgroundColor: "#f5f3ff",
+                                    color: "#6b21a8",
+                                    fontSize: "12px",
+                                    fontWeight: 600,
+                                    border: "1px solid #ddd6fe"
+                                  }}>
+                                    {l.type}
+                                  </span>
+                                </td>
+                                <td style={{ color: "#334155", fontWeight: 500 }}>
+                                  {l.sender}
+                                </td>
+                                <td style={{ color: "#64748b", fontSize: "13px" }}>
+                                  {l.letterDate || "—"}
+                                </td>
+                                <td style={{ color: "#64748b", fontSize: "13px" }}>
+                                  {l.receivedDate || "—"}
+                                </td>
+                                <td>
+                                  <span style={{
+                                    display: "inline-block",
+                                    padding: "3px 8px",
+                                    borderRadius: "12px",
+                                    backgroundColor: "#dcfce7",
+                                    color: "#166534",
+                                    fontSize: "11px",
+                                    fontWeight: 700,
+                                    border: "1px solid #bbf7d0"
+                                  }}>
+                                    ● {lang === "si" ? "පවරා ඇත" : "Assigned"}
+                                  </span>
+                                </td>
+                                <td className="text-center">
+                                  <Link
+                                    href={`/investigation/add-details?caseNo=${encodeURIComponent(l.letterNo || l.refNo)}`}
+                                    className="btn-add-details"
+                                    style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: "5px",
+                                      padding: "6px 12px",
+                                      borderRadius: "6px",
+                                      backgroundColor: "#0e162f",
+                                      color: "#ffffff",
+                                      fontSize: "12px",
+                                      fontWeight: 600,
+                                      textDecoration: "none"
+                                    }}
+                                  >
+                                    <Plus size={14} />
+                                    <span>{lang === "si" ? "විමර්ශනය අරඹන්න" : "Start Inquiry"}</span>
+                                  </Link>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </section>
+              )}
+
               {/* Inquiry Cases Table & Interactive Controls */}
               <section className="letters-list-section">
                 <div className="letters-list-header" style={{ flexDirection: "column", alignItems: "stretch", gap: "16px" }}>
                   
                   {/* Title & Filter Stats Header */}
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+
                     <div>
                       <h3 className="section-title" style={{ margin: 0 }}>
                         {lang === "si" ? "විමර්ශනයට නියමිත ලිපි සහ ගොනු" : "Inquiry & Investigation Cases"}

@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import "../../i18n";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Folder, Search, CheckCircle2, User, ChevronDown, Plus } from "lucide-react";
+import { Folder, Search, CheckCircle2, User, ChevronDown, ChevronUp, Plus, MailCheck, Mail } from "lucide-react";
 import {
   AreaChart,
   Area,
@@ -27,6 +27,7 @@ import {
   getDailyMailRecordsServer,
   getLetterEditRequestsServer,
   updateLetterEditRequestStatusServer,
+  getDirectlyAssignedLettersServer,
 } from "@/lib/db-actions";
 import { exportToExcel } from "@/lib/export-excel";
 
@@ -162,14 +163,30 @@ export default function AdminDashboard() {
   const [toastMessage, setToastMessage] = useState("");
   const [showToast, setShowToast] = useState(false);
 
-  // ── Session guard ──────────────────────────────────────────────────────────
+  // Directly Assigned Letters from Daily Mail
+  const [directlyAssignedLetters, setDirectlyAssignedLetters] = useState<any[]>([]);
+  const [isDirectLettersMinimized, setIsDirectLettersMinimized] = useState(false);
+
+  // ── Session guard & Data Loader ───────────────────────────────────────────
   useEffect(() => {
-    getCurrentProfile().then((profile) => {
+    getCurrentProfile().then(async (profile) => {
       const allowedRoles = ["admin", "assistant_secretary_discipline", "senior_assistant_secretary", "additional_secretary", "system_admin"];
       if (!profile || !allowedRoles.includes(profile.role)) {
         router.replace("/");
       }
       setCurrentUserProfile(profile);
+
+      // Load directly assigned letters for this Secretary / Admin
+      if (profile) {
+        try {
+          const directRes = await getDirectlyAssignedLettersServer(profile.full_name, profile.role);
+          if (directRes && directRes.success && Array.isArray(directRes.data)) {
+            setDirectlyAssignedLetters(directRes.data);
+          }
+        } catch (e) {
+          console.warn("Failed to load directly assigned letters in Admin:", e);
+        }
+      }
     });
   }, [router]);
 
@@ -530,6 +547,134 @@ export default function AdminDashboard() {
           </div>
         </div>
       </section>
+
+      {/* ── Directly Assigned Letters From Daily Mail ── */}
+      {directlyAssignedLetters.length > 0 && (
+        <div className="admin-approval-section-card" style={{ borderLeft: "4px solid #3b82f6" }}>
+          <div className="admin-approval-header">
+            <div className="admin-approval-title-area">
+              <div className="admin-approval-icon-badge" style={{ backgroundColor: "#dbeafe", color: "#1d4ed8" }}>
+                <MailCheck size={22} />
+              </div>
+              <div>
+                <h3 className="admin-approval-title">
+                  {lang === "si" ? "දෛනික තැපෑලෙන් පවරන ලද ලැබුණු ලිපි" : "Directly Assigned Letters from Daily Mail"} ({directlyAssignedLetters.length})
+                </h3>
+                <p className="admin-approval-desc">
+                  {lang === "si"
+                    ? "ඔබ වෙත සෘජුවම ක්‍රියාමාර්ග ගැනීම සඳහා පවරා ඇති ලැබුණු ලිපි."
+                    : "Letters assigned directly to you by Daily Mail for executive review and action."}
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsDirectLettersMinimized(!isDirectLettersMinimized)}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                backgroundColor: "#f8fafc",
+                color: "#334155",
+                border: "1px solid #cbd5e1",
+                borderRadius: "8px",
+                padding: "6px 14px",
+                fontSize: "12px",
+                fontWeight: 600,
+                cursor: "pointer"
+              }}
+            >
+              {isDirectLettersMinimized ? (
+                <>
+                  <ChevronDown size={16} />
+                  <span>{lang === "si" ? "විස්තර පෙන්වන්න" : "Expand"}</span>
+                </>
+              ) : (
+                <>
+                  <ChevronUp size={16} />
+                  <span>{lang === "si" ? "හකුලන්න" : "Collapse"}</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {!isDirectLettersMinimized && (
+            <div className="admin-approval-table-container">
+              <table className="admin-approval-table">
+                <thead>
+                  <tr>
+                    <th>{lang === "si" ? "ලිපි අංකය" : "Letter No"}</th>
+                    <th>{lang === "si" ? "ලිපි වර්ගය" : "Letter Type"}</th>
+                    <th>{lang === "si" ? "එවූ පාර්ශවය" : "Sender"}</th>
+                    <th>{lang === "si" ? "ලිපි දිනය" : "Letter Date"}</th>
+                    <th>{lang === "si" ? "ලැබුණු දිනය" : "Received Date"}</th>
+                    <th style={{ textAlign: "right" }}>{lang === "si" ? "ක්‍රියාමාර්ග" : "Actions"}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {directlyAssignedLetters.map((l: any, idx: number) => (
+                    <tr key={l.id || idx}>
+                      <td>
+                        <span style={{ fontWeight: 700, color: "#1e3a8a", fontFamily: "monospace" }}>
+                          {l.letterNo || l.refNo}
+                        </span>
+                      </td>
+                      <td>
+                        <span style={{
+                          display: "inline-block",
+                          padding: "3px 8px",
+                          borderRadius: "6px",
+                          backgroundColor: "#eff6ff",
+                          color: "#1e40af",
+                          fontSize: "12px",
+                          fontWeight: 600,
+                          border: "1px solid #bfdbfe"
+                        }}>
+                          {l.type}
+                        </span>
+                      </td>
+                      <td>
+                        <strong>{l.sender}</strong>
+                      </td>
+                      <td>
+                        <span style={{ fontSize: "12px", color: "#64748b" }}>
+                          {l.letterDate || "—"}
+                        </span>
+                      </td>
+                      <td>
+                        <span style={{ fontSize: "12px", color: "#64748b" }}>
+                          {l.receivedDate || "—"}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: "right" }}>
+                        <Link
+                          href={`/daily-mail/register?id=${encodeURIComponent(l.letterNo || l.refNo)}`}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "5px",
+                            backgroundColor: "#0e162f",
+                            color: "#ffffff",
+                            padding: "6px 12px",
+                            borderRadius: "6px",
+                            fontSize: "12px",
+                            fontWeight: 600,
+                            textDecoration: "none"
+                          }}
+                        >
+                          <Plus size={14} />
+                          <span>{lang === "si" ? "විස්තර බලන්න / එක් කරන්න" : "View Details"}</span>
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Pending Letter Edit Approval Requests Section ── */}
       {pendingEditRequests.length > 0 && (

@@ -7380,6 +7380,366 @@ export async function getFormalDisciplinaryInspectionServer(caseRef: string) {
   }
 }
 
+// -------------------------------------------------------------
+// Assignable Officers & Letter Assignment Routing
+// -------------------------------------------------------------
+export interface AssignableOfficer {
+  id: string;
+  employee_no?: string;
+  full_name: string;
+  email?: string;
+  role: string;
+  normalized_role: string;
+  category: "secretaries";
+  subject_type?: string;
+  is_active: boolean;
+}
+
+export async function getAllAssignableOfficersServer() {
+  try {
+    const officersMap = new Map<string, AssignableOfficer>();
+
+    const normalizeOfficerRole = (rawRole: string = ""): { normalized: string; category: "secretaries" } | null => {
+      const lower = rawRole.toLowerCase().trim();
+      
+      // 1. Assistant Secretary Discipline Branch
+      if (
+        lower.includes("assistant secretary discipline") ||
+        (lower.includes("assistant secretary") && lower.includes("discipline")) ||
+        lower === "assistant_secretary_discipline"
+      ) {
+        return { normalized: "Assistant Secretary Discipline Branch", category: "secretaries" };
+      }
+
+      // 2. Assistant Secretary Investigation Branch
+      if (
+        lower.includes("assistant secretary investigation") ||
+        (lower.includes("assistant secretary") && lower.includes("investigation")) ||
+        (lower.includes("investigation branch") && lower.includes("assistant")) ||
+        lower === "assistant_secretary_investigation"
+      ) {
+        return { normalized: "Assistant Secretary Investigation Branch", category: "secretaries" };
+      }
+
+      // 3. Senior Assistant Secretary
+      if (lower.includes("senior assistant") || lower === "senior_assistant_secretary") {
+        return { normalized: "Senior Assistant Secretary", category: "secretaries" };
+      }
+
+      // 4. Additional Secretary
+      if (lower.includes("additional secretary") || lower === "additional_secretary") {
+        return { normalized: "Additional Secretary", category: "secretaries" };
+      }
+
+      // All other roles (Subject Officer, Investigation Officer, Admin, System Admin) are excluded
+      return null;
+    };
+
+    // 1. Query register_officer_table from PostgreSQL
+    try {
+      const regRows: any[] = await prisma.$queryRaw`
+        SELECT id, employee_no, full_name, email, role, subject_type, is_active
+        FROM register_officer_table
+        WHERE (is_active IS NULL OR is_active = true)
+          AND role NOT ILIKE '%system%'
+          AND role NOT ILIKE '%daily%'
+        ORDER BY full_name ASC;
+      `;
+
+      regRows.forEach((r) => {
+        if (r.full_name && r.full_name.trim()) {
+          const key = r.full_name.trim().toLowerCase();
+          const roleInfo = normalizeOfficerRole(r.role);
+          if (roleInfo) {
+            officersMap.set(key, {
+              id: String(r.id),
+              employee_no: r.employee_no || "",
+              full_name: r.full_name.trim(),
+              email: r.email || "",
+              role: r.role || roleInfo.normalized,
+              normalized_role: roleInfo.normalized,
+              category: roleInfo.category,
+              subject_type: r.subject_type || undefined,
+              is_active: r.is_active !== false,
+            });
+          }
+        }
+      });
+    } catch (e) {
+      console.warn("Could not load from register_officer_table:", e);
+    }
+
+    // 2. Fallback / enrich from dcmms_profiles
+    try {
+      const profiles = await prisma.dcmmsProfile.findMany({
+        where: {
+          role: {
+            not: {
+              contains: "system",
+              mode: "insensitive"
+            }
+          }
+        },
+        select: {
+          id: true,
+          full_name: true,
+          role: true,
+          email: true,
+          employee_no: true,
+        }
+      });
+
+      profiles.forEach((p: any) => {
+        if (p.full_name && p.full_name.trim()) {
+          const key = p.full_name.trim().toLowerCase();
+          const roleLower = (p.role || "").toLowerCase();
+          if (roleLower.includes("daily") || roleLower.includes("system")) return;
+
+          if (!officersMap.has(key)) {
+            const roleInfo = normalizeOfficerRole(p.role);
+            if (roleInfo) {
+              officersMap.set(key, {
+                id: String(p.id),
+                employee_no: p.employee_no || "",
+                full_name: p.full_name.trim(),
+                email: p.email || "",
+                role: p.role || roleInfo.normalized,
+                normalized_role: roleInfo.normalized,
+                category: roleInfo.category,
+                is_active: true,
+              });
+            }
+          }
+        }
+      });
+    } catch (e) {}
+
+    const allOfficers = Array.from(officersMap.values());
+
+    const categorized = {
+      secretaries: allOfficers.filter((o) => o.category === "secretaries"),
+    };
+
+    return serializeForServerAction({
+      success: true,
+      data: allOfficers,
+      categories: categorized,
+    });
+  } catch (error: any) {
+    console.error("Error in getAllAssignableOfficersServer:", error);
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to fetch assignable officers", data: [] });
+  }
+}
+
+export async function getDirectlyAssignedLettersServer(officerName?: string, officerRole?: string) {
+  try {
+    const activeName = (officerName || "").trim().toLowerCase();
+    const activeRole = (officerRole || "").trim().toLowerCase();
+
+    let lettersRaw: any[] = [];
+
+    try {
+      const p1: any[] = await prisma.$queryRaw`
+        SELECT 
+          id::text as id,
+          ref_number as ref_no,
+          letter_number as letter_no,
+          subject_of_letter as subject,
+          mode_of_receipt as method,
+          nature_of_letter as type,
+          subject_category as classification,
+          senders_party as sender,
+          action_officer,
+          date_received_by_add_secretary as received_date,
+          date_letter_handover_discipline as letter_date,
+          created_at,
+          updated_at,
+          'Normal' as priority,
+          status
+        FROM public.daily_mail_letter_table
+        ORDER BY created_at DESC;
+      `;
+      lettersRaw.push(...(p1 || []));
+    } catch (e) {}
+
+    try {
+      const p2: any[] = await prisma.$queryRaw`
+        SELECT 
+          id::text as id,
+          serial_no as ref_no,
+          letter_no,
+          subject,
+          method,
+          type,
+          classification,
+          sender,
+          action_officer,
+          received_date,
+          submitted_date as letter_date,
+          created_at,
+          updated_at,
+          priority,
+          status
+        FROM public.dcmms_daily_mail
+        ORDER BY created_at DESC;
+      `;
+      lettersRaw.push(...(p2 || []));
+    } catch (e) {}
+
+    const seenRefs = new Set<string>();
+    const matchedLetters: any[] = [];
+
+    lettersRaw.forEach((l) => {
+      const ref = l.ref_no || l.letter_no || l.id;
+      if (!ref || seenRefs.has(ref)) return;
+      seenRefs.add(ref);
+
+      const actOfficer = (l.action_officer || "").trim().toLowerCase();
+
+      let isMatch = false;
+      if (activeName) {
+        if (actOfficer === activeName || actOfficer.includes(activeName) || activeName.includes(actOfficer)) {
+          isMatch = true;
+        }
+      }
+
+      // If active role matches and letter has no specific name but role tag
+      if (!isMatch && activeRole) {
+        if (actOfficer.includes(activeRole) || (activeRole.includes("subject") && actOfficer.includes("subject"))) {
+          isMatch = true;
+        }
+      }
+
+      if (isMatch || (!activeName && actOfficer)) {
+        matchedLetters.push({
+          id: l.id,
+          refNo: l.ref_no || l.letter_no || "",
+          letterNo: l.letter_no || l.ref_no || "",
+          subject: l.subject || "",
+          type: l.type || "Complaint",
+          sender: l.sender || "N/A",
+          receivedDate: l.received_date ? new Date(l.received_date).toISOString().split("T")[0] : "",
+          letterDate: l.letter_date ? new Date(l.letter_date).toISOString().split("T")[0] : "",
+          priority: l.priority || "Normal",
+          status: l.status || "assigned",
+          actionOfficer: l.action_officer || "",
+          createdAt: l.created_at ? new Date(l.created_at).toISOString() : new Date().toISOString(),
+        });
+      }
+    });
+
+    return serializeForServerAction({
+      success: true,
+      data: matchedLetters,
+    });
+  } catch (error: any) {
+    console.error("Error in getDirectlyAssignedLettersServer:", error);
+    return serializeForServerAction({ success: false, error: error?.message, data: [] });
+  }
+}
+
+export async function createOfficerNotificationServer(notifData: {
+  targetOfficerName?: string;
+  targetRole?: string;
+  caseNo?: string;
+  letterNo?: string;
+  type: string;
+  title: string;
+  message: string;
+  senderName?: string;
+}) {
+  try {
+    // Ensure notifications table exists in PostgreSQL
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS public.dcmms_notifications (
+          id VARCHAR(100) PRIMARY KEY,
+          target_officer_name VARCHAR(255),
+          target_role VARCHAR(100),
+          case_no VARCHAR(100),
+          letter_no VARCHAR(100),
+          type VARCHAR(100),
+          title VARCHAR(255),
+          message TEXT,
+          sender_name VARCHAR(255),
+          is_read BOOLEAN DEFAULT false,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+      `);
+    } catch (e) {}
+
+    const notifId = `notif-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO public.dcmms_notifications (
+        id, target_officer_name, target_role, case_no, letter_no, type, title, message, sender_name, is_read, created_at
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, false, NOW()
+      );
+    `,
+      notifId,
+      notifData.targetOfficerName || null,
+      notifData.targetRole || null,
+      notifData.caseNo || null,
+      notifData.letterNo || null,
+      notifData.type,
+      notifData.title,
+      notifData.message,
+      notifData.senderName || null
+    );
+
+    return serializeForServerAction({ success: true, id: notifId });
+  } catch (error: any) {
+    console.error("Error in createOfficerNotificationServer:", error);
+    return serializeForServerAction({ success: false, error: error?.message });
+  }
+}
+
+export async function getOfficerNotificationsServer(targetOfficerName?: string, targetRole?: string) {
+  try {
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS public.dcmms_notifications (
+          id VARCHAR(100) PRIMARY KEY,
+          target_officer_name VARCHAR(255),
+          target_role VARCHAR(100),
+          case_no VARCHAR(100),
+          letter_no VARCHAR(100),
+          type VARCHAR(100),
+          title VARCHAR(255),
+          message TEXT,
+          sender_name VARCHAR(255),
+          is_read BOOLEAN DEFAULT false,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+      `);
+    } catch (e) {}
+
+    const cleanName = (targetOfficerName || "").trim().toLowerCase();
+    const cleanRole = (targetRole || "").trim().toLowerCase();
+
+    let query = `SELECT * FROM public.dcmms_notifications WHERE 1=1`;
+    let params: any[] = [];
+
+    if (cleanName && cleanRole) {
+      query += ` AND (LOWER(target_officer_name) LIKE $1 OR LOWER(target_role) LIKE $2 OR target_officer_name IS NULL)`;
+      params.push(`%${cleanName}%`, `%${cleanRole}%`);
+    } else if (cleanName) {
+      query += ` AND (LOWER(target_officer_name) LIKE $1 OR target_officer_name IS NULL)`;
+      params.push(`%${cleanName}%`);
+    }
+
+    query += ` ORDER BY created_at DESC LIMIT 50;`;
+
+    const rows: any[] = await prisma.$queryRawUnsafe(query, ...params);
+    return serializeForServerAction({ success: true, data: rows });
+  } catch (error: any) {
+    console.error("Error in getOfficerNotificationsServer:", error);
+    return serializeForServerAction({ success: false, error: error?.message, data: [] });
+  }
+}
+
+
 
 
 

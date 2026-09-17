@@ -771,12 +771,25 @@
   "today": "இன்று",
   "yesterday": "நேற்று",
   "helpfulTips": "பயனுள்ள வழிகாட்டுதல்கள்",
-  "tip1": "கடித எண் திகதி வரிசைப்படி தானாக உருவாக்கப்படும்.",
-  "tip2": "சமர்ப்பித்தவுடன் தொடர்புடைய விடய உத்தியோகத்தருக்கு அனுப்பப்படும்.",
-  "tip3": "தேவைப்பட்டால் கிளை நிர்வாகியின் அனுமதியுடன் திருத்தலாம்.",
   "readyToRegister": "பதிவு செய்ய தயார்",
   "copyLetterNo": "கடித எண்ணை நகலெடுக்கவும்",
-  "copied": "நகலெடுக்கப்பட்டது!"
+  "copied": "நகலெடுக்கப்பட்டது!",
+  "sendToLabel": "அனுப்ப வேண்டியவர் (ஒதுக்கப்பட்ட அதிகாரி)",
+  "sendToPlaceholder": "கடிதத்தை ஒதுக்க வேண்டிய அதிகாரி அல்லது செயலாளரைத் தேர்ந்தெடுக்கவும்...",
+  "assignedOfficer": "ஒதுக்கப்பட்ட அதிகாரி",
+  "selectAssignee": "அதிகாரியைத் தேர்ந்தெடுக்கவும்",
+  "allOfficersFilter": "அனைத்து அதிகாரிகள்",
+  "subjectOfficersCategory": "விடய அதிகாரிகள் (Subject Officers)",
+  "investigationOfficersCategory": "விசாரணை அதிகாரிகள் (Investigation Officers)",
+  "secretariesCategory": "செயலாளர்கள் (Secretaries)",
+  "directlyAssignedLetters": "நேரடியாக ஒதுக்கப்பட்ட கடிதங்கள்",
+  "directlyAssignedLettersDesc": "உங்களுக்கு நேரடியாக ஒதுக்கப்பட்ட உள்வரும் கடிதங்கள்.",
+  "noDirectLetters": "ஒதுக்கப்பட்ட புதிய கடிதங்கள் எதுவும் இல்லை.",
+  "takeAction": "நடவடிக்கை எடு",
+  "processLetter": "விவரங்களைச் சேர்த்து தொடங்கு",
+  "letterAssignedNotification": "புதிய கடிதம் ஒதுக்கப்பட்டது",
+  "officerDesignation": "பதவி"
 }
+
 
 

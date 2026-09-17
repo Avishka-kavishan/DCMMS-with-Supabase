@@ -25,8 +25,10 @@ import {
   getMembersByCaseServer,
   getCommitteeOfficersWithSchoolsServer,
   getSubjectOfficerDashboardCasesServer,
-  saveSubjectOfficerAssignmentServer
+  saveSubjectOfficerAssignmentServer,
+  getDirectlyAssignedLettersServer
 } from "@/lib/db-actions";
+
 import { CheckCircle, XCircle, FileText, Send, Clock, X, AlertCircle, ShieldCheck, Calendar as CalendarIcon, ChevronDown, ChevronUp, Bell, Eye, MoreHorizontal, Filter, Check, MailCheck, ClipboardList, Plus, Sparkles, ExternalLink, User, Building, ArrowRight, ShieldAlert, FileCheck, Layers, UserCheck } from "lucide-react";
 
 interface Case {
@@ -242,13 +244,47 @@ export interface SeparateNotification {
   rawDate: string;
 }
 
-export function buildSeparateNotifications(assignments: any[], currentLang: string = "en"): SeparateNotification[] {
+export function buildSeparateNotifications(assignments: any[], currentLang: string = "en", directLetters: any[] = []): SeparateNotification[] {
   const notifs: SeparateNotification[] = [];
   const adminName = currentLang === "si" ? "විමර්ශන පරිපාලක (Admin)" : currentLang === "ta" ? "விசாரணை நிர்வாகி" : "Investigation Admin";
+
+  // 0. Directly Assigned Daily Mail Letters
+  if (Array.isArray(directLetters)) {
+    directLetters.forEach((letter) => {
+      const letterId = String(letter.id || letter.letterNo || letter.refNo || "");
+      const letterNo = String(letter.letterNo || letter.refNo || "");
+      notifs.push({
+        id: `notif-dm-letter-${letterId}`,
+        caseId: letterNo,
+        caseNo: letterNo,
+        stepNumber: 1,
+        stepType: "step1_officers",
+        asgn: { ...letter, caseNo: letterNo },
+        adminName: currentLang === "si" ? "දෛනික තැපැල් අංශය" : "Daily Mail Section",
+        headline: currentLang === "si"
+          ? `දෛනික තැපෑලෙන් නව ලිපියක් පවරා ඇත: ${letterNo}`
+          : currentLang === "ta"
+          ? `புதிய கடிதம் ஒதுக்கப்பட்டது: ${letterNo}`
+          : `New Letter Assigned from Daily Mail: ${letterNo}`,
+        actionSnippet: currentLang === "si"
+          ? `එවූ පාර්ශවය: ${letter.sender || "N/A"} | වර්ගය: ${letter.type || "Complaint"} | දිනය: ${letter.letterDate || "—"}. විස්තර ඇතුළත් කිරීමට මෙහි ක්ලික් කරන්න.`
+          : `From: ${letter.sender || "N/A"} | Type: ${letter.type || "Complaint"} | Date: ${letter.letterDate || "—"}. Click to add case details.`,
+        badgeColor: "badge-blue",
+        statusPill: currentLang === "si" ? "📬 නව ලිපියක් (New Letter)" : "📬 New Letter Assigned",
+        iconType: "file",
+        isUrgent: true,
+        isActionRequired: true,
+        isCompleted: false,
+        timeAgo: formatRelativeTime(letter.createdAt || letter.receivedDate || new Date().toISOString(), currentLang),
+        rawDate: letter.createdAt || letter.receivedDate || ""
+      });
+    });
+  }
 
   assignments.forEach((asgn) => {
     const caseId = String(asgn.id || asgn.caseNo || "");
     const caseNo = String(asgn.caseNo || "");
+
 
     // 1. Step 5: Initial Investigation Complete Notification
     const isInitialComplete = !!(
@@ -1465,6 +1501,9 @@ function SubjectOfficerDashboardContent() {
   const [isNotifDropdownOpen, setIsNotifDropdownOpen] = useState(false);
   const notifDropdownRef = useRef<HTMLDivElement>(null);
 
+  const [directlyAssignedLetters, setDirectlyAssignedLetters] = useState<any[]>([]);
+  const [isDirectLettersMinimized, setIsDirectLettersMinimized] = useState(false);
+
   useEffect(() => {
     if (typeof window !== "undefined") {
       try {
@@ -1489,8 +1528,8 @@ function SubjectOfficerDashboardContent() {
   }, []);
 
   const allSeparateNotifs = useMemo(() => {
-    return buildSeparateNotifications(assignments, lang);
-  }, [assignments, lang]);
+    return buildSeparateNotifications(assignments, lang, directlyAssignedLetters);
+  }, [assignments, lang, directlyAssignedLetters]);
 
   const [expandedNotifIds, setExpandedNotifIds] = useState<Record<string, boolean>>({});
 
@@ -1518,7 +1557,8 @@ function SubjectOfficerDashboardContent() {
   const markAllAsSeen = () => {
     const allNotifIds = allSeparateNotifs.map((n: SeparateNotification) => n.id);
     const allCaseNos = assignments.map((a) => a.caseNo).filter(Boolean);
-    const combined = Array.from(new Set([...seenNotifIds, ...allNotifIds, ...allCaseNos]));
+    const allDirectLetterIds = directlyAssignedLetters.map((l) => l.id || l.letterNo).filter(Boolean);
+    const combined = Array.from(new Set([...seenNotifIds, ...allNotifIds, ...allCaseNos, ...allDirectLetterIds]));
     setSeenNotifIds(combined);
     if (typeof window !== "undefined") {
       try {
@@ -1563,6 +1603,16 @@ function SubjectOfficerDashboardContent() {
     }
     const activeName = activeProfile?.full_name || "";
 
+    // 0. Fetch directly assigned letters from Daily Mail
+    try {
+      const directRes = await getDirectlyAssignedLettersServer(activeName, "subject");
+      if (directRes && directRes.success && Array.isArray(directRes.data)) {
+        setDirectlyAssignedLetters(directRes.data);
+      }
+    } catch (e) {
+      console.warn("getDirectlyAssignedLettersServer error:", e);
+    }
+
     // 1. Live PostgreSQL Database Fetch for multi-device synchronization
     try {
       const res = await getSubjectOfficerDashboardCasesServer(activeName);
@@ -1572,6 +1622,7 @@ function SubjectOfficerDashboardContent() {
     } catch (pgErr) {
       console.warn("PostgreSQL fetchAssignments error:", pgErr);
     }
+
 
     if (isSupabaseConfigured && list.length === 0) {
       try {
@@ -4943,6 +4994,185 @@ function SubjectOfficerDashboardContent() {
                   )}
                 </div>
               </section>
+
+              {/* ==================== DIRECTLY ASSIGNED LETTERS FROM DAILY MAIL ==================== */}
+              {directlyAssignedLetters && directlyAssignedLetters.length > 0 && (
+                <section style={{ marginBottom: "24px" }} id="direct-assigned-letters-section">
+                  <div style={{
+                    backgroundColor: "#ffffff",
+                    borderRadius: "16px",
+                    border: "1px solid #e2e8f0",
+                    padding: "20px 24px",
+                    boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05)"
+                  }}>
+                    {/* Header */}
+                    <div style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      borderBottom: isDirectLettersMinimized ? "none" : "1px solid #f1f5f9",
+                      paddingBottom: isDirectLettersMinimized ? "0" : "16px",
+                      marginBottom: isDirectLettersMinimized ? "0" : "16px",
+                      flexWrap: "wrap",
+                      gap: "12px"
+                    }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                        <div style={{
+                          width: "44px",
+                          height: "44px",
+                          borderRadius: "12px",
+                          backgroundColor: "#dbeafe",
+                          color: "#1d4ed8",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          boxShadow: "0 2px 4px rgba(29, 78, 216, 0.15)"
+                        }}>
+                          <MailCheck size={22} />
+                        </div>
+                        <div>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <h3 style={{ margin: 0, fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>
+                              {lang === "si" ? "දෛනික තැපෑලෙන් පවරන ලද ලැබුණු ලිපි" : "Directly Assigned Letters from Daily Mail"}
+                            </h3>
+                            <span style={{
+                              padding: "2px 8px",
+                              borderRadius: "12px",
+                              backgroundColor: "#2563eb",
+                              color: "#ffffff",
+                              fontSize: "12px",
+                              fontWeight: 700
+                            }}>
+                              {directlyAssignedLetters.length}
+                            </span>
+                          </div>
+                          <p style={{ margin: "3px 0 0 0", fontSize: "13px", color: "#64748b" }}>
+                            {lang === "si"
+                              ? "ඔබ වෙත සෘජුවම ක්‍රියාමාර්ග ගැනීම සඳහා පවරා ඇති ලැබුණු ලිපි — විස්තර එක් කර නඩුව අරඹන්න."
+                              : "Letters assigned directly to you by the Daily Mail section. Click 'Add Details' to initiate investigation."}
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsDirectLettersMinimized(!isDirectLettersMinimized)}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          padding: "6px 14px",
+                          borderRadius: "8px",
+                          backgroundColor: "#f8fafc",
+                          border: "1px solid #cbd5e1",
+                          color: "#334155",
+                          fontSize: "12px",
+                          fontWeight: 600,
+                          cursor: "pointer"
+                        }}
+                      >
+                        {isDirectLettersMinimized ? (
+                          <>
+                            <ChevronDown size={16} />
+                            <span>{lang === "si" ? "විස්තර පෙන්වන්න" : "Expand"}</span>
+                          </>
+                        ) : (
+                          <>
+                            <ChevronUp size={16} />
+                            <span>{lang === "si" ? "හකුලන්න" : "Collapse"}</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Content Table */}
+                    {!isDirectLettersMinimized && (
+                      <div className="table-responsive-container">
+                        <table className="letters-data-table" style={{ width: "100%" }}>
+                          <thead>
+                            <tr>
+                              <th scope="col" style={{ width: "15%" }}>{t("letterNoLabel", "Letter No")}</th>
+                              <th scope="col" style={{ width: "15%" }}>{t("letterTypeLabel", "Letter Type")}</th>
+                              <th scope="col" style={{ width: "25%" }}>{t("sendByLabel", "Send By")}</th>
+                              <th scope="col" style={{ width: "12%" }}>{t("letterDateLabel", "Letter Date")}</th>
+                              <th scope="col" style={{ width: "12%" }}>{lang === "si" ? "ලැබුණු දිනය" : "Received Date"}</th>
+                              <th scope="col" style={{ width: "10%" }}>{t("status", "Status")}</th>
+                              <th scope="col" className="text-center" style={{ width: "11%" }}>{t("takeAction", "Action")}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {directlyAssignedLetters.map((l: any, idx: number) => (
+                              <tr key={l.id || l.letterNo || idx} className="letter-table-row" style={{ backgroundColor: idx % 2 === 0 ? "#ffffff" : "#f8fafc" }}>
+                                <td className="font-semibold" style={{ fontFamily: "monospace", color: "#0f172a" }}>
+                                  {l.letterNo || l.refNo}
+                                </td>
+                                <td>
+                                  <span style={{
+                                    display: "inline-block",
+                                    padding: "3px 8px",
+                                    borderRadius: "6px",
+                                    backgroundColor: "#eff6ff",
+                                    color: "#1e40af",
+                                    fontSize: "12px",
+                                    fontWeight: 600,
+                                    border: "1px solid #bfdbfe"
+                                  }}>
+                                    {l.type}
+                                  </span>
+                                </td>
+                                <td style={{ color: "#334155", fontWeight: 500 }}>
+                                  {l.sender}
+                                </td>
+                                <td style={{ color: "#64748b", fontSize: "13px" }}>
+                                  {l.letterDate || "—"}
+                                </td>
+                                <td style={{ color: "#64748b", fontSize: "13px" }}>
+                                  {l.receivedDate || "—"}
+                                </td>
+                                <td>
+                                  <span style={{
+                                    display: "inline-block",
+                                    padding: "3px 8px",
+                                    borderRadius: "12px",
+                                    backgroundColor: "#dcfce7",
+                                    color: "#166534",
+                                    fontSize: "11px",
+                                    fontWeight: 700,
+                                    border: "1px solid #bbf7d0"
+                                  }}>
+                                    ● {lang === "si" ? "පවරා ඇත" : "Assigned"}
+                                  </span>
+                                </td>
+                                <td className="text-center">
+                                  <Link
+                                    href={`/subject/add-details?caseNo=${encodeURIComponent(l.letterNo || l.refNo)}&letterNo=${encodeURIComponent(l.letterNo || l.refNo)}&sender=${encodeURIComponent(l.sender || "")}&type=${encodeURIComponent(l.type || "")}`}
+                                    className="btn-add-details"
+                                    style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: "5px",
+                                      padding: "6px 12px",
+                                      borderRadius: "6px",
+                                      backgroundColor: "#0e162f",
+                                      color: "#ffffff",
+                                      fontSize: "12px",
+                                      fontWeight: 600,
+                                      textDecoration: "none"
+                                    }}
+                                  >
+                                    <Plus size={14} />
+                                    <span>{lang === "si" ? "විස්තර එක් කරන්න" : "Add Details"}</span>
+                                  </Link>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </section>
+              )}
 
           {/* ── Case Management Section ── */}
           <section className="letters-list-section">

@@ -772,10 +772,22 @@
   "today": "අද දිනය",
   "yesterday": "ඊයේ දිනය",
   "helpfulTips": "වැදගත් උපදෙස් සහ මාර්ගෝපදේශ",
-  "tip1": "ලිපි අංකය ස්වයංක්‍රීයව අද දිනය අනුව අනුක්‍රමිකව සකස් වේ.",
-  "tip2": "ලියාපදිංචි කළ පසු ලිපිය අදාළ විෂයභාර නිලධාරීන්ට සෘජුවම ලබාගත හැක.",
-  "tip3": "අවශ්‍ය නම් පසුව පරිපාලක අනුමැතියෙන් ලිපි තොරතුරු සංස්කරණය කළ හැක.",
   "readyToRegister": "ලියාපදිංචියට සූදානම්",
   "copyLetterNo": "ලිපි අංකය පිටපත් කරන්න",
-  "copied": "පිටපත් විය!"
-}
+  "copied": "පිටපත් විය!",
+  "sendToLabel": "යොමු කරන්නේ කාටද (යැවිය යුතු නිලධාරියා)",
+  "sendToPlaceholder": "ලිපිය යොමු කළ යුතු නිලධාරියා හෝ ලේකම්වරයා තෝරන්න...",
+  "assignedOfficer": "පවරන ලද නිලධාරියා",
+  "selectAssignee": "නිලධාරියෙකු තෝරන්න",
+  "allOfficersFilter": "සියලු නිලධාරීන්",
+  "subjectOfficersCategory": "විෂය භාර නිලධාරීන් (Subject Officers)",
+  "investigationOfficersCategory": "පරීක්ෂණ නිලධාරීන් (Investigation Officers)",
+  "secretariesCategory": "ලේකම්වරුන් (Secretaries)",
+  "directlyAssignedLetters": "දෛනික තැපෑලෙන් පවරන ලද ලැබුණු ලිපි",
+  "directlyAssignedLettersDesc": "ඔබ වෙත සෘජුවම ක්‍රියාමාර්ග ගැනීම සඳහා පවරා ඇති ලැබුණු ලිපි සහ පැමිණිලි.",
+  "noDirectLetters": "පවරන ලද නව ලිපි කිසිවක් නැත.",
+  "takeAction": "ක්‍රියාමාර්ගය",
+  "processLetter": "විස්තර එක් කර අරඹන්න",
+  "letterAssignedNotification": "නව ලිපියක් පවරා ඇත",
+  "officerDesignation": "තනතුර"
+}

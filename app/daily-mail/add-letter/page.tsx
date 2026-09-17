@@ -11,14 +11,23 @@ import {
   CheckCircle2, 
   AlertCircle, 
   RefreshCw,
-  Check
+  Check,
+  UserCheck,
+  Users,
+  Shield,
+  Briefcase,
+  Building,
+  User
 } from "lucide-react";
 import { Sidebar } from "@/components/Sidebar";
 import { SiteFooter } from "@/components/SiteFooter";
 import { signOut, getCurrentProfile, getRoleDisplayName, UserProfile } from "@/lib/auth";
 import { 
   saveDailyMailRecordServer, 
-  getNextDailyMailLetterNoServer 
+  getNextDailyMailLetterNoServer,
+  getAllAssignableOfficersServer,
+  createOfficerNotificationServer,
+  AssignableOfficer
 } from "@/lib/db-actions";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 
@@ -44,6 +53,12 @@ export default function AddNewLetterPage() {
   const [letterDate, setLetterDate] = useState(() => {
     return new Date().toISOString().split("T")[0];
   });
+
+  // Assign Secretary State
+  const [assignableOfficers, setAssignableOfficers] = useState<AssignableOfficer[]>([]);
+  const [selectedOfficerId, setSelectedOfficerId] = useState<string>("");
+  const [selectedOfficer, setSelectedOfficer] = useState<AssignableOfficer | null>(null);
+  const [isLoadingOfficers, setIsLoadingOfficers] = useState(false);
 
   // UI / Submission States
   const [isAutoGeneratingNo, setIsAutoGeneratingNo] = useState(false);
@@ -71,7 +86,7 @@ export default function AddNewLetterPage() {
       value: "Appeal", 
       labelEn: "Appeal", 
       labelSi: "අභියාචනය (Appeal)", 
-      labelTa: "மேන්முறையீடு" 
+      labelTa: "மேன்முறையீடு" 
     },
     { 
       value: "Request", 
@@ -126,12 +141,28 @@ export default function AddNewLetterPage() {
     }
   };
 
+  // Load assignable secretaries on mount
+  const loadAssignableOfficers = async () => {
+    setIsLoadingOfficers(true);
+    try {
+      const res = await getAllAssignableOfficersServer();
+      if (res && res.success && Array.isArray(res.data)) {
+        setAssignableOfficers(res.data);
+      }
+    } catch (e) {
+      console.warn("Error loading assignable officers:", e);
+    } finally {
+      setIsLoadingOfficers(false);
+    }
+  };
+
   useEffect(() => {
     setMounted(true);
     getCurrentProfile().then((prof) => {
       if (prof) setProfile(prof);
     });
     generateNextLetterNo(letterDate);
+    loadAssignableOfficers();
   }, []);
 
   // Handle Letter Date change -> recalculate suggested letter no
@@ -140,6 +171,18 @@ export default function AddNewLetterPage() {
     if (!letterNo || letterNo.includes("/")) {
       generateNextLetterNo(newDate);
     }
+  };
+
+  // Handle Officer selection
+  const handleOfficerChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const offId = e.target.value;
+    setSelectedOfficerId(offId);
+    if (!offId) {
+      setSelectedOfficer(null);
+      return;
+    }
+    const found = assignableOfficers.find((o) => o.id === offId || o.full_name === offId);
+    setSelectedOfficer(found || null);
   };
 
   const validateForm = () => {
@@ -169,6 +212,8 @@ export default function AddNewLetterPage() {
 
     try {
       const currentUserName = profile?.full_name || "Daily Mail Officer";
+      const assignedName = selectedOfficer?.full_name || "";
+      const assignedRole = selectedOfficer?.role || selectedOfficer?.normalized_role || "";
 
       const payload = {
         letter_no: letterNo.trim(),
@@ -186,8 +231,12 @@ export default function AddNewLetterPage() {
         receivedDate: letterDate,
         letterDate: letterDate,
         submitted_date: letterDate,
+        action_officer: assignedName,
+        officer_name: assignedName,
+        subject_officer_name: assignedName,
+        assigned_role: assignedRole,
         method: "Post",
-        status: "registered",
+        status: assignedName ? "assigned" : "registered",
         priority: "Normal",
         created_by_name: currentUserName
       };
@@ -198,16 +247,76 @@ export default function AddNewLetterPage() {
       if (res.success) {
         setSubmittedLetter({
           ...payload,
-          id: res.data?.id || `letter-${Date.now()}`
+          id: res.data?.id || `letter-${Date.now()}`,
+          assignedOfficerName: assignedName,
+          assignedOfficerRole: assignedRole,
         });
 
-        // 2. Audit log
+        // 2. If assigned to an officer, create a real-time notification
+        if (assignedName) {
+          try {
+            await createOfficerNotificationServer({
+              targetOfficerName: assignedName,
+              targetRole: assignedRole,
+              caseNo: letterNo.trim(),
+              letterNo: letterNo.trim(),
+              type: "daily_mail_letter_assigned",
+              title: lang === "si" ? "නව ලිපියක් පවරා ඇත" : "New Letter Assigned",
+              message: lang === "si" 
+                ? `දෛනික තැපෑලෙන් ${letterNo.trim()} අංක දරන ලිපිය (${sendBy.trim()}) ඔබ වෙත පවරා ඇත.`
+                : `Letter ${letterNo.trim()} (${letterType}) from ${sendBy.trim()} has been assigned to you.`,
+              senderName: currentUserName
+            });
+          } catch (notifErr) {
+            console.warn("Notification server dispatch error:", notifErr);
+          }
+
+          // Also store in localStorage dcmms_notifications for immediate reactive UI synchronization
+          if (typeof window !== "undefined") {
+            try {
+              const notifKey = "dcmms_notifications";
+              const stored = localStorage.getItem(notifKey) || "[]";
+              let notifs: any[] = [];
+              try { notifs = JSON.parse(stored); } catch (e) {}
+              if (!Array.isArray(notifs)) notifs = [];
+              notifs.unshift({
+                id: `notif-dm-${letterNo.trim()}-${Date.now()}`,
+                caseNo: letterNo.trim(),
+                letterNo: letterNo.trim(),
+                type: "daily_mail_letter_assigned",
+                title: lang === "si" ? "නව ලිපියක් පවරා ඇත" : "New Letter Assigned",
+                message: lang === "si" 
+                  ? `දෛනික තැපෑලෙන් ${letterNo.trim()} අංක දරන ලිපිය (${sendBy.trim()}) ඔබ වෙත පවරා ඇත.`
+                  : `Letter ${letterNo.trim()} (${letterType}) from ${sendBy.trim()} has been assigned to you.`,
+                targetOfficer: assignedName,
+                targetRole: assignedRole,
+                sender: sendBy.trim(),
+                letterType: letterType,
+                letterDate: letterDate,
+                createdAt: new Date().toISOString(),
+                read: false,
+              });
+              localStorage.setItem(notifKey, JSON.stringify(notifs));
+            } catch (e) {}
+          }
+        }
+
+        // 3. Audit log
         await logAuditEvent(
           "REGISTER_NEW_LETTER",
           "daily_mail_letter_table",
           res.data?.id || letterNo,
-          { letter_no: payload.letter_no, type: payload.type, sender: payload.sender, date: payload.letterDate }
+          { letter_no: payload.letter_no, type: payload.type, sender: payload.sender, assigned_to: assignedName, date: payload.letterDate }
         );
+
+        // 4. Dispatch sync events
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("dcmms_data_updated"));
+          window.dispatchEvent(new CustomEvent("dcmms_assignment_updated"));
+          window.dispatchEvent(new CustomEvent("dcmms_notifications_updated"));
+          window.dispatchEvent(new StorageEvent("storage", { key: "dcmms_notifications" }));
+          window.dispatchEvent(new StorageEvent("storage", { key: "dcmms_daily_mail" }));
+        }
 
         setShowSuccessModal(true);
       } else {
@@ -223,6 +332,8 @@ export default function AddNewLetterPage() {
 
   const handleReset = () => {
     setSendBy("");
+    setSelectedOfficerId("");
+    setSelectedOfficer(null);
     setErrors({});
     setErrorMessage("");
     generateNextLetterNo(letterDate);
@@ -258,7 +369,7 @@ export default function AddNewLetterPage() {
       <div className="dashboard-layout">
         <main id="dashboard-main-content" className="dashboard-content">
           
-          {/* Top App Bar Header - Same standard DCMMS navbar */}
+          {/* Top App Bar Header - Standard DCMMS navbar */}
           <header className="dashboard-header">
             <div className="dashboard-header-left">
               <button 
@@ -377,7 +488,7 @@ export default function AddNewLetterPage() {
             </div>
           </header>
 
-          {/* Standalone Register Page Wrapper (Same standard DCMMS form styling) */}
+          {/* Standalone Register Page Wrapper */}
           <section className="register-page-wrapper">
             <div className="register-card">
               
@@ -514,6 +625,119 @@ export default function AddNewLetterPage() {
                       {errors.sendBy && <span style={{ color: "#ef4444", fontSize: "0.75rem", marginTop: 4 }}>{errors.sendBy}</span>}
                     </div>
 
+                    {/* 5. Send To / Assign Officer (Interactive Multi-Role Selector) */}
+                    <div className="form-field-group" style={{ gridColumn: "1 / -1", marginTop: "8px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px", flexWrap: "wrap", gap: "8px" }}>
+                        <label className="field-label" htmlFor="sendToOfficer" style={{ margin: 0 }}>
+                          <span style={{ fontWeight: 700, color: "#0e162f", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                            <UserCheck size={17} style={{ color: "#d97706" }} />
+                            {lang === "si" ? "යොමු කිරීම / ලේකම්වරයා පත් කිරීම" : lang === "ta" ? "செயலாளருக்கு அனுப்பு / நியமி" : "Send To / Assign Secretary"}
+                          </span>
+                        </label>
+
+                        {/* Secretary Badge Count */}
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <span style={{
+                            padding: "4px 12px",
+                            borderRadius: "20px",
+                            backgroundColor: "#fef3c7",
+                            color: "#92400e",
+                            fontWeight: 700,
+                            fontSize: "0.75rem",
+                            border: "1px solid #fde68a"
+                          }}>
+                            🏛️ {lang === "si" ? "ලේකම්වරුන්" : lang === "ta" ? "செயலாளர்கள்" : "Secretaries"} ({assignableOfficers.length})
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Dropdown Select */}
+                      <select
+                        id="sendToOfficer"
+                        value={selectedOfficerId}
+                        onChange={handleOfficerChange}
+                        className="field-select"
+                        style={{
+                          backgroundColor: "#ffffff",
+                          borderColor: selectedOfficer ? "#d97706" : "#cbd5e1",
+                          fontSize: "0.9rem"
+                        }}
+                      >
+                        <option value="">
+                          {lang === "si" 
+                            ? "-- ලිපිය යොමු කළ යුතු ලේකම්වරයා තෝරන්න (Select Secretary) --" 
+                            : lang === "ta"
+                            ? "-- செயலாளரைத் தேர்ந்தெடுக்கவும் --"
+                            : "-- Select Secretary to Assign --"}
+                        </option>
+
+                        {assignableOfficers.map((off) => (
+                          <option key={off.id} value={off.id}>
+                            {off.full_name} — {off.normalized_role} {off.employee_no ? `(Emp: ${off.employee_no})` : ""}
+                          </option>
+                        ))}
+                      </select>
+
+                      {/* Selected Secretary Preview Badge */}
+                      {selectedOfficer && (
+                        <div style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          marginTop: "10px",
+                          padding: "10px 14px",
+                          backgroundColor: "#fefce8",
+                          border: "1px solid #fde047",
+                          borderRadius: "8px",
+                          gap: "12px",
+                          flexWrap: "wrap"
+                        }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                            <div style={{
+                              width: "36px",
+                              height: "36px",
+                              borderRadius: "50%",
+                              backgroundColor: "#fef3c7",
+                              color: "#b45309",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              fontWeight: 700
+                            }}>
+                              <Building size={18} />
+                            </div>
+                            <div>
+                              <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "#0e162f" }}>
+                                {selectedOfficer.full_name}
+                              </div>
+                              <div style={{ fontSize: "0.75rem", color: "#64748b", display: "flex", alignItems: "center", gap: "6px" }}>
+                                <span style={{
+                                  padding: "1px 6px",
+                                  borderRadius: "4px",
+                                  backgroundColor: "#fde68a",
+                                  color: "#92400e",
+                                  fontWeight: 600,
+                                  fontSize: "0.7rem"
+                                }}>
+                                  {selectedOfficer.normalized_role}
+                                </span>
+                                {selectedOfficer.employee_no && <span>Emp: {selectedOfficer.employee_no}</span>}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ fontSize: "0.75rem", color: "#b45309", fontWeight: 600, display: "flex", alignItems: "center", gap: "4px" }}>
+                            <CheckCircle2 size={14} />
+                            <span>
+                              {lang === "si" 
+                                ? "ලිපිය සෘජුවම මෙම ලේකම්වරයාගේ පද්ධතියට යොමු වේ" 
+                                : "Directly routed to Secretary's dashboard"}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
                   </div>
                 </div>
 
@@ -578,7 +802,7 @@ export default function AddNewLetterPage() {
       {/* Success Modal */}
       {showSuccessModal && (
         <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(14, 22, 47, 0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: "16px" }}>
-          <div style={{ background: "#ffffff", borderRadius: "12px", maxWidth: "480px", width: "100%", padding: "28px", textAlign: "center", boxShadow: "0 20px 40px rgba(0, 0, 0, 0.2)" }}>
+          <div style={{ background: "#ffffff", borderRadius: "12px", maxWidth: "500px", width: "100%", padding: "28px", textAlign: "center", boxShadow: "0 20px 40px rgba(0, 0, 0, 0.2)" }}>
             <div style={{ width: "60px", height: "60px", borderRadius: "50%", backgroundColor: "#dcfce7", color: "#16a34a", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
               <CheckCircle2 size={40} />
             </div>
@@ -610,6 +834,14 @@ export default function AddNewLetterPage() {
                 <span style={{ color: "#64748b", fontWeight: 600 }}>{t("letterDateLabel", "Letter Date")}:</span>
                 <span style={{ color: "#0e162f", fontWeight: 700 }}>{submittedLetter?.letterDate}</span>
               </div>
+              {submittedLetter?.assignedOfficerName && (
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem", paddingTop: "6px", borderTop: "1px dashed #cbd5e1" }}>
+                  <span style={{ color: "#0369a1", fontWeight: 700 }}>{t("assignedOfficer", "Assigned Officer")}:</span>
+                  <span style={{ color: "#0369a1", fontWeight: 800 }}>
+                    {submittedLetter?.assignedOfficerName} ({submittedLetter?.assignedOfficerRole || "Officer"})
+                  </span>
+                </div>
+              )}
             </div>
 
             <div style={{ display: "flex", gap: "10px", justifyContent: "center" }}>

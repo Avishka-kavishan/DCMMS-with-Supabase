@@ -772,15 +772,26 @@
   "quickSuggestions": "Quick Suggestions",
   "autoGenerate": "Auto Generate",
   "today": "Today",
-  "yesterday": "Yesterday",
-  "helpfulTips": "Helpful Guidelines & Tips",
-  "tip1": "Letter No is automatically formatted sequentially based on the selected date.",
-  "tip2": "Once registered, the letter becomes immediately accessible to assigned Subject Officers.",
-  "tip3": "Need edits later? Letter details can be updated with Branch Admin approval.",
   "readyToRegister": "Ready to Register",
   "copyLetterNo": "Copy Letter No",
-  "copied": "Copied!"
+  "copied": "Copied!",
+  "sendToLabel": "Send To / Assign Officer",
+  "sendToPlaceholder": "Select officer or secretary to assign this letter...",
+  "assignedOfficer": "Assigned Officer",
+  "selectAssignee": "Select Assignee",
+  "allOfficersFilter": "All Officers",
+  "subjectOfficersCategory": "Subject Officers",
+  "investigationOfficersCategory": "Investigation Officers",
+  "secretariesCategory": "Secretaries",
+  "directlyAssignedLetters": "Directly Assigned Letters from Daily Mail",
+  "directlyAssignedLettersDesc": "Incoming letters and complaints assigned directly to you for action.",
+  "noDirectLetters": "No newly assigned letters found.",
+  "takeAction": "Take Action",
+  "processLetter": "Process Letter",
+  "letterAssignedNotification": "New Letter Assigned",
+  "officerDesignation": "Designation"
 }
+
 
 
 
