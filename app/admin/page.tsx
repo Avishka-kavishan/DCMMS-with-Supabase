@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import "../../i18n";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Folder, Search, CheckCircle2, User, ChevronDown } from "lucide-react";
+import { Folder, Search, CheckCircle2, User, ChevronDown, Plus } from "lucide-react";
 import {
   AreaChart,
   Area,
@@ -501,6 +501,36 @@ export default function AdminDashboard() {
         />
       </div>
 
+      {/* ── Quick Action / Add New Letter Hero Banner ── */}
+      <section className="admin-hero-banner-section">
+        <div className="admin-hero-card">
+          <div className="admin-hero-left">
+            <div className="admin-hero-icon-badge">
+              <svg style={{ width: "26px", height: "26px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+            </div>
+            <div>
+              <h4 className="admin-hero-title">{t("addNewLetterTitle", "Add New Letter")}</h4>
+              <p className="admin-hero-subtitle">
+                {t("addNewLetterSubtitle", "Fill in the basic incoming letter details to register it into the system.")}
+              </p>
+            </div>
+          </div>
+
+          <div className="admin-hero-actions">
+            <button
+              type="button"
+              className="btn-hero-primary"
+              onClick={() => router.push("/daily-mail/add-letter")}
+            >
+              <Plus size={18} strokeWidth={2.8} />
+              <span>{t("addNewLetter", "Add New Letter")}</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
       {/* ── Pending Letter Edit Approval Requests Section ── */}
       {pendingEditRequests.length > 0 && (
         <div className="admin-approval-section-card">
@@ -741,6 +771,33 @@ export default function AdminDashboard() {
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
+            <button
+              type="button"
+              className="btn-add-letter-table"
+              onClick={() => router.push("/daily-mail/add-letter")}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                padding: "7px 14px",
+                backgroundColor: "#2563eb",
+                color: "#ffffff",
+                borderRadius: "8px",
+                fontWeight: 600,
+                fontSize: "0.85rem",
+                border: "none",
+                cursor: "pointer",
+                boxShadow: "0 2px 6px rgba(37, 99, 235, 0.25)",
+                transition: "all 0.15s ease",
+                whiteSpace: "nowrap",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1d4ed8")}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#2563eb")}
+              title={t("addNewLetter", "Add New Letter")}
+            >
+              <Plus size={16} strokeWidth={2.5} />
+              <span>{t("addNewLetter", "Add New Letter")}</span>
+            </button>
             <button
               className="btn-export-excel"
               onClick={() => {

@@ -857,9 +857,17 @@ export default function DailyMailPage() {
                   <h4 className="hero-action-title">{t("registerLetterComplainBanner")}</h4>
                   <p className="hero-action-description">{t("heroActionDesc", "Easily log new incoming correspondence and files for dispatching to subject officers.")}</p>
                 </div>
-                <div className="hero-action-buttons-group">
-                  <button className="btn-hero-action" onClick={() => router.push("/daily-mail/register")}>
-                    {t("newLetterBtn")}
+                <div className="hero-action-buttons-group" style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <button className="btn-hero-action" onClick={() => router.push("/daily-mail/add-letter")} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: '1.2rem', fontWeight: 700 }}>+</span>
+                    {t("addNewLetter", "Add New Letter")}
+                  </button>
+                  <button 
+                    className="btn-hero-action" 
+                    onClick={() => router.push("/daily-mail/register")} 
+                    style={{ background: '#ffffff', color: '#1e40af', border: '1px solid #bfdbfe' }}
+                  >
+                    {t("registerComplaintDetailed", "Full Complaint Registration")}
                   </button>
                 </div>
               </div>
@@ -871,7 +879,33 @@ export default function DailyMailPage() {
             
             {/* Header Filter Panel */}
             <div className="letters-list-header">
-              <h3 className="section-title">{t("letterEntries")}</h3>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                <h3 className="section-title" style={{ margin: 0 }}>{t("letterEntries")}</h3>
+                <button
+                  type="button"
+                  onClick={() => router.push("/daily-mail/add-letter")}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "6px 14px",
+                    borderRadius: 8,
+                    fontSize: "0.825rem",
+                    fontWeight: 600,
+                    backgroundColor: "#1e40af",
+                    color: "#ffffff",
+                    border: "none",
+                    cursor: "pointer",
+                    boxShadow: "0 2px 5px rgba(30, 64, 175, 0.2)",
+                    transition: "all 0.15s ease"
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1d4ed8")}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#1e40af")}
+                >
+                  <span style={{ fontSize: "1rem", fontWeight: 700 }}>+</span>
+                  <span>{t("addNewLetter", "Add New Letter")}</span>
+                </button>
+              </div>
               
               <div className="letters-filters-group">
                 {/* Search Bar Input */}
