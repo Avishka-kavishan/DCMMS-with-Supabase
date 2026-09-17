@@ -3,12 +3,17 @@ export type UserRole =
   | "daily_mail"
   | "subject_officer"
   | "investigation_officer"
-  | "system_admin";
+  | "system_admin"
+  | "assistant_secretary_discipline"
+  | "assistant_secretary_investigation"
+  | "senior_assistant_secretary"
+  | "additional_secretary";
 
 export interface UserProfile {
   id: string;
   full_name: string;
   role: UserRole;
+  raw_role?: string;
   email?: string;
   employee_no?: string;
 }
@@ -17,6 +22,26 @@ export function normalizeRole(roleStr?: string): UserRole {
   if (!roleStr) return "daily_mail";
   const lower = roleStr.toLowerCase().trim();
   if (lower.includes("system") || lower === "system_admin") return "system_admin";
+  
+  // Specific secretary & investigation roles
+  if (lower.includes("investigation branch") || (lower.includes("assistant secretary") && lower.includes("investigation"))) {
+    return "assistant_secretary_investigation";
+  }
+  if (lower.includes("senior assistant") || lower.includes("senior_assistant_secretary")) {
+    return "senior_assistant_secretary";
+  }
+  if (lower.includes("additional secretary") || lower.includes("additional_secretary")) {
+    return "additional_secretary";
+  }
+  if (
+    lower.includes("assistant secretary discipline") || 
+    (lower.includes("assistant secretary") && lower.includes("discipline")) ||
+    lower.includes("assistant_secretary_discipline")
+  ) {
+    return "assistant_secretary_discipline";
+  }
+
+  // General branch / admin
   if (lower.includes("branch") || lower.includes("administrator") || lower === "admin") return "admin";
   if (lower.includes("subject") || lower === "subject_officer") return "subject_officer";
   if (lower.includes("investigation") || lower === "investigation_officer") return "investigation_officer";
@@ -24,7 +49,7 @@ export function normalizeRole(roleStr?: string): UserRole {
   return "daily_mail";
 }
 
-/** Returns the currently signed-in user's profile (id, full_name, role, email), or null. */
+/** Returns the currently signed-in user's profile (id, full_name, role, raw_role, email), or null. */
 export async function getCurrentProfile(): Promise<UserProfile | null> {
   if (typeof window === "undefined") return null;
 
@@ -38,6 +63,7 @@ export async function getCurrentProfile(): Promise<UserProfile | null> {
           id: parsed.id || "local-user",
           full_name: parsed.full_name || parsed.fullName || "User",
           role: normalizeRole(parsed.role),
+          raw_role: parsed.raw_role || parsed.role || "",
           email: parsed.email || "",
           employee_no: parsed.employee_no || "",
         };
@@ -56,6 +82,7 @@ export async function getCurrentProfile(): Promise<UserProfile | null> {
       id: `usr-${storedUsername.toLowerCase().replace(/[^a-z0-9]/g, "_")}`,
       full_name: storedUsername,
       role: normalizeRole(storedRole || "daily_mail"),
+      raw_role: storedRole || "",
     };
   }
 
@@ -69,12 +96,16 @@ export function dashboardPath(role: string): string {
   
   switch (normalized) {
     case "admin":
+    case "assistant_secretary_discipline":
+    case "senior_assistant_secretary":
+    case "additional_secretary":
       return "/admin";
     case "daily_mail":
       return "/daily-mail";
     case "subject_officer":
       return "/subject";
     case "investigation_officer":
+    case "assistant_secretary_investigation":
       return "/investigation";
     case "system_admin":
       return "/system-admin";

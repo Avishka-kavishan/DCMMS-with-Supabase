@@ -738,7 +738,18 @@
   "recommendation": "பரிந்துரை (Recommendation)",
   "recommendationPlaceholder": "விசாரணைக் கண்டுபிடிப்புகள், அவதானிப்புகள் மற்றும் பரிந்துரைகளை உள்ளிடவும்...",
   "saveInquiryDetails": "விவரங்களைச் சேமிக்கவும் (Save Details)",
-  "inquiryDetailsSavedSuccess": "விசாரணை விவரங்கள் வெற்றிகரமாகப் புதுப்பிக்கப்பட்டன!"
+  "inquiryDetailsSavedSuccess": "விசாரணை விவரங்கள் வெற்றிகரமாகப் புதுப்பிக்கப்பட்டன!",
+  "roleAsstSecDiscipline": "ஒழுக்காற்றுப் பிரிவு உதவிச் செயலாளர்",
+  "roleAsstSecInvestigation": "விசாரணைப் பிரிவு உதவிச் செயலாளர்",
+  "roleSnrAsstSec": "சிரேஷ்ட உதவிச் செயலாளர்",
+  "roleAddSec": "கூடுதல் செயலாளர்",
+  "manageAdminsAndRoles": "நிர்வாகி மற்றும் பாத்திரங்கள் மேலாண்மை",
+  "manageAdminsAndRolesSubtitle": "நிர்வாகிகள், செயலாளர்கள் மற்றும் கணக்கு பாத்திரங்களை நிர்வகிக்கவும்.",
+  "selectRolePlaceholder": "பங்கு / பதவியைத் தேர்ந்தெடுக்கவும்",
+  "roleCategoryMinistry": "அமைச்சு & தலைமைத்துவ பாத்திரங்கள்",
+  "roleCategoryBranch": "கிளை நிர்வாகம்",
+  "roleCategoryOfficer": "செயல்பாட்டு அதிகாரிகள்",
+  "roleCategorySystem": "கணினி நிர்வாகம்"
 }
 
 

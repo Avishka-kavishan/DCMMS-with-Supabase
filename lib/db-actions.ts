@@ -2001,7 +2001,13 @@ export async function getRegisterOfficersServer(roleFilter?: string) {
     if (roleFilter && roleFilter !== "all") {
       const lowerFilter = roleFilter.toLowerCase();
       if (lowerFilter.includes("branch")) {
-        query += ` WHERE (r.role ILIKE '%branch%' OR (r.role ILIKE '%admin%' AND r.role NOT ILIKE '%system%'))`;
+        query += ` WHERE (r.role ILIKE '%branch%' OR r.role ILIKE '%secretary%' OR (r.role ILIKE '%admin%' AND r.role NOT ILIKE '%system%'))`;
+      } else if (lowerFilter.includes("secretary")) {
+        query += ` WHERE r.role ILIKE '%secretary%'`;
+      } else if (lowerFilter.includes("additional")) {
+        query += ` WHERE r.role ILIKE '%additional%'`;
+      } else if (lowerFilter.includes("senior")) {
+        query += ` WHERE r.role ILIKE '%senior%'`;
       } else {
         query += ` WHERE r.role ILIKE $1`;
         params.push(`%${roleFilter}%`);

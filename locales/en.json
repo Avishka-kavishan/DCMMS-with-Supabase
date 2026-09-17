@@ -741,7 +741,18 @@
   "recommendation": "Recommendation",
   "recommendationPlaceholder": "Enter detailed inquiry findings, observations, and recommendations...",
   "saveInquiryDetails": "Save Inquiry Details",
-  "inquiryDetailsSavedSuccess": "Inquiry details saved successfully!"
+  "inquiryDetailsSavedSuccess": "Inquiry details saved successfully!",
+  "roleAsstSecDiscipline": "Assistant Secretary Discipline Branch",
+  "roleAsstSecInvestigation": "Assistant Secretary Investigation Branch",
+  "roleSnrAsstSec": "Senior Assistant Secretary",
+  "roleAddSec": "Additional Secretary",
+  "manageAdminsAndRoles": "Administrator & Role Management",
+  "manageAdminsAndRolesSubtitle": "Provision, configure, and manage executive administrators, secretaries, and system roles.",
+  "selectRolePlaceholder": "Select Role / Designation",
+  "roleCategoryMinistry": "Ministry & Executive Leadership",
+  "roleCategoryBranch": "Branch Administration",
+  "roleCategoryOfficer": "Operational Officers",
+  "roleCategorySystem": "System Administration"
 }
 
 

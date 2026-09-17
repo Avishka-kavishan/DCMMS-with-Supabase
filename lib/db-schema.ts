@@ -5,7 +5,17 @@
 
 export interface Role {
   role_id: number;
-  role_name: 'Admin' | 'System Administrator' | 'Daily Mail Reporter' | 'Subject Officer' | 'Investigation Branch Administrator' | string;
+  role_name:
+    | 'Admin'
+    | 'System Administrator'
+    | 'Daily Mail Reporter'
+    | 'Subject Officer'
+    | 'Investigation Branch Administrator'
+    | 'Assistant Secretary Discipline Branch'
+    | 'Assistant Secretary Investigation Branch'
+    | 'Senior Assistant Secretary'
+    | 'Additional Secretary'
+    | string;
 }
 
 export interface User {
@@ -186,6 +196,10 @@ export const ROLE_MAP: Record<number, string> = {
   3: 'Daily Mail Reporter',
   4: 'Subject Officer',
   5: 'Investigation Branch Administrator',
+  6: 'Assistant Secretary Discipline Branch',
+  7: 'Assistant Secretary Investigation Branch',
+  8: 'Senior Assistant Secretary',
+  9: 'Additional Secretary',
 };
 
 /** Predefined Case Status Mapping */

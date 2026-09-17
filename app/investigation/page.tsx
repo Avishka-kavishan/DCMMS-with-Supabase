@@ -1474,7 +1474,10 @@ export default function InvestigationPage() {
   // ── Session guard ──────────────────────────────────────────────────────────
   useEffect(() => {
     getCurrentProfile().then((profile) => {
-      if (!profile || profile.role !== "investigation_officer") router.replace("/");
+      const allowedRoles = ["investigation_officer", "assistant_secretary_investigation", "system_admin"];
+      if (!profile || !allowedRoles.includes(profile.role)) {
+        router.replace("/");
+      }
     });
   }, [router]);
 

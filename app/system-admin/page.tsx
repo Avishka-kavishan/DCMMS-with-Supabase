@@ -520,11 +520,86 @@ export default function SystemAdminDashboard() {
     });
   };
 
+  const getAccountRoleBadge = (roleStr?: string) => {
+    const r = (roleStr || "").toLowerCase().trim();
+    if (r.includes("additional secretary") || r === "additional_secretary") {
+      return {
+        bg: "#fef3c7",
+        color: "#92400e",
+        border: "#fde68a",
+        label: roleStr || "Additional Secretary",
+      };
+    }
+    if (r.includes("senior assistant") || r === "senior_assistant_secretary") {
+      return {
+        bg: "#ede9fe",
+        color: "#6d28d9",
+        border: "#ddd6fe",
+        label: roleStr || "Senior Assistant Secretary",
+      };
+    }
+    if ((r.includes("assistant secretary") && r.includes("discipline")) || r === "assistant_secretary_discipline") {
+      return {
+        bg: "#e0e7ff",
+        color: "#3730a3",
+        border: "#c7d2fe",
+        label: roleStr || "Assistant Secretary Discipline Branch",
+      };
+    }
+    if ((r.includes("assistant secretary") && r.includes("investigation")) || r === "assistant_secretary_investigation") {
+      return {
+        bg: "#ffedd5",
+        color: "#9a3412",
+        border: "#fed7aa",
+        label: roleStr || "Assistant Secretary Investigation Branch",
+      };
+    }
+    if (r.includes("system")) {
+      return {
+        bg: "#fee2e2",
+        color: "#991b1b",
+        border: "#fecaca",
+        label: roleStr || "System Administrator",
+      };
+    }
+    if (r.includes("investigation")) {
+      return {
+        bg: "#ccfbf1",
+        color: "#0f766e",
+        border: "#99f6e4",
+        label: roleStr || "Investigation Administrator",
+      };
+    }
+    if (r.includes("subject")) {
+      return {
+        bg: "#e0f2fe",
+        color: "#0369a1",
+        border: "#bae6fd",
+        label: roleStr || "Subject Officer",
+      };
+    }
+    if (r.includes("daily") || r.includes("mail")) {
+      return {
+        bg: "#f1f5f9",
+        color: "#475569",
+        border: "#cbd5e1",
+        label: roleStr || "Daily Mail Officer",
+      };
+    }
+    return {
+      bg: "#dcfce7",
+      color: "#166534",
+      border: "#bbf7d0",
+      label: roleStr || "Discipline Branch Administrator",
+    };
+  };
+
   const filteredAccounts = accounts.filter((a) => {
     const matchesSearch =
       (a.full_name || "").toLowerCase().includes(accountSearchQuery.toLowerCase()) ||
       (a.employee_no || "").toLowerCase().includes(accountSearchQuery.toLowerCase()) ||
       (a.email || "").toLowerCase().includes(accountSearchQuery.toLowerCase()) ||
+      (a.role || "").toLowerCase().includes(accountSearchQuery.toLowerCase()) ||
       (a.created_by_name || "").toLowerCase().includes(accountSearchQuery.toLowerCase());
 
     if (accountRoleFilter === "all") return matchesSearch;
@@ -723,11 +798,21 @@ export default function SystemAdminDashboard() {
                 onChange={(e) => setAccountRoleFilter(e.target.value)}
               >
                 <option value="all">All Roles</option>
-                <option value="system">System admin</option>
-                <option value="branch">Branch admin</option>
-                <option value="subject">Subject officer</option>
-                <option value="daily">Daily mail officer</option>
-                <option value="investigation">Investigation officer</option>
+                <optgroup label="Ministry & Executive Leadership">
+                  <option value="Additional Secretary">Additional Secretary</option>
+                  <option value="Senior Assistant Secretary">Senior Assistant Secretary</option>
+                  <option value="Assistant Secretary Discipline Branch">Assistant Secretary Discipline Branch</option>
+                  <option value="Assistant Secretary Investigation Branch">Assistant Secretary Investigation Branch</option>
+                </optgroup>
+                <optgroup label="Branch Administration">
+                  <option value="branch">Discipline Branch Administrator</option>
+                  <option value="investigation">Investigation Administrator</option>
+                </optgroup>
+                <optgroup label="Operational & System">
+                  <option value="subject">Subject officer</option>
+                  <option value="daily">Daily mail officer</option>
+                  <option value="system">System admin</option>
+                </optgroup>
               </select>
             </div>
 
@@ -739,14 +824,16 @@ export default function SystemAdminDashboard() {
                       <th style={{ width: "14%" }}>Employee No</th>
                       <th style={{ width: "18%" }}>Full Name</th>
                       <th style={{ width: "18%" }}>E-mail</th>
-                      <th style={{ width: "14%" }}>Role</th>
+                      <th style={{ width: "16%" }}>Role</th>
                       <th style={{ width: "10%" }}>Account state</th>
-                      <th style={{ width: "13%" }}>Created by</th>
-                      <th style={{ width: "13%" }}>Created at</th>
+                      <th style={{ width: "12%" }}>Created by</th>
+                      <th style={{ width: "12%" }}>Created at</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredAccounts.map((acc) => (
+                    {filteredAccounts.map((acc) => {
+                      const badge = getAccountRoleBadge(acc.role);
+                      return (
                       <tr key={acc.id} className="sysadmin-table-row">
                         <td className="font-semibold text-primary font-mono">{acc.employee_no || "—"}</td>
                         <td className="font-medium text-gray-900">{acc.full_name}</td>
@@ -756,23 +843,17 @@ export default function SystemAdminDashboard() {
                             style={{
                               display: "inline-flex",
                               alignItems: "center",
+                              gap: 4,
                               padding: "3px 8px",
                               borderRadius: 6,
                               fontSize: "0.75rem",
                               fontWeight: 600,
-                              backgroundColor: acc.role?.toLowerCase().includes("system")
-                                ? "#fee2e2"
-                                : acc.role?.toLowerCase().includes("branch")
-                                ? "#ede9fe"
-                                : "#e0f2fe",
-                              color: acc.role?.toLowerCase().includes("system")
-                                ? "#b91c1c"
-                                : acc.role?.toLowerCase().includes("branch")
-                                ? "#6d28d9"
-                                : "#0369a1",
+                              backgroundColor: badge.bg,
+                              color: badge.color,
+                              border: `1px solid ${badge.border}`,
                             }}
                           >
-                            {acc.role || "User"}
+                            {badge.label}
                           </span>
                         </td>
                         <td>
@@ -811,7 +892,8 @@ export default function SystemAdminDashboard() {
                           {acc.created_at ? new Date(acc.created_at).toLocaleString() : "—"}
                         </td>
                       </tr>
-                    ))}
+                    );
+                  })}
                   </tbody>
                 </table>
               </div>

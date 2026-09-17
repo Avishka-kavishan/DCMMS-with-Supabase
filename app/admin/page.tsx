@@ -165,7 +165,10 @@ export default function AdminDashboard() {
   // ── Session guard ──────────────────────────────────────────────────────────
   useEffect(() => {
     getCurrentProfile().then((profile) => {
-      if (!profile || profile.role !== "admin") router.replace("/");
+      const allowedRoles = ["admin", "assistant_secretary_discipline", "senior_assistant_secretary", "additional_secretary", "system_admin"];
+      if (!profile || !allowedRoles.includes(profile.role)) {
+        router.replace("/");
+      }
       setCurrentUserProfile(profile);
     });
   }, [router]);

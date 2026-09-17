@@ -116,6 +116,7 @@ export default function Home() {
           full_name: res.data.full_name,
           email: res.data.email,
           role: userRole,
+          raw_role: res.data.role || "",
         };
 
         const activeSessionId = res.data.sessionId || `sess-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;

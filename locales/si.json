@@ -739,5 +739,16 @@
   "recommendation": "නිර්දේශය (Recommendation)",
   "recommendationPlaceholder": "පරීක්ෂණ සොයාගැනීම් සහ නිර්දේශයන් ඇතුළත් කරන්න...",
   "saveInquiryDetails": "පරීක්ෂණ විස්තර සුරකින්න (Save Details)",
-  "inquiryDetailsSavedSuccess": "පරීක්ෂණ විස්තර සාර්ථකව යාවත්කාලීන විය!"
+  "inquiryDetailsSavedSuccess": "පරීක්ෂණ විස්තර සාර්ථකව යාවත්කාලීන විය!",
+  "roleAsstSecDiscipline": "විනය ශාඛාවේ සහකාර ලේකම්",
+  "roleAsstSecInvestigation": "විමර්ශන ශාඛාවේ සහකාර ලේකම්",
+  "roleSnrAsstSec": "ජ්‍යෙෂ්ඨ සහකාර ලේකම්",
+  "roleAddSec": "අතිරේක ලේකම්",
+  "manageAdminsAndRoles": "පරිපාලක සහ භූමිකා කළමනාකරණය",
+  "manageAdminsAndRolesSubtitle": "විධායක පරිපාලකයින්, ලේකම්වරුන් සහ පද්ධති භූමිකාවන් කළමනාකරණය කිරීම.",
+  "selectRolePlaceholder": "භූමිකාව / තනතුර තෝරන්න",
+  "roleCategoryMinistry": "අමාත්‍යාංශ සහ විධායක නායකත්වය",
+  "roleCategoryBranch": "ශාඛා පරිපාලනය",
+  "roleCategoryOfficer": "ක්‍රියාන්විත නිලධාරීන්",
+  "roleCategorySystem": "පද්ධති පරිපාලනය"
 }

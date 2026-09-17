@@ -6,7 +6,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
-import { getCurrentProfile, UserProfile } from "@/lib/auth";
+import { getCurrentProfile, UserProfile, UserRole } from "@/lib/auth";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
@@ -15,7 +15,7 @@ interface SidebarProps {
   setIsSidebarOpen: (isOpen: boolean) => void;
   setIsModalOpen?: (isOpen: boolean) => void;
   handleLogout: (e: React.MouseEvent) => void;
-  role?: "admin" | "dailymail" | "subject" | "investigation" | "system_admin";
+  role?: "admin" | "dailymail" | "subject" | "investigation" | "system_admin" | UserRole | string;
 }
 
 interface MenuItem {
@@ -38,18 +38,36 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const { t } = useTranslation();
   const pathname = usePathname() || "";
 
-  // Auto-detect role from path if not provided explicitly
-  const activeRole =
-    role ||
-    (pathname.includes("/admin")
+  // Auto-detect role from prop or path
+  let activeRole: "admin" | "dailymail" | "subject" | "investigation" | "system_admin" = "dailymail";
+  if (role) {
+    if (
+      role === "admin" ||
+      role === "assistant_secretary_discipline" ||
+      role === "senior_assistant_secretary" ||
+      role === "additional_secretary"
+    ) {
+      activeRole = "admin";
+    } else if (role === "investigation" || role === "investigation_officer" || role === "assistant_secretary_investigation") {
+      activeRole = "investigation";
+    } else if (role === "system_admin") {
+      activeRole = "system_admin";
+    } else if (role === "subject" || role === "subject_officer") {
+      activeRole = "subject";
+    } else {
+      activeRole = "dailymail";
+    }
+  } else {
+    activeRole = pathname.includes("/admin")
       ? "admin"
       : pathname.includes("/system-admin")
-        ? "system_admin"
-        : pathname.includes("/subject")
-          ? "subject"
-          : pathname.includes("/investigation")
-            ? "investigation"
-            : "dailymail");
+      ? "system_admin"
+      : pathname.includes("/subject")
+      ? "subject"
+      : pathname.includes("/investigation")
+      ? "investigation"
+      : "dailymail";
+  }
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
 

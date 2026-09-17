@@ -804,7 +804,8 @@ function AdminViewCaseInner() {
       // Role check
       try {
         const profile = await getCurrentProfile();
-        if (profile && profile.role !== "admin" && profile.role !== "system_admin") {
+        const allowedRoles = ["admin", "assistant_secretary_discipline", "senior_assistant_secretary", "additional_secretary", "system_admin"];
+        if (profile && !allowedRoles.includes(profile.role)) {
           router.replace(dashboardPath(profile.role));
           return;
         }

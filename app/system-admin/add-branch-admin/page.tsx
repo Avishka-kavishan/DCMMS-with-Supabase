@@ -70,6 +70,7 @@ export default function AddBranchAdminPage() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "Active" | "Inactive">("all");
+  const [roleFilter, setRoleFilter] = useState("all");
   const [admins, setAdmins] = useState<BranchAdmin[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [toastMessage, setToastMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -83,6 +84,7 @@ export default function AddBranchAdminPage() {
   const [formEmployeeNo, setFormEmployeeNo] = useState("");
   const [formName, setFormName] = useState("");
   const [formEmail, setFormEmail] = useState("");
+  const [formRole, setFormRole] = useState("Assistant Secretary Discipline Branch");
   const [formPassword, setFormPassword] = useState("123456");
   const [showPassword, setShowPassword] = useState(false);
   const [formStatus, setFormStatus] = useState<"Active" | "Inactive">("Active");
@@ -115,14 +117,14 @@ export default function AddBranchAdminPage() {
     checkAuth();
   }, [router]);
 
-  // ── Fetch Branch Admins from register_officer_table ───────────────────────
+  // ── Fetch Branch Admins & Roles from register_officer_table ───────────────
   const fetchBranchAdmins = async () => {
     setIsLoading(true);
     let result: BranchAdmin[] = [];
 
     // 1. Primary: Server Action querying register_officer_table in PostgreSQL
     try {
-      const res = await getRegisterOfficersServer("Branch");
+      const res = await getRegisterOfficersServer();
       if (res.success && res.data && res.data.length > 0) {
         result = res.data.map((p: any) => ({
           id: p.id,
@@ -136,7 +138,7 @@ export default function AddBranchAdminPage() {
         }));
       }
     } catch (err) {
-      console.error("Failed to load branch admins via server action:", err);
+      console.error("Failed to load administrators via server action:", err);
     }
 
     // 2. Supabase fallback querying register_officer_table
@@ -145,25 +147,22 @@ export default function AddBranchAdminPage() {
         const { data, error } = await supabase
           .from("register_officer_table")
           .select("*")
-          .or("role.ilike.%branch%,role.eq.admin,role.ilike.%branch%admin%")
           .order("created_at", { ascending: false });
 
         if (!error && data) {
-          result = data
-            .filter((p: any) => !p.role?.toLowerCase().includes("system"))
-            .map((p: any) => ({
-              id: p.id,
-              employeeNo: p.employee_no || "",
-              fullName: p.full_name || "",
-              email: p.email || "",
-              role: p.role || "Branch admin",
-              status: p.is_active === false ? "Inactive" : "Active",
-              createdBy: p.created_by || "System Root",
-              createdAt: p.created_at ? new Date(p.created_at).toLocaleString() : "—",
-            }));
+          result = data.map((p: any) => ({
+            id: p.id,
+            employeeNo: p.employee_no || "",
+            fullName: p.full_name || "",
+            email: p.email || "",
+            role: p.role || "Branch admin",
+            status: p.is_active === false ? "Inactive" : "Active",
+            createdBy: p.created_by || "System Root",
+            createdAt: p.created_at ? new Date(p.created_at).toLocaleString() : "—",
+          }));
         }
       } catch (err) {
-        console.error("Failed to load branch admins from Supabase:", err);
+        console.error("Failed to load administrators from Supabase:", err);
       }
     }
 
@@ -173,19 +172,16 @@ export default function AddBranchAdminPage() {
       if (stored) {
         try {
           const list = JSON.parse(stored) as any[];
-          const localAdmins = list.filter(
-            (o) => (o.role === "admin" || o.role === "Branch admin" || o.role === "branch_admin") && !o.role?.toLowerCase().includes("system")
-          );
           const dbIds = new Set(result.map((o) => o.id));
           const dbEmails = new Set(result.map((o) => (o.email || "").toLowerCase()));
-          localAdmins.forEach((lo) => {
+          list.forEach((lo) => {
             if (!dbIds.has(lo.id) && !dbEmails.has((lo.email || "").toLowerCase())) {
               result.push({
                 id: lo.id,
                 employeeNo: lo.employeeNo || lo.employee_no || "",
                 fullName: lo.fullName || lo.full_name || "",
                 email: lo.email || "",
-                role: "Branch admin",
+                role: lo.role || "Branch admin",
                 status: lo.status || "Active",
                 createdBy: lo.createdBy || "System Root",
                 createdAt: lo.createdAt || new Date().toLocaleString(),
@@ -268,6 +264,7 @@ export default function AddBranchAdminPage() {
     setFormEmployeeNo(`EMP-${Math.floor(100000 + Math.random() * 900000)}`);
     setFormName("");
     setFormEmail("");
+    setFormRole("Assistant Secretary Discipline Branch");
     setFormPassword("123456");
     setShowPassword(false);
     setFormStatus("Active");
@@ -281,6 +278,7 @@ export default function AddBranchAdminPage() {
     setFormEmployeeNo(admin.employeeNo);
     setFormName(admin.fullName);
     setFormEmail(admin.email);
+    setFormRole(admin.role || "Assistant Secretary Discipline Branch");
     setFormPassword("");
     setShowPassword(false);
     setFormStatus(admin.status);
@@ -304,7 +302,7 @@ export default function AddBranchAdminPage() {
       employee_no: formEmployeeNo.trim(),
       full_name: formName.trim(),
       email: formEmail.trim().toLowerCase(),
-      role: "Branch admin",
+      role: formRole.trim(),
       is_active: formStatus === "Active",
       password: formPassword.trim() || undefined,
       created_by: currentAdmin?.id || undefined,
@@ -319,16 +317,16 @@ export default function AddBranchAdminPage() {
       if (res.success) {
         saveSuccess = true;
         await logAuditEvent(
-          isEditMode ? "UPDATE_BRANCH_ADMIN" : "REGISTER_BRANCH_ADMIN",
+          isEditMode ? "UPDATE_OFFICER_ROLE" : "REGISTER_OFFICER_ROLE",
           "register_officer_table",
           res.data?.id || editingId || "new",
           { name: payload.full_name, email: payload.email, employee_no: payload.employee_no, role: payload.role }
         );
       } else {
-        errorMsg = res.error || "Failed to save branch admin in database";
+        errorMsg = res.error || "Failed to save account in database";
       }
     } catch (err: any) {
-      console.error("Error saving branch admin via server action:", err);
+      console.error("Error saving account via server action:", err);
       errorMsg = err?.message || "Server error";
     }
 
@@ -339,7 +337,7 @@ export default function AddBranchAdminPage() {
           employee_no: payload.employee_no,
           full_name: payload.full_name,
           email: payload.email,
-          role: "Branch admin",
+          role: payload.role,
           is_active: payload.is_active,
         };
         if (payload.password) supaPayload.password = payload.password;
@@ -363,7 +361,7 @@ export default function AddBranchAdminPage() {
         employeeNo: payload.employee_no,
         fullName: payload.full_name,
         email: payload.email,
-        role: "admin",
+        role: payload.role,
         status: formStatus,
         password: payload.password || "123456",
         createdAt: new Date().toISOString().slice(0, 10),
@@ -671,7 +669,82 @@ export default function AddBranchAdminPage() {
       a.createdAt || "—",
     ]);
 
-    exportToExcel(`DCMMS_Branch_Administrators_${new Date().toISOString().split("T")[0]}`, headers, rows);
+    exportToExcel(`DCMMS_Accounts_and_Roles_${new Date().toISOString().split("T")[0]}`, headers, rows);
+  };
+
+  // ── Role Badge Styler ──────────────────────────────────────────────────────
+  const getRoleBadge = (roleStr?: string) => {
+    const r = (roleStr || "").toLowerCase().trim();
+    if (r.includes("additional secretary") || r === "additional_secretary") {
+      return {
+        bg: "#fef3c7",
+        color: "#92400e",
+        border: "#fde68a",
+        label: roleStr || "Additional Secretary",
+      };
+    }
+    if (r.includes("senior assistant") || r === "senior_assistant_secretary") {
+      return {
+        bg: "#ede9fe",
+        color: "#6d28d9",
+        border: "#ddd6fe",
+        label: roleStr || "Senior Assistant Secretary",
+      };
+    }
+    if ((r.includes("assistant secretary") && r.includes("discipline")) || r === "assistant_secretary_discipline") {
+      return {
+        bg: "#e0e7ff",
+        color: "#3730a3",
+        border: "#c7d2fe",
+        label: roleStr || "Assistant Secretary Discipline Branch",
+      };
+    }
+    if ((r.includes("assistant secretary") && r.includes("investigation")) || r === "assistant_secretary_investigation") {
+      return {
+        bg: "#ffedd5",
+        color: "#9a3412",
+        border: "#fed7aa",
+        label: roleStr || "Assistant Secretary Investigation Branch",
+      };
+    }
+    if (r.includes("system")) {
+      return {
+        bg: "#fee2e2",
+        color: "#991b1b",
+        border: "#fecaca",
+        label: roleStr || "System Administrator",
+      };
+    }
+    if (r.includes("investigation")) {
+      return {
+        bg: "#ccfbf1",
+        color: "#0f766e",
+        border: "#99f6e4",
+        label: roleStr || "Investigation Administrator",
+      };
+    }
+    if (r.includes("subject")) {
+      return {
+        bg: "#e0f2fe",
+        color: "#0369a1",
+        border: "#bae6fd",
+        label: roleStr || "Subject Officer",
+      };
+    }
+    if (r.includes("daily") || r.includes("mail")) {
+      return {
+        bg: "#f1f5f9",
+        color: "#475569",
+        border: "#cbd5e1",
+        label: roleStr || "Daily Mail Officer",
+      };
+    }
+    return {
+      bg: "#dcfce7",
+      color: "#166534",
+      border: "#bbf7d0",
+      label: roleStr || "Discipline Branch Administrator",
+    };
   };
 
   // ── Filtered list ──────────────────────────────────────────────────────────
@@ -680,10 +753,18 @@ export default function AddBranchAdminPage() {
       a.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       a.employeeNo.toLowerCase().includes(searchQuery.toLowerCase()) ||
       a.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (a.role && a.role.toLowerCase().includes(searchQuery.toLowerCase())) ||
       (a.createdBy && a.createdBy.toLowerCase().includes(searchQuery.toLowerCase()));
 
-    if (statusFilter === "all") return matchesSearch;
-    return matchesSearch && a.status === statusFilter;
+    const matchesStatus = statusFilter === "all" || a.status === statusFilter;
+
+    let matchesRole = true;
+    if (roleFilter !== "all") {
+      const rLower = (a.role || "").toLowerCase();
+      matchesRole = rLower.includes(roleFilter.toLowerCase());
+    }
+
+    return matchesSearch && matchesStatus && matchesRole;
   });
 
   const totalCount = admins.length;
@@ -995,31 +1076,73 @@ export default function AddBranchAdminPage() {
                 />
               </div>
 
-              {/* Status Filter */}
-              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                <span style={{ fontSize: "0.85rem", color: "#64748b", fontWeight: 500 }}>
-                  {t("status", "Status")}:
-                </span>
-                {(["all", "Active", "Inactive"] as const).map((st) => (
-                  <button
-                    key={st}
-                    onClick={() => setStatusFilter(st)}
+              {/* Role & Status Filters */}
+              <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                {/* Role Filter Dropdown */}
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <span style={{ fontSize: "0.85rem", color: "#64748b", fontWeight: 500 }}>
+                    {t("role", "Role")}:
+                  </span>
+                  <select
+                    value={roleFilter}
+                    onChange={(e) => setRoleFilter(e.target.value)}
                     style={{
                       padding: "6px 12px",
                       borderRadius: 6,
-                      fontSize: "0.8rem",
+                      fontSize: "0.825rem",
                       fontWeight: 500,
+                      border: "1px solid #cbd5e1",
+                      backgroundColor: "#ffffff",
+                      color: "#1e293b",
                       cursor: "pointer",
-                      border: "1px solid",
-                      borderColor: statusFilter === st ? "#3b82f6" : "#e2e8f0",
-                      background: statusFilter === st ? "#eff6ff" : "#ffffff",
-                      color: statusFilter === st ? "#1d4ed8" : "#64748b",
-                      transition: "all 0.15s ease",
+                      outline: "none",
                     }}
                   >
-                    {st === "all" ? "All" : st}
-                  </button>
-                ))}
+                    <option value="all">All Roles</option>
+                    <optgroup label="Ministry & Executive Leadership">
+                      <option value="Additional Secretary">Additional Secretary</option>
+                      <option value="Senior Assistant Secretary">Senior Assistant Secretary</option>
+                      <option value="Assistant Secretary Discipline Branch">Assistant Secretary Discipline Branch</option>
+                      <option value="Assistant Secretary Investigation Branch">Assistant Secretary Investigation Branch</option>
+                    </optgroup>
+                    <optgroup label="Branch Administration">
+                      <option value="Branch">Discipline Branch Administrator</option>
+                      <option value="Investigation">Investigation Administrator</option>
+                    </optgroup>
+                    <optgroup label="Operational & System">
+                      <option value="Subject">Subject Officer</option>
+                      <option value="Daily">Daily Mail Officer</option>
+                      <option value="System">System Administrator</option>
+                    </optgroup>
+                  </select>
+                </div>
+
+                {/* Status Filter */}
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <span style={{ fontSize: "0.85rem", color: "#64748b", fontWeight: 500 }}>
+                    {t("status", "Status")}:
+                  </span>
+                  {(["all", "Active", "Inactive"] as const).map((st) => (
+                    <button
+                      key={st}
+                      onClick={() => setStatusFilter(st)}
+                      style={{
+                        padding: "6px 12px",
+                        borderRadius: 6,
+                        fontSize: "0.8rem",
+                        fontWeight: 500,
+                        cursor: "pointer",
+                        border: "1px solid",
+                        borderColor: statusFilter === st ? "#3b82f6" : "#e2e8f0",
+                        background: statusFilter === st ? "#eff6ff" : "#ffffff",
+                        color: statusFilter === st ? "#1d4ed8" : "#64748b",
+                        transition: "all 0.15s ease",
+                      }}
+                    >
+                      {st === "all" ? "All" : st}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -1031,10 +1154,10 @@ export default function AddBranchAdminPage() {
                     <th style={{ width: "13%" }}>{t("branchAdminEmployeeNo", "Employee No")}</th>
                     <th style={{ width: "18%" }}>{t("branchAdminFullName", "Full Name")}</th>
                     <th style={{ width: "18%" }}>{t("branchAdminEmail", "E-mail")}</th>
-                    <th style={{ width: "12%" }}>{t("branchAdminRole", "Role")}</th>
+                    <th style={{ width: "16%" }}>{t("branchAdminRole", "Role")}</th>
                     <th style={{ width: "10%" }}>{t("branchAdminStatus", "Account state")}</th>
-                    <th style={{ width: "14%" }}>{t("branchAdminCreatedBy", "Created by")}</th>
-                    <th style={{ width: "15%" }}>{t("branchAdminCreatedAt", "Created at")}</th>
+                    <th style={{ width: "12%" }}>{t("branchAdminCreatedBy", "Created by")}</th>
+                    <th style={{ width: "13%" }}>{t("branchAdminCreatedAt", "Created at")}</th>
                     <th style={{ width: "10%", textAlign: "center" }}>{t("actions", "Actions")}</th>
                   </tr>
                 </thead>
@@ -1044,7 +1167,7 @@ export default function AddBranchAdminPage() {
                       <td colSpan={8} style={{ textAlign: "center", padding: "40px 16px", color: "#94a3b8" }}>
                         <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 10 }}>
                           <RefreshCw size={18} className="animate-spin" />
-                          <span>Loading Branch Administrators...</span>
+                          <span>Loading Accounts...</span>
                         </div>
                       </td>
                     </tr>
@@ -1054,7 +1177,7 @@ export default function AddBranchAdminPage() {
                         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
                           <Shield size={32} style={{ color: "#cbd5e1" }} />
                           <p style={{ margin: 0, fontWeight: 500 }}>
-                            {t("noBranchAdminsFound", "No branch administrators found matching your criteria.")}
+                            {t("noBranchAdminsFound", "No accounts found matching your criteria.")}
                           </p>
                           <button
                             onClick={openAddModal}
@@ -1069,13 +1192,15 @@ export default function AddBranchAdminPage() {
                               cursor: "pointer",
                             }}
                           >
-                            + {t("addBranchAdmin", "Add the branch admin")}
+                            + {t("addBranchAdmin", "Add Account / Role")}
                           </button>
                         </div>
                       </td>
                     </tr>
                   ) : (
-                    filteredAdmins.map((admin) => (
+                    filteredAdmins.map((admin) => {
+                      const badge = getRoleBadge(admin.role);
+                      return (
                       <tr key={admin.id}>
                         <td>
                           <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600, color: "#1e293b" }}>
@@ -1090,8 +1215,9 @@ export default function AddBranchAdminPage() {
                                 width: 30,
                                 height: 30,
                                 borderRadius: "50%",
-                                backgroundColor: "#dbeafe",
-                                color: "#1e40af",
+                                backgroundColor: badge.bg,
+                                color: badge.color,
+                                border: `1px solid ${badge.border}`,
                                 display: "flex",
                                 alignItems: "center",
                                 justifyContent: "center",
@@ -1120,12 +1246,13 @@ export default function AddBranchAdminPage() {
                               borderRadius: 6,
                               fontSize: "0.75rem",
                               fontWeight: 600,
-                              backgroundColor: "#ede9fe",
-                              color: "#6d28d9",
+                              backgroundColor: badge.bg,
+                              color: badge.color,
+                              border: `1px solid ${badge.border}`,
                             }}
                           >
                             <Shield size={12} />
-                            {admin.role || "Branch admin"}
+                            {badge.label}
                           </span>
                         </td>
                         <td>
@@ -1221,8 +1348,9 @@ export default function AddBranchAdminPage() {
                           </div>
                         </td>
                       </tr>
-                    ))
-                  )}
+                    );
+                  })
+                )}
                 </tbody>
               </table>
             </div>
@@ -1416,28 +1544,51 @@ export default function AddBranchAdminPage() {
                   </span>
                 </div>
 
-                {/* System Role (Pre-configured) */}
+                {/* System Role Selector */}
                 <div>
                   <label style={{ display: "block", fontSize: "0.85rem", fontWeight: 600, color: "#334155", marginBottom: 6 }}>
-                    {t("branchAdminRole", "Assigned System Role")}
+                    {t("branchAdminRole", "Assigned System Role")} <span style={{ color: "#ef4444" }}>*</span>
                   </label>
-                  <div
-                    style={{
-                      padding: "10px 14px",
-                      borderRadius: 8,
-                      backgroundColor: "#f8fafc",
-                      border: "1px solid #e2e8f0",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      color: "#1e3a8a",
-                      fontWeight: 600,
-                      fontSize: "0.875rem",
-                    }}
-                  >
-                    <Shield size={16} />
-                    <span>Discipline Branch Administrator (Role: Branch admin)</span>
+                  <div style={{ position: "relative" }}>
+                    <Shield size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} />
+                    <select
+                      value={formRole}
+                      onChange={(e) => setFormRole(e.target.value)}
+                      style={{
+                        width: "100%",
+                        padding: "10px 12px 10px 36px",
+                        borderRadius: 8,
+                        border: "1px solid #cbd5e1",
+                        fontSize: "0.9rem",
+                        backgroundColor: "#ffffff",
+                        color: "#0f172a",
+                        fontWeight: 500,
+                        outline: "none",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <optgroup label="Ministry & Executive Leadership">
+                        <option value="Additional Secretary">Additional Secretary (අතිරේක ලේකම් / கூடுதல் செயலாளர்)</option>
+                        <option value="Senior Assistant Secretary">Senior Assistant Secretary (ජ්‍යෙෂ්ඨ සහකාර ලේකම් / சிரேஷ்ட உதவிச் செயலாளர்)</option>
+                        <option value="Assistant Secretary Discipline Branch">Assistant Secretary Discipline Branch (විනය ශාඛාවේ සහකාර ලේකම් / ஒழுக்காற்றுப் பிரிவு உதவிச் செயலாளர்)</option>
+                        <option value="Assistant Secretary Investigation Branch">Assistant Secretary Investigation Branch (විමර්ශන ශාඛාවේ සහකාර ලේකම් / விசாரணைப் பிரிவு உதவிச் செயலாளர்)</option>
+                      </optgroup>
+                      <optgroup label="Branch Administration">
+                        <option value="Discipline Branch Administrator">Discipline Branch Administrator (විනය ශාඛා පරිපාලක)</option>
+                        <option value="Investigation Branch Administrator">Investigation Branch Administrator (විමර්ශන ශාඛා පරිපාලක)</option>
+                      </optgroup>
+                      <optgroup label="Operational Officers">
+                        <option value="Subject officer">Subject Officer (විෂය භාර නිලධාරී)</option>
+                        <option value="Daily mail">Daily Mail Officer (දෛනික තැපැල් නිලධාරී)</option>
+                      </optgroup>
+                      <optgroup label="System Administration">
+                        <option value="System Administrator">System Administrator (පද්ධති පරිපාලක)</option>
+                      </optgroup>
+                    </select>
                   </div>
+                  <span style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 4, display: "block" }}>
+                    Select the official authorization level and system workspace permissions for this user.
+                  </span>
                 </div>
 
                 {/* Status Toggle */}
