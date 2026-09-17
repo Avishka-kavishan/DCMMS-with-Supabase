@@ -9,7 +9,7 @@ import { useTranslation } from "react-i18next";
 import { Sidebar } from "@/components/Sidebar";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
-import { signOut, getCurrentProfile } from "@/lib/auth";
+import { signOut, getCurrentProfile, getRoleDisplayName, UserProfile } from "@/lib/auth";
 import { getInvestigationOfficersServer, assignOfficerToInvestigationServer, logAuditEventServer, getAccusedOfficerByRefServer, getCommitteeOfficersWithSchoolsServer, saveChairmanByCaseServer, getChairmanByCaseServer, saveMembersByCaseServer, getMembersByCaseServer, saveCaseByDateExtensionServer, getSubjectOfficerDashboardCasesServer } from "@/lib/db-actions";
 import { 
   UserPlus, X, Edit, Trash2, Check, Eye, ClipboardList, 
@@ -117,6 +117,21 @@ export default function InvestigationPage() {
 
   // Dynamic localized greeting
   const [greeting, setGreeting] = useState("");
+  const [currentUserProfile, setCurrentUserProfile] = useState<UserProfile | null>(null);
+
+  useEffect(() => {
+    const loadProfile = async () => {
+      const prof = await getCurrentProfile();
+      setCurrentUserProfile(prof);
+    };
+    loadProfile();
+    window.addEventListener("storage", loadProfile);
+    window.addEventListener("dcmms_session_updated", loadProfile);
+    return () => {
+      window.removeEventListener("storage", loadProfile);
+      window.removeEventListener("dcmms_session_updated", loadProfile);
+    };
+  }, []);
 
   // Inquiries & Officers state
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
@@ -3232,7 +3247,9 @@ export default function InvestigationPage() {
                 </svg>
               </button>
               <div className="dashboard-title-area">
-                <h2 className="dashboard-main-title">{t("investigationDashboardTitle", "Investigation Administrator Dashboard")}</h2>
+                <h2 className="dashboard-main-title">
+                  {getRoleDisplayName(currentUserProfile?.raw_role || currentUserProfile?.role, t) || t("investigationDashboardTitle", "Investigation Administrator Dashboard")}
+                </h2>
                 <p className="dashboard-main-subtitle">{t("investigationDashboardDesc")}</p>
               </div>
             </div>

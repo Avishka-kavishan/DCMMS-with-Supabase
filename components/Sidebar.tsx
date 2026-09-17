@@ -5,8 +5,7 @@ import { useTranslation } from "react-i18next";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase";
-import { getCurrentProfile, UserProfile, UserRole } from "@/lib/auth";
+import { getCurrentProfile, getRoleDisplayName, UserProfile, UserRole } from "@/lib/auth";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
@@ -96,17 +95,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   }, []);
 
   // Determine user information dynamically from the logged-in profile session
-  const userName = profile?.full_name || (
-    activeRole === "system_admin"
-      ? "System Administrator"
-      : activeRole === "admin"
-      ? t("adminName", "Branch Administrator")
-      : activeRole === "subject"
-      ? t("subjectName", "Subject Officer")
-      : activeRole === "investigation"
-      ? t("investigationName", "Investigation Officer")
-      : t("roleDailyMail", "Daily Mail Officer")
-  );
+  const userName = profile?.full_name || getRoleDisplayName(profile?.raw_role || profile?.role || activeRole, t);
 
   const userEmail = profile?.email || (
     activeRole === "system_admin"

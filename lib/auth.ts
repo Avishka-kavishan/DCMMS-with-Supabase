@@ -49,6 +49,75 @@ export function normalizeRole(roleStr?: string): UserRole {
   return "daily_mail";
 }
 
+/**
+ * Returns the localized display name for a role based on the role string.
+ */
+export function getRoleDisplayName(
+  roleStr?: string,
+  t?: any
+): string {
+  if (!roleStr) {
+    return t ? t("roleAdmin", "Discipline Branch Administrator") : "Discipline Branch Administrator";
+  }
+  const lower = roleStr.toLowerCase().trim();
+
+  // Assistant Secretary Discipline Branch
+  if (
+    lower.includes("assistant secretary discipline") ||
+    (lower.includes("assistant secretary") && lower.includes("discipline")) ||
+    lower === "assistant_secretary_discipline"
+  ) {
+    return t ? t("roleAsstSecDiscipline", "Assistant Secretary Discipline Branch") : "Assistant Secretary Discipline Branch";
+  }
+
+  // Assistant Secretary Investigation Branch
+  if (
+    lower.includes("assistant secretary investigation") ||
+    (lower.includes("assistant secretary") && lower.includes("investigation")) ||
+    (lower.includes("investigation branch") && lower.includes("assistant")) ||
+    lower === "assistant_secretary_investigation"
+  ) {
+    return t ? t("roleAsstSecInvestigation", "Assistant Secretary Investigation Branch") : "Assistant Secretary Investigation Branch";
+  }
+
+  // Senior Assistant Secretary
+  if (lower.includes("senior assistant") || lower === "senior_assistant_secretary") {
+    return t ? t("roleSnrAsstSec", "Senior Assistant Secretary") : "Senior Assistant Secretary";
+  }
+
+  // Additional Secretary
+  if (lower.includes("additional secretary") || lower === "additional_secretary") {
+    return t ? t("roleAddSec", "Additional Secretary") : "Additional Secretary";
+  }
+
+  // System Administrator
+  if (lower.includes("system") || lower === "system_admin") {
+    return t ? t("sysAdmin", "System Administrator") : "System Administrator";
+  }
+
+  // Investigation Administrator / Investigation Officer
+  if (lower.includes("investigation")) {
+    return t ? t("roleInvestigationAdmin", "Investigation Branch Administrator") : "Investigation Branch Administrator";
+  }
+
+  // Subject Officer
+  if (lower.includes("subject")) {
+    return t ? t("roleSubject", "Subject Officer") : "Subject Officer";
+  }
+
+  // Daily Mail Officer / Daily Mail Reporter
+  if (lower.includes("daily") || lower.includes("mail")) {
+    return t ? t("roleDailyMail", "Daily Mail Officer") : "Daily Mail Officer";
+  }
+
+  // Discipline Branch Administrator / Admin
+  if (lower.includes("branch") || lower.includes("discipline") || lower.includes("administrator") || lower === "admin") {
+    return t ? t("roleAdmin", "Discipline Branch Administrator") : "Discipline Branch Administrator";
+  }
+
+  return roleStr;
+}
+
 /** Returns the currently signed-in user's profile (id, full_name, role, raw_role, email), or null. */
 export async function getCurrentProfile(): Promise<UserProfile | null> {
   if (typeof window === "undefined") return null;

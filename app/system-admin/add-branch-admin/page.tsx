@@ -59,6 +59,13 @@ interface BranchAdmin {
   createdAt: string;
 }
 
+export const ALLOWED_ADMIN_ROLES = [
+  "Assistant Secretary Discipline Branch",
+  "Assistant Secretary Investigation Branch",
+  "Senior Assistant Secretary",
+  "Additional Secretary",
+] as const;
+
 export default function AddBranchAdminPage() {
   const { t, i18n } = useTranslation();
   const router = useRouter();
@@ -250,6 +257,9 @@ export default function AddBranchAdminPage() {
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formEmail.trim())) {
       newErrors.email = "Please enter a valid email address.";
     }
+    if (!formRole.trim() || !ALLOWED_ADMIN_ROLES.includes(formRole.trim() as any)) {
+      newErrors.role = "System Administrator can only assign Assistant Secretary Discipline Branch, Assistant Secretary Investigation Branch, Senior Assistant Secretary, or Additional Secretary roles.";
+    }
     if (!isEditMode && (!formPassword || formPassword.length < 6)) {
       newErrors.password = "Password must be at least 6 characters.";
     }
@@ -278,7 +288,8 @@ export default function AddBranchAdminPage() {
     setFormEmployeeNo(admin.employeeNo);
     setFormName(admin.fullName);
     setFormEmail(admin.email);
-    setFormRole(admin.role || "Assistant Secretary Discipline Branch");
+    const isAllowed = ALLOWED_ADMIN_ROLES.includes((admin.role || "").trim() as any);
+    setFormRole(isAllowed ? admin.role : "Assistant Secretary Discipline Branch");
     setFormPassword("");
     setShowPassword(false);
     setFormStatus(admin.status);
@@ -1558,7 +1569,7 @@ export default function AddBranchAdminPage() {
                         width: "100%",
                         padding: "10px 12px 10px 36px",
                         borderRadius: 8,
-                        border: "1px solid #cbd5e1",
+                        border: errors.role ? "1px solid #ef4444" : "1px solid #cbd5e1",
                         fontSize: "0.9rem",
                         backgroundColor: "#ffffff",
                         color: "#0f172a",
@@ -1567,27 +1578,27 @@ export default function AddBranchAdminPage() {
                         cursor: "pointer",
                       }}
                     >
-                      <optgroup label="Ministry & Executive Leadership">
-                        <option value="Additional Secretary">Additional Secretary (අතිරේක ලේකම් / கூடுதல் செயலாளர்)</option>
-                        <option value="Senior Assistant Secretary">Senior Assistant Secretary (ජ්‍යෙෂ්ඨ සහකාර ලේකම් / சிரேஷ்ட உதவிச் செயலாளர்)</option>
-                        <option value="Assistant Secretary Discipline Branch">Assistant Secretary Discipline Branch (විනය ශාඛාවේ සහකාර ලේකම් / ஒழுக்காற்றுப் பிரிவு உதவிச் செயலாளர்)</option>
-                        <option value="Assistant Secretary Investigation Branch">Assistant Secretary Investigation Branch (විමර්ශන ශාඛාවේ සහකාර ලේකම් / விசாரணைப் பிரிவு உதவிச் செயலாளர்)</option>
-                      </optgroup>
-                      <optgroup label="Branch Administration">
-                        <option value="Discipline Branch Administrator">Discipline Branch Administrator (විනය ශාඛා පරිපාලක)</option>
-                        <option value="Investigation Branch Administrator">Investigation Branch Administrator (විමර්ශන ශාඛා පරිපාලක)</option>
-                      </optgroup>
-                      <optgroup label="Operational Officers">
-                        <option value="Subject officer">Subject Officer (විෂය භාර නිලධාරී)</option>
-                        <option value="Daily mail">Daily Mail Officer (දෛනික තැපැල් නිලධාරී)</option>
-                      </optgroup>
-                      <optgroup label="System Administration">
-                        <option value="System Administrator">System Administrator (පද්ධති පරිපාලක)</option>
-                      </optgroup>
+                      <option value="Assistant Secretary Discipline Branch">
+                        Assistant Secretary Discipline Branch (සහකාර ලේකම් විනය ශාඛාව / ஒழுக்காற்றுப் பிரிவு உதவிச் செயலாளர்)
+                      </option>
+                      <option value="Assistant Secretary Investigation Branch">
+                        Assistant Secretary Investigation Branch (සහකාර ලේකම් විමර්ශන ශාඛාව / விசாரணைப் பிரிவு உதவிச் செயலாளர்)
+                      </option>
+                      <option value="Senior Assistant Secretary">
+                        Senior Assistant Secretary (ජ්‍යෙෂ්ඨ සහකාර ලේකම් / சிரேஷ்ட உதவிச் செயலாளர்)
+                      </option>
+                      <option value="Additional Secretary">
+                        Additional Secretary (අතිරේක ලේකම් / கூடுதல் செயலாளர்)
+                      </option>
                     </select>
                   </div>
+                  {errors.role && (
+                    <span style={{ fontSize: "0.75rem", color: "#ef4444", marginTop: 4, display: "block" }}>
+                      {errors.role}
+                    </span>
+                  )}
                   <span style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 4, display: "block" }}>
-                    Select the official authorization level and system workspace permissions for this user.
+                    System Administrator is authorized to provision Executive and Secretary roles only: Assistant Secretary Discipline Branch, Assistant Secretary Investigation Branch, Senior Assistant Secretary, and Additional Secretary.
                   </span>
                 </div>
 

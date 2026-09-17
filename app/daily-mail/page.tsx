@@ -11,7 +11,7 @@ import { useTranslation } from "react-i18next";
 import { Sidebar } from "@/components/Sidebar";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
-import { signOut, getCurrentProfile } from "@/lib/auth";
+import { signOut, getCurrentProfile, getRoleDisplayName, UserProfile } from "@/lib/auth";
 import { getDailyMailRecordsServer, getLetterEditRequestsServer } from "@/lib/db-actions";
 import { exportToExcel } from "@/lib/export-excel";
 
@@ -55,6 +55,7 @@ export default function DailyMailPage() {
 
   // Dynamic localized greeting based on time of day
   const [greeting, setGreeting] = useState("");
+  const [profile, setProfile] = useState<UserProfile | null>(null);
 
   useEffect(() => {
     const hour = new Date().getHours();
@@ -68,14 +69,21 @@ export default function DailyMailPage() {
     const loadGreeting = async () => {
       let displayName = t("welcomeUser", "User");
       const prof = await getCurrentProfile();
-      if (prof && prof.full_name) {
-        displayName = prof.full_name;
+      if (prof) {
+        setProfile(prof);
+        if (prof.full_name) displayName = prof.full_name;
       }
       const defaultText = hour >= 12 && hour < 17 ? "Good Afternoon" : hour >= 17 || hour < 5 ? "Good Evening" : "Good Morning";
       const timeGreeting = t(greetingKey, defaultText);
       setGreeting(`${timeGreeting}, ${displayName}!`);
     };
     loadGreeting();
+    window.addEventListener("storage", loadGreeting);
+    window.addEventListener("dcmms_session_updated", loadGreeting);
+    return () => {
+      window.removeEventListener("storage", loadGreeting);
+      window.removeEventListener("dcmms_session_updated", loadGreeting);
+    };
   }, [t]);
 
   // Close sidebar on Escape key press (A11y compliance)
@@ -515,7 +523,7 @@ export default function DailyMailPage() {
                 </svg>
               </button>
               <div className="dashboard-title-area">
-                <h2 className="dashboard-main-title">{t("dailyMailReporter")}</h2>
+                <h2 className="dashboard-main-title">{getRoleDisplayName(profile?.raw_role || profile?.role, t) || t("dailyMailReporter")}</h2>
                 <p className="dashboard-main-subtitle">{t("registerLettersDesc")}</p>
               </div>
             </div>

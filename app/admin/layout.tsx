@@ -9,7 +9,7 @@ import "../daily-mail/daily-mail.css";
 import "../dashboard-common.css";
 import "./admin.css";
 import { Sidebar } from "@/components/Sidebar";
-import { signOut, getCurrentProfile, UserProfile } from "@/lib/auth";
+import { signOut, getCurrentProfile, getRoleDisplayName, UserProfile } from "@/lib/auth";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase } from "@/lib/supabase";
 import { getLetterEditRequestsServer, updateLetterEditRequestStatusServer } from "@/lib/db-actions";
@@ -44,8 +44,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   React.useEffect(() => {
     setMounted(true);
-    getCurrentProfile().then(setCurrentUserProfile);
+    const loadProfile = async () => {
+      const prof = await getCurrentProfile();
+      setCurrentUserProfile(prof);
+    };
+    loadProfile();
     fetchPendingRequests();
+
+    window.addEventListener("storage", loadProfile);
+    window.addEventListener("dcmms_session_updated", loadProfile);
 
     // Polling every 10 seconds for real-time notification updates
     const interval = setInterval(fetchPendingRequests, 10000);
@@ -59,6 +66,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     document.addEventListener("mousedown", handleClickOutside);
 
     return () => {
+      window.removeEventListener("storage", loadProfile);
+      window.removeEventListener("dcmms_session_updated", loadProfile);
       clearInterval(interval);
       document.removeEventListener("mousedown", handleClickOutside);
     };
@@ -147,8 +156,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         subtitle: t("caseDossierDesc", "Multi-role process tracking & officer workflow details")
       };
     }
+    const dynamicRoleTitle = getRoleDisplayName(currentUserProfile?.raw_role || currentUserProfile?.role, t);
     return {
-      title: t("adminDashboardTitle", "Discipline Branch Administrator"),
+      title: dynamicRoleTitle || t("adminDashboardTitle", "Discipline Branch Administrator"),
       subtitle: t("adminDashboardDesc", "Manage cases and user access")
     };
   };

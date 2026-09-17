@@ -11,7 +11,7 @@ import { Sidebar } from "@/components/Sidebar";
 import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
-import { getCurrentProfile, signOut, UserProfile } from "@/lib/auth";
+import { getCurrentProfile, signOut, getRoleDisplayName, UserProfile } from "@/lib/auth";
 import { 
   updateCaseByDateExtensionApprovalServer, 
   saveCaseByAppointmentAndReportDueDateServer, 
@@ -3745,7 +3745,7 @@ function SubjectOfficerDashboardContent() {
                 </svg>
               </button>
               <div className="dashboard-title-area">
-                <h2 className="dashboard-main-title">Subject Officer</h2>
+                <h2 className="dashboard-main-title">{getRoleDisplayName(profile?.raw_role || profile?.role, t) || t("roleSubject", "Subject Officer")}</h2>
                 <p className="dashboard-main-subtitle">{t("subjectOfficerDesc")}</p>
               </div>
             </div>
