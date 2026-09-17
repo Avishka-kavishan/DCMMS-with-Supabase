@@ -6403,7 +6403,7 @@ function SubjectOfficerDashboardContent() {
                   </div>
                 </div>
 
-                <div className="premium-stat-card inprogress-cases-card" style={{ height: "100px", padding: "16px", background: completedAwaitingRecCases.length > 0 ? "linear-gradient(135deg, #e11d48, #be123c)" : "linear-gradient(135deg, #f97316, #c2410c)" }}>
+                <div className="premium-stat-card inprogress-cases-card" style={{ height: "100px", padding: "16px" }}>
                   <div className="premium-card-top">
                     <div className="premium-card-title-area">
                       <ShieldAlert className="premium-card-icon" />
@@ -6414,23 +6414,6 @@ function SubjectOfficerDashboardContent() {
                     <div className="premium-card-value-area">
                       <span className="premium-card-value">{String(completedAwaitingRecCases.length).padStart(2, "0")}</span>
                       <span className="premium-card-label">{lang === "si" ? "අපේක්ෂිත" : "pending"}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="premium-stat-card closed-cases-card" style={{ height: "100px", padding: "16px", background: "linear-gradient(135deg, #4f46e5, #3730a3)" }}>
-                  <div className="premium-card-top">
-                    <div className="premium-card-title-area">
-                      <CheckCircle className="premium-card-icon" />
-                      <span>{t("submittedRecommendations", "Submitted")}</span>
-                    </div>
-                  </div>
-                  <div className="premium-card-bottom">
-                    <div className="premium-card-value-area">
-                      <span className="premium-card-value">
-                        {String(recommendations.filter(r => r.status === "Submitted" || r.status === "Approved").length).padStart(2, "0")}
-                      </span>
-                      <span className="premium-card-label">{lang === "si" ? "යොමු කළ" : "submitted"}</span>
                     </div>
                   </div>
                 </div>
@@ -6448,6 +6431,23 @@ function SubjectOfficerDashboardContent() {
                         {String(recommendations.filter(r => r.status === "Draft").length).padStart(2, "0")}
                       </span>
                       <span className="premium-card-label">{lang === "si" ? "කෙටුම්පත්" : "drafts"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="premium-stat-card closed-cases-card" style={{ height: "100px", padding: "16px" }}>
+                  <div className="premium-card-top">
+                    <div className="premium-card-title-area">
+                      <CheckCircle className="premium-card-icon" />
+                      <span>{t("submittedRecommendations", "Submitted")}</span>
+                    </div>
+                  </div>
+                  <div className="premium-card-bottom">
+                    <div className="premium-card-value-area">
+                      <span className="premium-card-value">
+                        {String(recommendations.filter(r => r.status === "Submitted" || r.status === "Approved").length).padStart(2, "0")}
+                      </span>
+                      <span className="premium-card-label">{lang === "si" ? "යොමු කළ" : "submitted"}</span>
                     </div>
                   </div>
                 </div>

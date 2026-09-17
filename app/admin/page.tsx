@@ -484,20 +484,20 @@ export default function AdminDashboard() {
           sparklineD="M 5,20 Q 25,25 45,12 T 75,5 T 95,15"
         />
         <StatCard
-          title={t("closed", "CLOSED")}
-          value={isLoading ? "…" : closedCount.toString()}
-          percentage={isLoading ? "…" : pct(closedCount)}
-          icon={<CheckCircle2 className="premium-card-icon" />}
-          cardClass="closed-cases-card"
-          sparklineD="M 5,25 Q 25,20 45,8 T 75,5 T 95,12"
-        />
-        <StatCard
           title={t("underSubjectOfficer", "UNDER SUBJECT OFFICER")}
           value={isLoading ? "…" : underSubjectOfficerCount.toString()}
           percentage={isLoading ? "…" : pct(underSubjectOfficerCount)}
           icon={<User className="premium-card-icon" />}
           cardClass="pending-cases-card"
           sparklineD="M 5,15 Q 25,8 45,22 T 75,12 T 95,25"
+        />
+        <StatCard
+          title={t("closed", "CLOSED")}
+          value={isLoading ? "…" : closedCount.toString()}
+          percentage={isLoading ? "…" : pct(closedCount)}
+          icon={<CheckCircle2 className="premium-card-icon" />}
+          cardClass="closed-cases-card"
+          sparklineD="M 5,25 Q 25,20 45,8 T 75,5 T 95,12"
         />
       </div>
 

@@ -1,47 +1,185 @@
 /* Common styles for stats grids and cards across dashboards */
 .dashboard-stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 20px;
   margin-bottom: 30px;
 }
 
-.dashboard-stats-grid .hero-action-card {
+@media (min-width: 1024px) {
+  .dashboard-stats-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/* ============================================================
+   PREMIUM KPI / STAT CARDS UNIFIED SYSTEM
+   ============================================================ */
+.premium-stat-card {
+  border-radius: 16px;
   padding: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 16px;
+  box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.08), 0 2px 6px -1px rgba(0, 0, 0, 0.04);
+  color: #ffffff !important;
+  position: relative;
+  overflow: hidden;
+  height: 120px;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: default;
 }
 
-.dashboard-stats-grid h4 {
-  margin: 0;
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.7);
+.premium-stat-card:hover {
+  transform: translateY(-3px);
 }
 
-.dashboard-stats-grid p {
-  margin: 10px 0 0 0;
-  font-size: 36px;
-  font-weight: bold;
+/* Card 1: Total / Registered Cases (#16324F) */
+.total-cases-card,
+.total-letters-card,
+.sysadmin-card-total {
+  background-color: #16324F !important;
+  background: #16324F !important;
+}
+.total-cases-card:hover,
+.total-letters-card:hover,
+.sysadmin-card-total:hover {
+  box-shadow: 0 12px 28px rgba(22, 50, 79, 0.45) !important;
 }
 
-/* Value status color helper classes */
-.dashboard-stats-grid p.val-success {
-  font-size: 24px;
-  color: #4caf50;
+/* Card 2: Ongoing / In Progress Cases (#E76F24) */
+.inprogress-cases-card,
+.todays-letters-card,
+.sysadmin-card-ongoing {
+  background-color: #E76F24 !important;
+  background: #E76F24 !important;
+}
+.inprogress-cases-card:hover,
+.todays-letters-card:hover,
+.sysadmin-card-ongoing:hover {
+  box-shadow: 0 12px 28px rgba(231, 111, 36, 0.45) !important;
 }
 
-.dashboard-stats-grid p.val-warning {
-  color: #ff9800;
+/* Card 3: Pending / Delayed Cases (#D99A00) */
+.pending-cases-card,
+.pending-submission-card,
+.sysadmin-card-pending {
+  background-color: #D99A00 !important;
+  background: #D99A00 !important;
+}
+.pending-cases-card:hover,
+.pending-submission-card:hover,
+.sysadmin-card-pending:hover {
+  box-shadow: 0 12px 28px rgba(217, 154, 0, 0.45) !important;
 }
 
-.dashboard-stats-grid p.val-danger {
-  color: #f44336;
+/* Card 4: Completed / Closed Cases (#008F6B) */
+.closed-cases-card,
+.submitted-today-card,
+.sysadmin-card-completed {
+  background-color: #008F6B !important;
+  background: #008F6B !important;
+}
+.closed-cases-card:hover,
+.submitted-today-card:hover,
+.sysadmin-card-completed:hover {
+  box-shadow: 0 12px 28px rgba(0, 143, 107, 0.45) !important;
 }
 
-.dashboard-stats-grid p.val-info {
-  color: #2196f3;
+/* Top Area: Icon + Title & Percentage Badge */
+.premium-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
 }
 
-.dashboard-stats-grid p.val-purple {
-  color: #9c27b0;
+.premium-card-title-area {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.premium-card-icon {
+  width: 20px;
+  height: 20px;
+  color: #E8EDF5 !important;
+  stroke: currentColor;
+  opacity: 1;
+}
+
+.premium-card-title-area span {
+  font-size: calc(14px * var(--font-scale, 1));
+  font-weight: 600;
+  color: #FFFFFF !important;
+  letter-spacing: 0.01em;
+}
+
+.premium-card-percentage {
+  font-size: calc(12px * var(--font-scale, 1));
+  font-weight: 700;
+  color: #FFFFFF !important;
+  background: rgba(255, 255, 255, 0.18) !important;
+  padding: 3px 12px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  line-height: 1.3;
+}
+
+/* Bottom Area: Large Number + Label & Sparkline */
+.premium-card-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  width: 100%;
+}
+
+.premium-card-value-area {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.premium-card-value {
+  font-size: calc(34px * var(--font-scale, 1));
+  font-weight: 800;
+  line-height: 1;
+  color: #FFFFFF !important;
+  letter-spacing: -0.02em;
+}
+
+.premium-card-label {
+  font-size: calc(13px * var(--font-scale, 1));
+  font-weight: 500;
+  color: #FFFFFF !important;
+  opacity: 0.9;
+}
+
+.premium-card-sparkline {
+  color: #E8EDF5;
+  opacity: 0.95;
+  display: flex;
+  align-items: flex-end;
+}
+
+.premium-card-sparkline svg {
+  display: block;
+}
+
+.premium-card-sparkline svg path {
+  stroke: #E8EDF5 !important;
+  stroke-width: 2.2 !important;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.15));
+}
+
+.premium-card-sparkline svg circle {
+  fill: #FFFFFF !important;
+  stroke: #FFFFFF !important;
 }
 
 /* Active status badge styling for User Management tables */

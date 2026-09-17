@@ -655,7 +655,7 @@ export default function SystemAdminDashboard() {
 
           {/* Stats Grid */}
           <div className="sysadmin-stats-grid">
-            <div className="sysadmin-stat-card">
+            <div className="sysadmin-stat-card card-active-users">
               <div className="stat-card-header">
                 <div className="stat-icon-wrapper active-users">
                   <svg className="stat-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -668,7 +668,7 @@ export default function SystemAdminDashboard() {
               <p className="stat-card-desc">{t("sysAdminActiveUsersDesc")}</p>
             </div>
 
-            <div className="sysadmin-stat-card">
+            <div className="sysadmin-stat-card card-logins-today">
               <div className="stat-card-header">
                 <div className="stat-icon-wrapper logins-today">
                   <svg className="stat-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -681,7 +681,7 @@ export default function SystemAdminDashboard() {
               <p className="stat-card-desc">{t("sysAdminLoginsTodayDesc")}</p>
             </div>
 
-            <div className="sysadmin-stat-card">
+            <div className="sysadmin-stat-card card-logouts-today">
               <div className="stat-card-header">
                 <div className="stat-icon-wrapper logouts-today">
                   <svg className="stat-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -694,7 +694,7 @@ export default function SystemAdminDashboard() {
               <p className="stat-card-desc">{t("sysAdminLogoutsTodayDesc")}</p>
             </div>
 
-            <div className="sysadmin-stat-card danger">
+            <div className="sysadmin-stat-card card-failures-today">
               <div className="stat-card-header">
                 <div className="stat-icon-wrapper failures-today">
                   <svg className="stat-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">

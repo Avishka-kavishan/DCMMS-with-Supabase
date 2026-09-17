@@ -28,76 +28,93 @@
 }
 
 .sysadmin-stat-card {
-  background: white;
   border-radius: 16px;
-  padding: 24px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-  border: 1px solid #f1f5f9;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 16px;
+  box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.08), 0 2px 6px -1px rgba(0, 0, 0, 0.04);
+  color: #ffffff !important;
+  position: relative;
+  overflow: hidden;
+  height: 120px;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: default;
 }
 
 .sysadmin-stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.03);
-  border-color: #e2e8f0;
+  transform: translateY(-3px);
 }
 
-.sysadmin-stat-card.danger {
-  border-left: 4px solid #ef4444;
+.sysadmin-stat-card.card-active-users {
+  background-color: #16324F !important;
+  background: #16324F !important;
+}
+.sysadmin-stat-card.card-active-users:hover {
+  box-shadow: 0 12px 28px rgba(22, 50, 79, 0.45) !important;
+}
+
+.sysadmin-stat-card.card-logins-today {
+  background-color: #E76F24 !important;
+  background: #E76F24 !important;
+}
+.sysadmin-stat-card.card-logins-today:hover {
+  box-shadow: 0 12px 28px rgba(231, 111, 36, 0.45) !important;
+}
+
+.sysadmin-stat-card.card-logouts-today {
+  background-color: #D99A00 !important;
+  background: #D99A00 !important;
+}
+.sysadmin-stat-card.card-logouts-today:hover {
+  box-shadow: 0 12px 28px rgba(217, 154, 0, 0.45) !important;
+}
+
+.sysadmin-stat-card.card-failures-today {
+  background-color: #008F6B !important;
+  background: #008F6B !important;
+}
+.sysadmin-stat-card.card-failures-today:hover {
+  box-shadow: 0 12px 28px rgba(0, 143, 107, 0.45) !important;
 }
 
 .stat-icon-wrapper {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  margin-right: 12px;
-}
-
-.stat-icon-wrapper.active-users {
-  background-color: rgba(59, 130, 246, 0.1);
-  color: #3b82f6;
-}
-
-.stat-icon-wrapper.logins-today {
-  background-color: rgba(16, 185, 129, 0.1);
-  color: #10b981;
-}
-
-.stat-icon-wrapper.logouts-today {
-  background-color: rgba(107, 114, 128, 0.1);
-  color: #6b7280;
-}
-
-.stat-icon-wrapper.failures-today {
-  background-color: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
+  width: 24px;
+  height: 24px;
 }
 
 .stat-icon {
   width: 20px;
   height: 20px;
+  color: #E8EDF5 !important;
+  stroke: currentColor;
 }
 
 .stat-card-title {
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: #64748b;
+  font-size: calc(14px * var(--font-scale, 1));
+  font-weight: 600;
+  color: #FFFFFF !important;
+  margin: 0;
 }
 
 .stat-card-value {
-  font-size: 2rem;
-  font-weight: 700;
-  color: #0f172a;
-  margin-top: 12px;
-  margin-bottom: 4px;
+  font-size: calc(34px * var(--font-scale, 1));
+  font-weight: 800;
+  line-height: 1;
+  color: #FFFFFF !important;
+  letter-spacing: -0.02em;
+  margin: 0;
 }
 
 .stat-card-desc {
-  font-size: 0.75rem;
-  color: #94a3b8;
+  font-size: calc(12px * var(--font-scale, 1));
+  color: #FFFFFF !important;
+  opacity: 0.85;
+  margin: 0;
 }
 
 .sysadmin-chart-card {

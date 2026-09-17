@@ -536,7 +536,7 @@ export default function OfficerWorkflowPage() {
               <span className="premium-card-label">{t("officers", "Officers")}</span>
             </div>
             <div className="premium-card-sparkline">
-              <UserCheck size={28} color="#4F46E5" opacity={0.8} />
+              <UserCheck size={28} color="#E8EDF5" opacity={0.9} />
             </div>
           </div>
         </div>
@@ -558,7 +558,27 @@ export default function OfficerWorkflowPage() {
               <span className="premium-card-label">{t("assignedLetters", "Letters / Cases")}</span>
             </div>
             <div className="premium-card-sparkline">
-              <Briefcase size={28} color="#6366F1" opacity={0.8} />
+              <Briefcase size={28} color="#E8EDF5" opacity={0.9} />
+            </div>
+          </div>
+        </div>
+
+        {/* Daily Mail Officers */}
+        <div className="premium-stat-card pending-cases-card">
+          <div className="premium-card-top">
+            <div className="premium-card-title-area">
+              <Mail className="premium-card-icon" />
+              <span>{t("dailyMailOfficers", "DAILY MAIL OFFICERS")}</span>
+            </div>
+            <span className="premium-card-percentage">{dailyMailOfficersCount} {t("staff", "Staff")}</span>
+          </div>
+          <div className="premium-card-bottom">
+            <div className="premium-card-value-area">
+              <span className="premium-card-value">{isLoading ? "…" : lettersData.length}</span>
+              <span className="premium-card-label">{t("loggedLetters", "Logged Letters")}</span>
+            </div>
+            <div className="premium-card-sparkline">
+              <Mail size={28} color="#E8EDF5" opacity={0.9} />
             </div>
           </div>
         </div>
@@ -580,27 +600,7 @@ export default function OfficerWorkflowPage() {
               <span className="premium-card-label">{t("investigations", "Inquiries")}</span>
             </div>
             <div className="premium-card-sparkline">
-              <TrendingUp size={28} color="#10B981" opacity={0.8} />
-            </div>
-          </div>
-        </div>
-
-        {/* Daily Mail Officers */}
-        <div className="premium-stat-card pending-cases-card">
-          <div className="premium-card-top">
-            <div className="premium-card-title-area">
-              <Mail className="premium-card-icon" />
-              <span>{t("dailyMailOfficers", "DAILY MAIL OFFICERS")}</span>
-            </div>
-            <span className="premium-card-percentage">{dailyMailOfficersCount} {t("staff", "Staff")}</span>
-          </div>
-          <div className="premium-card-bottom">
-            <div className="premium-card-value-area">
-              <span className="premium-card-value">{isLoading ? "…" : lettersData.length}</span>
-              <span className="premium-card-label">{t("loggedLetters", "Logged Letters")}</span>
-            </div>
-            <div className="premium-card-sparkline">
-              <Mail size={28} color="#F59E0B" opacity={0.8} />
+              <TrendingUp size={28} color="#E8EDF5" opacity={0.9} />
             </div>
           </div>
         </div>

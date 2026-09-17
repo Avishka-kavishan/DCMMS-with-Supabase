@@ -3333,36 +3333,113 @@ export default function InvestigationPage() {
           {/* ── Interactive Dashboard Stats Overview ── */}
           <section className="dashboard-stats-grid">
             <div 
-              className={`hero-action-card${statusFilter === "All" ? " active-stat-card" : ""}`}
+              className={`premium-stat-card total-cases-card${statusFilter === "All" ? " active-stat-card" : ""}`}
               onClick={() => setStatusFilter("All")}
-              style={{ cursor: "pointer", border: statusFilter === "All" ? "2px solid #3b82f6" : "1px solid rgba(255,255,255,0.1)", borderRadius: "12px", transition: "transform 0.2s ease" }}
+              style={{ cursor: "pointer", outline: statusFilter === "All" ? "3px solid #60a5fa" : "none", outlineOffset: "2px" }}
             >
-              <h4>{lang === "si" ? "ක්‍රියාකාරී විමර්ශන" : "Active Inquiries"}</h4>
-              <p>{activeInquiriesCount}</p>
+              <div className="premium-card-top">
+                <div className="premium-card-title-area">
+                  <FileText className="premium-card-icon" />
+                  <span>{lang === "si" ? "ක්‍රියාකාරී විමර්ශන" : "Active Inquiries"}</span>
+                </div>
+                <span className="premium-card-percentage">100%</span>
+              </div>
+              <div className="premium-card-bottom">
+                <div className="premium-card-value-area">
+                  <span className="premium-card-value">{String(activeInquiriesCount).padStart(2, "0")}</span>
+                  <span className="premium-card-label">{lang === "si" ? "විමර්ශන" : "inquiries"}</span>
+                </div>
+                <div className="premium-card-sparkline">
+                  <svg viewBox="0 0 100 30" width="80" height="24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M 5,22 Q 25,10 45,20 T 75,8 T 95,15" strokeLinecap="round" />
+                    <circle cx="75" cy="8" r="3" fill="#ffffff" />
+                  </svg>
+                </div>
+              </div>
             </div>
+
             <div 
-              className={`hero-action-card${statusFilter === "In Progress" ? " active-stat-card" : ""}`}
+              className={`premium-stat-card inprogress-cases-card${statusFilter === "In Progress" ? " active-stat-card" : ""}`}
               onClick={() => setStatusFilter("In Progress")}
-              style={{ cursor: "pointer", border: statusFilter === "In Progress" ? "2px solid #2196f3" : "1px solid rgba(255,255,255,0.1)", borderRadius: "12px", transition: "transform 0.2s ease" }}
+              style={{ cursor: "pointer", outline: statusFilter === "In Progress" ? "3px solid #fdba74" : "none", outlineOffset: "2px" }}
             >
-              <h4>{lang === "si" ? "සිදුවෙමින් පවතින" : "In Progress"}</h4>
-              <p className="val-info">{inProgressInquiriesCount}</p>
+              <div className="premium-card-top">
+                <div className="premium-card-title-area">
+                  <RefreshCw className="premium-card-icon" />
+                  <span>{lang === "si" ? "සිදුවෙමින් පවතින" : "In Progress"}</span>
+                </div>
+                <span className="premium-card-percentage">
+                  {activeInquiriesCount > 0 ? `${Math.round((inProgressInquiriesCount / activeInquiriesCount) * 100)}%` : "0%"}
+                </span>
+              </div>
+              <div className="premium-card-bottom">
+                <div className="premium-card-value-area">
+                  <span className="premium-card-value">{String(inProgressInquiriesCount).padStart(2, "0")}</span>
+                  <span className="premium-card-label">{lang === "si" ? "විමර්ශන" : "inquiries"}</span>
+                </div>
+                <div className="premium-card-sparkline">
+                  <svg viewBox="0 0 100 30" width="80" height="24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M 5,20 Q 25,25 45,12 T 75,5 T 95,15" strokeLinecap="round" />
+                    <circle cx="75" cy="5" r="3" fill="#ffffff" />
+                  </svg>
+                </div>
+              </div>
             </div>
+
             <div 
-              className={`hero-action-card${statusFilter === "Evidence Review" ? " active-stat-card" : ""}`}
+              className={`premium-stat-card pending-cases-card${statusFilter === "Evidence Review" ? " active-stat-card" : ""}`}
               onClick={() => setStatusFilter("Evidence Review")}
-              style={{ cursor: "pointer", border: statusFilter === "Evidence Review" ? "2px solid #9c27b0" : "1px solid rgba(255,255,255,0.1)", borderRadius: "12px", transition: "transform 0.2s ease" }}
+              style={{ cursor: "pointer", outline: statusFilter === "Evidence Review" ? "3px solid #fde047" : "none", outlineOffset: "2px" }}
             >
-              <h4>{lang === "si" ? "සාක්ෂි සමාලෝචන" : "Evidence Reviews"}</h4>
-              <p className="val-purple">{evidenceReviewsInquiriesCount}</p>
+              <div className="premium-card-top">
+                <div className="premium-card-title-area">
+                  <Clock className="premium-card-icon" />
+                  <span>{lang === "si" ? "සාක්ෂි සමාලෝචන" : "Evidence Reviews"}</span>
+                </div>
+                <span className="premium-card-percentage">
+                  {activeInquiriesCount > 0 ? `${Math.round((evidenceReviewsInquiriesCount / activeInquiriesCount) * 100)}%` : "0%"}
+                </span>
+              </div>
+              <div className="premium-card-bottom">
+                <div className="premium-card-value-area">
+                  <span className="premium-card-value">{String(evidenceReviewsInquiriesCount).padStart(2, "0")}</span>
+                  <span className="premium-card-label">{lang === "si" ? "සමාලෝචන" : "reviews"}</span>
+                </div>
+                <div className="premium-card-sparkline">
+                  <svg viewBox="0 0 100 30" width="80" height="24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M 5,15 Q 25,8 45,22 T 75,12 T 95,25" strokeLinecap="round" />
+                    <circle cx="75" cy="12" r="3" fill="#ffffff" />
+                  </svg>
+                </div>
+              </div>
             </div>
+
             <div 
-              className={`hero-action-card${statusFilter === "Scheduled" ? " active-stat-card" : ""}`}
+              className={`premium-stat-card closed-cases-card${statusFilter === "Scheduled" ? " active-stat-card" : ""}`}
               onClick={() => setStatusFilter("Scheduled")}
-              style={{ cursor: "pointer", border: statusFilter === "Scheduled" ? "2px solid #ff9800" : "1px solid rgba(255,255,255,0.1)", borderRadius: "12px", transition: "transform 0.2s ease" }}
+              style={{ cursor: "pointer", outline: statusFilter === "Scheduled" ? "3px solid #6ee7b7" : "none", outlineOffset: "2px" }}
             >
-              <h4>{lang === "si" ? "සැලසුම් කළ විභාග" : "Scheduled Hearings"}</h4>
-              <p className="val-warning">{scheduledHearingsInquiriesCount}</p>
+              <div className="premium-card-top">
+                <div className="premium-card-title-area">
+                  <CalendarIcon className="premium-card-icon" />
+                  <span>{lang === "si" ? "සැලසුම් කළ විභාග" : "Scheduled Hearings"}</span>
+                </div>
+                <span className="premium-card-percentage">
+                  {activeInquiriesCount > 0 ? `${Math.round((scheduledHearingsInquiriesCount / activeInquiriesCount) * 100)}%` : "0%"}
+                </span>
+              </div>
+              <div className="premium-card-bottom">
+                <div className="premium-card-value-area">
+                  <span className="premium-card-value">{String(scheduledHearingsInquiriesCount).padStart(2, "0")}</span>
+                  <span className="premium-card-label">{lang === "si" ? "විභාග" : "hearings"}</span>
+                </div>
+                <div className="premium-card-sparkline">
+                  <svg viewBox="0 0 100 30" width="80" height="24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M 5,25 Q 25,20 45,8 T 75,5 T 95,12" strokeLinecap="round" />
+                    <circle cx="75" cy="5" r="3" fill="#ffffff" />
+                  </svg>
+                </div>
+              </div>
             </div>
           </section>
 
