@@ -14,12 +14,15 @@ export function SessionMonitor() {
     // If we're on login page or register page, do not monitor
     if (pathname === "/" || pathname === "/register") return;
 
-    // Initialize last activity if not present
-    if (typeof window !== "undefined" && !localStorage.getItem("dcmms_last_activity")) {
-      localStorage.setItem("dcmms_last_activity", Date.now().toString());
+    // Ensure activity timestamp is fresh on mount
+    if (typeof window !== "undefined") {
+      const existingActivity = localStorage.getItem("dcmms_last_activity");
+      if (!existingActivity || isNaN(parseInt(existingActivity, 10))) {
+        localStorage.setItem("dcmms_last_activity", Date.now().toString());
+      }
     }
 
-    const events = ["mousemove", "mousedown", "keypress", "scroll", "touchstart", "click"];
+    const events = ["mousemove", "mousedown", "keypress", "keydown", "scroll", "touchstart", "click", "focus"];
     let lastSavedTime = Date.now();
 
     const updateActivity = () => {
@@ -62,41 +65,52 @@ export function SessionMonitor() {
         // 1. Check if session was forced logout by admin
         const isForced = await checkSessionStatus(profile.id);
         if (isForced) {
-          await signOut();
           if (typeof window !== "undefined") {
+            localStorage.removeItem("dcmms_simulated_session");
+            localStorage.removeItem("dcmms_username");
+            localStorage.removeItem("dcmms_user_role");
+            localStorage.removeItem("dcmms_current_user");
             localStorage.removeItem("dcmms_current_session_id");
             localStorage.removeItem("dcmms_last_activity");
             alert("Security Alert: Your session has been terminated by a system administrator.");
           }
+          await signOut();
           router.replace("/?reason=forced_logout");
           return;
         }
 
-        // 2. Check for inactivity timeout (10 minutes)
+        // 2. Check for inactivity timeout (30 minutes)
         if (typeof window !== "undefined") {
           const lastActivity = localStorage.getItem("dcmms_last_activity");
           if (lastActivity) {
-            const timeDiff = Date.now() - parseInt(lastActivity, 10);
-            const tenMinutes = 10 * 60 * 1000; // 10 minutes in milliseconds
-            if (timeDiff > tenMinutes) {
-              // Log the user out cleanly (ends session in security logs)
-              await logLogout(profile.id);
-              await signOut();
-              localStorage.removeItem("dcmms_current_session_id");
-              localStorage.removeItem("dcmms_last_activity");
-              router.replace("/?reason=inactivity_timeout");
-              return;
+            const parsedActivity = parseInt(lastActivity, 10);
+            if (!isNaN(parsedActivity)) {
+              const timeDiff = Date.now() - parsedActivity;
+              const thirtyMinutes = 30 * 60 * 1000;
+              if (timeDiff > thirtyMinutes) {
+                localStorage.removeItem("dcmms_simulated_session");
+                localStorage.removeItem("dcmms_username");
+                localStorage.removeItem("dcmms_user_role");
+                localStorage.removeItem("dcmms_current_user");
+                localStorage.removeItem("dcmms_current_session_id");
+                localStorage.removeItem("dcmms_last_activity");
+                await logLogout(profile.id);
+                await signOut();
+                router.replace("/?reason=inactivity_timeout");
+                return;
+              }
+            } else {
+              localStorage.setItem("dcmms_last_activity", Date.now().toString());
             }
+          } else {
+            localStorage.setItem("dcmms_last_activity", Date.now().toString());
           }
         }
       }
     };
 
-    // Run initially
-    checkStatus();
-
-    // Poll every 5 seconds
-    const interval = setInterval(checkStatus, 5000);
+    // Poll every 30 seconds for forced logout / inactivity
+    const interval = setInterval(checkStatus, 30000);
 
     return () => {
       clearInterval(interval);

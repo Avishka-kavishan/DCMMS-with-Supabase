@@ -10,7 +10,7 @@ import { useTranslation } from "react-i18next";
 import { Sidebar } from "@/components/Sidebar";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
-import { signOut, getCurrentProfile, getRoleDisplayName, UserProfile } from "@/lib/auth";
+import { signOut, getCurrentProfile, getRoleDisplayName, UserProfile, dashboardPath } from "@/lib/auth";
 import { getInvestigationOfficersServer, assignOfficerToInvestigationServer, logAuditEventServer, getAccusedOfficerByRefServer, getCommitteeOfficersWithSchoolsServer, saveChairmanByCaseServer, getChairmanByCaseServer, saveMembersByCaseServer, getMembersByCaseServer, saveCaseByDateExtensionServer, getSubjectOfficerDashboardCasesServer, getDirectlyAssignedLettersServer } from "@/lib/db-actions";
 
 import { 
@@ -1507,8 +1507,17 @@ export default function InvestigationPage() {
   useEffect(() => {
     getCurrentProfile().then((profile) => {
       const allowedRoles = ["investigation_officer", "assistant_secretary_investigation", "system_admin"];
-      if (!profile || !allowedRoles.includes(profile.role)) {
+      if (!profile) {
         router.replace("/");
+        return;
+      }
+      if (!allowedRoles.includes(profile.role)) {
+        const target = dashboardPath(profile.role);
+        if (target !== "/investigation" && target !== "/") {
+          router.replace(target);
+        } else {
+          router.replace("/");
+        }
       }
     });
   }, [router]);

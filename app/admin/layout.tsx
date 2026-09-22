@@ -54,8 +54,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     window.addEventListener("storage", loadProfile);
     window.addEventListener("dcmms_session_updated", loadProfile);
 
-    // Polling every 10 seconds for real-time notification updates
-    const interval = setInterval(fetchPendingRequests, 10000);
+    // Polling every 30 seconds for background notification updates
+    const interval = setInterval(fetchPendingRequests, 30000);
 
     // Close dropdown on click outside
     const handleClickOutside = (event: MouseEvent) => {

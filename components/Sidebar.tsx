@@ -37,44 +37,56 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const { t } = useTranslation();
   const pathname = usePathname() || "";
 
-  // Auto-detect role from prop or path
-  let activeRole: "admin" | "dailymail" | "subject" | "investigation" | "system_admin" = "dailymail";
-  if (role) {
+  const [mounted, setMounted] = useState(false);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+
+  // Auto-detect role from prop, profile, or path
+  const effectiveRole = role || profile?.role;
+  let activeRole: "admin" | "dailymail" | "subject" | "investigation" | "system_admin" = "admin";
+  if (effectiveRole) {
     if (
-      role === "admin" ||
-      role === "assistant_secretary_discipline" ||
-      role === "senior_assistant_secretary" ||
-      role === "additional_secretary"
+      effectiveRole === "admin" ||
+      effectiveRole === "assistant_secretary_discipline" ||
+      effectiveRole === "senior_assistant_secretary" ||
+      effectiveRole === "additional_secretary"
     ) {
       activeRole = "admin";
-    } else if (role === "investigation" || role === "investigation_officer" || role === "assistant_secretary_investigation") {
+    } else if (effectiveRole === "investigation" || effectiveRole === "investigation_officer" || effectiveRole === "assistant_secretary_investigation") {
       activeRole = "investigation";
-    } else if (role === "system_admin") {
+    } else if (effectiveRole === "system_admin") {
       activeRole = "system_admin";
-    } else if (role === "subject" || role === "subject_officer") {
+    } else if (effectiveRole === "subject" || effectiveRole === "subject_officer") {
       activeRole = "subject";
     } else {
-      activeRole = "dailymail";
+      activeRole = "admin";
     }
   } else {
-    activeRole = pathname.includes("/admin")
-      ? "admin"
-      : pathname.includes("/system-admin")
+    activeRole = pathname.includes("/system-admin")
       ? "system_admin"
       : pathname.includes("/subject")
       ? "subject"
       : pathname.includes("/investigation")
       ? "investigation"
-      : "dailymail";
+      : "admin";
   }
 
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-
   useEffect(() => {
+    setMounted(true);
     const loadProfile = async () => {
       const prof = await getCurrentProfile();
       if (prof) {
         setProfile(prof);
+      } else if (typeof window !== "undefined") {
+        const storedUsername = localStorage.getItem("dcmms_username") || localStorage.getItem("dcmms_current_user");
+        const storedRole = localStorage.getItem("dcmms_user_role");
+        if (storedUsername || storedRole) {
+          setProfile({
+            id: `usr-${(storedUsername || "").toLowerCase().replace(/[^a-z0-9]/g, "_")}`,
+            full_name: storedUsername || "",
+            role: (storedRole || "additional_secretary") as any,
+            raw_role: storedRole || "",
+          });
+        }
       }
     };
     loadProfile();
@@ -106,7 +118,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       ? "subject@dcmms.gov.lk"
       : activeRole === "investigation"
       ? "investigation@dcmms.gov.lk"
-      : "dailymail@dcmms.gov.lk"
+      : "admin@dcmms.gov.lk"
   );
 
   // Generate initials dynamically from the actual user's name
@@ -120,16 +132,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   // Quick Action button based on active role
   let quickActionButton = null;
-  if (activeRole === "dailymail") {
+  if (profile?.role === "additional_secretary") {
     quickActionButton = (
-      <Link href="/daily-mail/add-letter" className="btn-sidebar-action" style={{ textDecoration: 'none' }}>
-        <span className="plus-icon">+</span> {t("addNewLetter", "Add New Letter")}
-      </Link>
-    );
-  } else if (activeRole === "admin") {
-    quickActionButton = (
-      <Link href={`${basePath}/daily-mail/add-letter`} className="btn-sidebar-action" style={{ textDecoration: 'none' }}>
-        <span className="plus-icon">+</span> {t("addNewLetter", "Add New Letter")}
+      <Link href={`${basePath}/daily-mail/register`} className="btn-sidebar-action" style={{ textDecoration: 'none' }}>
+        <span className="plus-icon">+</span> {t("registerComplaint", "Register Complaint")}
       </Link>
     );
   } else if (activeRole === "investigation") {
@@ -192,6 +198,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
         ),
         isActive: pathname === "/admin" || pathname === "/admin/",
       },
+      ...( (profile?.role === "additional_secretary") ? [
+        {
+          id: "register-complaint",
+          label: t("registerComplaintDetailed", "Full Complaint Registration"),
+          href: `${basePath}/daily-mail/register`,
+          icon: (
+            <svg className="menu-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          ),
+          isActive: pathname.includes("/daily-mail/register"),
+        },
+        {
+          id: "add-letter",
+          label: t("addNewLetterTitle", "Add New Letter"),
+          href: `${basePath}/daily-mail/add-letter`,
+          icon: (
+            <svg className="menu-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+          ),
+          isActive: pathname.includes("/daily-mail/add-letter"),
+        },
+      ] : []),
       {
         id: "subject-officers",
         label: t("subjectOfficers", "Subject Officers"),
@@ -213,17 +243,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </svg>
         ),
         isActive: pathname.includes("/admin/investigation-officers"),
-      },
-      {
-        id: "daily-mail-officers",
-        label: t("dailyMailOfficers", "Daily Mail Officers"),
-        href: `${basePath}/admin/daily-mail-officers`,
-        icon: (
-          <svg className="menu-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-          </svg>
-        ),
-        isActive: pathname.includes("/admin/daily-mail-officers"),
       },
       {
         id: "institutes",
@@ -376,7 +395,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* Quick Action Sidebar Button */}
-        {quickActionButton && (
+        {mounted && quickActionButton && (
           <div className="sidebar-action-wrapper" suppressHydrationWarning>
             {quickActionButton}
           </div>

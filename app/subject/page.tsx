@@ -11,7 +11,7 @@ import { Sidebar } from "@/components/Sidebar";
 import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
-import { getCurrentProfile, signOut, getRoleDisplayName, UserProfile } from "@/lib/auth";
+import { getCurrentProfile, signOut, getRoleDisplayName, UserProfile, dashboardPath } from "@/lib/auth";
 import { 
   updateCaseByDateExtensionApprovalServer, 
   saveCaseByAppointmentAndReportDueDateServer, 
@@ -1290,8 +1290,8 @@ function SubjectOfficerDashboardContent() {
       .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_preliminary_investigations" }, handleSyncAll)
       .subscribe();
 
-    // Fast 3-second polling for real-time multi-device sync
-    const interval = setInterval(handleSyncAll, 3_000);
+    // Calm 30-second fallback polling for multi-device sync (instant updates handled by Realtime channels)
+    const interval = setInterval(handleSyncAll, 30_000);
 
     const handleStorageEvent = (e: StorageEvent) => {
       if (
@@ -2034,8 +2034,8 @@ function SubjectOfficerDashboardContent() {
       .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subject" }, fetchAssignments)
       .subscribe();
 
-    // Fast 3-second polling for real-time multi-device sync
-    const interval = setInterval(fetchAssignments, 3_000);
+    // Calm 30-second fallback polling for multi-device sync
+    const interval = setInterval(fetchAssignments, 30_000);
 
     const handleStorageEvent = (e: StorageEvent) => {
       if (e.key === "dcmms_subject_assignments" || e.key === "dcmms_cases" || e.key === "dcmms_letters") {
@@ -2547,7 +2547,18 @@ function SubjectOfficerDashboardContent() {
   // Session guard — redirect to login if not authenticated
   useEffect(() => {
     getCurrentProfile().then((profile) => {
-      if (!profile || profile.role !== "subject_officer") router.replace("/");
+      if (!profile) {
+        router.replace("/");
+        return;
+      }
+      if (profile.role !== "subject_officer") {
+        const target = dashboardPath(profile.role);
+        if (target !== "/subject" && target !== "/") {
+          router.replace(target);
+        } else {
+          router.replace("/");
+        }
+      }
     });
   }, [router]);
 

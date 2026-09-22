@@ -363,7 +363,7 @@ export default function AddNewLetterPage() {
         isSidebarOpen={isSidebarOpen}
         setIsSidebarOpen={setIsSidebarOpen}
         handleLogout={handleLogout}
-        role="dailymail"
+        role={profile?.role || "admin"}
       />
 
       <div className="dashboard-layout">
@@ -502,7 +502,7 @@ export default function AddNewLetterPage() {
                 </div>
                 
                 <div className="register-header-right-btns">
-                  <Link href="/daily-mail" className="btn-back-home">
+                  <Link href={profile?.role === "additional_secretary" || profile?.role === "admin" ? "/admin" : "/daily-mail"} className="btn-back-home">
                     <svg className="btn-back-home-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
                     </svg>
@@ -534,37 +534,15 @@ export default function AddNewLetterPage() {
                         <span>{t("letterNoLabel", "Letter No")}</span>
                         <span style={{ color: "#ef4444" }}> *</span>
                       </label>
-                      <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                        <input
+                      <input
                           id="letterNo"
                           type="text"
                           value={letterNo}
                           onChange={(e) => setLetterNo(e.target.value)}
                           placeholder={t("letterNoPlaceholder", "e.g. 2026/09/17/001")}
                           className={`field-input ${errors.letterNo ? "input-error" : ""}`}
-                          style={{ flex: 1, fontFamily: "monospace", fontWeight: 600 }}
+                          style={{ fontFamily: "monospace", fontWeight: 600 }}
                         />
-                        <button
-                          type="button"
-                          onClick={() => generateNextLetterNo(letterDate)}
-                          disabled={isAutoGeneratingNo}
-                          style={{
-                            height: "42px",
-                            padding: "0 14px",
-                            backgroundColor: "#e2e8f0",
-                            color: "#0f172a",
-                            border: "none",
-                            borderRadius: "6px",
-                            fontWeight: 600,
-                            fontSize: "0.85rem",
-                            cursor: "pointer",
-                            whiteSpace: "nowrap"
-                          }}
-                          title="Auto-generate sequential letter number"
-                        >
-                          {isAutoGeneratingNo ? "…" : `⚡ ${t("autoGenerate", "Auto")}`}
-                        </button>
-                      </div>
                       {errors.letterNo && <span style={{ color: "#ef4444", fontSize: "0.75rem", marginTop: 4 }}>{errors.letterNo}</span>}
                     </div>
 
@@ -855,11 +833,11 @@ export default function AddNewLetterPage() {
 
               <button
                 type="button"
-                onClick={() => router.push("/daily-mail")}
+                onClick={() => router.push(profile?.role === "additional_secretary" || profile?.role === "admin" ? "/admin" : "/daily-mail")}
                 style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "10px 14px", borderRadius: "6px", backgroundColor: "#0e162f", color: "#ffffff", border: "none", fontSize: "0.85rem", fontWeight: 700, cursor: "pointer" }}
               >
                 <Check size={16} />
-                <span>{t("goToDailyMailList", "View in Daily Mail List")}</span>
+                <span>{profile?.role === "additional_secretary" || profile?.role === "admin" ? t("goToAdminDashboard", "Return to Dashboard") : t("goToDailyMailList", "View in Daily Mail List")}</span>
               </button>
             </div>
           </div>

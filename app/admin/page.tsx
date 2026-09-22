@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import "../../i18n";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Folder, Search, CheckCircle2, User, ChevronDown, ChevronUp, Plus, MailCheck, Mail } from "lucide-react";
+import { Folder, Search, CheckCircle2, User, ChevronDown, ChevronUp, Plus, MailCheck, Mail, FileText, BarChart2, SlidersHorizontal, X } from "lucide-react";
 import {
   AreaChart,
   Area,
@@ -22,7 +22,7 @@ import {
 } from "recharts";
 import "./admin.css";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
-import { signOut, getCurrentProfile } from "@/lib/auth";
+import { signOut, getCurrentProfile, dashboardPath } from "@/lib/auth";
 import {
   getDailyMailRecordsServer,
   getLetterEditRequestsServer,
@@ -167,12 +167,37 @@ export default function AdminDashboard() {
   const [directlyAssignedLetters, setDirectlyAssignedLetters] = useState<any[]>([]);
   const [isDirectLettersMinimized, setIsDirectLettersMinimized] = useState(false);
 
+  // Visualization Charts Slide Bar & Collapsible state
+  const [isChartSlideBarOpen, setIsChartSlideBarOpen] = useState(false);
+  const [isChartsExpanded, setIsChartsExpanded] = useState(false);
+
+  // Close chart slide bar on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isChartSlideBarOpen) {
+        setIsChartSlideBarOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isChartSlideBarOpen]);
+
   // ── Session guard & Data Loader ───────────────────────────────────────────
   useEffect(() => {
     getCurrentProfile().then(async (profile) => {
       const allowedRoles = ["admin", "assistant_secretary_discipline", "senior_assistant_secretary", "additional_secretary", "system_admin"];
-      if (!profile || !allowedRoles.includes(profile.role)) {
+      if (!profile) {
         router.replace("/");
+        return;
+      }
+      if (!allowedRoles.includes(profile.role)) {
+        const target = dashboardPath(profile.role);
+        if (target !== "/admin" && target !== "/") {
+          router.replace(target);
+        } else {
+          router.replace("/");
+        }
+        return;
       }
       setCurrentUserProfile(profile);
 
@@ -479,6 +504,15 @@ export default function AdminDashboard() {
             </select>
             <div className="admin-filter-icon"><ChevronDown /></div>
           </div>
+          <button
+            type="button"
+            className="btn-analytics-slidebar-trigger"
+            onClick={() => setIsChartSlideBarOpen(true)}
+            title={t("viewAnalyticsCharts", "Analytics & Charts")}
+          >
+            <BarChart2 size={16} />
+            <span>{t("viewAnalyticsCharts", "Analytics & Charts")}</span>
+          </button>
         </div>
       </div>
 
@@ -518,7 +552,7 @@ export default function AdminDashboard() {
         />
       </div>
 
-      {/* ── Quick Action / Add New Letter Hero Banner ── */}
+      {/* ── Quick Action / Add New Letter & Complaint Hero Banner ── */}
       <section className="admin-hero-banner-section">
         <div className="admin-hero-card">
           <div className="admin-hero-left">
@@ -528,14 +562,33 @@ export default function AdminDashboard() {
               </svg>
             </div>
             <div>
-              <h4 className="admin-hero-title">{t("addNewLetterTitle", "Add New Letter")}</h4>
+              <h4 className="admin-hero-title">
+                {currentUserProfile?.role === "additional_secretary"
+                  ? (lang === "si" ? "පැමිණිලි සහ ලිපි ලියාපදිංචි කිරීම" : "Complaint & Letter Registration")
+                  : t("addNewLetterTitle", "Add New Letter")}
+              </h4>
               <p className="admin-hero-subtitle">
-                {t("addNewLetterSubtitle", "Fill in the basic incoming letter details to register it into the system.")}
+                {currentUserProfile?.role === "additional_secretary"
+                  ? (lang === "si"
+                      ? "අතිරේක ලේකම් ලෙස පැමිණිලි සවිස්තරාත්මකව හෝ මූලික ලිපි ආකාරයෙන් පද්ධතියට ලියාපදිංචි කර විනය ශාඛාව වෙත යොමු කරන්න."
+                      : "As Additional Secretary overseeing Daily Mail tasks, register full complaints or basic incoming letters to route to disciplinary officers.")
+                  : t("addNewLetterSubtitle", "Fill in the basic incoming letter details to register it into the system.")}
               </p>
             </div>
           </div>
 
-          <div className="admin-hero-actions">
+          <div className="admin-hero-actions" style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+            {currentUserProfile?.role === "additional_secretary" && (
+              <button
+                type="button"
+                className="btn-hero-primary"
+                style={{ backgroundColor: "#0f766e", borderColor: "#0d9488", display: "inline-flex", alignItems: "center", gap: 6 }}
+                onClick={() => router.push("/daily-mail/register")}
+              >
+                <FileText size={18} strokeWidth={2.4} />
+                <span>{t("registerComplaintDetailed", "Full Complaint Registration")}</span>
+              </button>
+            )}
             <button
               type="button"
               className="btn-hero-primary"
@@ -814,85 +867,135 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Chart Section */}
-      <div className="admin-chart-card">
-        <div className="admin-chart-header">
-          <div>
-            <h3 className="admin-chart-title">{t("casesOverTime", "Cases over time")}</h3>
-            <p className="admin-chart-subtitle">{t("newCasesPerPeriod", "New cases per period")}</p>
+      {/* ── Visualization Charts Section (Banner + Collapsible + Slide-out Trigger) ── */}
+      <section className="admin-analytics-section">
+        <div className="admin-analytics-banner">
+          <div className="admin-analytics-banner-left">
+            <div className="admin-analytics-badge">
+              <BarChart2 size={22} />
+            </div>
+            <div>
+              <h3 className="admin-analytics-banner-title">
+                {t("analyticsSlideBarTitle", "Visualization & Analytics")}
+              </h3>
+              <p className="admin-analytics-banner-subtitle">
+                {t("analyticsSlideBarSubtitle", "Trends, case distributions, and classification breakdown")}
+              </p>
+            </div>
           </div>
-          <div className="admin-chart-filters">
-            {["Daily", "Weekly", "Monthly", "Yearly"].map((period) => (
-              <button
-                key={period}
-                className={chartPeriod === period ? "admin-chart-filter-btn-active" : "admin-chart-filter-btn"}
-                onClick={() => setChartPeriod(period)}
-              >
-                {t(period.toLowerCase(), period)}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="admin-chart-wrapper">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={filteredChartData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
-              <defs>
-                <linearGradient id="caseGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#4F46E5" stopOpacity={0.3} />
-                  <stop offset="50%" stopColor="#818CF8" stopOpacity={0.12} />
-                  <stop offset="100%" stopColor="#C7D2FE" stopOpacity={0.02} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "#6B7280", fontSize: 12 }} dy={10} />
-              <YAxis axisLine={false} tickLine={false} tick={{ fill: "#6B7280", fontSize: 12 }} allowDecimals={false} />
-              <Tooltip contentStyle={{ borderRadius: "8px", border: "none", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }} cursor={{ stroke: "#E5E7EB", strokeWidth: 1, strokeDasharray: "5 5" }} />
-              <Area type="monotone" dataKey="cases" stroke="#4F46E5" strokeWidth={3} fill="url(#caseGradient)" dot={false} activeDot={{ r: 6, fill: "#4F46E5", stroke: "#fff", strokeWidth: 2 }} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* Secondary Charts */}
-      <div className="admin-secondary-charts-grid">
-        {/* Status Distribution */}
-        <div className="admin-chart-card">
-          <h3 className="admin-secondary-chart-title">{t("statusDistribution", "Status distribution")}</h3>
-          <div className="admin-pie-chart-wrapper">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={dynamicStatusData} cx="50%" cy="45%" innerRadius={60} outerRadius={90} paddingAngle={2} dataKey="value" stroke="none">
-                  {dynamicStatusData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip contentStyle={{ borderRadius: "8px", border: "none", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }} />
-                <Legend verticalAlign="bottom" height={36} iconType="circle" formatter={(value) => <span className="admin-legend-label">{value}</span>} />
-              </PieChart>
-            </ResponsiveContainer>
+          <div className="admin-analytics-banner-actions">
+            <button
+              type="button"
+              className="btn-analytics-drawer"
+              onClick={() => setIsChartSlideBarOpen(true)}
+            >
+              <SlidersHorizontal size={15} />
+              <span>{t("openChartsDrawer", "Slide Out Charts")}</span>
+            </button>
+            <button
+              type="button"
+              className="btn-analytics-toggle"
+              onClick={() => setIsChartsExpanded(!isChartsExpanded)}
+            >
+              {isChartsExpanded ? (
+                <>
+                  <ChevronUp size={16} />
+                  <span>{t("collapseCharts", "Hide Charts")}</span>
+                </>
+              ) : (
+                <>
+                  <ChevronDown size={16} />
+                  <span>{t("expandCharts", "Show Charts")}</span>
+                </>
+              )}
+            </button>
           </div>
         </div>
 
-        {/* Cases by Type */}
-        <div className="admin-chart-card">
-          <h3 className="admin-secondary-chart-title">{t("casesByType", "Cases by type")}</h3>
-          <div className="admin-bar-chart-wrapper">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={dynamicTypeData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "#6B7280", fontSize: 12 }} dy={10} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fill: "#6B7280", fontSize: 12 }} allowDecimals={false} />
-                <Tooltip cursor={{ fill: "#F3F4F6" }} contentStyle={{ borderRadius: "8px", border: "none", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }} />
-                <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                  {dynamicTypeData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
+        {isChartsExpanded && (
+          <div className="admin-analytics-collapsible-body">
+            {/* Chart Section */}
+            <div className="admin-chart-card">
+              <div className="admin-chart-header">
+                <div>
+                  <h3 className="admin-chart-title">{t("casesOverTime", "Cases over time")}</h3>
+                  <p className="admin-chart-subtitle">{t("newCasesPerPeriod", "New cases per period")}</p>
+                </div>
+                <div className="admin-chart-filters">
+                  {["Daily", "Weekly", "Monthly", "Yearly"].map((period) => (
+                    <button
+                      key={period}
+                      className={chartPeriod === period ? "admin-chart-filter-btn-active" : "admin-chart-filter-btn"}
+                      onClick={() => setChartPeriod(period)}
+                    >
+                      {t(period.toLowerCase(), period)}
+                    </button>
                   ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+                </div>
+              </div>
+              <div className="admin-chart-wrapper">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={filteredChartData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="caseGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#4F46E5" stopOpacity={0.3} />
+                        <stop offset="50%" stopColor="#818CF8" stopOpacity={0.12} />
+                        <stop offset="100%" stopColor="#C7D2FE" stopOpacity={0.02} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "#6B7280", fontSize: 12 }} dy={10} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fill: "#6B7280", fontSize: 12 }} allowDecimals={false} />
+                    <Tooltip contentStyle={{ borderRadius: "8px", border: "none", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }} cursor={{ stroke: "#E5E7EB", strokeWidth: 1, strokeDasharray: "5 5" }} />
+                    <Area type="monotone" dataKey="cases" stroke="#4F46E5" strokeWidth={3} fill="url(#caseGradient)" dot={false} activeDot={{ r: 6, fill: "#4F46E5", stroke: "#fff", strokeWidth: 2 }} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Secondary Charts */}
+            <div className="admin-secondary-charts-grid">
+              {/* Status Distribution */}
+              <div className="admin-chart-card">
+                <h3 className="admin-secondary-chart-title">{t("statusDistribution", "Status distribution")}</h3>
+                <div className="admin-pie-chart-wrapper">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={dynamicStatusData} cx="50%" cy="45%" innerRadius={60} outerRadius={90} paddingAngle={2} dataKey="value" stroke="none">
+                        {dynamicStatusData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip contentStyle={{ borderRadius: "8px", border: "none", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }} />
+                      <Legend verticalAlign="bottom" height={36} iconType="circle" formatter={(value) => <span className="admin-legend-label">{value}</span>} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Cases by Type */}
+              <div className="admin-chart-card">
+                <h3 className="admin-secondary-chart-title">{t("casesByType", "Cases by type")}</h3>
+                <div className="admin-bar-chart-wrapper">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={dynamicTypeData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "#6B7280", fontSize: 12 }} dy={10} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fill: "#6B7280", fontSize: 12 }} allowDecimals={false} />
+                      <Tooltip cursor={{ fill: "#F3F4F6" }} contentStyle={{ borderRadius: "8px", border: "none", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }} />
+                      <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                        {dynamicTypeData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        )}
+      </section>
 
       {/* Recent Cases Section */}
       <section className="letters-list-section">
@@ -1062,6 +1165,144 @@ export default function AdminDashboard() {
           </table>
         </div>
       </section>
+
+      {/* ── Visualization Charts Slide Bar Drawer (Offcanvas Side Panel) ── */}
+      {isChartSlideBarOpen && (
+        <div
+          className="admin-charts-slidebar-overlay"
+          onClick={() => setIsChartSlideBarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+      <aside
+        className={`admin-charts-slidebar ${isChartSlideBarOpen ? "admin-charts-slidebar-open" : ""}`}
+        aria-label={t("analyticsSlideBarTitle", "Visualization & Analytics")}
+        role="dialog"
+        aria-modal="true"
+      >
+        <div className="admin-charts-slidebar-header">
+          <div className="admin-charts-slidebar-header-info">
+            <div className="admin-charts-slidebar-icon">
+              <BarChart2 size={22} />
+            </div>
+            <div>
+              <h3 className="admin-charts-slidebar-title">
+                {t("analyticsSlideBarTitle", "Visualization & Analytics")}
+              </h3>
+              <p className="admin-charts-slidebar-subtitle">
+                {t("analyticsSlideBarSubtitle", "Trends, case distributions, and classification breakdown")}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="admin-charts-slidebar-close-btn"
+            onClick={() => setIsChartSlideBarOpen(false)}
+            aria-label={t("closeChartsDrawer", "Close Slide Bar")}
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="admin-charts-slidebar-content">
+          {/* Quick Metrics Summary */}
+          <div className="admin-charts-slidebar-metrics">
+            <div className="admin-slidebar-metric-card" style={{ borderLeft: "3px solid #1e3a8a" }}>
+              <div className="admin-slidebar-metric-label">{t("totalCases", "Total Cases")}</div>
+              <div className="admin-slidebar-metric-val">{totalCasesCount}</div>
+            </div>
+            <div className="admin-slidebar-metric-card" style={{ borderLeft: "3px solid #ea580c" }}>
+              <div className="admin-slidebar-metric-label">{t("underInvestigation", "In Investigation")}</div>
+              <div className="admin-slidebar-metric-val">{underInvestigationCount}</div>
+            </div>
+            <div className="admin-slidebar-metric-card" style={{ borderLeft: "3px solid #d97706" }}>
+              <div className="admin-slidebar-metric-label">{t("underSubjectOfficer", "Subject Officer")}</div>
+              <div className="admin-slidebar-metric-val">{underSubjectOfficerCount}</div>
+            </div>
+            <div className="admin-slidebar-metric-card" style={{ borderLeft: "3px solid #16a34a" }}>
+              <div className="admin-slidebar-metric-label">{t("closed", "Closed")}</div>
+              <div className="admin-slidebar-metric-val">{closedCount}</div>
+            </div>
+          </div>
+
+          {/* Chart 1: Cases over time */}
+          <div className="admin-charts-slidebar-card">
+            <div className="admin-charts-slidebar-card-header">
+              <div>
+                <h4 className="admin-charts-slidebar-card-title">{t("casesOverTime", "Cases over time")}</h4>
+                <p className="admin-charts-slidebar-card-subtitle">{t("newCasesPerPeriod", "New cases per period")}</p>
+              </div>
+              <div className="admin-chart-filters">
+                {["Daily", "Weekly", "Monthly", "Yearly"].map((period) => (
+                  <button
+                    key={`sb-${period}`}
+                    className={chartPeriod === period ? "admin-chart-filter-btn-active" : "admin-chart-filter-btn"}
+                    onClick={() => setChartPeriod(period)}
+                  >
+                    {t(period.toLowerCase(), period)}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="admin-chart-wrapper">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={filteredChartData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="caseGradientDrawer" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#4F46E5" stopOpacity={0.3} />
+                      <stop offset="50%" stopColor="#818CF8" stopOpacity={0.12} />
+                      <stop offset="100%" stopColor="#C7D2FE" stopOpacity={0.02} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "#6B7280", fontSize: 12 }} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "#6B7280", fontSize: 12 }} allowDecimals={false} />
+                  <Tooltip contentStyle={{ borderRadius: "8px", border: "none", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }} cursor={{ stroke: "#E5E7EB", strokeWidth: 1, strokeDasharray: "5 5" }} />
+                  <Area type="monotone" dataKey="cases" stroke="#4F46E5" strokeWidth={3} fill="url(#caseGradientDrawer)" dot={false} activeDot={{ r: 6, fill: "#4F46E5", stroke: "#fff", strokeWidth: 2 }} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Chart 2: Status Distribution */}
+          <div className="admin-charts-slidebar-card">
+            <h4 className="admin-charts-slidebar-card-title">{t("statusDistribution", "Status distribution")}</h4>
+            <div className="admin-pie-chart-wrapper">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={dynamicStatusData} cx="50%" cy="45%" innerRadius={60} outerRadius={90} paddingAngle={2} dataKey="value" stroke="none">
+                    {dynamicStatusData.map((entry, index) => (
+                      <Cell key={`sb-cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip contentStyle={{ borderRadius: "8px", border: "none", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }} />
+                  <Legend verticalAlign="bottom" height={36} iconType="circle" formatter={(value) => <span className="admin-legend-label">{value}</span>} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Chart 3: Cases by Type */}
+          <div className="admin-charts-slidebar-card">
+            <h4 className="admin-charts-slidebar-card-title">{t("casesByType", "Cases by type")}</h4>
+            <div className="admin-bar-chart-wrapper">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={dynamicTypeData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "#6B7280", fontSize: 12 }} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "#6B7280", fontSize: 12 }} allowDecimals={false} />
+                  <Tooltip cursor={{ fill: "#F3F4F6" }} contentStyle={{ borderRadius: "8px", border: "none", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }} />
+                  <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                    {dynamicTypeData.map((entry, index) => (
+                      <Cell key={`sb-bar-${index}`} fill={entry.color} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      </aside>
     </div>
   );
 }

@@ -37,12 +37,28 @@ export default function Home() {
     }
   }, []);
 
-  // If already signed in, redirect to correct dashboard
+  // If already signed in, redirect to correct dashboard (unless arriving via logout/timeout)
   useEffect(() => {
     const checkRedirect = async () => {
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get("reason") || params.get("logout")) {
+          // Explicitly clear session keys to prevent any redirect bounce
+          localStorage.removeItem("dcmms_simulated_session");
+          localStorage.removeItem("dcmms_username");
+          localStorage.removeItem("dcmms_user_role");
+          localStorage.removeItem("dcmms_current_user");
+          localStorage.removeItem("dcmms_current_session_id");
+          localStorage.removeItem("dcmms_last_activity");
+          return;
+        }
+      }
       const profile = await getCurrentProfile();
       if (profile?.role) {
-        router.replace(dashboardPath(profile.role));
+        const target = dashboardPath(profile.role);
+        if (target && target !== "/" && target !== window.location.pathname) {
+          router.replace(target);
+        }
       }
     };
     checkRedirect();
@@ -70,7 +86,7 @@ export default function Home() {
         return { id: "officer-200133702441", full_name: "Avishka Kavishan", role: "admin" as UserRole, email };
       }
       if (emailLower === "avishakavishan3@gmail.com" && password === "kavi123456") {
-        return { id: "sim-daily-mail", full_name: "Avishka", role: "daily_mail" as UserRole, email };
+        return { id: "sim-daily-mail", full_name: "Avishka", role: "additional_secretary" as UserRole, email };
       }
       if (emailLower === "admin@dcmms.gov.lk" && password === "sysadmin123456") {
         return { id: "sim-sysadmin", full_name: "System Admin", role: "system_admin" as UserRole, email };
@@ -126,6 +142,7 @@ export default function Home() {
           localStorage.setItem("dcmms_username", res.data.full_name || sessionUser.full_name);
           localStorage.setItem("dcmms_user_role", userRole);
           localStorage.setItem("dcmms_current_session_id", activeSessionId);
+          localStorage.setItem("dcmms_last_activity", Date.now().toString());
           window.dispatchEvent(new Event("dcmms_session_updated"));
           window.dispatchEvent(new Event("storage"));
         }
@@ -143,6 +160,7 @@ export default function Home() {
           localStorage.setItem("dcmms_username", simUser.full_name);
           localStorage.setItem("dcmms_user_role", simUser.role);
           localStorage.setItem("dcmms_current_session_id", simSession.id);
+          localStorage.setItem("dcmms_last_activity", Date.now().toString());
           window.dispatchEvent(new Event("dcmms_session_updated"));
           window.dispatchEvent(new Event("storage"));
         }

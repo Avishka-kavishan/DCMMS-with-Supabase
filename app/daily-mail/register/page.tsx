@@ -10,7 +10,7 @@ import { Sidebar } from "@/components/Sidebar";
 import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
-import { getCurrentProfile, UserProfile } from "@/lib/auth";
+import { getCurrentProfile, UserProfile, dashboardPath } from "@/lib/auth";
 import {
   saveDailyMailRecordServer,
   saveDailyMailToNewTableServer,
@@ -146,6 +146,18 @@ function RegisterComplaintForm() {
     setMounted(true);
     const initAuthAndAdmins = async () => {
       const prof = await getCurrentProfile();
+      if (!prof) {
+        router.replace("/");
+        return;
+      }
+
+      // Based on additional_secretary role, only display the full complaint registration form for that role (or system_admin)
+      if (prof.role !== "additional_secretary" && prof.role !== "system_admin") {
+        const target = dashboardPath(prof.role);
+        router.replace(target && target !== "/daily-mail/register" ? target : "/admin");
+        return;
+      }
+
       setCurrentUserProfile(prof);
 
       // Load registered branch administrators for quick authorization
@@ -159,13 +171,17 @@ function RegisterComplaintForm() {
       }
     };
     initAuthAndAdmins();
-  }, []);
+  }, [router]);
 
   const isCurrentUserBranchAdmin = Boolean(
     currentUserProfile &&
       (currentUserProfile.role === "admin" ||
         currentUserProfile.role === "system_admin" ||
+        currentUserProfile.role === "additional_secretary" ||
+        currentUserProfile.role === "assistant_secretary_discipline" ||
+        currentUserProfile.role === "senior_assistant_secretary" ||
         String(currentUserProfile.role).toLowerCase().includes("admin") ||
+        String(currentUserProfile.role).toLowerCase().includes("secretary") ||
         String(currentUserProfile.role).toLowerCase().includes("branch"))
   );
   const isBranchAdmin = isCurrentUserBranchAdmin;
@@ -228,6 +244,12 @@ function RegisterComplaintForm() {
     isAnswerLetter: false as boolean | string,
     documentUrl: "",
     documentName: "",
+    // ── Additional Secretary Fields ──
+    addSecName: "",          // Name of the Additional Secretary who processed this
+    addSecProcessedDate: "", // Date the Additional Secretary processed / reviewed it
+    addSecInstructions: "",  // Instructions given by the Additional Secretary
+    addSecForwardMethod: "", // How the file is forwarded (e.g. "Discipline Branch", "Investigation Branch")
+    addSecNotes: "",         // Any additional notes by the Additional Secretary
   });
 
   const [selectedPdf, setSelectedPdf] = useState<File | null>(null);
@@ -811,6 +833,12 @@ function RegisterComplaintForm() {
           isAnswerLetter: found.is_answer_letter === true || String(found.is_answer_letter) === "true",
           documentUrl: found.document_url || found.documentUrl || "",
           documentName: found.document_name || found.documentName || "",
+          // ── Additional Secretary Fields ──
+          addSecName: found.add_sec_name || found.addSecName || "",
+          addSecProcessedDate: formatFormDate(found.add_sec_processed_date || found.addSecProcessedDate),
+          addSecInstructions: found.add_sec_instructions || found.addSecInstructions || "",
+          addSecForwardMethod: found.add_sec_forward_method || found.addSecForwardMethod || "",
+          addSecNotes: found.add_sec_notes || found.addSecNotes || "",
         };
 
         setFormState(loadedFormData);
@@ -1006,6 +1034,12 @@ function RegisterComplaintForm() {
       isAnswerLetter: formState.isAnswerLetter,
       documentUrl: uploadedUrl,
       documentName: uploadedName,
+      // ── Additional Secretary Fields ──
+      addSecName: formState.addSecName,
+      addSecProcessedDate: formState.addSecProcessedDate,
+      addSecInstructions: formState.addSecInstructions,
+      addSecForwardMethod: formState.addSecForwardMethod,
+      addSecNotes: formState.addSecNotes,
     };
 
     // Always save directly to PostgreSQL database tables (dcmms_daily_mail, daily_mail, daily_mail_letter_table)
@@ -1235,7 +1269,7 @@ function RegisterComplaintForm() {
         if (typeof window !== "undefined") window.dispatchEvent(new Event("dcmms_data_updated"));
       }
 
-      router.push("/daily-mail");
+      router.push("/admin");
       return;
     }
 
@@ -1330,7 +1364,7 @@ function RegisterComplaintForm() {
 
         localStorage.setItem("show_register_success", "true");
         if (typeof window !== "undefined") window.dispatchEvent(new Event("dcmms_data_updated"));
-        const nextUrl = "/daily-mail";
+        const nextUrl = "/admin";
         router.push(nextUrl);
         return;
       } catch (err: any) {
@@ -1394,7 +1428,7 @@ function RegisterComplaintForm() {
       localStorage.setItem("show_register_success", "true");
     }
 
-    const nextUrl = "/daily-mail";
+    const nextUrl = "/admin";
     router.push(nextUrl);
   };
 
@@ -1457,7 +1491,7 @@ function RegisterComplaintForm() {
 
         console.debug("Supabase draft upsert returned:", upsertedDraft);
         localStorage.setItem("show_register_success", "true");
-        router.push("/daily-mail");
+        router.push("/admin");
         return;
       } catch (err: any) {
         const errCode = err?.code ?? "";
@@ -1485,7 +1519,7 @@ function RegisterComplaintForm() {
       localStorage.setItem("show_register_success", "true");
     }
 
-    router.push("/daily-mail");
+    router.push("/admin");
   };
 
   // Close sidebar on Escape key press (A11y compliance)
@@ -1760,6 +1794,7 @@ function RegisterComplaintForm() {
         isSidebarOpen={isSidebarOpen}
         setIsSidebarOpen={setIsSidebarOpen}
         handleLogout={handleLogout}
+        role={currentUserProfile?.role || "admin"}
       />
 
       <div className="dashboard-layout">
@@ -1779,8 +1814,16 @@ function RegisterComplaintForm() {
                 </svg>
               </button>
               <div className="dashboard-title-area">
-                <h2 className="dashboard-main-title">{t("dailyMailReporter")}</h2>
-                <p className="dashboard-main-subtitle">{t("registerLettersDesc")}</p>
+                <h2 className="dashboard-main-title">
+                  {currentUserProfile?.role === "additional_secretary"
+                    ? t("registerComplaintDetailed", "Full Complaint Registration")
+                    : t("dailyMailReporter", "Daily Mail Officer")}
+                </h2>
+                <p className="dashboard-main-subtitle">
+                  {currentUserProfile?.role === "additional_secretary"
+                    ? t("registerLettersDescSec", "Register incoming complaints and route to disciplinary branch officers")
+                    : t("registerLettersDesc", "Register incoming complaints and letters")}
+                </p>
               </div>
             </div>
 
@@ -1909,7 +1952,7 @@ function RegisterComplaintForm() {
                   </p>
                 </div>
                 <div className="register-header-right-btns">
-                  <Link href="/daily-mail" className="btn-back-home">
+                  <Link href="/admin" className="btn-back-home">
                     <svg className="btn-back-home-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
                     </svg>
@@ -2714,6 +2757,147 @@ function RegisterComplaintForm() {
                             style={(isFieldDisabled || isSubsequentMode) ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
                           />
                         </div>
+                      </div>
+
+                    </div>
+                  </div>
+
+                  {/* ── Card 3.5: Additional Secretary Details (අතිරේක ලේකම් විස්තර) ── */}
+                  <div className="register-step-card" style={{ borderLeftColor: "#7c3aed" }}>
+                    <h3 className="register-step-title" style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <span style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        width: "28px",
+                        height: "28px",
+                        backgroundColor: "#ede9fe",
+                        borderRadius: "6px",
+                        flexShrink: 0
+                      }}>
+                        <svg style={{ width: "17px", height: "17px", color: "#7c3aed" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                      </span>
+                      {lang === "si"
+                        ? "අතිරේක ලේකම් විස්තර"
+                        : lang === "ta"
+                        ? "கூடுதல் செயலாளர் விவரங்கள்"
+                        : "Additional Secretary Details"}
+                    </h3>
+                    <div className="register-step-grid">
+
+                      {/* Additional Secretary Name */}
+                      <div className="form-field-group">
+                        <label htmlFor="addSecName" className="field-label">
+                          {lang === "si" ? "අතිරේක ලේකම්ගේ නම" : lang === "ta" ? "கூடுதல் செயலாளர் பெயர்" : "Name of Additional Secretary"}
+                        </label>
+                        <input
+                          id="addSecName"
+                          type="text"
+                          disabled={isFieldDisabled}
+                          readOnly={isFieldDisabled}
+                          value={formState.addSecName}
+                          onChange={(e) => setFormState({ ...formState, addSecName: e.target.value })}
+                          placeholder={lang === "si" ? "අතිරේක ලේකම්ගේ සම්පූර්ණ නම" : lang === "ta" ? "கூடுதல் செயலாளரின் முழுப்பெயர்" : "e.g. Mr. K. Perera"}
+                          className="field-input"
+                          style={isFieldDisabled ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
+                        />
+                      </div>
+
+                      {/* Date Processed by Additional Secretary */}
+                      <div className="form-field-group">
+                        <label htmlFor="addSecProcessedDate" className="field-label">
+                          {lang === "si" ? "අතිරේක ලේකම් විසින් සකස් කළ දිනය" : lang === "ta" ? "கூடுதல் செயலாளரால் செயலாக்கப்பட்ட திகதி" : "Date Processed by Additional Secretary"}
+                        </label>
+                        <div className="input-icon-wrapper">
+                          <input
+                            id="addSecProcessedDate"
+                            type="date"
+                            disabled={isFieldDisabled}
+                            readOnly={isFieldDisabled}
+                            value={formState.addSecProcessedDate}
+                            onChange={(e) => setFormState({ ...formState, addSecProcessedDate: e.target.value })}
+                            className="field-input"
+                            style={isFieldDisabled ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Forwarded To (Branch) */}
+                      <div className="form-field-group">
+                        <label htmlFor="addSecForwardMethod" className="field-label">
+                          {lang === "si" ? "ලිපිය යොමු කළ ශාඛාව" : lang === "ta" ? "கோப்பு அனுப்பப்பட்ட பிரிவு" : "Forwarded to Branch"}
+                        </label>
+                        <select
+                          id="addSecForwardMethod"
+                          disabled={isFieldDisabled}
+                          value={formState.addSecForwardMethod}
+                          onChange={(e) => setFormState({ ...formState, addSecForwardMethod: e.target.value })}
+                          className="field-select"
+                          style={isFieldDisabled ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
+                        >
+                          <option value="">{lang === "si" ? "-- ශාඛාව තෝරන්න --" : lang === "ta" ? "-- பிரிவைத் தேர்ந்தெடுக்கவும் --" : "-- Select Branch --"}</option>
+                          <option value="Discipline Branch">{lang === "si" ? "විනය ශාඛාව" : lang === "ta" ? "ஒழுக்காற்றுப் பிரிவு" : "Discipline Branch"}</option>
+                          <option value="Investigation Branch">{lang === "si" ? "විමර්ශන ශාඛාව" : lang === "ta" ? "புலனாய்வுப் பிரிவு" : "Investigation Branch"}</option>
+                          <option value="Legal Branch">{lang === "si" ? "නීති ශාඛාව" : lang === "ta" ? "சட்டப் பிரிவு" : "Legal Branch"}</option>
+                          <option value="HR Branch">{lang === "si" ? "මානව සම්පත් ශාඛාව" : lang === "ta" ? "மனித வள பிரிவு" : "HR Branch"}</option>
+                          <option value="Other">{lang === "si" ? "වෙනත්" : lang === "ta" ? "மற்றவை" : "Other"}</option>
+                        </select>
+                      </div>
+
+                      {/* Instructions by Additional Secretary — full width */}
+                      <div className="form-field-group" style={{ gridColumn: "1 / -1" }}>
+                        <label htmlFor="addSecInstructions" className="field-label">
+                          {lang === "si" ? "අතිරේක ලේකම් විසින් ලබා දුන් උපදෙස්" : lang === "ta" ? "கூடுதல் செயலாளரின் வழிமுறைகள்" : "Instructions by Additional Secretary"}
+                        </label>
+                        <textarea
+                          id="addSecInstructions"
+                          disabled={isFieldDisabled}
+                          readOnly={isFieldDisabled}
+                          value={formState.addSecInstructions}
+                          onChange={(e) => setFormState({ ...formState, addSecInstructions: e.target.value })}
+                          placeholder={lang === "si"
+                            ? "අතිරේක ලේකම් විසින් ලිපිය සම්බන්ධව ලබා දුන් විශේෂ උපදෙස් / නිර්දේශ ඇතුළත් කරන්න..."
+                            : lang === "ta"
+                            ? "கூடுதல் செயலாளர் வழங்கிய சிறப்பு வழிமுறைகள் அல்லது பரிந்துரைகளை உள்ளிடவும்..."
+                            : "Enter any specific instructions or recommendations given by the Additional Secretary regarding this letter..."}
+                          className="field-input field-textarea"
+                          rows={3}
+                          style={{
+                            height: "88px",
+                            resize: "vertical",
+                            padding: "10px 14px",
+                            ...(isFieldDisabled ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {})
+                          }}
+                        />
+                      </div>
+
+                      {/* Additional Notes — full width */}
+                      <div className="form-field-group" style={{ gridColumn: "1 / -1" }}>
+                        <label htmlFor="addSecNotes" className="field-label">
+                          {lang === "si" ? "අතිරේක ලේකම් සටහන් (විශේෂ)" : lang === "ta" ? "கூடுதல் செயலாளர் குறிப்புகள்" : "Additional Secretary Notes"}
+                        </label>
+                        <textarea
+                          id="addSecNotes"
+                          disabled={isFieldDisabled}
+                          readOnly={isFieldDisabled}
+                          value={formState.addSecNotes}
+                          onChange={(e) => setFormState({ ...formState, addSecNotes: e.target.value })}
+                          placeholder={lang === "si"
+                            ? "අතිරේක ලේකම් ලිපිය සම්බන්ධව ඇතුළත් කළ ඕනෑම සටහන්..."
+                            : lang === "ta"
+                            ? "கூடுதல் செயலாளர் எழுதிய கூடுதல் குறிப்புகள்..."
+                            : "Any additional notes recorded by the Additional Secretary for this complaint..."}
+                          className="field-input field-textarea"
+                          rows={2}
+                          style={{
+                            height: "72px",
+                            resize: "vertical",
+                            padding: "10px 14px",
+                            ...(isFieldDisabled ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {})
+                          }}
+                        />
                       </div>
 
                     </div>

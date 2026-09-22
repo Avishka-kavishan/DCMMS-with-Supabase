@@ -11,7 +11,7 @@ import { useTranslation } from "react-i18next";
 import { Sidebar } from "@/components/Sidebar";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
-import { signOut, getCurrentProfile, getRoleDisplayName, UserProfile } from "@/lib/auth";
+import { signOut, getCurrentProfile, getRoleDisplayName, UserProfile, dashboardPath } from "@/lib/auth";
 import { getDailyMailRecordsServer, getLetterEditRequestsServer } from "@/lib/db-actions";
 import { exportToExcel } from "@/lib/export-excel";
 
@@ -132,7 +132,7 @@ export default function DailyMailPage() {
 
   useEffect(() => {
     fetchEditRequests();
-    const interval = setInterval(fetchEditRequests, 10000);
+    const interval = setInterval(fetchEditRequests, 30000);
     const handleClickOutside = (event: MouseEvent) => {
       if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
         setShowNotifDropdown(false);
@@ -281,8 +281,8 @@ export default function DailyMailPage() {
     window.addEventListener("dcmms_data_updated", handleLocalUpdate);
     window.addEventListener("dcmms_assignment_updated", handleLocalUpdate);
 
-    // Fast 3-second background polling for live multi-device synchronization
-    const interval = setInterval(fetchLetters, 3_000);
+    // Calm 30-second background polling for live multi-device synchronization
+    const interval = setInterval(fetchLetters, 30_000);
 
     return () => {
       supabase.removeChannel(channel);
@@ -310,10 +310,19 @@ export default function DailyMailPage() {
     i18n.changeLanguage(lng);
   };
 
-  // Session guard — redirect to login if not authenticated
+  // Session guard — redirect to user's primary dashboard since daily_mail role is retired
   useEffect(() => {
     getCurrentProfile().then((profile) => {
-      if (!profile || profile.role !== "daily_mail") router.replace("/");
+      if (!profile) {
+        router.replace("/");
+        return;
+      }
+      const target = dashboardPath(profile.role);
+      if (target && target !== "/daily-mail") {
+        router.replace(target);
+      } else {
+        router.replace("/admin");
+      }
     });
   }, [router]);
 
@@ -881,30 +890,6 @@ export default function DailyMailPage() {
             <div className="letters-list-header">
               <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                 <h3 className="section-title" style={{ margin: 0 }}>{t("letterEntries")}</h3>
-                <button
-                  type="button"
-                  onClick={() => router.push("/daily-mail/add-letter")}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 6,
-                    padding: "6px 14px",
-                    borderRadius: 8,
-                    fontSize: "0.825rem",
-                    fontWeight: 600,
-                    backgroundColor: "#1e40af",
-                    color: "#ffffff",
-                    border: "none",
-                    cursor: "pointer",
-                    boxShadow: "0 2px 5px rgba(30, 64, 175, 0.2)",
-                    transition: "all 0.15s ease"
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1d4ed8")}
-                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#1e40af")}
-                >
-                  <span style={{ fontSize: "1rem", fontWeight: 700 }}>+</span>
-                  <span>{t("addNewLetter", "Add New Letter")}</span>
-                </button>
               </div>
               
               <div className="letters-filters-group">

@@ -1,6 +1,5 @@
 export type UserRole =
   | "admin"
-  | "daily_mail"
   | "subject_officer"
   | "investigation_officer"
   | "system_admin"
@@ -19,7 +18,7 @@ export interface UserProfile {
 }
 
 export function normalizeRole(roleStr?: string): UserRole {
-  if (!roleStr) return "daily_mail";
+  if (!roleStr) return "additional_secretary";
   const lower = roleStr.toLowerCase().trim();
   if (lower.includes("system") || lower === "system_admin") return "system_admin";
   
@@ -45,8 +44,9 @@ export function normalizeRole(roleStr?: string): UserRole {
   if (lower.includes("branch") || lower.includes("administrator") || lower === "admin") return "admin";
   if (lower.includes("subject") || lower === "subject_officer") return "subject_officer";
   if (lower.includes("investigation") || lower === "investigation_officer") return "investigation_officer";
-  if (lower.includes("daily") || lower.includes("mail") || lower === "daily_mail") return "daily_mail";
-  return "daily_mail";
+  // Former daily_mail role — map to additional_secretary for backward compatibility
+  if (lower.includes("daily") || lower.includes("mail") || lower === "daily_mail") return "additional_secretary";
+  return "additional_secretary";
 }
 
 /**
@@ -105,10 +105,6 @@ export function getRoleDisplayName(
     return t ? t("roleSubject", "Subject Officer") : "Subject Officer";
   }
 
-  // Daily Mail Officer / Daily Mail Reporter
-  if (lower.includes("daily") || lower.includes("mail")) {
-    return t ? t("roleDailyMail", "Daily Mail Officer") : "Daily Mail Officer";
-  }
 
   // Discipline Branch Administrator / Admin
   if (lower.includes("branch") || lower.includes("discipline") || lower.includes("administrator") || lower === "admin") {
@@ -150,7 +146,7 @@ export async function getCurrentProfile(): Promise<UserProfile | null> {
     return {
       id: `usr-${storedUsername.toLowerCase().replace(/[^a-z0-9]/g, "_")}`,
       full_name: storedUsername,
-      role: normalizeRole(storedRole || "daily_mail"),
+      role: normalizeRole(storedRole || "additional_secretary"),
       raw_role: storedRole || "",
     };
   }
@@ -169,8 +165,6 @@ export function dashboardPath(role: string): string {
     case "senior_assistant_secretary":
     case "additional_secretary":
       return "/admin";
-    case "daily_mail":
-      return "/daily-mail";
     case "subject_officer":
       return "/subject";
     case "investigation_officer":

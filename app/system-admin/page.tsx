@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { Sidebar } from "@/components/Sidebar";
-import { getCurrentProfile, signOut } from "@/lib/auth";
+import { getCurrentProfile, signOut, dashboardPath } from "@/lib/auth";
 import { 
   exportToExcel, 
   getActiveExcelPassword, 
@@ -110,7 +110,12 @@ export default function SystemAdminDashboard() {
     if (profile) {
       setAdminName(profile.full_name);
       if (profile.role !== "system_admin") {
-        router.replace("/");
+        const target = dashboardPath(profile.role);
+        if (target !== "/system-admin" && target !== "/") {
+          router.replace(target);
+        } else {
+          router.replace("/");
+        }
         return;
       }
     } else {
