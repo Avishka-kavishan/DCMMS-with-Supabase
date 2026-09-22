@@ -1021,7 +1021,6 @@
 .admin-notification-list {
   max-height: 380px;
   overflow-y: auto;
-  divide-y: 1px solid #f1f5f9;
 }
 
 .admin-notification-item {
