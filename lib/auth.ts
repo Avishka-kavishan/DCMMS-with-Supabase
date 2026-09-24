@@ -114,6 +114,77 @@ export function getRoleDisplayName(
   return roleStr;
 }
 
+/**
+ * Returns the dynamic button label for adding letters based on the user's role:
+ * - Additional Secretary: "අතිලේ වෙත ලැබෙන ලිපි එක් කරන්න"
+ * - Senior Assistant Secretary: "ජෙසලේ වෙත ලැබෙන ලිපි එක් කරන්න"
+ * - Assistant Secretary Investigation Branch: "විමර්ශන අංශය වෙත ලැබෙන ලිපි එක් කරන්න"
+ * - Assistant Secretary Discipline Branch: "විනය අංශය වෙත ලැබෙන ලිපි එක් කරන්න"
+ */
+export function getAddLetterButtonLabel(
+  roleStr?: string,
+  rawRoleStr?: string,
+  t?: any
+): string {
+  const norm = normalizeRole(roleStr || rawRoleStr);
+  const rawLower = `${roleStr || ""} ${rawRoleStr || ""}`.toLowerCase();
+
+  // 1. Assistant Secretary Investigation Branch
+  if (
+    norm === "assistant_secretary_investigation" ||
+    (rawLower.includes("investigation") && (rawLower.includes("assistant") || rawLower.includes("secretary") || rawLower.includes("branch")))
+  ) {
+    return t
+      ? t("addLetterRoleAsstSecInvestigation", "විමර්ශන අංශය වෙත ලැබෙන ලිපි එක් කරන්න")
+      : "විමර්ශන අංශය වෙත ලැබෙන ලිපි එක් කරන්න";
+  }
+
+  // 2. Senior Assistant Secretary
+  if (
+    norm === "senior_assistant_secretary" ||
+    rawLower.includes("senior assistant") ||
+    rawLower.includes("senior_assistant") ||
+    rawLower.includes("ජෙසලේ")
+  ) {
+    return t
+      ? t("addLetterRoleSnrAsstSec", "ජෙසලේ වෙත ලැබෙන ලිපි එක් කරන්න")
+      : "ජෙසලේ වෙත ලැබෙන ලිපි එක් කරන්න";
+  }
+
+  // 3. Assistant Secretary Discipline Branch
+  if (
+    norm === "assistant_secretary_discipline" ||
+    (rawLower.includes("discipline") && (rawLower.includes("assistant") || rawLower.includes("secretary") || rawLower.includes("branch")))
+  ) {
+    return t
+      ? t("addLetterRoleAsstSecDiscipline", "විනය අංශය වෙත ලැබෙන ලිපි එක් කරන්න")
+      : "විනය අංශය වෙත ලැබෙන ලිපි එක් කරන්න";
+  }
+
+  // 4. Additional Secretary
+  if (
+    norm === "additional_secretary" ||
+    rawLower.includes("additional") ||
+    rawLower.includes("අතිලේ")
+  ) {
+    return t
+      ? t("addLetterRoleAddSec", "අතිලේ වෙත ලැබෙන ලිපි එක් කරන්න")
+      : "අතිලේ වෙත ලැබෙන ලිපි එක් කරන්න";
+  }
+
+  // Discipline fallback
+  if (rawLower.includes("discipline")) {
+    return t
+      ? t("addLetterRoleAsstSecDiscipline", "විනය අංශය වෙත ලැබෙන ලිපි එක් කරන්න")
+      : "විනය අංශය වෙත ලැබෙන ලිපි එක් කරන්න";
+  }
+
+  // Default fallback
+  return t
+    ? t("addLetterRoleAddSec", "අතිලේ වෙත ලැබෙන ලිපි එක් කරන්න")
+    : "අතිලේ වෙත ලැබෙන ලිපි එක් කරන්න";
+}
+
 /** Returns the currently signed-in user's profile (id, full_name, role, raw_role, email), or null. */
 export async function getCurrentProfile(): Promise<UserProfile | null> {
   if (typeof window === "undefined") return null;

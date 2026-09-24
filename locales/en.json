@@ -589,6 +589,8 @@
   "caseDossier": "Case Dossier",
   "caseDossierTitle": "Case Dossier & Investigation Timeline",
   "caseDossierDesc": "Multi-role process tracking & officer workflow details",
+  "viewLetterTitle": "Letter Details & Routing",
+  "viewLetterDesc": "Official letter record, sender information, and routing assignment",
   "activeCase": "Active Case",
   "priorityUrgent": "Urgent Priority",
   "inquiryCaseDossier": "Inquiry Case Dossier #{{caseNo}}",
@@ -764,6 +766,10 @@
   "roleCategoryOfficer": "Operational Officers",
   "roleCategorySystem": "System Administration",
   "addNewLetter": "Add New Letter",
+  "addLetterRoleAddSec": "Add Letters Received to Addl. Sec",
+  "addLetterRoleSnrAsstSec": "Add Letters Received to Snr. Asst. Sec",
+  "addLetterRoleAsstSecInvestigation": "Add Letters Received to Investigation Branch",
+  "addLetterRoleAsstSecDiscipline": "Add Letters Received to Discipline Branch",
   "addNewLetterTitle": "Add New Letter",
   "addNewLetterSubtitle": "Fill in the basic incoming letter details to register it into the system.",
   "letterNoLabel": "Letter No",
@@ -797,7 +803,19 @@
   "takeAction": "Take Action",
   "processLetter": "Process Letter",
   "letterAssignedNotification": "New Letter Assigned",
-  "officerDesignation": "Designation"
+  "officerDesignation": "Designation",
+  "addressedOfficerLabel": "Addressed Officer (Recipient)",
+  "addressedOfficerPlaceholder": "-- Select the officer to whom the letter is addressed --",
+  "forwardedToAdditionalSecretary": "Forwarded to Additional Secretary",
+  "forwardedToAdditionalSecretaryBadge": "Forwarded to Addl. Sec",
+  "forwardingRuleBannerTitle": "Administrative Forwarding Rule Applied",
+  "forwardingRuleBannerDesc": "Letters addressed to officers like Assistant Secretary (Discipline), Assistant Secretary (Investigation), and Senior Assistant Secretary are forwarded to the Additional Secretary.",
+  "addressedTo": "Addressed To",
+  "forwardedTo": "Forwarded To",
+  "forwardedLetterNotification": "New Forwarded Letter Received",
+  "forwardedLetterNotifDesc": "A letter addressed to {{addressedTo}} has been forwarded to you (Additional Secretary) for review and directives.",
+  "addressedOfficerNotifTitle": "Letter Addressed to You Forwarded",
+  "addressedOfficerNotifDesc": "Letter {{letterNo}} addressed to you has been forwarded to the Additional Secretary in accordance with ministry administrative workflow."
 }
 
 

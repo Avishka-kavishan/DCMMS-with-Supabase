@@ -815,7 +815,6 @@ export default function SystemAdminDashboard() {
                 </optgroup>
                 <optgroup label="Operational & System">
                   <option value="subject">Subject officer</option>
-                  <option value="daily">Daily mail officer</option>
                   <option value="system">System admin</option>
                 </optgroup>
               </select>

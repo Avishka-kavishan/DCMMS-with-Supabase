@@ -586,6 +586,8 @@
   "caseDossier": "வழக்கு ஆவணம்",
   "caseDossierTitle": "வழக்கு ஆவணம் & விசாரணை காலவரிசை",
   "caseDossierDesc": "பல பங்கு செயல்முறை கண்காணிப்பு & அதிகாரி பணிப்பாய்வு விவரங்கள்",
+  "viewLetterTitle": "கடித விவரங்கள் மற்றும் வழிப்படுத்தல்",
+  "viewLetterDesc": "வாசிப்பதற்கு மட்டுமேயான கடித விவரங்கள் மற்றும் அதிகாரி ஒதுக்கீட்டு தகவல்கள்",
   "activeCase": "செயலில் உள்ள வழக்கு",
   "priorityUrgent": "அவசர முன்னுரிமை",
   "inquiryCaseDossier": "விசாரணை வழக்கு ஆவணம் #{{caseNo}}",
@@ -761,6 +763,10 @@
   "roleCategoryOfficer": "செயல்பாட்டு அதிகாரிகள்",
   "roleCategorySystem": "கணினி நிர்வாகம்",
   "addNewLetter": "புதிய கடிதத்தைச் சேர்க்கவும்",
+  "addLetterRoleAddSec": "மேலதிக செயலாளருக்கு வரும் கடிதங்களைச் சேர்க்கவும்",
+  "addLetterRoleSnrAsstSec": "சிரேஷ்ட உதவிச் செயலாளருக்கு வரும் கடிதங்களைச் சேர்க்கவும்",
+  "addLetterRoleAsstSecInvestigation": "விசாரணைப் பிரிவுக்கு வரும் கடிதங்களைச் சேர்க்கவும்",
+  "addLetterRoleAsstSecDiscipline": "ஒழுக்காற்றுப் பிரிவுக்கு வரும் கடிதங்களைச் சேர்க்கவும்",
   "addNewLetterTitle": "புதிய கடிதத்தைச் சேர்த்தல்",
   "addNewLetterSubtitle": "கணினியில் பதிவு செய்ய அடிப்படை உள்வரும் கடித விவரங்களை நிரப்பவும்.",
   "letterNoLabel": "கடித எண்",
@@ -796,7 +802,19 @@
   "takeAction": "நடவடிக்கை எடு",
   "processLetter": "விவரங்களைச் சேர்த்து தொடங்கு",
   "letterAssignedNotification": "புதிய கடிதம் ஒதுக்கப்பட்டது",
-  "officerDesignation": "பதவி"
+  "officerDesignation": "பதவி",
+  "addressedOfficerLabel": "முகவரியிடப்பட்ட அதிகாரி",
+  "addressedOfficerPlaceholder": "-- கடிதம் முகவரியிடப்பட்ட அதிகாரியைத் தேர்ந்தெடுக்கவும் --",
+  "forwardedToAdditionalSecretary": "கூடுதல் செயலாளருக்கு அனுப்பப்பட்டது",
+  "forwardedToAdditionalSecretaryBadge": "கூடுதல் செயலாளருக்கு",
+  "forwardingRuleBannerTitle": "அமைச்சு நிர்வாக நடைமுறைப்படி முன்னனுப்பப்பட்டது",
+  "forwardingRuleBannerDesc": "உதவிச் செயலாளர் (ஒழுக்காற்று), உதவிச் செயலாளர் (விசாரணை) மற்றும் சிரேஷ்ட உதவிச் செயலாளர் போன்ற அதிகாரிகளுக்கு வரும் கடிதங்கள் கூடுதல் செயலாளருக்கு அனுப்பப்படும்.",
+  "addressedTo": "முகவரியிடப்பட்டது",
+  "forwardedTo": "அனுப்பப்பட்டது",
+  "forwardedLetterNotification": "முன்னனுப்பப்பட்ட புதிய கடிதம் பெறப்பட்டது",
+  "forwardedLetterNotifDesc": "{{addressedTo}} அவர்களுக்கு முகவரியிடப்பட்ட கடிதம் உங்கள் (கூடுதல் செயலாளர்) பார்வைக்காக அனுப்பப்பட்டுள்ளது.",
+  "addressedOfficerNotifTitle": "உங்களுக்கு வந்த கடிதம் கூடுதல் செயலாளருக்கு அனுப்பப்பட்டது",
+  "addressedOfficerNotifDesc": "உங்களுக்கு முகவரியிடப்பட்ட கடிதம் {{letterNo}} அமைச்சின் நடைமுறைப்படி கூடுதல் செயலாளருக்கு அனுப்பப்பட்டுள்ளது."
 }
 
 

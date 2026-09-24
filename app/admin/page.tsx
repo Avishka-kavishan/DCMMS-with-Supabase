@@ -2,9 +2,9 @@
 import React, { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import "../../i18n";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Folder, Search, CheckCircle2, User, ChevronDown, ChevronUp, Plus, MailCheck, Mail, FileText, BarChart2, SlidersHorizontal, X } from "lucide-react";
+import { Folder, Search, CheckCircle2, User, ChevronDown, ChevronUp, Plus, MailCheck, Mail, FileText, BarChart2, SlidersHorizontal, X, Landmark, ArrowRight, Bell, Send } from "lucide-react";
 import {
   AreaChart,
   Area,
@@ -22,12 +22,14 @@ import {
 } from "recharts";
 import "./admin.css";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
-import { signOut, getCurrentProfile, dashboardPath } from "@/lib/auth";
+import { signOut, getCurrentProfile, dashboardPath, getAddLetterButtonLabel } from "@/lib/auth";
 import {
   getDailyMailRecordsServer,
   getLetterEditRequestsServer,
   updateLetterEditRequestStatusServer,
   getDirectlyAssignedLettersServer,
+  getLettersForwardedToSeniorServer,
+  createOfficerNotificationServer,
 } from "@/lib/db-actions";
 import { exportToExcel } from "@/lib/export-excel";
 
@@ -136,11 +138,84 @@ function buildYearlyChart(dates: string[]): { name: string; cases: number }[] {
   return years;
 }
 
+/** Derive the officer role label from letter metadata */
+function getLetterOfficerRole(letter: any, lang: string = "si"): string {
+  const roleRaw = (letter.created_by_role || letter.createdByRole || "").toLowerCase().trim();
+  const creator = (letter.created_by_name || "").toLowerCase().trim();
+  const addrRole = (letter.addressedRole || letter.addressed_role || "").toLowerCase().trim();
+
+  // 1. Direct role string match
+  if (roleRaw.includes("discipline")) {
+    return lang === "si" ? "සහකාර ලේකම් (විනය)" : lang === "ta" ? "உதவிச் செயலாளர் (ஒழுக்கம்)" : "Assistant Secretary (Discipline)";
+  }
+  if (roleRaw.includes("investigation") && (roleRaw.includes("assistant") || roleRaw.includes("sec"))) {
+    return lang === "si" ? "සහකාර ලේකම් (විමර්ශන)" : lang === "ta" ? "உதவிச் செயலாளர் (விசாரணை)" : "Assistant Secretary (Investigation)";
+  }
+  if (roleRaw.includes("assistant") || roleRaw.includes("asst")) {
+    return lang === "si" ? "සහකාර ලේකම්" : lang === "ta" ? "உதவிச் செயலாளர்" : "Assistant Secretary";
+  }
+  if (roleRaw.includes("senior")) {
+    return lang === "si" ? "ජ්‍යෙෂ්ඨ සහකාර ලේකම්" : lang === "ta" ? "மூத்த உதவிச் செயலாளர்" : "Senior Assistant Secretary";
+  }
+  if (roleRaw.includes("daily") || roleRaw.includes("mail")) {
+    return lang === "si" ? "දෛනික තැපැල් නිලධාරී" : lang === "ta" ? "தினசரி அஞ்சல் அதிகாரி" : "Daily Mail Officer";
+  }
+  if (roleRaw.includes("additional")) {
+    return lang === "si" ? "අතිරේක ලේකම්" : lang === "ta" ? "கூடுதல் செயலாளர்" : "Additional Secretary";
+  }
+
+  // 2. Creator officer name match
+  if (creator.includes("bandula")) {
+    return lang === "si" ? "සහකාර ලේකම්" : lang === "ta" ? "உதவிச் செயலாளர்" : "Assistant Secretary";
+  }
+  if (creator.includes("ranjith")) {
+    return lang === "si" ? "සහකාර ලේකම්" : lang === "ta" ? "உதவிச் செயலாளர்" : "Assistant Secretary";
+  }
+  if (creator.includes("dharshana")) {
+    return lang === "si" ? "ජ්‍යෙෂ්ඨ සහකාර ලේකම්" : lang === "ta" ? "மூத்த உதவிச் செயலாளர்" : "Senior Assistant Secretary";
+  }
+  if (creator.includes("nihal")) {
+    return lang === "si" ? "අතිරේක ලේකම්" : lang === "ta" ? "கூடுதல் செயலாளர்" : "Additional Secretary";
+  }
+  if (creator.includes("daily mail")) {
+    return lang === "si" ? "දෛනික තැපැල් නිලධාරී" : lang === "ta" ? "தினசரி அஞ்சல் அதிகாரி" : "Daily Mail Officer";
+  }
+
+  // 3. Addressed officer role match
+  if (addrRole.includes("discipline")) {
+    return lang === "si" ? "සහකාර ලේකම්" : lang === "ta" ? "உதவிச் செயலாளர்" : "Assistant Secretary";
+  }
+  if (addrRole.includes("investigation") && (addrRole.includes("assistant") || addrRole.includes("sec"))) {
+    return lang === "si" ? "සහකාර ලේකම්" : lang === "ta" ? "உதவிச் செயலாளர்" : "Assistant Secretary";
+  }
+  if (addrRole.includes("assistant") || addrRole.includes("asst")) {
+    return lang === "si" ? "සහකාර ලේකම්" : lang === "ta" ? "உதவிச் செயலாளர்" : "Assistant Secretary";
+  }
+  if (addrRole.includes("senior")) {
+    return lang === "si" ? "ජ්‍යෙෂ්ඨ සහකාර ලේකම්" : lang === "ta" ? "மூத்த உதவிச் செயலாளர்" : "Senior Assistant Secretary";
+  }
+  if (addrRole.includes("additional")) {
+    return lang === "si" ? "අතිරේක ලේකම්" : lang === "ta" ? "கூடுதல் செயலாளர்" : "Additional Secretary";
+  }
+
+  // 4. Formatted raw role fallback
+  if (roleRaw) {
+    return roleRaw.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
+  }
+
+  if (letter.isForwarded) {
+    return lang === "si" ? "සහකාර ලේකම්" : "Assistant Secretary";
+  }
+  return lang === "si" ? "දෛනික තැපැල් නිලධාරී" : "Daily Mail Officer";
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function AdminDashboard() {
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const highlightLetterNo = searchParams?.get("highlight") || searchParams?.get("id") || "";
 
   const [chartPeriod, setChartPeriod] = useState("Monthly");
   const [greeting, setGreeting] = useState("");
@@ -155,10 +230,12 @@ export default function AdminDashboard() {
   const [allCases, setAllCases] = useState<{ type: string; status: string }[]>([]);
   const [recentCases, setRecentCases] = useState<CaseRow[]>([]);
   const [caseDates, setCaseDates] = useState<string[]>([]);
+  const [casesTab, setCasesTab] = useState<"all" | "additional_secretary">("all");
 
   // Pending Letter Edit Approval Requests state
   const [pendingEditRequests, setPendingEditRequests] = useState<any[]>([]);
   const [isLoadingRequests, setIsLoadingRequests] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
   const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
   const [toastMessage, setToastMessage] = useState("");
   const [showToast, setShowToast] = useState(false);
@@ -166,6 +243,15 @@ export default function AdminDashboard() {
   // Directly Assigned Letters from Daily Mail
   const [directlyAssignedLetters, setDirectlyAssignedLetters] = useState<any[]>([]);
   const [isDirectLettersMinimized, setIsDirectLettersMinimized] = useState(false);
+  const [assignedLettersSearchQuery, setAssignedLettersSearchQuery] = useState("");
+  const [assignedLettersFilter, setAssignedLettersFilter] = useState<"all" | "direct" | "forwarded">("all");
+
+  // ── Letters forwarded TO Senior Assistant Secretary BY Additional Secretary ──
+  const [seniorSecLetters, setSeniorSecLetters] = useState<any[]>([]);
+  const [isSeniorLettersMinimized, setIsSeniorLettersMinimized] = useState(false);
+  const [seniorLettersSearch, setSeniorLettersSearch] = useState("");
+  const [seniorLettersNewCount, setSeniorLettersNewCount] = useState(0);
+  const [showSeniorNotifBell, setShowSeniorNotifBell] = useState(false);
 
   // Visualization Charts Slide Bar & Collapsible state
   const [isChartSlideBarOpen, setIsChartSlideBarOpen] = useState(false);
@@ -184,8 +270,19 @@ export default function AdminDashboard() {
 
   // ── Session guard & Data Loader ───────────────────────────────────────────
   useEffect(() => {
+    setIsMounted(true);
+    try {
+      const sim = localStorage.getItem("dcmms_simulated_session");
+      if (sim) {
+        setCurrentUserProfile(JSON.parse(sim));
+      } else {
+        const r = localStorage.getItem("dcmms_user_role");
+        if (r) setCurrentUserProfile({ role: r, full_name: localStorage.getItem("dcmms_username") || "User" });
+      }
+    } catch {}
+
     getCurrentProfile().then(async (profile) => {
-      const allowedRoles = ["admin", "assistant_secretary_discipline", "senior_assistant_secretary", "additional_secretary", "system_admin"];
+      const allowedRoles = ["admin", "assistant_secretary_discipline", "senior_assistant_secretary", "additional_secretary", "assistant_secretary_investigation", "system_admin"];
       if (!profile) {
         router.replace("/");
         return;
@@ -210,6 +307,45 @@ export default function AdminDashboard() {
           }
         } catch (e) {
           console.warn("Failed to load directly assigned letters in Admin:", e);
+        }
+
+        // ── For Senior Assistant Secretary: load letters forwarded by Additional Secretary ──
+        const isSenior =
+          profile.role === "senior_assistant_secretary" ||
+          (profile.role || "").toLowerCase().includes("senior");
+        if (isSenior) {
+          try {
+            const seniorRes = await getLettersForwardedToSeniorServer();
+            if (seniorRes && seniorRes.success && Array.isArray(seniorRes.data)) {
+              setSeniorSecLetters(seniorRes.data);
+              // Determine truly new letters (not yet seen)
+              const seenKey = "dcmms_senior_seen_letters";
+              let seenIds: string[] = [];
+              try { seenIds = JSON.parse(localStorage.getItem(seenKey) || "[]"); } catch {}
+              const newOnes = seniorRes.data.filter((l: any) => !seenIds.includes(l.id));
+              setSeniorLettersNewCount(newOnes.length);
+              setShowSeniorNotifBell(newOnes.length > 0);
+              // Send a notification to Senior's notification panel for each new letter
+              if (newOnes.length > 0 && profile.full_name) {
+                for (const nl of newOnes.slice(0, 3)) {
+                  try {
+                    await createOfficerNotificationServer({
+                      targetOfficerName: profile.full_name,
+                      targetRole: "senior_assistant_secretary",
+                      letterNo: nl.letterNo || nl.refNo,
+                      type: "letter_forwarded",
+                      title: "New Letter from Additional Secretary",
+                      message: `Letter ${nl.letterNo || nl.refNo} from "${nl.sender}" has been forwarded to you by ${nl.createdByName || "Additional Secretary"} for review and action.`,
+                      senderName: nl.createdByName || "Additional Secretary",
+                    });
+                  } catch {}
+                }
+                window.dispatchEvent(new Event("dcmms_notifications_updated"));
+              }
+            }
+          } catch (e) {
+            console.warn("Failed to load senior secretary letters:", e);
+          }
         }
       }
     });
@@ -438,8 +574,17 @@ export default function AdminDashboard() {
     color: typeColors[i],
   }));
 
+  // ── Helper to check if a case is assigned or forwarded to Additional Secretary ──
+  const isAssignedToAddSec = (officer: string) => {
+    const o = (officer || "").toLowerCase();
+    return o.includes("nihal") || o.includes("additional") || o.includes("daily mail");
+  };
+
   // ── Filtered recent cases table ────────────────────────────────────────────
   const filteredRecentCases = recentCases.filter((c) => {
+    if (isMounted && currentUserProfile?.role === "additional_secretary" && casesTab === "additional_secretary") {
+      if (!isAssignedToAddSec(c.assignedTo)) return false;
+    }
     const matchesType = selectedType === "All types" || c.type === selectedType;
     const matchesStatus = selectedStatus === "All statuses" || c.status === selectedStatus;
     const q = searchQuery.toLowerCase().trim();
@@ -562,172 +707,443 @@ export default function AdminDashboard() {
               </svg>
             </div>
             <div>
-              <h4 className="admin-hero-title">
-                {currentUserProfile?.role === "additional_secretary"
-                  ? (lang === "si" ? "පැමිණිලි සහ ලිපි ලියාපදිංචි කිරීම" : "Complaint & Letter Registration")
+              <h4 className="admin-hero-title" suppressHydrationWarning>
+                {isMounted && currentUserProfile?.role === "additional_secretary"
+                  ? t("registerComplaintDetailed", "Full Complaint Registration")
                   : t("addNewLetterTitle", "Add New Letter")}
               </h4>
-              <p className="admin-hero-subtitle">
-                {currentUserProfile?.role === "additional_secretary"
+              <p className="admin-hero-subtitle" suppressHydrationWarning>
+                {isMounted && currentUserProfile?.role === "additional_secretary"
                   ? (lang === "si"
-                      ? "අතිරේක ලේකම් ලෙස පැමිණිලි සවිස්තරාත්මකව හෝ මූලික ලිපි ආකාරයෙන් පද්ධතියට ලියාපදිංචි කර විනය ශාඛාව වෙත යොමු කරන්න."
-                      : "As Additional Secretary overseeing Daily Mail tasks, register full complaints or basic incoming letters to route to disciplinary officers.")
+                      ? "අතිරේක ලේකම් ලෙස නව පැමිණිලි සවිස්තරාත්මකව පද්ධතියට ලියාපදිංචි කර විනය ශාඛාවේ නිලධාරීන් වෙත යොමු කරන්න."
+                      : "As Additional Secretary, register full incoming complaints directly into the system.")
                   : t("addNewLetterSubtitle", "Fill in the basic incoming letter details to register it into the system.")}
               </p>
             </div>
           </div>
 
-          <div className="admin-hero-actions" style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
-            {currentUserProfile?.role === "additional_secretary" && (
+          <div className="admin-hero-actions" style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }} suppressHydrationWarning>
+            {isMounted && currentUserProfile?.role === "additional_secretary" ? (
               <button
                 type="button"
                 className="btn-hero-primary"
-                style={{ backgroundColor: "#0f766e", borderColor: "#0d9488", display: "inline-flex", alignItems: "center", gap: 6 }}
                 onClick={() => router.push("/daily-mail/register")}
               >
                 <FileText size={18} strokeWidth={2.4} />
                 <span>{t("registerComplaintDetailed", "Full Complaint Registration")}</span>
               </button>
+            ) : (
+              <button
+                type="button"
+                className="btn-hero-primary"
+                onClick={() => router.push("/daily-mail/add-letter")}
+              >
+                <Plus size={18} strokeWidth={2.8} />
+                <span suppressHydrationWarning>{getAddLetterButtonLabel(isMounted ? currentUserProfile?.role : undefined, isMounted ? currentUserProfile?.raw_role : undefined, t)}</span>
+              </button>
             )}
-            <button
-              type="button"
-              className="btn-hero-primary"
-              onClick={() => router.push("/daily-mail/add-letter")}
-            >
-              <Plus size={18} strokeWidth={2.8} />
-              <span>{t("addNewLetter", "Add New Letter")}</span>
-            </button>
           </div>
         </div>
       </section>
 
-      {/* ── Directly Assigned Letters From Daily Mail ── */}
-      {directlyAssignedLetters.length > 0 && (
-        <div className="admin-approval-section-card" style={{ borderLeft: "4px solid #3b82f6" }}>
-          <div className="admin-approval-header">
-            <div className="admin-approval-title-area">
-              <div className="admin-approval-icon-badge" style={{ backgroundColor: "#dbeafe", color: "#1d4ed8" }}>
-                <MailCheck size={22} />
+      {/* ── Assigned & Forwarded Letters Section ── */}
+      {(() => {
+        if (directlyAssignedLetters.length === 0) return null;
+
+        const isAddSec = isMounted && currentUserProfile?.role === "additional_secretary";
+        const isSeniorAsstSec = isMounted && (currentUserProfile?.role === "senior_assistant_secretary" || (currentUserProfile?.role || "").toLowerCase().includes("senior"));
+        const directCount = directlyAssignedLetters.filter((l: any) => !l.isForwarded).length;
+        const forwardedCount = directlyAssignedLetters.filter((l: any) => l.isForwarded).length;
+
+        const filteredList = directlyAssignedLetters.filter((l: any) => {
+          // Safety guard for non-AddSec users: ensure letters displayed were entered by or assigned/forwarded to this officer
+          if (!isAddSec && currentUserProfile?.full_name) {
+            const myName = currentUserProfile.full_name.toLowerCase().trim();
+            const actOfficer = (l.actionOfficer || l.action_officer || "").toLowerCase().trim();
+            const fwdTo = (l.forwardedTo || l.forwarded_to || "").toLowerCase().trim();
+            const addrTo = (l.addressedTo || l.addressed_to || "").toLowerCase().trim();
+            const addrRole = (l.addressedRole || l.addressed_role || "").toLowerCase().trim();
+            const creator = (l.created_by_name || "").toLowerCase().trim();
+            const reason = (l.forwardReason || l.forward_reason || "").toLowerCase().trim();
+
+            if (isSeniorAsstSec) {
+              // Exclude letters entered/created by Additional Secretary —
+              // Senior Asst Sec only needs to see letters forwarded TO them, not those entered by Addl. Sec.
+              const creatorRole = (l.created_by_role || l.createdByRole || "").toLowerCase().trim();
+              if (creatorRole.includes("additional")) {
+                return false;
+              }
+              const matchesSenior =
+                actOfficer.includes(myName) ||
+                fwdTo.includes(myName) ||
+                addrTo.includes(myName) ||
+                creator.includes(myName) ||
+                reason.includes(myName) ||
+                actOfficer.includes("senior assistant") ||
+                actOfficer.includes("senior_assistant") ||
+                actOfficer.includes("ජ්‍යෙෂ්ඨ සහකාර") ||
+                fwdTo.includes("senior assistant") ||
+                fwdTo.includes("senior_assistant") ||
+                fwdTo.includes("ජ්‍යෙෂ්ඨ සහකාර") ||
+                addrTo.includes("senior assistant") ||
+                addrRole.includes("senior") ||
+                reason.includes("senior assistant");
+              if (!matchesSenior) {
+                return false;
+              }
+            } else {
+              const myTokens = myName.split(/\s+/).filter((w: string) => w.length > 2 && !["mr.", "mrs.", "miss", "dr."].includes(w));
+              const matchesCreator = creator.includes(myName) || myName.includes(creator) || (myTokens.length > 0 && myTokens.every((tk: string) => creator.includes(tk)));
+              const matchesReason = reason.includes(myName) || (myTokens.length > 0 && myTokens.every((tk: string) => reason.includes(tk)));
+              if (!matchesCreator && !matchesReason && (creator || reason)) {
+                return false;
+              }
+            }
+          }
+
+          if (assignedLettersFilter === "direct" && l.isForwarded) return false;
+          if (assignedLettersFilter === "forwarded" && !l.isForwarded) return false;
+          if (assignedLettersSearchQuery.trim()) {
+            const q = assignedLettersSearchQuery.toLowerCase();
+            const lNo = (l.letterNo || l.refNo || "").toLowerCase();
+            const sender = (l.sender || "").toLowerCase();
+            const roleLabel = getLetterOfficerRole(l, lang).toLowerCase();
+            const assignedBy = (l.created_by_name || l.addressedTo || "").toLowerCase();
+            const type = (l.type || "").toLowerCase();
+            return lNo.includes(q) || sender.includes(q) || assignedBy.includes(q) || roleLabel.includes(q) || type.includes(q);
+          }
+          return true;
+        });
+
+        const title = isAddSec
+          ? (lang === "si" ? "අතිරේක ලේකම් වෙත පවරන ලද ලිපි" : "Assigned Letters to Additional Secretary")
+          : isSeniorAsstSec
+          ? (lang === "si" ? "ජ්‍යෙෂ්ඨ සහකාර ලේකම් වෙත පවරන ලද ලිපි" : "Assigned Letters to Senior Assistant Secretary")
+          : (lang === "si" ? "ඔබ විසින් ඇතුළත් කළ ලිපි" : "Letters Entered by You");
+
+        const description = isAddSec
+          ? (lang === "si"
+              ? "සහකාර ලේකම්වරුන් සහ ජ්‍යෙෂ්ඨ සහකාර ලේකම් මඟින් ලැබුණු සහ අතිරේක ලේකම් වෙත යොමු කළ සියලුම ලිපි සහ පැමිණිලි."
+              : "All letters registered and forwarded by Assistant Secretaries and Senior Assistant Secretary for executive review and action.")
+          : isSeniorAsstSec
+          ? (lang === "si"
+              ? "අතිරේක ලේකම් මඟින් ඔබ වෙත විමර්ශන සහ විනය ක්‍රියාමාර්ග සඳහා යොමු කරන ලද සියලුම ලිපි සහ පැමිණිලි."
+              : "All letters and complaints forwarded to Senior Assistant Secretary by Additional Secretary for review and action.")
+          : (lang === "si"
+              ? "ඔබ විසින් පද්ධතියට ඇතුළත් කර අතිරේක ලේකම් වෙත යොමු කරන ලද ලිපි."
+              : "Letters entered by you and forwarded to the Additional Secretary.");
+
+        return (
+          <div className="assigned-letters-card">
+            <div className="assigned-letters-header">
+              <div className="assigned-letters-title-area">
+                <div className="assigned-letters-icon-badge">
+                  <MailCheck size={22} strokeWidth={2.2} />
+                </div>
+                <div>
+                  <h3 className="assigned-letters-title" suppressHydrationWarning>
+                    <span>{title}</span>
+                    <span className="assigned-letters-count-pill">{directlyAssignedLetters.length}</span>
+                  </h3>
+                  <p className="assigned-letters-desc" suppressHydrationWarning>
+                    {description}
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="admin-approval-title">
-                  {lang === "si" ? "දෛනික තැපෑලෙන් පවරන ලද ලැබුණු ලිපි" : "Directly Assigned Letters from Daily Mail"} ({directlyAssignedLetters.length})
-                </h3>
-                <p className="admin-approval-desc">
-                  {lang === "si"
-                    ? "ඔබ වෙත සෘජුවම ක්‍රියාමාර්ග ගැනීම සඳහා පවරා ඇති ලැබුණු ලිපි."
-                    : "Letters assigned directly to you by Daily Mail for executive review and action."}
-                </p>
-              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsDirectLettersMinimized(!isDirectLettersMinimized)}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  backgroundColor: "#f8fafc",
+                  color: "#334155",
+                  border: "1px solid #cbd5e1",
+                  borderRadius: "8px",
+                  padding: "6px 14px",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  transition: "all 0.15s ease"
+                }}
+              >
+                {isDirectLettersMinimized ? (
+                  <>
+                    <ChevronDown size={16} />
+                    <span>{lang === "si" ? "විස්තර පෙන්වන්න" : "Expand"}</span>
+                  </>
+                ) : (
+                  <>
+                    <ChevronUp size={16} />
+                    <span>{lang === "si" ? "හකුලන්න" : "Collapse"}</span>
+                  </>
+                )}
+              </button>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setIsDirectLettersMinimized(!isDirectLettersMinimized)}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "6px",
-                backgroundColor: "#f8fafc",
-                color: "#334155",
-                border: "1px solid #cbd5e1",
-                borderRadius: "8px",
-                padding: "6px 14px",
-                fontSize: "12px",
-                fontWeight: 600,
-                cursor: "pointer"
-              }}
-            >
-              {isDirectLettersMinimized ? (
-                <>
-                  <ChevronDown size={16} />
-                  <span>{lang === "si" ? "විස්තර පෙන්වන්න" : "Expand"}</span>
-                </>
-              ) : (
-                <>
-                  <ChevronUp size={16} />
-                  <span>{lang === "si" ? "හකුලන්න" : "Collapse"}</span>
-                </>
-              )}
-            </button>
+            {!isDirectLettersMinimized && (
+              <>
+                {/* Executive Toolbar: Filter Tabs + Quick Search */}
+                <div className="assigned-letters-toolbar">
+                  <div className="assigned-letters-tabs">
+                    <button
+                      type="button"
+                      className={`assigned-letters-tab-btn ${assignedLettersFilter === "all" ? "active" : ""}`}
+                      onClick={() => setAssignedLettersFilter("all")}
+                    >
+                      <span>{lang === "si" ? "සියල්ල" : "All"}</span>
+                      <span style={{
+                        padding: "1px 6px",
+                        borderRadius: "10px",
+                        backgroundColor: assignedLettersFilter === "all" ? "#2563eb" : "#e2e8f0",
+                        color: assignedLettersFilter === "all" ? "#ffffff" : "#64748b",
+                        fontSize: "11px",
+                        fontWeight: 700
+                      }}>
+                        {directlyAssignedLetters.length}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className={`assigned-letters-tab-btn ${assignedLettersFilter === "direct" ? "active" : ""}`}
+                      onClick={() => setAssignedLettersFilter("direct")}
+                    >
+                      <Mail size={13} style={{ color: assignedLettersFilter === "direct" ? "#2563eb" : "#64748b" }} />
+                      <span>{lang === "si" ? "සෘජුව ලැබුණු" : "Direct Received"}</span>
+                      <span style={{
+                        padding: "1px 6px",
+                        borderRadius: "10px",
+                        backgroundColor: assignedLettersFilter === "direct" ? "#2563eb" : "#e2e8f0",
+                        color: assignedLettersFilter === "direct" ? "#ffffff" : "#64748b",
+                        fontSize: "11px",
+                        fontWeight: 700
+                      }}>
+                        {directCount}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className={`assigned-letters-tab-btn ${assignedLettersFilter === "forwarded" ? "active" : ""}`}
+                      onClick={() => setAssignedLettersFilter("forwarded")}
+                    >
+                      <Landmark size={13} style={{ color: assignedLettersFilter === "forwarded" ? "#059669" : "#64748b" }} />
+                      <span>{lang === "si" ? "සහකාර ලේකම්වරුන්ගෙන් යොමු වූ" : "Forwarded"}</span>
+                      <span style={{
+                        padding: "1px 6px",
+                        borderRadius: "10px",
+                        backgroundColor: assignedLettersFilter === "forwarded" ? "#059669" : "#e2e8f0",
+                        color: assignedLettersFilter === "forwarded" ? "#ffffff" : "#64748b",
+                        fontSize: "11px",
+                        fontWeight: 700
+                      }}>
+                        {forwardedCount}
+                      </span>
+                    </button>
+                  </div>
+
+                  <div className="assigned-letters-search-box">
+                    <Search size={14} className="assigned-letters-search-icon" />
+                    <input
+                      type="text"
+                      className="assigned-letters-search-input"
+                      placeholder={lang === "si" ? "ලිපි අංකය, එවූ පාර්ශවය සොයන්න..." : "Search letter no, sender..."}
+                      value={assignedLettersSearchQuery}
+                      onChange={(e) => setAssignedLettersSearchQuery(e.target.value)}
+                    />
+                    {assignedLettersSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setAssignedLettersSearchQuery("")}
+                        style={{
+                          position: "absolute",
+                          right: "8px",
+                          background: "none",
+                          border: "none",
+                          color: "#94a3b8",
+                          cursor: "pointer",
+                          padding: "2px",
+                          display: "flex",
+                          alignItems: "center"
+                        }}
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="assigned-letters-table-container">
+                  <table className="assigned-letters-table">
+                    <thead>
+                      <tr>
+                        <th>{lang === "si" ? "ලිපි අංකය" : "Letter No"}</th>
+                        <th>{isAddSec ? (lang === "si" ? "යොමු කළ නිලධාරියා" : "Forwarded By") : (lang === "si" ? "ඇතුළත් කළ නිලධාරියා" : "Entered By")}</th>
+                        <th>{lang === "si" ? "ලිපි වර්ගය" : "Letter Type"}</th>
+                        <th>{lang === "si" ? "එවූ පාර්ශවය" : "Sender"}</th>
+                        <th>{lang === "si" ? "ලිපි දිනය" : "Letter Date"}</th>
+                        <th>{lang === "si" ? "ලැබුණු දිනය" : "Received Date"}</th>
+                        <th style={{ textAlign: "right" }}>{lang === "si" ? "ක්‍රියාමාර්ග" : "Actions"}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredList.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} style={{ textAlign: "center", padding: "36px 16px", color: "#64748b" }}>
+                            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px" }}>
+                              <Search size={24} style={{ color: "#94a3b8" }} />
+                              <span style={{ fontWeight: 600, fontSize: "14px", color: "#334155" }}>
+                                {lang === "si" ? "ලිපි කිසිවක් හමු නොවීය" : "No matching letters found"}
+                              </span>
+                              <span style={{ fontSize: "12px", color: "#94a3b8" }}>
+                                {lang === "si" ? "වෙනත් සෙවුම් පදයක් හෝ පෙරහනක් භාවිතා කරන්න" : "Try adjusting your search or filter criteria"}
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredList.map((l: any, idx: number) => {
+                          const isComplaint = (l.type || "").toLowerCase().includes("complaint") || (l.type || "").includes("පැමිණි");
+                          const isHighlighted = Boolean(
+                            highlightLetterNo &&
+                            ((l.letterNo && l.letterNo.toLowerCase() === highlightLetterNo.toLowerCase()) ||
+                             (l.refNo && l.refNo.toLowerCase() === highlightLetterNo.toLowerCase()) ||
+                             (l.id && String(l.id).toLowerCase() === highlightLetterNo.toLowerCase()))
+                          );
+                          return (
+                            <tr
+                              key={l.id || idx}
+                              className={`assigned-letters-row ${isHighlighted ? "row-highlighted" : ""}`}
+                              style={isHighlighted ? { backgroundColor: "#fef9c3", borderLeft: "4px solid #eab308", transition: "all 0.3s ease" } : {}}
+                            >
+                              <td>
+                                <span style={{
+                                  fontWeight: 700,
+                                  color: "#0f172a",
+                                  fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                                  fontSize: "13px"
+                                }}>
+                                  {l.letterNo || l.refNo}
+                                </span>
+                              </td>
+                              <td>
+                                {l.isForwarded ? (
+                                  <span
+                                    title={l.created_by_name || l.addressedTo || ""}
+                                    style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: "5px",
+                                      fontSize: "12px",
+                                      padding: "4px 10px",
+                                      borderRadius: "6px",
+                                      backgroundColor: "#ecfdf5",
+                                      color: "#065f46",
+                                      fontWeight: 600,
+                                      border: "1px solid #a7f3d0",
+                                      whiteSpace: "nowrap"
+                                    }}
+                                  >
+                                    <Landmark size={13} style={{ color: "#059669" }} />
+                                    <span>{getLetterOfficerRole(l, lang)}</span>
+                                  </span>
+                                ) : (
+                                  <span
+                                    title={l.created_by_name || l.addressedTo || ""}
+                                    style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: "5px",
+                                      fontSize: "12px",
+                                      padding: "4px 10px",
+                                      borderRadius: "6px",
+                                      backgroundColor: "#eff6ff",
+                                      color: "#1e40af",
+                                      fontWeight: 600,
+                                      border: "1px solid #bfdbfe",
+                                      whiteSpace: "nowrap"
+                                    }}
+                                  >
+                                    <Mail size={13} style={{ color: "#2563eb" }} />
+                                    <span>{getLetterOfficerRole(l, lang)}</span>
+                                  </span>
+                                )}
+                              </td>
+                              <td>
+                                <span style={{
+                                  display: "inline-block",
+                                  padding: "3px 9px",
+                                  borderRadius: "6px",
+                                  backgroundColor: isComplaint ? "#fff1f2" : "#f1f5f9",
+                                  color: isComplaint ? "#be123c" : "#334155",
+                                  fontSize: "12px",
+                                  fontWeight: 600,
+                                  border: isComplaint ? "1px solid #fecdd3" : "1px solid #e2e8f0"
+                                }}>
+                                  {l.type}
+                                </span>
+                              </td>
+                              <td>
+                                <span style={{ color: "#0f172a", fontWeight: 600, fontSize: "13px" }}>
+                                  {l.sender}
+                                </span>
+                              </td>
+                              <td>
+                                <span style={{ fontSize: "12.5px", color: "#475569", fontWeight: 500 }}>
+                                  {l.letterDate || "—"}
+                                </span>
+                              </td>
+                              <td>
+                                <span style={{ fontSize: "12.5px", color: "#475569", fontWeight: 500 }}>
+                                  {l.receivedDate || "—"}
+                                </span>
+                              </td>
+                              <td style={{ textAlign: "right" }}>
+                                <Link
+                                  href={`/admin/view-letter?id=${encodeURIComponent(l.letterNo || l.refNo)}`}
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: "6px",
+                                    backgroundColor: "#0f172a",
+                                    color: "#ffffff",
+                                    padding: "6px 14px",
+                                    borderRadius: "7px",
+                                    fontSize: "12px",
+                                    fontWeight: 600,
+                                    textDecoration: "none",
+                                    boxShadow: "0 1px 3px rgba(0, 0, 0, 0.1)",
+                                    transition: "all 0.15s ease",
+                                    whiteSpace: "nowrap"
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.backgroundColor = "#2563eb";
+                                    e.currentTarget.style.boxShadow = "0 3px 8px rgba(37, 99, 235, 0.3)";
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.backgroundColor = "#0f172a";
+                                    e.currentTarget.style.boxShadow = "0 1px 3px rgba(0, 0, 0, 0.1)";
+                                  }}
+                                >
+                                  <span>{lang === "si" ? "විස්තර බලන්න" : "View Details"}</span>
+                                  <ArrowRight size={13} />
+                                </Link>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
           </div>
-
-          {!isDirectLettersMinimized && (
-            <div className="admin-approval-table-container">
-              <table className="admin-approval-table">
-                <thead>
-                  <tr>
-                    <th>{lang === "si" ? "ලිපි අංකය" : "Letter No"}</th>
-                    <th>{lang === "si" ? "ලිපි වර්ගය" : "Letter Type"}</th>
-                    <th>{lang === "si" ? "එවූ පාර්ශවය" : "Sender"}</th>
-                    <th>{lang === "si" ? "ලිපි දිනය" : "Letter Date"}</th>
-                    <th>{lang === "si" ? "ලැබුණු දිනය" : "Received Date"}</th>
-                    <th style={{ textAlign: "right" }}>{lang === "si" ? "ක්‍රියාමාර්ග" : "Actions"}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {directlyAssignedLetters.map((l: any, idx: number) => (
-                    <tr key={l.id || idx}>
-                      <td>
-                        <span style={{ fontWeight: 700, color: "#1e3a8a", fontFamily: "monospace" }}>
-                          {l.letterNo || l.refNo}
-                        </span>
-                      </td>
-                      <td>
-                        <span style={{
-                          display: "inline-block",
-                          padding: "3px 8px",
-                          borderRadius: "6px",
-                          backgroundColor: "#eff6ff",
-                          color: "#1e40af",
-                          fontSize: "12px",
-                          fontWeight: 600,
-                          border: "1px solid #bfdbfe"
-                        }}>
-                          {l.type}
-                        </span>
-                      </td>
-                      <td>
-                        <strong>{l.sender}</strong>
-                      </td>
-                      <td>
-                        <span style={{ fontSize: "12px", color: "#64748b" }}>
-                          {l.letterDate || "—"}
-                        </span>
-                      </td>
-                      <td>
-                        <span style={{ fontSize: "12px", color: "#64748b" }}>
-                          {l.receivedDate || "—"}
-                        </span>
-                      </td>
-                      <td style={{ textAlign: "right" }}>
-                        <Link
-                          href={`/daily-mail/register?id=${encodeURIComponent(l.letterNo || l.refNo)}`}
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "5px",
-                            backgroundColor: "#0e162f",
-                            color: "#ffffff",
-                            padding: "6px 12px",
-                            borderRadius: "6px",
-                            fontSize: "12px",
-                            fontWeight: 600,
-                            textDecoration: "none"
-                          }}
-                        >
-                          <Plus size={14} />
-                          <span>{lang === "si" ? "විස්තර බලන්න / එක් කරන්න" : "View Details"}</span>
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── Pending Letter Edit Approval Requests Section ── */}
       {pendingEditRequests.length > 0 && (
@@ -997,15 +1413,340 @@ export default function AdminDashboard() {
         )}
       </section>
 
+      {/* ── Letters Forwarded to Senior Assistant Secretary Section ── */}
+      {isMounted && (currentUserProfile?.role === "senior_assistant_secretary" || (currentUserProfile?.role || "").toLowerCase().includes("senior")) && seniorSecLetters.length > 0 && (
+        <section style={{
+          margin: "0 0 28px 0",
+          borderRadius: "16px",
+          overflow: "hidden",
+          boxShadow: "0 4px 24px rgba(124, 58, 237, 0.10), 0 1px 4px rgba(0,0,0,0.07)",
+          border: "1.5px solid #ede9fe",
+          background: "linear-gradient(135deg, #faf5ff 0%, #f5f3ff 100%)",
+        }}>
+          {/* Section Header */}
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "18px 24px 14px 24px",
+            borderBottom: "1px solid #ede9fe",
+            background: "linear-gradient(90deg, #7c3aed 0%, #6d28d9 100%)",
+            color: "#fff",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <div style={{
+                width: "38px", height: "38px",
+                borderRadius: "10px",
+                background: "rgba(255,255,255,0.18)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                flexShrink: 0,
+              }}>
+                <Send size={20} strokeWidth={2.2} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 700, letterSpacing: "0.01em" }}>
+                  {lang === "si" ? "අතිරේක ලේකම් යොමු කළ ලිපි" : "Letters Sent by Additional Secretary"}
+                  <span style={{
+                    marginLeft: "10px",
+                    background: "rgba(255,255,255,0.25)",
+                    borderRadius: "20px",
+                    padding: "1px 10px",
+                    fontSize: "0.8rem",
+                    fontWeight: 700,
+                  }}>{seniorSecLetters.length}</span>
+                  {showSeniorNotifBell && seniorLettersNewCount > 0 && (
+                    <span style={{
+                      marginLeft: "8px",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      background: "#f59e0b",
+                      color: "#1e1e1e",
+                      borderRadius: "20px",
+                      padding: "2px 9px",
+                      fontSize: "0.72rem",
+                      fontWeight: 800,
+                      animation: "seniorBellPulse 1.4s ease-in-out infinite",
+                    }}>
+                      <Bell size={11} strokeWidth={2.8} /> {seniorLettersNewCount} {lang === "si" ? "නව" : "New"}
+                    </span>
+                  )}
+                </h3>
+                <p style={{ margin: 0, fontSize: "0.78rem", opacity: 0.85, marginTop: "2px" }}>
+                  {lang === "si"
+                    ? "අතිරේක ලේකම් විසින් ඔබ වෙත යොමු කළ ලිපි සහ පැමිණිලි"
+                    : "All letters and complaints forwarded to you by Additional Secretary for review and action"}
+                </p>
+              </div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              {/* Search */}
+              <div style={{ position: "relative" }}>
+                <input
+                  type="text"
+                  placeholder={lang === "si" ? "ලිපිය සොයන්න…" : "Search letters…"}
+                  value={seniorLettersSearch}
+                  onChange={(e) => setSeniorLettersSearch(e.target.value)}
+                  style={{
+                    padding: "6px 12px 6px 32px",
+                    borderRadius: "8px",
+                    border: "none",
+                    fontSize: "0.8rem",
+                    background: "rgba(255,255,255,0.18)",
+                    color: "#fff",
+                    outline: "none",
+                    width: "180px",
+                  }}
+                />
+                <Search size={13} strokeWidth={2} style={{ position: "absolute", left: "9px", top: "50%", transform: "translateY(-50%)", color: "rgba(255,255,255,0.7)" }} />
+              </div>
+              {/* Mark all read button */}
+              {showSeniorNotifBell && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const seenKey = "dcmms_senior_seen_letters";
+                    const allIds = seniorSecLetters.map((l: any) => l.id);
+                    try { localStorage.setItem(seenKey, JSON.stringify(allIds)); } catch {}
+                    setSeniorLettersNewCount(0);
+                    setShowSeniorNotifBell(false);
+                  }}
+                  style={{
+                    padding: "6px 14px",
+                    borderRadius: "8px",
+                    border: "1px solid rgba(255,255,255,0.4)",
+                    background: "rgba(255,255,255,0.15)",
+                    color: "#fff",
+                    fontSize: "0.78rem",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    transition: "all 0.15s",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  ✓ {lang === "si" ? "සියල්ල කියවා ඇත" : "Mark all read"}
+                </button>
+              )}
+              {/* Minimize toggle */}
+              <button
+                type="button"
+                onClick={() => setIsSeniorLettersMinimized(!isSeniorLettersMinimized)}
+                style={{
+                  background: "rgba(255,255,255,0.18)",
+                  border: "none",
+                  borderRadius: "8px",
+                  color: "#fff",
+                  cursor: "pointer",
+                  padding: "6px 10px",
+                  display: "flex", alignItems: "center",
+                }}
+                title={isSeniorLettersMinimized ? "Expand" : "Collapse"}
+              >
+                {isSeniorLettersMinimized ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+              </button>
+            </div>
+          </div>
+
+          {/* Table body */}
+          {!isSeniorLettersMinimized && (() => {
+            const seenKey = "dcmms_senior_seen_letters";
+            let seenIds: string[] = [];
+            try { seenIds = JSON.parse(localStorage.getItem(seenKey) || "[]"); } catch {}
+
+            const filtered = seniorSecLetters.filter((l: any) => {
+              if (!seniorLettersSearch.trim()) return true;
+              const q = seniorLettersSearch.toLowerCase();
+              return (
+                (l.letterNo || l.refNo || "").toLowerCase().includes(q) ||
+                (l.sender || "").toLowerCase().includes(q) ||
+                (l.subject || "").toLowerCase().includes(q) ||
+                (l.type || "").toLowerCase().includes(q) ||
+                (l.createdByName || "").toLowerCase().includes(q)
+              );
+            });
+
+            return (
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.84rem" }}>
+                  <thead>
+                    <tr style={{ background: "rgba(109, 40, 217, 0.08)" }}>
+                      <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 700, color: "#5b21b6", whiteSpace: "nowrap" }}>🆕</th>
+                      <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 700, color: "#5b21b6", whiteSpace: "nowrap" }}>{lang === "si" ? "ලිපි අංකය" : "Letter No."}</th>
+                      <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 700, color: "#5b21b6" }}>{lang === "si" ? "යවන ලද්දා" : "Sender"}</th>
+                      <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 700, color: "#5b21b6" }}>{lang === "si" ? "විෂය" : "Subject"}</th>
+                      <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 700, color: "#5b21b6", whiteSpace: "nowrap" }}>{lang === "si" ? "ලිපි වර්ගය" : "Type"}</th>
+                      <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 700, color: "#5b21b6", whiteSpace: "nowrap" }}>{lang === "si" ? "ලැබුණු දිනය" : "Received"}</th>
+                      <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 700, color: "#5b21b6", whiteSpace: "nowrap" }}>{lang === "si" ? "යොමු කළේ" : "Forwarded By"}</th>
+                      <th style={{ padding: "10px 14px", textAlign: "center", fontWeight: 700, color: "#5b21b6" }}>{lang === "si" ? "කාර්යය" : "Action"}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} style={{ textAlign: "center", padding: "32px", color: "#9ca3af", fontSize: "0.9rem" }}>
+                          {seniorLettersSearch
+                            ? (lang === "si" ? "ගැළපෙන ලිපි සොයා නොගත්හ." : "No letters match your search.")
+                            : (lang === "si" ? "ලිපි කිසිවක් නැත." : "No letters forwarded yet.")}
+                        </td>
+                      </tr>
+                    ) : filtered.map((l: any, idx: number) => {
+                      const isNew = !seenIds.includes(l.id);
+                      const typeColor = l.type?.toLowerCase().includes("complaint") ? "#dc2626"
+                        : l.type?.toLowerCase().includes("notification") ? "#7c3aed"
+                        : "#0284c7";
+                      return (
+                        <tr key={l.id} style={{
+                          borderBottom: "1px solid #ede9fe",
+                          background: isNew ? "rgba(124,58,237,0.04)" : idx % 2 === 0 ? "#ffffff" : "rgba(245,243,255,0.5)",
+                          transition: "background 0.15s",
+                        }}
+                          onMouseEnter={e => (e.currentTarget.style.background = "rgba(124,58,237,0.08)")}
+                          onMouseLeave={e => (e.currentTarget.style.background = isNew ? "rgba(124,58,237,0.04)" : idx % 2 === 0 ? "#ffffff" : "rgba(245,243,255,0.5)")}
+                        >
+                          <td style={{ padding: "10px 14px", textAlign: "center" }}>
+                            {isNew && (
+                              <span style={{
+                                display: "inline-block",
+                                width: "9px", height: "9px",
+                                borderRadius: "50%",
+                                background: "#7c3aed",
+                                boxShadow: "0 0 0 3px rgba(124,58,237,0.2)",
+                              }} title="New" />
+                            )}
+                          </td>
+                          <td style={{ padding: "10px 14px", fontWeight: 700, color: "#4c1d95", whiteSpace: "nowrap" }}>
+                            {l.letterNo || l.refNo || "—"}
+                          </td>
+                          <td style={{ padding: "10px 14px", color: "#374151" }}>{l.sender}</td>
+                          <td style={{ padding: "10px 14px", color: "#374151", maxWidth: "220px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                            title={l.subject}>{l.subject || "—"}</td>
+                          <td style={{ padding: "10px 14px" }}>
+                            <span style={{
+                              padding: "2px 10px", borderRadius: "20px", fontSize: "0.75rem",
+                              fontWeight: 700, background: `${typeColor}15`, color: typeColor,
+                              border: `1px solid ${typeColor}30`,
+                              whiteSpace: "nowrap",
+                            }}>{l.type}</span>
+                          </td>
+                          <td style={{ padding: "10px 14px", color: "#6b7280", whiteSpace: "nowrap" }}>
+                            {l.receivedDate || l.letterDate || "—"}
+                          </td>
+                          <td style={{ padding: "10px 14px", color: "#6b7280", whiteSpace: "nowrap" }}>
+                            <span style={{
+                              display: "inline-flex", alignItems: "center", gap: "5px",
+                              padding: "2px 9px", borderRadius: "20px",
+                              background: "rgba(124,58,237,0.10)", color: "#5b21b6",
+                              fontSize: "0.76rem", fontWeight: 600,
+                            }}>
+                              🏛️ {
+                                // Format the role string into a readable label
+                                (() => {
+                                  const raw = (l.createdByRole || "additional_secretary");
+                                  return raw
+                                    .replace(/_/g, " ")
+                                    .replace(/\b\w/g, (c: string) => c.toUpperCase());
+                                })()
+                              }
+                            </span>
+                          </td>
+                          <td style={{ padding: "10px 14px", textAlign: "center" }}>
+                            <a
+                              href={`/admin/view-case?caseNo=${encodeURIComponent(l.letterNo || l.refNo || "")}`}
+                              style={{
+                                display: "inline-block",
+                                padding: "5px 14px",
+                                borderRadius: "7px",
+                                background: "linear-gradient(135deg,#7c3aed,#6d28d9)",
+                                color: "#fff",
+                                fontWeight: 700,
+                                fontSize: "0.78rem",
+                                textDecoration: "none",
+                                boxShadow: "0 2px 6px rgba(124,58,237,0.25)",
+                                transition: "opacity 0.15s",
+                              }}
+                              onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
+                              onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
+                            >
+                              {lang === "si" ? "බලන්න" : "View"}
+                            </a>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
+        </section>
+      )}
+
+      {/* Keyframe for the bell pulse animation */}
+      <style>{`
+        @keyframes seniorBellPulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,0.5); }
+          50% { box-shadow: 0 0 0 6px rgba(245,158,11,0); }
+        }
+      `}</style>
+
       {/* Recent Cases Section */}
       <section className="letters-list-section">
-        <div className="letters-list-header">
-          <h3 className="section-title">
-            <svg className="admin-section-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-            </svg>
-            <span>{t("recentCases", "Recent Cases")}</span>
-          </h3>
+        <div className="letters-list-header" style={{ flexWrap: "wrap", gap: "12px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
+            <h3 className="section-title" style={{ margin: 0 }}>
+              <svg className="admin-section-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+              <span>{t("recentCases", "Recent Cases")}</span>
+            </h3>
+
+            {isMounted && currentUserProfile?.role === "additional_secretary" && (
+              <div style={{
+                display: "inline-flex",
+                backgroundColor: "#f1f5f9",
+                borderRadius: "8px",
+                padding: "3px",
+                border: "1px solid #e2e8f0"
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setCasesTab("all")}
+                  style={{
+                    padding: "5px 12px",
+                    borderRadius: "6px",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    border: "none",
+                    cursor: "pointer",
+                    backgroundColor: casesTab === "all" ? "#ffffff" : "transparent",
+                    color: casesTab === "all" ? "#1e293b" : "#64748b",
+                    boxShadow: casesTab === "all" ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
+                    transition: "all 0.15s ease"
+                  }}
+                >
+                  {lang === "si" ? "සියලුම ලිපි / නඩු" : "All Cases"} ({recentCases.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCasesTab("additional_secretary")}
+                  style={{
+                    padding: "5px 12px",
+                    borderRadius: "6px",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    border: "none",
+                    cursor: "pointer",
+                    backgroundColor: casesTab === "additional_secretary" ? "#2563eb" : "transparent",
+                    color: casesTab === "additional_secretary" ? "#ffffff" : "#64748b",
+                    boxShadow: casesTab === "additional_secretary" ? "0 1px 3px rgba(37,99,235,0.3)" : "none",
+                    transition: "all 0.15s ease"
+                  }}
+                >
+                  🏛️ {lang === "si" ? "අතිරේක ලේකම් වෙත පවරන ලද ලිපි" : "Assigned to Additional Secretary"} ({recentCases.filter(c => isAssignedToAddSec(c.assignedTo)).length})
+                </button>
+              </div>
+            )}
+          </div>
           <div className="letters-filters-group">
             <div className="search-box">
               <svg className="admin-search-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -1019,33 +1760,65 @@ export default function AdminDashboard() {
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
-            <button
-              type="button"
-              className="btn-add-letter-table"
-              onClick={() => router.push("/daily-mail/add-letter")}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "6px",
-                padding: "7px 14px",
-                backgroundColor: "#2563eb",
-                color: "#ffffff",
-                borderRadius: "8px",
-                fontWeight: 600,
-                fontSize: "0.85rem",
-                border: "none",
-                cursor: "pointer",
-                boxShadow: "0 2px 6px rgba(37, 99, 235, 0.25)",
-                transition: "all 0.15s ease",
-                whiteSpace: "nowrap",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1d4ed8")}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#2563eb")}
-              title={t("addNewLetter", "Add New Letter")}
-            >
-              <Plus size={16} strokeWidth={2.5} />
-              <span>{t("addNewLetter", "Add New Letter")}</span>
-            </button>
+            {isMounted && currentUserProfile?.role === "additional_secretary" ? (
+              <button
+                type="button"
+                className="btn-add-letter-table"
+                onClick={() => router.push("/daily-mail/register")}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  padding: "7px 14px",
+                  backgroundColor: "#2563eb",
+                  color: "#ffffff",
+                  borderRadius: "8px",
+                  fontWeight: 600,
+                  fontSize: "0.85rem",
+                  border: "none",
+                  cursor: "pointer",
+                  boxShadow: "0 2px 6px rgba(37, 99, 235, 0.25)",
+                  transition: "all 0.15s ease",
+                  whiteSpace: "nowrap",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1d4ed8")}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#2563eb")}
+                title={t("registerComplaintDetailed", "Full Complaint Registration")}
+                suppressHydrationWarning
+              >
+                <Plus size={16} strokeWidth={2.5} />
+                <span suppressHydrationWarning>{t("registerComplaintDetailed", "Full Complaint Registration")}</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn-add-letter-table"
+                onClick={() => router.push("/daily-mail/add-letter")}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  padding: "7px 14px",
+                  backgroundColor: "#2563eb",
+                  color: "#ffffff",
+                  borderRadius: "8px",
+                  fontWeight: 600,
+                  fontSize: "0.85rem",
+                  border: "none",
+                  cursor: "pointer",
+                  boxShadow: "0 2px 6px rgba(37, 99, 235, 0.25)",
+                  transition: "all 0.15s ease",
+                  whiteSpace: "nowrap",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1d4ed8")}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#2563eb")}
+                title={getAddLetterButtonLabel(isMounted ? currentUserProfile?.role : undefined, isMounted ? currentUserProfile?.raw_role : undefined, t)}
+                suppressHydrationWarning
+              >
+                <Plus size={16} strokeWidth={2.5} />
+                <span suppressHydrationWarning>{getAddLetterButtonLabel(isMounted ? currentUserProfile?.role : undefined, isMounted ? currentUserProfile?.raw_role : undefined, t)}</span>
+              </button>
+            )}
             <button
               className="btn-export-excel"
               onClick={() => {
@@ -1109,7 +1882,25 @@ export default function AdminDashboard() {
                     </td>
                     <td>{item.dateFiled}</td>
                     <td className="subject-cell">{item.subject}</td>
-                    <td>{item.assignedTo}</td>
+                    <td>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                        <span style={{ fontWeight: 600 }}>{item.assignedTo}</span>
+                        {isAssignedToAddSec(item.assignedTo) && (
+                          <span style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            fontSize: "10px",
+                            padding: "1px 6px",
+                            borderRadius: "4px",
+                            backgroundColor: "#dbeafe",
+                            color: "#1d4ed8",
+                            fontWeight: 700
+                          }}>
+                            {lang === "si" ? "අතිරේක ලේකම්" : "Addl. Secretary"}
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td>
                       <span
                         className={`badge-badge ${item.priority === "High"

@@ -11,7 +11,7 @@ import { useTranslation } from "react-i18next";
 import { Sidebar } from "@/components/Sidebar";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
-import { signOut, getCurrentProfile, getRoleDisplayName, UserProfile, dashboardPath } from "@/lib/auth";
+import { signOut, getCurrentProfile, getRoleDisplayName, UserProfile, dashboardPath, getAddLetterButtonLabel, normalizeRole } from "@/lib/auth";
 import { getDailyMailRecordsServer, getLetterEditRequestsServer } from "@/lib/db-actions";
 import { exportToExcel } from "@/lib/export-excel";
 
@@ -35,6 +35,10 @@ interface Letter {
   regionProvince?: string;
   documentUrl?: string;
   documentName?: string;
+  addressedTo?: string;
+  addressedRole?: string;
+  forwardedTo?: string;
+  forwardReason?: string;
 }
 
 const getValidSubjectOfficerName = (name?: string, fallback = "Subject Officer") => {
@@ -55,7 +59,35 @@ export default function DailyMailPage() {
 
   // Dynamic localized greeting based on time of day
   const [greeting, setGreeting] = useState("");
-  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const sim = localStorage.getItem("dcmms_simulated_session");
+      if (sim) {
+        const parsed = JSON.parse(sim);
+        return {
+          id: parsed.id || "local-user",
+          full_name: parsed.full_name || parsed.fullName || "User",
+          role: normalizeRole(parsed.role),
+          raw_role: parsed.role || parsed.raw_role || "",
+          email: parsed.email || "",
+          employee_no: parsed.employee_no || "",
+        };
+      }
+      const r = localStorage.getItem("dcmms_user_role");
+      if (r) {
+        return {
+          id: "local-user",
+          full_name: localStorage.getItem("dcmms_username") || "User",
+          role: normalizeRole(r),
+          raw_role: r,
+          email: "",
+          employee_no: "",
+        };
+      }
+    } catch {}
+    return null;
+  });
 
   useEffect(() => {
     const hour = new Date().getHours();
@@ -189,6 +221,10 @@ export default function DailyMailPage() {
               regionProvince: "",
               documentUrl: db.document_url || "",
               documentName: db.document_name || "",
+              addressedTo: db.addressed_to || "",
+              addressedRole: db.addressed_role || "",
+              forwardedTo: db.forwarded_to || "",
+              forwardReason: db.forward_reason || "",
             }));
           setLetters(mapped);
 
@@ -352,6 +388,8 @@ export default function DailyMailPage() {
       (letter.letterType || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
       (letter.subjectCategory || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
       (letter.officerName || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (letter.addressedTo || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (letter.forwardedTo || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
       letter.subject.toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesPriority = priorityFilter === "all" || letter.priority === priorityFilter;
@@ -869,7 +907,7 @@ export default function DailyMailPage() {
                 <div className="hero-action-buttons-group" style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                   <button className="btn-hero-action" onClick={() => router.push("/daily-mail/add-letter")} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                     <span style={{ fontSize: '1.2rem', fontWeight: 700 }}>+</span>
-                    {t("addNewLetter", "Add New Letter")}
+                    {getAddLetterButtonLabel(profile?.role, (profile as any)?.raw_role, t)}
                   </button>
                   <button 
                     className="btn-hero-action" 
@@ -1022,11 +1060,39 @@ export default function DailyMailPage() {
                           )}
                         </td>
                         <td>
-                          {letter.officerName ? (
-                            t(`opt${getValidSubjectOfficerName(letter.officerName).replace(/\s+/g, "")}`, getValidSubjectOfficerName(letter.officerName))
-                          ) : (
-                            "—"
-                          )}
+                          <div>
+                            {letter.officerName ? (
+                              <span style={{ fontWeight: letter.forwardedTo ? 600 : 400 }}>
+                                {t(`opt${getValidSubjectOfficerName(letter.officerName).replace(/\s+/g, "")}`, getValidSubjectOfficerName(letter.officerName))}
+                              </span>
+                            ) : (
+                              "—"
+                            )}
+                            {letter.forwardedTo && (
+                              <div style={{ marginTop: "4px" }}>
+                                <span style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "3px",
+                                  fontSize: "10.5px",
+                                  fontWeight: 600,
+                                  backgroundColor: "#eff6ff",
+                                  color: "#1d4ed8",
+                                  border: "1px solid #bfdbfe",
+                                  borderRadius: "4px",
+                                  padding: "2px 6px",
+                                  lineHeight: 1.2
+                                }}>
+                                  🏛️ {t("forwardedToAdditionalSecretaryBadge", "Forwarded (Addl. Sec)")}
+                                </span>
+                                {letter.addressedTo && (
+                                  <div style={{ fontSize: "10.5px", color: "#64748b", marginTop: "2px" }}>
+                                    <span style={{ fontWeight: 500 }}>{t("addressedTo", "Addressed to")}:</span> {letter.addressedTo}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </td>
                         <td className="subject-cell">{letter.subject}</td>
                         <td>

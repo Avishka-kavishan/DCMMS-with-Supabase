@@ -563,14 +563,14 @@ export default function OfficerWorkflowPage() {
           </div>
         </div>
 
-        {/* Daily Mail Officers */}
+        {/* Registered Incoming Letters */}
         <div className="premium-stat-card pending-cases-card">
           <div className="premium-card-top">
             <div className="premium-card-title-area">
               <Mail className="premium-card-icon" />
-              <span>{t("dailyMailOfficers", "DAILY MAIL OFFICERS")}</span>
+              <span>{t("registeredLetters", "REGISTERED LETTERS")}</span>
             </div>
-            <span className="premium-card-percentage">{dailyMailOfficersCount} {t("staff", "Staff")}</span>
+            <span className="premium-card-percentage">{t("incomingLetters", "Incoming")}</span>
           </div>
           <div className="premium-card-bottom">
             <div className="premium-card-value-area">
@@ -725,7 +725,6 @@ export default function OfficerWorkflowPage() {
                 <option value="All">{t("allRoles", "All Roles")}</option>
                 <option value="Subject">{t("roleSubjectOfficer", "Subject Officers")}</option>
                 <option value="Investigation">{t("roleInvestigationOfficer", "Investigation Officers")}</option>
-                <option value="DailyMail">{t("roleDailyMail", "Daily Mail Officers")}</option>
               </select>
               <div className="admin-filter-icon"><ChevronDown size={14} /></div>
             </div>

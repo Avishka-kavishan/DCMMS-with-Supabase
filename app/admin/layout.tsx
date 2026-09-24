@@ -156,6 +156,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         subtitle: t("caseDossierDesc", "Multi-role process tracking & officer workflow details")
       };
     }
+    if (cleanPath === "/admin/view-letter") {
+      return {
+        title: t("viewLetterTitle", "Letter Details & Routing"),
+        subtitle: t("viewLetterDesc", "Official letter record, sender information, and routing assignment")
+      };
+    }
     const dynamicRoleTitle = getRoleDisplayName(currentUserProfile?.raw_role || currentUserProfile?.role, t);
     return {
       title: dynamicRoleTitle || t("adminDashboardTitle", "Discipline Branch Administrator"),

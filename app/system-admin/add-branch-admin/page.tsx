@@ -1122,7 +1122,6 @@ export default function AddBranchAdminPage() {
                     </optgroup>
                     <optgroup label="Operational & System">
                       <option value="Subject">Subject Officer</option>
-                      <option value="Daily">Daily Mail Officer</option>
                       <option value="System">System Administrator</option>
                     </optgroup>
                   </select>

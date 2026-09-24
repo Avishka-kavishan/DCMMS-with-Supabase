@@ -25,6 +25,8 @@ import {
   getLetterEditRequestsServer,
   updateLetterEditRequestStatusServer,
   checkLetterEditApprovalStatusServer,
+  getSeniorAssistantSecretaryOfficerServer,
+  createOfficerNotificationServer,
 } from "@/lib/db-actions";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
@@ -105,7 +107,7 @@ function RegisterComplaintForm() {
   const lang = i18n.language;
 
   const [isEditMode, setIsEditMode] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditing, setIsEditing] = useState(true);
   const [isSubsequentMode, setIsSubsequentMode] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -186,7 +188,7 @@ function RegisterComplaintForm() {
   );
   const isBranchAdmin = isCurrentUserBranchAdmin;
 
-  const isFieldDisabled = isEditMode && !isEditing;
+  const isFieldDisabled = false;
 
   const [currentCaseDetails, setCurrentCaseDetails] = useState<{
     letterNo: string;
@@ -254,6 +256,21 @@ function RegisterComplaintForm() {
 
   const [selectedPdf, setSelectedPdf] = useState<File | null>(null);
   const [isUploadingPdf, setIsUploadingPdf] = useState(false);
+  const [seniorAsstSecOfficer, setSeniorAsstSecOfficer] = useState<{
+    id?: string;
+    employee_no?: string;
+    full_name: string;
+    email?: string;
+    role?: string;
+  } | null>({
+    full_name: "Dharshana Senanayake",
+    employee_no: "SEC-TEST-003",
+    role: "Senior Assistant Secretary",
+    email: "senior.asst.sec.test@dcmms.gov.lk",
+  });
+  const [submittedLetterData, setSubmittedLetterData] = useState<any | null>(null);
+  const [showSubmittedLetterModal, setShowSubmittedLetterModal] = useState(false);
+  const [isSubmittingLetter, setIsSubmittingLetter] = useState(false);
 
   const isOfficerLocked = Boolean(isFieldDisabled || (initialOfficerName && !isEditing));
 
@@ -263,8 +280,20 @@ function RegisterComplaintForm() {
     document.title = `${isEditMode ? (isEditing ? (lang === "si" ? "ලිපිය සංස්කරණය" : "Edit Letter") : (lang === "si" ? "පූර්වයෙන් යොමු කළ ලිපි විස්තර" : "View Submitted Letter Details")) : isSubsequentMode ? t("registerLetterForCurrentComplaintTitle", "Register New Letter for Current Complaint") : t("registerComplaintTitle")} | DCMMS`;
   }, [lang, t, isEditMode, isEditing, isSubsequentMode]);
 
-  // Load subject officers and institutes on mount
+  // Load subject officers, Senior Assistant Secretary, and institutes on mount
   useEffect(() => {
+    const loadSeniorAsstSec = async () => {
+      try {
+        const res = await getSeniorAssistantSecretaryOfficerServer();
+        if (res && res.success && res.data) {
+          setSeniorAsstSecOfficer(res.data);
+        }
+      } catch (e) {
+        console.warn("Failed to load Senior Assistant Secretary officer:", e);
+      }
+    };
+    loadSeniorAsstSec();
+
     const loadOfficers = async () => {
       const officerMap = new Map<string, { name: string; subjectType?: string }>();
 
@@ -950,27 +979,7 @@ function RegisterComplaintForm() {
       return;
     }
 
-    if (!formState.letterDate) {
-      alert(
-        lang === "si"
-          ? "කරුණාකර විනය ශාඛාවට භාරදුන් දිනය ඇතුළත් කරන්න."
-          : lang === "ta"
-          ? "தயவுசெய்து ஒழுக்காற்றுப் பிரிவிடம் ஒப்படைக்கப்பட்ட திகதியை உள்ளிடவும்."
-          : "Please select the Date letter handed over to disciplinary branch."
-      );
-      return;
-    }
 
-    if (!formState.officerName || !formState.officerName.trim()) {
-      alert(
-        lang === "si"
-          ? "කරුණාකර විෂයභාර නිලධාරියා තෝරන්න."
-          : lang === "ta"
-          ? "தயவுசெய்து விடய உத்தியோகத்தரைத் தேர்ந்தெடுக்கவும்."
-          : "Please select a Subject Officer before submitting."
-      );
-      return;
-    }
 
     let uploadedUrl = formState.documentUrl || "";
     let uploadedName = formState.documentName || "";
@@ -1014,33 +1023,63 @@ function RegisterComplaintForm() {
       }
     }
 
+    const sasOfficerName = seniorAsstSecOfficer?.full_name || "Dharshana Senanayake";
+    const sasRole = "Senior Assistant Secretary";
+
     const newLetter = {
       id: formState.id || Date.now().toString(),
       refNo: formState.refNo,
       senderName: formState.senderName,
       senderAddress: "N/A", // Default
-      letterDate: formState.letterDate || new Date().toISOString().split("T")[0],
+      letterDate: formState.letterDate || formState.receivedDate || new Date().toISOString().split("T")[0],
       receivedDate: formState.receivedDate || new Date().toISOString().split("T")[0],
       subject: formState.subject || "N/A", // maps to subject / title
       priority: formState.priority,
-      status: formState.officerName ? ("assigned" as const) : ("registered" as const),
+      status: "assigned" as const,
       // Extra fields captured
       letterNo: finalLetterNo,
       letterType: formState.letterType,
-      officerName: formState.officerName,
+      officerName: sasOfficerName,
       subjectCategory: formState.subjectCategory,
       instituteName: formState.instituteName,
       regionProvince: formState.regionProvince,
       isAnswerLetter: formState.isAnswerLetter,
       documentUrl: uploadedUrl,
       documentName: uploadedName,
+      // Routing to Senior Assistant Secretary
+      actionOfficer: sasOfficerName,
+      assignedOfficer: sasOfficerName,
+      assignedRole: sasRole,
+      addressedTo: sasOfficerName,
+      addressedRole: "senior_assistant_secretary",
+      forwardedTo: `${sasOfficerName} (${sasRole})`,
+      forwardReason: "Forwarded by Additional Secretary to Senior Assistant Secretary for investigation and disciplinary action",
+      isForwarded: true,
       // ── Additional Secretary Fields ──
-      addSecName: formState.addSecName,
-      addSecProcessedDate: formState.addSecProcessedDate,
+      addSecName: formState.addSecName || currentUserProfile?.full_name || "Additional Secretary",
+      addSecProcessedDate: formState.addSecProcessedDate || formState.receivedDate || new Date().toISOString().split("T")[0],
       addSecInstructions: formState.addSecInstructions,
-      addSecForwardMethod: formState.addSecForwardMethod,
+      addSecForwardMethod: formState.addSecForwardMethod || "Senior Assistant Secretary",
       addSecNotes: formState.addSecNotes,
     };
+
+    // 1. Send direct notification to Senior Assistant Secretary
+    try {
+      await createOfficerNotificationServer({
+        targetOfficerName: sasOfficerName,
+        targetRole: sasRole,
+        caseNo: newLetter.refNo,
+        letterNo: newLetter.letterNo,
+        type: "secretary_letter_forwarded",
+        title: lang === "si" ? "නව ලිපියක් යොමු කර ඇත" : lang === "ta" ? "புதிய கடிதம் அனுப்பப்பட்டது" : "New Letter Forwarded",
+        message: lang === "si" 
+          ? `අතිරේක ලේකම් විසින් ${newLetter.letterNo} දරන ලිපිය (${newLetter.senderName || "පැමිණිල්ල"}) ඔබ වෙත යොමු කර ඇත.`
+          : `Letter ${newLetter.letterNo} from ${newLetter.senderName || "Complaint"} has been forwarded to you by Additional Secretary.`,
+        senderName: currentUserProfile?.full_name ? `${currentUserProfile.full_name} (Additional Secretary)` : "Additional Secretary",
+      });
+    } catch (notifErr) {
+      console.warn("Notification server dispatch warning:", notifErr);
+    }
 
     // Always save directly to PostgreSQL database tables (dcmms_daily_mail, daily_mail, daily_mail_letter_table)
     try {
@@ -1055,8 +1094,17 @@ function RegisterComplaintForm() {
         method: "Post",
         type: newLetter.letterType,
         classification: newLetter.subjectCategory,
-        action_officer: newLetter.officerName,
-        status: newLetter.status || "Pending",
+        action_officer: sasOfficerName,
+        addressed_to: sasOfficerName,
+        addressed_role: "senior_assistant_secretary",
+        forwarded_to: `${sasOfficerName} (${sasRole})`,
+        forward_target: "senior_assistant_secretary",
+        forward_direction: "to_senior_assistant_secretary",
+        forward_reason: "Forwarded by Additional Secretary to Senior Assistant Secretary for investigation and disciplinary action",
+        is_forwarded: true,
+        created_by_name: currentUserProfile?.full_name || "Additional Secretary",
+        created_by_role: "additional_secretary",
+        status: "assigned",
         document_url: uploadedUrl,
         document_name: uploadedName,
         is_answer_letter: formState.isAnswerLetter === "true" || formState.isAnswerLetter === true,
@@ -1288,7 +1336,15 @@ function RegisterComplaintForm() {
           status: newLetter.status,
           letter_no: newLetter.letterNo || null,
           letter_type: newLetter.letterType || null,
-          officer_name: newLetter.officerName || null,
+          officer_name: sasOfficerName,
+          action_officer: sasOfficerName,
+          addressed_to: sasOfficerName,
+          addressed_role: "senior_assistant_secretary",
+          forwarded_to: `${sasOfficerName} (${sasRole})`,
+          forward_reason: "Forwarded by Additional Secretary to Senior Assistant Secretary for investigation and disciplinary action",
+          is_forwarded: true,
+          created_by_name: currentUserProfile?.full_name || "Additional Secretary",
+          created_by_role: "additional_secretary",
           subject_category: newLetter.subjectCategory || null,
           institute_name: newLetter.instituteName || null,
           region_province: mapRegionProvince(newLetter.regionProvince),
@@ -1325,7 +1381,7 @@ function RegisterComplaintForm() {
             assigned_date: newLetter.receivedDate,
             subject: newLetter.subject,
             priority: newLetter.priority,
-            officer_name: newLetter.officerName || null,
+            officer_name: sasOfficerName,
             status: "In Progress",
           });
 
@@ -1335,11 +1391,11 @@ function RegisterComplaintForm() {
         }
 
         // Also write assignment entry to dcmms_subject_assignments if an officer is assigned
-        if (newLetter.officerName) {
+        if (sasOfficerName) {
           await supabase.from("dcmms_subject_assignments").upsert({
             id: `asgn-${newLetter.refNo}`,
             case_no: newLetter.refNo,
-            officer_name: newLetter.officerName,
+            officer_name: sasOfficerName,
             assigned_at: newLetter.receivedDate,
             status: "Assigned",
           });
@@ -1353,8 +1409,9 @@ function RegisterComplaintForm() {
           {
             sender: newLetter.senderName,
             subject: newLetter.subject,
-            officer: newLetter.officerName,
-            approvedBy: adminApproval?.approverName || currentUserProfile?.full_name || "Branch Administrator",
+            officer: sasOfficerName,
+            forwardedTo: `${sasOfficerName} (${sasRole})`,
+            approvedBy: adminApproval?.approverName || currentUserProfile?.full_name || "Additional Secretary",
             approvedAt: adminApproval?.approvedAt || new Date().toISOString(),
           }
         );
@@ -1363,9 +1420,20 @@ function RegisterComplaintForm() {
         console.debug("Supabase upsert returned:", upserted);
 
         localStorage.setItem("show_register_success", "true");
-        if (typeof window !== "undefined") window.dispatchEvent(new Event("dcmms_data_updated"));
-        const nextUrl = "/admin";
-        router.push(nextUrl);
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new Event("dcmms_data_updated"));
+          window.dispatchEvent(new Event("dcmms_assignment_updated"));
+          window.dispatchEvent(new Event("dcmms_notifications_updated"));
+        }
+
+        setSubmittedLetterData({
+          ...newLetter,
+          letterNo: finalLetterNo,
+          actionOfficer: sasOfficerName,
+          forwardedTo: `${sasOfficerName} (${sasRole})`,
+          forwardReason: "Forwarded by Additional Secretary to Senior Assistant Secretary for investigation and disciplinary action",
+        });
+        setShowSubmittedLetterModal(true);
         return;
       } catch (err: any) {
         const errCode = err?.code ?? "";
@@ -1406,19 +1474,19 @@ function RegisterComplaintForm() {
         subject: newLetter.subject,
         priority: newLetter.priority,
         status: "In Progress",
-        assignedTo: newLetter.officerName || "",
+        assignedTo: sasOfficerName,
       };
       const updatedCases = casesList.filter((item: any) => item.caseNo !== newCase.caseNo);
       localStorage.setItem("dcmms_cases", JSON.stringify([newCase, ...updatedCases]));
 
-      if (newLetter.officerName) {
+      if (sasOfficerName) {
         const storedAsgns = localStorage.getItem("dcmms_subject_assignments") || "[]";
         let asgnsList = [];
         try { asgnsList = JSON.parse(storedAsgns); } catch (e) {}
         const newAsgn = {
           id: `asgn-${newLetter.refNo}`,
           caseNo: newLetter.refNo,
-          subjectOfficerName: newLetter.officerName.trim(),
+          subjectOfficerName: sasOfficerName,
           status: "Step 1: Officers Assigned",
         };
         const updatedAsgns = asgnsList.filter((a: any) => a.caseNo !== newLetter.refNo);
@@ -1426,10 +1494,21 @@ function RegisterComplaintForm() {
       }
 
       localStorage.setItem("show_register_success", "true");
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("dcmms_data_updated"));
+        window.dispatchEvent(new Event("dcmms_assignment_updated"));
+        window.dispatchEvent(new Event("dcmms_notifications_updated"));
+      }
     }
 
-    const nextUrl = "/admin";
-    router.push(nextUrl);
+    setSubmittedLetterData({
+      ...newLetter,
+      letterNo: finalLetterNo,
+      actionOfficer: sasOfficerName,
+      forwardedTo: `${sasOfficerName} (${sasRole})`,
+      forwardReason: "Forwarded by Additional Secretary to Senior Assistant Secretary for investigation and disciplinary action",
+    });
+    setShowSubmittedLetterModal(true);
   };
 
   // Save draft Handler
@@ -1936,18 +2015,14 @@ function RegisterComplaintForm() {
                 <div className="register-header-left">
                   <h1 className="register-title">
                     {isEditMode 
-                      ? (isEditing
-                          ? (lang === "si" ? "පූර්වයෙන් යොමු කළ ලිපි විස්තර සංස්කරණය" : lang === "ta" ? "சமர்ப்பிக்கப்பட்ட கடித விவரங்களைத் தொகுக்க" : "Edit Submitted Letter Details")
-                          : (lang === "si" ? "පූර්වයෙන් යොමු කළ ලිපි විස්තර නැරඹීම" : t("viewSubmittedLetterTitle", "View Submitted Letter Details"))) 
+                      ? (lang === "si" ? "පූර්වයෙන් යොමු කළ ලිපි විස්තර සංස්කරණය" : lang === "ta" ? "சமர்ப்பிக்கப்பட்ட கடித விவரங்களைத் தொகுக்க" : "Edit Submitted Letter Details")
                       : isSubsequentMode 
                         ? t("registerLetterForCurrentComplaintTitle", "Register New Letter for Current Complaint") 
                         : t("registerComplaintTitle")}
                   </h1>
                   <p className="register-subtitle">
                     {isEditMode 
-                      ? (isEditing
-                          ? (lang === "si" ? `ශාඛා පරිපාලක අනුමැතිය ලදි: ${adminApproval?.approverName || "Branch Admin"}. අවශ්‍ය වෙනස්කම් සිදුකර සුරකින්න.` : lang === "ta" ? `கிளை நிர்வாகி அனுமதி வழங்கப்பட்டது: ${adminApproval?.approverName || "Branch Admin"}. திருத்தங்களை மேற்கொண்டு சேமிக்கவும்.` : `Authorized by Branch Administrator: ${adminApproval?.approverName || "Branch Admin"}. You can modify details and save changes.`)
-                          : (lang === "si" ? "පූර්වයෙන් ඇතුළත් කළ ලිපි දත්ත (කියවීම සඳහා පමණි). සංස්කරණය සඳහා ශාඛා පරිපාලක අනුමැතිය අවශ්‍ය වේ." : lang === "ta" ? "முன்பு சமர்ப்பிக்கப்பட்ட கடித விவரங்கள் (வாசிக்க மட்டுமே). திருத்துவதற்கு கிளை நிர்வாகி அனுமதி தேவை." : "Previously submitted letter data (Read-only). Editing requires Branch Administrator authorization.")) 
+                      ? (lang === "si" ? "ඕනෑම විස්තරයක් වෙනස් කර මෙම ලිපිය යාවත්කාලීන කිරීමට වෙනස්කම් සුරකින්න." : lang === "ta" ? "விவரங்களை மாற்றி இந்தக் கடிதத்தைப் புதுப்பிக்க மாற்றங்களைச் சேமிக்கவும்." : "Modify any details and save the changes to update this letter.")
                       : t("registerComplaintDesc")}
                   </p>
                 </div>
@@ -1959,32 +2034,7 @@ function RegisterComplaintForm() {
                     {t("backToHome")}
                   </Link>
 
-                  {/* Edit Button in Header for View Submitted Letter Details */}
-                  {isEditMode && !isEditing && (
-                    <button
-                      type="button"
-                      className="btn-header-edit"
-                      onClick={handleStartEdit}
-                      title={lang === "si" ? "ශාඛා පරිපාලක අනුමැතියෙන් සංස්කරණය කරන්න" : "Edit Letter (Branch Admin Authorization)"}
-                      aria-label="Edit Submitted Letter"
-                    >
-                      <svg className="btn-header-edit-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                      </svg>
-                      {lang === "si" ? "සංස්කරණය (ශාඛා පරිපාලක)" : lang === "ta" ? "திருத்துக (கிளை நிர்வாகி)" : t("editLetterTitle", "Edit Letter")}
-                    </button>
-                  )}
 
-                  {isEditMode && isEditing && (
-                    <button
-                      type="button"
-                      className="btn-auth-cancel"
-                      onClick={handleCancelEdit}
-                      style={{ borderColor: "#f87171", color: "#dc2626", fontWeight: 700 }}
-                    >
-                      ✕ {lang === "si" ? "සංස්කරණය අවලංගු කරන්න" : lang === "ta" ? "இரத்து செய்க" : "Cancel Edit"}
-                    </button>
-                  )}
 
                   {!isEditMode && (
                     <button
@@ -2146,369 +2196,6 @@ function RegisterComplaintForm() {
 
               {/* Form entries section */}
               <div className="entries-container">
-                {/* Banner when viewing submitted letter in read-only mode */}
-                {/* ── Status Banners for View / Edit Mode ── */}
-                {isEditMode && isEditing && (
-                  <div style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: "14px",
-                    backgroundColor: "#ecfdf5",
-                    color: "#065f46",
-                    border: "1.5px solid #a7f3d0",
-                    padding: "16px 20px",
-                    borderRadius: "12px",
-                    marginBottom: "22px",
-                    fontWeight: 600,
-                    fontSize: "13.5px",
-                    flexWrap: "wrap",
-                    boxShadow: "0 2px 6px rgba(5, 150, 105, 0.08)"
-                  }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                      <div style={{
-                        width: "38px",
-                        height: "38px",
-                        borderRadius: "8px",
-                        backgroundColor: "#d1fae5",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        flexShrink: 0
-                      }}>
-                        <svg style={{ width: "22px", height: "22px", color: "#059669" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                        </svg>
-                      </div>
-                      <div>
-                        <div style={{ color: "#064e3b", fontWeight: 700, fontSize: "14px" }}>
-                          {lang === "si"
-                            ? `✓ ශාඛා පරිපාලක අනුමැතිය ලදි (${adminApproval?.approverName || "Branch Admin"}) — සංස්කරණය සක්‍රියයි`
-                            : lang === "ta"
-                            ? `✓ கிளை நிர்வாகி அனுமதி வழங்கப்பட்டது (${adminApproval?.approverName || "Branch Admin"}) — திருத்த முறைமை செயலில்`
-                            : `✓ Approved by Branch Administrator (${adminApproval?.approverName || "Branch Admin"}) — Form Editing Active`}
-                        </div>
-                        <div style={{ fontSize: "12.5px", color: "#047857", fontWeight: 500, marginTop: "2px" }}>
-                          {lang === "si"
-                            ? "අවශ්‍ය සියලු ක්ෂේත්‍ර වෙනස් කර අවසානයේ 'වෙනස්කම් සුරකින්න' බොත්තම ඔබන්න."
-                            : lang === "ta"
-                            ? "தேவையான புலங்களை மாற்றி, முடிவில் 'மாற்றங்களைச் சேமிக்கவும்' பொத்தானைக் கிளிக் செய்யவும்."
-                            : "Modify any details and click 'Save Changes' at the bottom to update the letter records."}
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleCancelEdit}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "6px",
-                        backgroundColor: "#ffffff",
-                        color: "#dc2626",
-                        border: "1px solid #fca5a5",
-                        borderRadius: "8px",
-                        padding: "8px 16px",
-                        fontSize: "13px",
-                        fontWeight: 700,
-                        cursor: "pointer"
-                      }}
-                    >
-                      ✕ {lang === "si" ? "සංස්කරණය අවලංගු කරන්න" : lang === "ta" ? "இரத்து" : "Cancel Edit"}
-                    </button>
-                  </div>
-                )}
-
-                {/* State A: Edit Request has been APPROVED by Branch Admin */}
-                {isEditMode && !isEditing && editRequest && editRequest.status === "Approved" && (
-                  <div style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: "14px",
-                    backgroundColor: "#ecfdf5",
-                    color: "#065f46",
-                    border: "1.5px solid #6ee7b7",
-                    padding: "16px 20px",
-                    borderRadius: "12px",
-                    marginBottom: "22px",
-                    fontWeight: 600,
-                    fontSize: "13.5px",
-                    flexWrap: "wrap",
-                    boxShadow: "0 4px 12px rgba(16, 185, 129, 0.12)"
-                  }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                      <div style={{
-                        width: "38px",
-                        height: "38px",
-                        borderRadius: "8px",
-                        backgroundColor: "#d1fae5",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        flexShrink: 0
-                      }}>
-                        <svg style={{ width: "24px", height: "24px", color: "#059669" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                        </svg>
-                      </div>
-                      <div>
-                        <div style={{ color: "#064e3b", fontWeight: 700, fontSize: "14.5px" }}>
-                          {lang === "si"
-                            ? `✓ ශාඛා පරිපාලක අනුමැතිය හිමිවිය: ${editRequest.reviewed_by || "Branch Admin"}`
-                            : `✓ Edit Permission Granted by Branch Administrator: ${editRequest.reviewed_by || "Branch Admin"}`}
-                        </div>
-                        <div style={{ fontSize: "12.5px", color: "#047857", fontWeight: 500, marginTop: "2px" }}>
-                          {lang === "si"
-                            ? `අනුමත කළ දිනය: ${editRequest.reviewed_at ? new Date(editRequest.reviewed_at).toLocaleDateString() : 'මෑතකදී'}. ඔබට දැන් ලිපි දත්ත වෙනස් කළ හැක.`
-                            : `Approved on ${editRequest.reviewed_at ? new Date(editRequest.reviewed_at).toLocaleDateString() : 'recently'}. You can now unlock the form to make edits.`}
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleStartEdit}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "8px",
-                        backgroundColor: "#059669",
-                        color: "#ffffff",
-                        border: "none",
-                        borderRadius: "8px",
-                        padding: "9px 20px",
-                        fontSize: "13.5px",
-                        fontWeight: 700,
-                        cursor: "pointer",
-                        boxShadow: "0 3px 8px rgba(5, 150, 105, 0.3)",
-                        transition: "all 0.15s ease"
-                      }}
-                    >
-                      <svg style={{ width: "16px", height: "16px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                      </svg>
-                      {lang === "si" ? "පෝරමය සංස්කරණය අරඹන්න" : lang === "ta" ? "திருத்தலைத் தொடங்குக" : "Start Editing Form"}
-                    </button>
-                  </div>
-                )}
-
-                {/* State B: Edit Request is PENDING review by Branch Admin */}
-                {isEditMode && !isEditing && editRequest && editRequest.status === "Pending" && (
-                  <div style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: "14px",
-                    backgroundColor: "#fffbeb",
-                    color: "#92400e",
-                    border: "1.5px solid #fde68a",
-                    padding: "16px 20px",
-                    borderRadius: "12px",
-                    marginBottom: "22px",
-                    fontWeight: 600,
-                    fontSize: "13.5px",
-                    flexWrap: "wrap",
-                    boxShadow: "0 4px 12px rgba(217, 119, 6, 0.08)"
-                  }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                      <div style={{
-                        width: "38px",
-                        height: "38px",
-                        borderRadius: "8px",
-                        backgroundColor: "#fef3c7",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        flexShrink: 0
-                      }}>
-                        <svg style={{ width: "24px", height: "24px", color: "#d97706" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      </div>
-                      <div>
-                        <div style={{ color: "#78350f", fontWeight: 700, fontSize: "14px" }}>
-                          {lang === "si"
-                            ? `⏳ ශාඛා පරිපාලක වෙත අනුමැති ඉල්ලීම යවා ඇත (තත්ත්වය: අනුමැතිය බලාපොරොත්තුවෙන්)`
-                            : `⏳ Edit Approval Request Sent to Branch Administrator (Pending Review)`}
-                        </div>
-                        <div style={{ fontSize: "12.5px", color: "#b45309", fontWeight: 500, marginTop: "2px" }}>
-                          {lang === "si"
-                            ? `ඉල්ලුම්කරු: ${editRequest.requested_by} | හේතුව: "${editRequest.reason || 'විස්තර නැත'}"`
-                            : `Requested by ${editRequest.requested_by} • Reason: "${editRequest.reason || 'N/A'}"`}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-                      {/* If current viewer is a Branch Admin, allow 1-click Approval right here */}
-                      {isCurrentUserBranchAdmin ? (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => handleApproveRequestByAdmin(editRequest.id)}
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "6px",
-                              backgroundColor: "#059669",
-                              color: "#ffffff",
-                              border: "none",
-                              borderRadius: "8px",
-                              padding: "8px 18px",
-                              fontSize: "13px",
-                              fontWeight: 700,
-                              cursor: "pointer",
-                              boxShadow: "0 2px 6px rgba(5, 150, 105, 0.25)"
-                            }}
-                          >
-                            ✓ {lang === "si" ? "ඉල්ලීම අනුමත කරන්න" : "Approve Request"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleRejectRequestByAdmin(editRequest.id)}
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "6px",
-                              backgroundColor: "#ffffff",
-                              color: "#dc2626",
-                              border: "1px solid #fca5a5",
-                              borderRadius: "8px",
-                              padding: "8px 14px",
-                              fontSize: "13px",
-                              fontWeight: 600,
-                              cursor: "pointer"
-                            }}
-                          >
-                            ✕ {lang === "si" ? "ප්‍රතික්ෂේප කරන්න" : "Reject"}
-                          </button>
-                        </>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => refreshApprovalStatus()}
-                          disabled={isLoadingApprovalStatus}
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "6px",
-                            backgroundColor: "#ffffff",
-                            color: "#92400e",
-                            border: "1px solid #fde68a",
-                            borderRadius: "8px",
-                            padding: "8px 16px",
-                            fontSize: "13px",
-                            fontWeight: 700,
-                            cursor: "pointer"
-                          }}
-                        >
-                          <span style={{ display: "inline-block", transform: isLoadingApprovalStatus ? "rotate(360deg)" : "none", transition: "transform 0.5s ease" }}>🔄</span>
-                          {lang === "si" ? "තත්ත්වය යාවත්කාලීන කරන්න" : "Check Status"}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* State C: No Approval Request Sent or Rejected */}
-                {isEditMode && !isEditing && (!editRequest || (editRequest.status !== "Approved" && editRequest.status !== "Pending")) && (
-                  <div style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: "14px",
-                    backgroundColor: "#eff6ff",
-                    color: "#1e40af",
-                    border: "1.5px solid #bfdbfe",
-                    padding: "16px 20px",
-                    borderRadius: "12px",
-                    marginBottom: "22px",
-                    fontWeight: 600,
-                    fontSize: "13.5px",
-                    flexWrap: "wrap",
-                    boxShadow: "0 2px 6px rgba(37, 99, 235, 0.05)"
-                  }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                      <div style={{
-                        width: "38px",
-                        height: "38px",
-                        borderRadius: "8px",
-                        backgroundColor: "#dbeafe",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        flexShrink: 0
-                      }}>
-                        <svg style={{ width: "20px", height: "20px", color: "#2563eb" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                        </svg>
-                      </div>
-                      <div>
-                        <div style={{ color: "#1e3a8a", fontWeight: 700, fontSize: "14px" }}>
-                          {lang === "si" ? "පූර්වයෙන් යොමු කළ ලිපි විස්තර (කියවීම සඳහා පමණි)" : lang === "ta" ? "முன்பு சமர்ப்பிக்கப்பட்ட கடித விவரங்கள்" : "Submitted Letter Details (Read-Only)"}
-                        </div>
-                        <div style={{ fontSize: "12.5px", color: "#3b82f6", fontWeight: 500, marginTop: "2px" }}>
-                          {lang === "si"
-                            ? "සංස්කරණය කිරීමට ශාඛා පරිපාලක (Branch Admin) වෙත අනුමැති ඉල්ලීමක් යවන්න හෝ සෘජුවම අනුමත කරගන්න."
-                            : "Editing requires approval from a Branch Administrator. Send an approval request to unlock this form."}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-                      <button
-                        type="button"
-                        onClick={() => setShowRequestModal(true)}
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "8px",
-                          background: "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)",
-                          color: "#ffffff",
-                          border: "none",
-                          borderRadius: "8px",
-                          padding: "8px 18px",
-                          fontSize: "13px",
-                          fontWeight: 700,
-                          cursor: "pointer",
-                          boxShadow: "0 2px 8px rgba(217, 119, 6, 0.25)",
-                          transition: "all 0.15s ease"
-                        }}
-                      >
-                        <svg style={{ width: "16px", height: "16px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                        </svg>
-                        {lang === "si" ? "ශාඛා පරිපාලක අනුමැතිය ඉල්ලන්න" : lang === "ta" ? "நிர்வாகி அனுமதி கோருக" : "Request Edit Approval"}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setShowAdminAuthModal(true)}
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "6px",
-                          backgroundColor: "#2563eb",
-                          color: "#ffffff",
-                          border: "none",
-                          borderRadius: "8px",
-                          padding: "8px 16px",
-                          fontSize: "13px",
-                          fontWeight: 700,
-                          cursor: "pointer",
-                          boxShadow: "0 2px 6px rgba(37, 99, 235, 0.2)",
-                          transition: "all 0.15s ease"
-                        }}
-                      >
-                        <svg style={{ width: "15px", height: "15px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                        </svg>
-                        {lang === "si" ? "සෘජු අනුමැතිය" : "Direct Unlock"}
-                      </button>
-                    </div>
-                  </div>
-                )}
-
                 <h2 className="entries-header">
                   <svg className="entries-header-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -2742,366 +2429,15 @@ function RegisterComplaintForm() {
                         </div>
                       </div>
 
-                      {/* Date of the Letter */}
-                      <div className="form-field-group">
-                        <label htmlFor="letterDate" className="field-label">{t("letterDate")}</label>
-                        <div className="input-icon-wrapper">
-                          <input
-                            id="letterDate"
-                            type="date"
-                            disabled={isFieldDisabled || isSubsequentMode}
-                            readOnly={isFieldDisabled || isSubsequentMode}
-                            value={formState.letterDate}
-                            onChange={(e) => setFormState({ ...formState, letterDate: e.target.value })}
-                            className="field-input"
-                            style={(isFieldDisabled || isSubsequentMode) ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
-                          />
-                        </div>
-                      </div>
+
 
                     </div>
                   </div>
 
-                  {/* ── Card 3.5: Additional Secretary Details (අතිරේක ලේකම් විස්තර) ── */}
-                  <div className="register-step-card" style={{ borderLeftColor: "#7c3aed" }}>
-                    <h3 className="register-step-title" style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                      <span style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        width: "28px",
-                        height: "28px",
-                        backgroundColor: "#ede9fe",
-                        borderRadius: "6px",
-                        flexShrink: 0
-                      }}>
-                        <svg style={{ width: "17px", height: "17px", color: "#7c3aed" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                        </svg>
-                      </span>
-                      {lang === "si"
-                        ? "අතිරේක ලේකම් විස්තර"
-                        : lang === "ta"
-                        ? "கூடுதல் செயலாளர் விவரங்கள்"
-                        : "Additional Secretary Details"}
-                    </h3>
-                    <div className="register-step-grid">
-
-                      {/* Additional Secretary Name */}
-                      <div className="form-field-group">
-                        <label htmlFor="addSecName" className="field-label">
-                          {lang === "si" ? "අතිරේක ලේකම්ගේ නම" : lang === "ta" ? "கூடுதல் செயலாளர் பெயர்" : "Name of Additional Secretary"}
-                        </label>
-                        <input
-                          id="addSecName"
-                          type="text"
-                          disabled={isFieldDisabled}
-                          readOnly={isFieldDisabled}
-                          value={formState.addSecName}
-                          onChange={(e) => setFormState({ ...formState, addSecName: e.target.value })}
-                          placeholder={lang === "si" ? "අතිරේක ලේකම්ගේ සම්පූර්ණ නම" : lang === "ta" ? "கூடுதல் செயலாளரின் முழுப்பெயர்" : "e.g. Mr. K. Perera"}
-                          className="field-input"
-                          style={isFieldDisabled ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
-                        />
-                      </div>
-
-                      {/* Date Processed by Additional Secretary */}
-                      <div className="form-field-group">
-                        <label htmlFor="addSecProcessedDate" className="field-label">
-                          {lang === "si" ? "අතිරේක ලේකම් විසින් සකස් කළ දිනය" : lang === "ta" ? "கூடுதல் செயலாளரால் செயலாக்கப்பட்ட திகதி" : "Date Processed by Additional Secretary"}
-                        </label>
-                        <div className="input-icon-wrapper">
-                          <input
-                            id="addSecProcessedDate"
-                            type="date"
-                            disabled={isFieldDisabled}
-                            readOnly={isFieldDisabled}
-                            value={formState.addSecProcessedDate}
-                            onChange={(e) => setFormState({ ...formState, addSecProcessedDate: e.target.value })}
-                            className="field-input"
-                            style={isFieldDisabled ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Forwarded To (Branch) */}
-                      <div className="form-field-group">
-                        <label htmlFor="addSecForwardMethod" className="field-label">
-                          {lang === "si" ? "ලිපිය යොමු කළ ශාඛාව" : lang === "ta" ? "கோப்பு அனுப்பப்பட்ட பிரிவு" : "Forwarded to Branch"}
-                        </label>
-                        <select
-                          id="addSecForwardMethod"
-                          disabled={isFieldDisabled}
-                          value={formState.addSecForwardMethod}
-                          onChange={(e) => setFormState({ ...formState, addSecForwardMethod: e.target.value })}
-                          className="field-select"
-                          style={isFieldDisabled ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
-                        >
-                          <option value="">{lang === "si" ? "-- ශාඛාව තෝරන්න --" : lang === "ta" ? "-- பிரிவைத் தேர்ந்தெடுக்கவும் --" : "-- Select Branch --"}</option>
-                          <option value="Discipline Branch">{lang === "si" ? "විනය ශාඛාව" : lang === "ta" ? "ஒழுக்காற்றுப் பிரிவு" : "Discipline Branch"}</option>
-                          <option value="Investigation Branch">{lang === "si" ? "විමර්ශන ශාඛාව" : lang === "ta" ? "புலனாய்வுப் பிரிவு" : "Investigation Branch"}</option>
-                          <option value="Legal Branch">{lang === "si" ? "නීති ශාඛාව" : lang === "ta" ? "சட்டப் பிரிவு" : "Legal Branch"}</option>
-                          <option value="HR Branch">{lang === "si" ? "මානව සම්පත් ශාඛාව" : lang === "ta" ? "மனித வள பிரிவு" : "HR Branch"}</option>
-                          <option value="Other">{lang === "si" ? "වෙනත්" : lang === "ta" ? "மற்றவை" : "Other"}</option>
-                        </select>
-                      </div>
-
-                      {/* Instructions by Additional Secretary — full width */}
-                      <div className="form-field-group" style={{ gridColumn: "1 / -1" }}>
-                        <label htmlFor="addSecInstructions" className="field-label">
-                          {lang === "si" ? "අතිරේක ලේකම් විසින් ලබා දුන් උපදෙස්" : lang === "ta" ? "கூடுதல் செயலாளரின் வழிமுறைகள்" : "Instructions by Additional Secretary"}
-                        </label>
-                        <textarea
-                          id="addSecInstructions"
-                          disabled={isFieldDisabled}
-                          readOnly={isFieldDisabled}
-                          value={formState.addSecInstructions}
-                          onChange={(e) => setFormState({ ...formState, addSecInstructions: e.target.value })}
-                          placeholder={lang === "si"
-                            ? "අතිරේක ලේකම් විසින් ලිපිය සම්බන්ධව ලබා දුන් විශේෂ උපදෙස් / නිර්දේශ ඇතුළත් කරන්න..."
-                            : lang === "ta"
-                            ? "கூடுதல் செயலாளர் வழங்கிய சிறப்பு வழிமுறைகள் அல்லது பரிந்துரைகளை உள்ளிடவும்..."
-                            : "Enter any specific instructions or recommendations given by the Additional Secretary regarding this letter..."}
-                          className="field-input field-textarea"
-                          rows={3}
-                          style={{
-                            height: "88px",
-                            resize: "vertical",
-                            padding: "10px 14px",
-                            ...(isFieldDisabled ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {})
-                          }}
-                        />
-                      </div>
-
-                      {/* Additional Notes — full width */}
-                      <div className="form-field-group" style={{ gridColumn: "1 / -1" }}>
-                        <label htmlFor="addSecNotes" className="field-label">
-                          {lang === "si" ? "අතිරේක ලේකම් සටහන් (විශේෂ)" : lang === "ta" ? "கூடுதல் செயலாளர் குறிப்புகள்" : "Additional Secretary Notes"}
-                        </label>
-                        <textarea
-                          id="addSecNotes"
-                          disabled={isFieldDisabled}
-                          readOnly={isFieldDisabled}
-                          value={formState.addSecNotes}
-                          onChange={(e) => setFormState({ ...formState, addSecNotes: e.target.value })}
-                          placeholder={lang === "si"
-                            ? "අතිරේක ලේකම් ලිපිය සම්බන්ධව ඇතුළත් කළ ඕනෑම සටහන්..."
-                            : lang === "ta"
-                            ? "கூடுதல் செயலாளர் எழுதிய கூடுதல் குறிப்புகள்..."
-                            : "Any additional notes recorded by the Additional Secretary for this complaint..."}
-                          className="field-input field-textarea"
-                          rows={2}
-                          style={{
-                            height: "72px",
-                            resize: "vertical",
-                            padding: "10px 14px",
-                            ...(isFieldDisabled ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {})
-                          }}
-                        />
-                      </div>
-
-                    </div>
-                  </div>
-
-                  {/* ── Card 4: Officer & Priority (නිලධාරී සහ ප්‍රමුඛතාව) ── */}
+                  {/* ── Card 4: Priority (ප්‍රමුඛතාව) ── */}
                   <div className="register-step-card">
-                    <h3 className="register-step-title">{t("stepOfficerPriority", "Officer & Priority")}</h3>
+                    <h3 className="register-step-title">{t("priority", "Priority")}</h3>
                     <div className="register-step-grid">
-
-                      {/* Subject Officer Name - Searchable Custom Dropdown */}
-                      <div className="form-field-group" ref={officerDropdownRef} style={{ position: "relative" }}>
-                        <label htmlFor="officerNameInput" className="field-label">
-                          {t("subjectOfficer")}
-                          {isOfficerLocked && (
-                            <span style={{ marginLeft: "8px", fontSize: "11px", color: "#64748b", fontWeight: "normal" }}>
-                              ({lang === "si" ? "ස්වයංක්‍රීයව පවරන ලදී" : lang === "ta" ? "தானாக ஒதுக்கப்பட்டது" : "Auto-assigned by Subject"})
-                            </span>
-                          )}
-                        </label>
-
-                        <div className="searchable-select-wrapper">
-                          <div className="searchable-select-input-container">
-                            {(() => {
-                              const targetOfficer = (formState.officerName || "").trim().toLowerCase();
-                              const selectedOfficerObj = officerOptions.find((opt) => {
-                                const oName = getOfficerName(opt).toLowerCase();
-                                return oName && oName === targetOfficer;
-                              });
-                              const oName = selectedOfficerObj ? getOfficerName(selectedOfficerObj) : formState.officerName || "";
-                              const oType = selectedOfficerObj ? getOfficerSubjectType(selectedOfficerObj) : "";
-                              const displayVal = oName ? (oType ? `${oName} — ${oType}` : oName) : "";
-
-                              return (
-                                <input
-                                  id="officerNameInput"
-                                  type="text"
-                                  readOnly
-                                  disabled={isOfficerLocked}
-                                  value={displayVal}
-                                  onClick={() => {
-                                    if (!isOfficerLocked) setIsOfficerDropdownOpen(!isOfficerDropdownOpen);
-                                  }}
-                                  placeholder={t("selectSubjectOfficer")}
-                                  className="field-input searchable-select-input"
-                                  style={
-                                    isOfficerLocked
-                                      ? { backgroundColor: "#f1f5f9", cursor: "not-allowed", opacity: 0.9, fontWeight: 700, borderColor: "#cbd5e1" }
-                                      : { cursor: "pointer", fontWeight: formState.officerName ? 600 : 400 }
-                                  }
-                                />
-                              );
-                            })()}
-                            <div className="searchable-select-icons">
-                              {formState.officerName && !isOfficerLocked && (
-                                <button
-                                  type="button"
-                                  className="searchable-select-clear-btn"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setFormState((prev) => ({ ...prev, officerName: "" }));
-                                    setOfficerSearchQuery("");
-                                  }}
-                                  title="Clear selection"
-                                >
-                                  <svg style={{ width: "16px", height: "16px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                  </svg>
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                disabled={isOfficerLocked}
-                                className="searchable-select-arrow-btn"
-                                onClick={() => {
-                                  if (!isOfficerLocked) setIsOfficerDropdownOpen(!isOfficerDropdownOpen);
-                                }}
-                                style={isOfficerLocked ? { cursor: "not-allowed", opacity: 0.6 } : {}}
-                              >
-                                {isOfficerLocked ? (
-                                  <svg style={{ width: "16px", height: "16px", color: "#64748b" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                                  </svg>
-                                ) : (
-                                  <svg
-                                    className="select-arrow-icon"
-                                    style={{
-                                      width: "16px",
-                                      height: "16px",
-                                      transform: isOfficerDropdownOpen ? "rotate(180deg)" : "rotate(0deg)",
-                                      transition: "transform 0.2s ease"
-                                    }}
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor"
-                                    strokeWidth="2.5"
-                                  >
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                                  </svg>
-                                )}
-                              </button>
-                            </div>
-                          </div>
-
-                          {!isOfficerLocked && isOfficerDropdownOpen && (
-                            <div className="searchable-select-dropdown">
-                              <div className="searchable-select-search-box">
-                                <input
-                                  type="text"
-                                  value={officerSearchQuery}
-                                  onChange={(e) => setOfficerSearchQuery(e.target.value)}
-                                  placeholder={lang === "si" ? "විෂය ලිපිකරු හෝ විෂය වර්ගය සොයන්න..." : lang === "ta" ? "அதிகாரி அல்லது விடய வகையைத் தேடுக..." : "Search officer name or subject type..."}
-                                  className="searchable-select-filter-input"
-                                  autoFocus
-                                />
-                              </div>
-                              <div className="searchable-select-options-list">
-                                <div
-                                  className={`searchable-select-option ${!formState.officerName ? "selected" : ""}`}
-                                  onClick={() => {
-                                    setFormState((prev) => ({ ...prev, officerName: "" }));
-                                    setOfficerSearchQuery("");
-                                    setIsOfficerDropdownOpen(false);
-                                  }}
-                                >
-                                  <span style={{ color: "#64748b", fontStyle: "italic" }}>{t("selectSubjectOfficer")}</span>
-                                </div>
-                                {officerOptions.filter((opt) => {
-                                  const oName = getOfficerName(opt);
-                                  const oType = getOfficerSubjectType(opt);
-                                  const q = officerSearchQuery.toLowerCase().trim();
-                                  if (!oName) return false;
-                                  return !q || oName.toLowerCase().includes(q) || oType.toLowerCase().includes(q);
-                                }).length > 0 ? (
-                                  officerOptions
-                                    .filter((opt) => {
-                                      const oName = getOfficerName(opt);
-                                      const oType = getOfficerSubjectType(opt);
-                                      const q = officerSearchQuery.toLowerCase().trim();
-                                      if (!oName) return false;
-                                      return !q || oName.toLowerCase().includes(q) || oType.toLowerCase().includes(q);
-                                    })
-                                    .map((opt, idx) => {
-                                      const oName = getOfficerName(opt);
-                                      const oType = getOfficerSubjectType(opt);
-                                      const isSelected = (formState.officerName || "").trim().toLowerCase() === oName.toLowerCase();
-                                      return (
-                                        <div
-                                          key={oName || idx}
-                                          className={`searchable-select-option ${isSelected ? "selected" : ""}`}
-                                          onClick={() => {
-                                            setFormState((prev) => ({ ...prev, officerName: oName }));
-                                            setOfficerSearchQuery("");
-                                            setIsOfficerDropdownOpen(false);
-                                          }}
-                                          style={{
-                                            display: "flex",
-                                            alignItems: "center",
-                                            justifyContent: "space-between",
-                                            padding: "10px 14px",
-                                            gap: "10px",
-                                            borderBottom: "1px solid #f1f5f9",
-                                            cursor: "pointer",
-                                          }}
-                                        >
-                                          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-                                            <span style={{ fontWeight: 600, color: "#1e293b", fontSize: "14px" }}>
-                                              {oName}
-                                            </span>
-                                            {oType && (
-                                              <span
-                                                style={{
-                                                  fontSize: "12px",
-                                                  fontWeight: 600,
-                                                  color: "#1e40af",
-                                                  backgroundColor: "#eff6ff",
-                                                  border: "1px solid #bfdbfe",
-                                                  padding: "2px 8px",
-                                                  borderRadius: "6px",
-                                                  lineHeight: "1.4",
-                                                }}
-                                              >
-                                                {oType}
-                                              </span>
-                                            )}
-                                          </div>
-                                          {isSelected && (
-                                            <svg style={{ width: "16px", height: "16px", color: "#2563eb", flexShrink: 0 }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                                            </svg>
-                                          )}
-                                        </div>
-                                      );
-                                    })
-                                ) : (
-                                  <div className="searchable-select-no-options">
-                                    {lang === "si" ? "ගැලපෙන විෂය ලිපිකරුවන් හමු නොවුණි" : lang === "ta" ? "பொருந்தக்கூடிய அதிகாரிகள் இல்லை" : "No matching subject officers found"}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
 
                       {/* Priority */}
                       <div className="form-field-group">
@@ -3191,7 +2527,7 @@ function RegisterComplaintForm() {
                       )}
 
                       {/* File upload input: available in new letter mode OR active edit mode */}
-                      {(!isEditMode || isEditing) && (
+                      {true && (
                         <div>
                           <input
                             id="pdfUploadInput"
@@ -3265,91 +2601,76 @@ function RegisterComplaintForm() {
                     </div>
                   </div>
 
+                  {/* Routing Destination Banner */}
+                  <div style={{
+                    marginTop: "20px",
+                    marginBottom: "8px",
+                    padding: "16px 20px",
+                    backgroundColor: "#f0fdf4",
+                    border: "1.5px solid #86efac",
+                    borderRadius: "10px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    flexWrap: "wrap",
+                    gap: "12px",
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+                      <div style={{
+                        width: "44px",
+                        height: "44px",
+                        borderRadius: "10px",
+                        backgroundColor: "#dcfce7",
+                        color: "#15803d",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: "22px",
+                        flexShrink: 0,
+                        border: "1px solid #bbf7d0"
+                      }}>
+                        🏛️
+                      </div>
+                      <div>
+                        <div style={{ fontSize: "14px", fontWeight: 800, color: "#166534", letterSpacing: "0.2px" }}>
+                          {lang === "si" ? "ලිපිය යොමු වන නිලධාරියා: ජ්‍යෙෂ්ඨ සහකාර ලේකම්" : lang === "ta" ? "கடிதம் அனுப்பப்படும் அதிகாரி: சிரேஷ்ட உதவிச் செயலாளர்" : "Routing Destination: Senior Assistant Secretary"}
+                        </div>
+                        <div style={{ fontSize: "13px", color: "#15803d", fontWeight: 600, marginTop: "2px" }}>
+                          {seniorAsstSecOfficer?.full_name || "Dharshana Senanayake"} {seniorAsstSecOfficer?.employee_no ? `(${seniorAsstSecOfficer.employee_no})` : ""} — {lang === "si" ? "ජ්‍යෙෂ්ඨ සහකාර ලේකම්" : "Senior Assistant Secretary"}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      fontSize: "12.5px",
+                      fontWeight: 700,
+                      color: "#166534",
+                      backgroundColor: "#dcfce7",
+                      padding: "7px 16px",
+                      borderRadius: "20px",
+                      border: "1px solid #a7f3d0"
+                    }}>
+                      <span>✓ {lang === "si" ? "ඉදිරිපත් කළ විට ලිපිය සෘජුවම ජ්‍යෙෂ්ඨ සහකාර ලේකම් වෙත යොමු වේ" : lang === "ta" ? "சமர்ப்பித்ததும் கடிதம் நேரடியாக சிரேஷ்ட உதவிச் செயலாளருக்கு நகர்த்தப்படும்" : "Submitting moves this letter directly to Senior Assistant Secretary"}</span>
+                    </div>
+                  </div>
+
                   {/* Form Action Buttons */}
                   <div className="register-form-actions">
-                    {isEditMode && !isEditing ? (
-                      <>
-                        <button
-                          type="button"
-                          className="btn-action-cancel"
-                          onClick={() => router.push("/daily-mail")}
-                        >
-                          {lang === "si" ? "නැවත ප්‍රධාන පුවරුවට" : lang === "ta" ? "முகப்புக்குச் செல்" : "Back to Dashboard"}
-                        </button>
-                        {editRequest && editRequest.status === "Approved" ? (
-                          <button
-                            type="button"
-                            className="btn-action-edit-trigger"
-                            onClick={handleStartEdit}
-                            style={{ backgroundColor: "#059669", boxShadow: "0 4px 12px rgba(5, 150, 105, 0.3)" }}
-                          >
-                            <svg style={{ width: "18px", height: "18px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                            </svg>
-                            {lang === "si" ? "සංස්කරණය අරඹන්න (අනුමතයි)" : "Start Editing (Approved)"}
-                          </button>
-                        ) : editRequest && editRequest.status === "Pending" ? (
-                          <button
-                            type="button"
-                            className="btn-action-edit-trigger"
-                            onClick={() => isCurrentUserBranchAdmin ? handleApproveRequestByAdmin() : refreshApprovalStatus()}
-                            style={{ backgroundColor: "#d97706", boxShadow: "0 4px 12px rgba(217, 119, 6, 0.25)" }}
-                          >
-                            <span style={{ fontSize: "16px" }}>⏳</span>
-                            {isCurrentUserBranchAdmin
-                              ? (lang === "si" ? "ඉල්ලීම අනුමත කරන්න (පරිපාලක)" : "Approve Edit Request (Admin)")
-                              : (lang === "si" ? "අනුමැතිය බලාපොරොත්තුවෙන්..." : "Approval Pending (Click to check)")}
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            className="btn-action-edit-trigger"
-                            onClick={() => setShowRequestModal(true)}
-                          >
-                            <svg style={{ width: "18px", height: "18px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                            </svg>
-                            {lang === "si" ? "ශාඛා පරිපාලක අනුමැතිය ඉල්ලන්න" : lang === "ta" ? "நிர்வாகி அனுமதி கோருக" : "Request Edit Approval"}
-                          </button>
-                        )}
-                      </>
-                    ) : isEditMode && isEditing ? (
-                      <>
-                        <button
-                          type="button"
-                          className="btn-action-cancel"
-                          onClick={handleCancelEdit}
-                        >
-                          {lang === "si" ? "සංස්කරණය අවලංගු කරන්න" : lang === "ta" ? "இரத்து செய்க" : "Cancel Edit"}
-                        </button>
-                        <button
-                          type="submit"
-                          className="btn-action-submit"
-                          style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}
-                        >
-                          <svg style={{ width: "18px", height: "18px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                          </svg>
-                          {lang === "si" ? "වෙනස්කම් සුරකින්න" : lang === "ta" ? "மாற்றங்களைச் சேமிக்கவும்" : "Save Changes"}
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          type="button"
-                          className="btn-action-cancel"
-                          onClick={() => router.push("/daily-mail")}
-                        >
-                          {t("cancelBtn")}
-                        </button>
-                        <button
-                          type="submit"
-                          className="btn-action-submit"
-                        >
-                          {t("submitBtn")}
-                        </button>
-                      </>
-                    )}
+                    <button
+                      type="button"
+                      className="btn-action-cancel"
+                      onClick={() => router.push("/daily-mail")}
+                    >
+                      {t("cancelBtn")}
+                    </button>
+                    <button
+                      type="submit"
+                      className="btn-action-submit"
+                    >
+                      {t("submitBtn")}
+                    </button>
                   </div>
 
                 </form>
@@ -3358,264 +2679,304 @@ function RegisterComplaintForm() {
             </div>
           </section>
 
-          {/* Send Approval Request to Branch Administrator Modal */}
-          {showRequestModal && (
-            <div className="admin-auth-modal-backdrop" onClick={() => setShowRequestModal(false)}>
-              <div className="admin-auth-modal-box" onClick={(e) => e.stopPropagation()}>
-                <div className="admin-auth-modal-header" style={{ background: "linear-gradient(135deg, #1e3a8a 0%, #0f172a 100%)" }}>
-                  <div className="admin-auth-modal-title">
-                    <svg style={{ width: "22px", height: "22px", color: "#60a5fa" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+          {/* ── Display Submitted Letter Modal ── */}
+          {showSubmittedLetterModal && submittedLetterData && (
+            <div style={{
+              position: "fixed",
+              inset: 0,
+              backgroundColor: "rgba(15, 23, 42, 0.7)",
+              backdropFilter: "blur(6px)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 99999,
+              padding: "16px",
+              overflowY: "auto",
+            }}>
+              <div style={{
+                backgroundColor: "#ffffff",
+                borderRadius: "16px",
+                maxWidth: "680px",
+                width: "100%",
+                padding: "32px",
+                boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.35)",
+                border: "1px solid #e2e8f0",
+                animation: "fadeIn 0.25s ease-out",
+                maxHeight: "92vh",
+                overflowY: "auto"
+              }}>
+                {/* Header Icon & Title */}
+                <div style={{ textAlign: "center", marginBottom: "22px" }}>
+                  <div style={{
+                    width: "64px",
+                    height: "64px",
+                    borderRadius: "50%",
+                    backgroundColor: "#dcfce7",
+                    color: "#16a34a",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    margin: "0 auto 16px",
+                    boxShadow: "0 4px 12px rgba(22, 163, 74, 0.2)"
+                  }}>
+                    <svg style={{ width: "36px", height: "36px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                     </svg>
-                    <span>
-                      {lang === "si" ? "ශාඛා පරිපාලක අනුමැති ඉල්ලීම යැවීම" : lang === "ta" ? "நிர்வாகியிடம் அனுமதி கோருதல்" : "Send Edit Approval Request to Branch Admin"}
-                    </span>
                   </div>
-                  <button
-                    type="button"
-                    className="admin-auth-modal-close"
-                    onClick={() => setShowRequestModal(false)}
-                    aria-label="Close modal"
-                  >
-                    ✕
-                  </button>
+                  <h2 style={{ fontSize: "1.35rem", fontWeight: 800, color: "#0f172a", margin: "0 0 6px 0" }}>
+                    {lang === "si"
+                      ? "ලිපිය සාර්ථකව ජ්‍යෙෂ්ඨ සහකාර ලේකම් වෙත යොමු කරන ලදී!"
+                      : lang === "ta"
+                      ? "கடிதம் சிரேஷ்ட உதவிச் செயலாளருக்கு வெற்றிகரமாக நகர்த்தப்பட்டது!"
+                      : "Letter Successfully Moved to Senior Assistant Secretary!"}
+                  </h2>
+                  <p style={{ fontSize: "0.875rem", color: "#64748b", margin: 0, fontWeight: 500 }}>
+                    {lang === "si"
+                      ? "ලිපියේ සියලුම විස්තර පද්ධතියේ සටහන් කර ජ්‍යෙෂ්ඨ සහකාර ලේකම්වරයාගේ ලේඛනයට ඇතුළත් කරන ලදී."
+                      : lang === "ta"
+                      ? "கடித விவரங்கள் பதிவு செய்யப்பட்டு சிரேஷ்ட உதவிச் செயலாளரின் பதிவேட்டில் சேர்க்கப்பட்டது."
+                      : "All letter details have been recorded and assigned directly to the Senior Assistant Secretary's ledger."}
+                  </p>
                 </div>
 
-                <form onSubmit={handleSendApprovalRequest}>
-                  <div className="admin-auth-modal-body">
-                    <p className="admin-auth-modal-desc">
-                      {lang === "si"
-                        ? "පූර්වයෙන් යොමු කළ ලිපි විස්තර සංස්කරණය කිරීමට ශාඛා පරිපාලකවරයෙකුගේ අනුමැතිය අවශ්‍ය වේ. ඔබගේ ඉල්ලීම සහ හේතුව පහත ඇතුළත් කරන්න."
-                        : lang === "ta"
-                        ? "கடித விவரங்களைத் திருத்த கிளை நிர்வாகியின் அனுமதி தேவை. உங்கள் கோரிக்கையையும் காரணத்தையும் கீழே உள்ளிடவும்."
-                        : "Editing submitted letter details is protected. Submit an approval request to the Branch Administrator with the reason for modification."}
-                    </p>
-
-                    <div className="admin-auth-info-card" style={{ backgroundColor: "#eff6ff", borderColor: "#bfdbfe", color: "#1e40af" }}>
-                      <svg style={{ width: "20px", height: "20px", color: "#2563eb", flexShrink: 0, marginTop: "1px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <span>
-                        {lang === "si"
-                          ? `ලිපි අංකය: ${formState.letterNo || "—"} | යොමු අංකය: ${formState.refNo || "—"}`
-                          : `Letter No: ${formState.letterNo || "—"} • Ref No: ${formState.refNo || "—"}`}
-                      </span>
-                    </div>
-
-                    <div className="form-field-group">
-                      <label className="field-label" htmlFor="targetAdminSelect">
-                        {lang === "si" ? "ඉලක්කගත ශාඛා පරිපාලක" : "Target Branch Administrator"}
-                      </label>
-                      <select
-                        id="targetAdminSelect"
-                        value={targetAdminIdentifier}
-                        onChange={(e) => setTargetAdminIdentifier(e.target.value)}
-                        className="field-select"
-                      >
-                        <option value="">-- {lang === "si" ? "සියලුම ශාඛා පරිපාලකවරුන්ට (All Branch Admins)" : "All Branch Administrators"} --</option>
-                        {availableBranchAdmins.map((adm: any) => (
-                          <option key={adm.id} value={adm.full_name || adm.email}>
-                            {adm.full_name || adm.employee_no} ({adm.email || adm.employee_no})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="form-field-group">
-                      <label className="field-label" htmlFor="requestReason">
-                        {lang === "si" ? "සංස්කරණය කිරීමට හේතුව" : "Reason for Edit / Modification"} <span className="required-star">*</span>
-                      </label>
-                      <textarea
-                        id="requestReason"
-                        required
-                        rows={3}
-                        value={requestReason}
-                        onChange={(e) => setRequestReason(e.target.value)}
-                        placeholder={lang === "si" ? "උදා: එවන පාර්ශ්වයේ තොරතුරු නිවැරදි කිරීම, විෂය ලිපිකරු සංශෝධනය..." : "e.g. Need to update sender details, rectify subject officer assignment..."}
-                        className="field-input"
-                        style={{ height: "80px", resize: "vertical", padding: "10px" }}
-                        autoFocus
-                      />
+                {/* Routing Banner inside Modal */}
+                <div style={{
+                  backgroundColor: "#f0fdf4",
+                  border: "1.5px solid #86efac",
+                  borderRadius: "10px",
+                  padding: "14px 18px",
+                  marginBottom: "20px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "12px",
+                  flexWrap: "wrap"
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <span style={{ fontSize: "24px" }}>🏛️</span>
+                    <div>
+                      <div style={{ fontSize: "11.5px", fontWeight: 700, color: "#166534", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                        {lang === "si" ? "පවරා ඇති නිලධාරී / යොමු කළ ස්ථානය" : "Assigned Officer & Destination"}
+                      </div>
+                      <div style={{ fontSize: "14px", fontWeight: 800, color: "#14532d" }}>
+                        {submittedLetterData.actionOfficer || "Dharshana Senanayake"}
+                      </div>
+                      <div style={{ fontSize: "12px", color: "#15803d", fontWeight: 600 }}>
+                        {lang === "si" ? "ජ්‍යෙෂ්ඨ සහකාර ලේකම් (Senior Assistant Secretary)" : "Senior Assistant Secretary"}
+                      </div>
                     </div>
                   </div>
+                  <div style={{
+                    backgroundColor: "#dcfce7",
+                    color: "#166534",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    padding: "4px 12px",
+                    borderRadius: "16px",
+                    border: "1px solid #bbf7d0"
+                  }}>
+                    ✓ {lang === "si" ? "යොමු කරන ලදී" : "Forwarded & Assigned"}
+                  </div>
+                </div>
 
-                  <div className="admin-auth-modal-actions">
-                    <button
-                      type="button"
-                      className="btn-auth-cancel"
-                      onClick={() => setShowRequestModal(false)}
-                      disabled={isSubmittingRequest}
-                    >
-                      {lang === "si" ? "අවලංගු කරන්න" : "Cancel"}
-                    </button>
-                    <button
-                      type="submit"
-                      className="btn-auth-submit"
-                      disabled={isSubmittingRequest}
-                      style={{ background: "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)" }}
-                    >
-                      {isSubmittingRequest ? (
-                        <>
-                          <span style={{ display: "inline-block", width: "14px", height: "14px", border: "2px solid #ffffff", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-                          {lang === "si" ? "යවමින්..." : "Sending..."}
-                        </>
-                      ) : (
-                        <>
-                          <svg style={{ width: "16px", height: "16px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                {/* Detailed Letter Specification Card */}
+                <div style={{
+                  backgroundColor: "#f8fafc",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: "12px",
+                  padding: "18px 20px",
+                  marginBottom: "22px"
+                }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "14px 20px" }}>
+                    <div>
+                      <div style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                        {lang === "si" ? "ලිපි අංකය (Letter Number)" : "Letter Number"}
+                      </div>
+                      <div style={{ fontSize: "15px", fontWeight: 800, color: "#0f172a", fontFamily: "monospace", marginTop: "2px" }}>
+                        {submittedLetterData.letterNo || "—"}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                        {lang === "si" ? "යොමු අංකය (Reference Number)" : "Reference Number"}
+                      </div>
+                      <div style={{ fontSize: "15px", fontWeight: 800, color: "#0f172a", fontFamily: "monospace", marginTop: "2px" }}>
+                        {submittedLetterData.refNo || "—"}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                        {lang === "si" ? "එවූ පාර්ශවය (Sender)" : "Sender's Party"}
+                      </div>
+                      <div style={{ fontSize: "13.5px", fontWeight: 700, color: "#1e293b", marginTop: "2px" }}>
+                        {submittedLetterData.senderName || "—"}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                        {lang === "si" ? "ලැබුණු දිනය (Received Date)" : "Received Date"}
+                      </div>
+                      <div style={{ fontSize: "13.5px", fontWeight: 600, color: "#1e293b", marginTop: "2px" }}>
+                        {submittedLetterData.receivedDate || "—"}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                        {lang === "si" ? "ලැබුණු ආකාරය / ස්වභාවය" : "Mode of Receipt / Nature"}
+                      </div>
+                      <div style={{ fontSize: "13px", fontWeight: 600, color: "#1e293b", marginTop: "2px" }}>
+                        {submittedLetterData.letterType || "By Post"} {submittedLetterData.regionProvince ? `(${submittedLetterData.regionProvince})` : ""}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                        {lang === "si" ? "ප්‍රමුඛතාව (Priority)" : "Priority"}
+                      </div>
+                      <div style={{ marginTop: "4px" }}>
+                        <span style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          padding: "3px 10px",
+                          borderRadius: "12px",
+                          fontSize: "12px",
+                          fontWeight: 700,
+                          backgroundColor: submittedLetterData.priority === "high" ? "#fee2e2" : submittedLetterData.priority === "low" ? "#f1f5f9" : "#ffedd5",
+                          color: submittedLetterData.priority === "high" ? "#b91c1c" : submittedLetterData.priority === "low" ? "#475569" : "#c2410c",
+                        }}>
+                          <span style={{
+                            width: "8px",
+                            height: "8px",
+                            borderRadius: "50%",
+                            backgroundColor: submittedLetterData.priority === "high" ? "#ef4444" : submittedLetterData.priority === "low" ? "#64748b" : "#f97316",
+                          }} />
+                          {submittedLetterData.priority === "high" ? "High (Within 1 day)" : submittedLetterData.priority === "low" ? "Low (Within 7 days)" : "Medium (Within 3 days)"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div style={{ gridColumn: "1 / -1" }}>
+                      <div style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                        {lang === "si" ? "ලිපියේ විෂය / කරුණ (Subject / Matter)" : "Subject / Matter of Letter"}
+                      </div>
+                      <div style={{ fontSize: "14px", fontWeight: 600, color: "#0f172a", marginTop: "4px", backgroundColor: "#ffffff", padding: "10px 12px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                        {submittedLetterData.subject || "N/A"}
+                      </div>
+                    </div>
+
+                    {submittedLetterData.documentUrl && (
+                      <div style={{ gridColumn: "1 / -1" }}>
+                        <div style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "4px" }}>
+                          {lang === "si" ? "අමුණා ඇති PDF ලේඛනය (Attached PDF)" : "Attached PDF Document"}
+                        </div>
+                        <a
+                          href={submittedLetterData.documentUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            fontSize: "13px",
+                            fontWeight: 600,
+                            color: "#2563eb",
+                            backgroundColor: "#eff6ff",
+                            padding: "6px 12px",
+                            borderRadius: "6px",
+                            border: "1px solid #bfdbfe",
+                            textDecoration: "none"
+                          }}
+                        >
+                          <svg style={{ width: "16px", height: "16px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                           </svg>
-                          {lang === "si" ? "ඉල්ලීම යවන්න" : "Send Approval Request"}
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          )}
-
-          {/* Branch Administrator Authorization Modal */}
-          {showAdminAuthModal && (
-            <div className="admin-auth-modal-backdrop" onClick={() => setShowAdminAuthModal(false)}>
-              <div className="admin-auth-modal-box" onClick={(e) => e.stopPropagation()}>
-                <div className="admin-auth-modal-header">
-                  <div className="admin-auth-modal-title">
-                    <svg style={{ width: "22px", height: "22px", color: "#38bdf8" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                    </svg>
-                    <span>
-                      {lang === "si" ? "ශාඛා පරිපාලක අනුමැතිය (Branch Admin Authorization)" : lang === "ta" ? "கிளை நிர்வாகி அனுமதி" : "Branch Admin Authorization Required"}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    className="admin-auth-modal-close"
-                    onClick={() => setShowAdminAuthModal(false)}
-                    aria-label="Close modal"
-                  >
-                    ✕
-                  </button>
-                </div>
-
-                <form onSubmit={handleAuthorizeAdmin}>
-                  <div className="admin-auth-modal-body">
-                    <p className="admin-auth-modal-desc">
-                      {lang === "si"
-                        ? "පූර්වයෙන් යොමු කළ ලිපි විස්තර සංස්කරණය කිරීමට ශාඛා පරිපාලකවරයෙකුගේ අනුමැතිය සහ මුරපද සත්‍යාපනය අවශ්‍ය වේ."
-                        : lang === "ta"
-                        ? "சமர்ப்பிக்கப்பட்ட கடித விவரங்களைத் திருத்த கிளை நிர்வாகியின் அனுமதியும் கடவுச்சொல் சரிபார்ப்பும் தேவை."
-                        : "Editing submitted letter details is restricted. Please provide Branch Administrator credentials to authorize editing."}
-                    </p>
-
-                    <div className="admin-auth-info-card">
-                      <svg style={{ width: "20px", height: "20px", color: "#d97706", flexShrink: 0, marginTop: "1px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <span>
-                        {lang === "si"
-                          ? "අනුමත ශාඛා පරිපාලකවරයාගේ ඊමේල් ලිපිනය හෝ සේවක අංකය තෝරා මුරපදය ඇතුළත් කරන්න."
-                          : "Select or enter the Branch Administrator email / employee ID and enter password to unlock."}
-                      </span>
-                    </div>
-
-                    {authError && (
-                      <div className="admin-auth-error-alert">
-                        <svg style={{ width: "18px", height: "18px", flexShrink: 0 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                        </svg>
-                        <span>{authError}</span>
+                          <span>{submittedLetterData.documentName || "View Attached PDF Document"}</span>
+                        </a>
                       </div>
                     )}
-
-                    <div className="form-field-group">
-                      <label className="field-label" htmlFor="adminIdentifier">
-                        {lang === "si" ? "ශාඛා පරිපාලක (ඊමේල් / සේවක අංකය)" : "Branch Administrator (Email / Employee ID)"} <span className="required-star">*</span>
-                      </label>
-                      {availableBranchAdmins.length > 0 ? (
-                        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                          <select
-                            id="adminIdentifierSelect"
-                            value={authAdminIdentifier}
-                            onChange={(e) => setAuthAdminIdentifier(e.target.value)}
-                            className="field-select"
-                          >
-                            <option value="">-- {lang === "si" ? "ශාඛා පරිපාලක තෝරන්න" : "Select Branch Administrator"} --</option>
-                            {availableBranchAdmins.map((adm: any) => (
-                              <option key={adm.id} value={adm.email || adm.employee_no}>
-                                {adm.full_name || adm.employee_no} ({adm.email || adm.employee_no})
-                              </option>
-                            ))}
-                          </select>
-                          <input
-                            id="adminIdentifierManual"
-                            type="text"
-                            value={authAdminIdentifier}
-                            onChange={(e) => setAuthAdminIdentifier(e.target.value)}
-                            placeholder="or type email/employee number..."
-                            className="field-input"
-                            style={{ fontSize: "12px", height: "36px" }}
-                          />
-                        </div>
-                      ) : (
-                        <input
-                          id="adminIdentifier"
-                          type="text"
-                          required
-                          value={authAdminIdentifier}
-                          onChange={(e) => setAuthAdminIdentifier(e.target.value)}
-                          placeholder="e.g. branch_admin@moe.gov.lk or 200133702441"
-                          className="field-input"
-                          autoFocus
-                        />
-                      )}
-                    </div>
-
-                    <div className="form-field-group">
-                      <label className="field-label" htmlFor="adminPassword">
-                        {lang === "si" ? "ශාඛා පරිපාලක මුරපදය" : "Branch Admin Password"} <span className="required-star">*</span>
-                      </label>
-                      <input
-                        id="adminPassword"
-                        type="password"
-                        required
-                        value={authAdminPassword}
-                        onChange={(e) => setAuthAdminPassword(e.target.value)}
-                        placeholder="••••••••"
-                        className="field-input"
-                      />
-                    </div>
                   </div>
+                </div>
 
-                  <div className="admin-auth-modal-actions">
-                    <button
-                      type="button"
-                      className="btn-auth-cancel"
-                      onClick={() => setShowAdminAuthModal(false)}
-                      disabled={isVerifyingAdmin}
-                    >
-                      {lang === "si" ? "අවලංගු කරන්න" : lang === "ta" ? "இரத்து" : "Cancel"}
-                    </button>
-                    <button
-                      type="submit"
-                      className="btn-auth-submit"
-                      disabled={isVerifyingAdmin}
-                    >
-                      {isVerifyingAdmin ? (
-                        <>
-                          <span style={{ display: "inline-block", width: "14px", height: "14px", border: "2px solid #ffffff", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-                          {lang === "si" ? "සත්‍යාපනය වෙමින්..." : "Verifying..."}
-                        </>
-                      ) : (
-                        <>
-                          <svg style={{ width: "16px", height: "16px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
-                          </svg>
-                          {lang === "si" ? "අනුමත කර සංස්කරණය අරඹන්න" : lang === "ta" ? "அனுமதித்து திருத்துக" : "Authorize & Unlock"}
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </form>
+                {/* Modal Action Buttons */}
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      window.print();
+                    }}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      padding: "10px 18px",
+                      borderRadius: "8px",
+                      backgroundColor: "#f1f5f9",
+                      color: "#334155",
+                      border: "1px solid #cbd5e1",
+                      fontSize: "13px",
+                      fontWeight: 600,
+                      cursor: "pointer"
+                    }}
+                  >
+                    <svg style={{ width: "16px", height: "16px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                    </svg>
+                    <span>{lang === "si" ? "මුද්‍රණය කරන්න" : "Print Summary"}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowSubmittedLetterModal(false);
+                      router.push("/admin");
+                    }}
+                    style={{
+                      padding: "10px 18px",
+                      borderRadius: "8px",
+                      backgroundColor: "#e2e8f0",
+                      color: "#0f172a",
+                      border: "none",
+                      fontSize: "13px",
+                      fontWeight: 600,
+                      cursor: "pointer"
+                    }}
+                  >
+                    {lang === "si" ? "වසන්න" : "Close"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowSubmittedLetterModal(false);
+                      const targetNo = submittedLetterData.letterNo || submittedLetterData.refNo || "";
+                      router.push(`/admin?highlight=${encodeURIComponent(targetNo)}`);
+                    }}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      padding: "10px 22px",
+                      borderRadius: "8px",
+                      backgroundColor: "#0f172a",
+                      color: "#ffffff",
+                      border: "none",
+                      fontSize: "13px",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      boxShadow: "0 4px 12px rgba(15, 23, 42, 0.25)"
+                    }}
+                  >
+                    <span>{lang === "si" ? "ජ්‍යෙෂ්ඨ සහකාර ලේකම් ලේඛනයේ බලන්න" : "View in Senior Assistant Secretary Dashboard"}</span>
+                    <svg style={{ width: "16px", height: "16px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                    </svg>
+                  </button>
+                </div>
               </div>
             </div>
           )}
