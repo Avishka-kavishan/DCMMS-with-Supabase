@@ -2,7 +2,8 @@
 import React, { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import "../../../i18n";
-import { UserPlus, X, ToggleLeft, ToggleRight, Check, ShieldCheck, Lock, Shield, Mail, Hash, User, AlertCircle, RefreshCw } from "lucide-react";
+import "../admin.css";
+import { UserPlus, X, ToggleLeft, ToggleRight, Check, ShieldCheck, Lock, Shield, Mail, Hash, User, AlertCircle, RefreshCw, ChevronDown } from "lucide-react";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 import { 
   getRegisterOfficersServer, 
@@ -39,8 +40,19 @@ export default function ChiefClerksPage() {
   const [formEmail, setFormEmail] = useState("");
   const [formPassword, setFormPassword] = useState("123456");
   const [formStatus, setFormStatus] = useState<"Active" | "Inactive">("Active");
+  const [formBranchType, setFormBranchType] = useState<"discipline" | "investigation">("discipline");
+  const [branchFilter, setBranchFilter] = useState<"all" | "discipline" | "investigation">("all");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
+
+  // Helper to determine officer branch from role string
+  const getOfficerBranch = (role: string): "discipline" | "investigation" => {
+    const lower = (role || "").toLowerCase();
+    if (lower.includes("investigation") || lower.includes("විමර්ශන") || lower.includes("inv")) {
+      return "investigation";
+    }
+    return "discipline";
+  };
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -176,14 +188,26 @@ export default function ChiefClerksPage() {
   };
 
   // ── Modal helpers ──────────────────────────────────────────────────────────
-  const openAddModal = () => {
-    setFormEmployeeNo(`CC-${Date.now().toString().slice(-4)}`);
+  const openAddModal = (defaultBranch: "discipline" | "investigation" = "discipline") => {
+    setFormBranchType(defaultBranch);
+    const prefix = defaultBranch === "investigation" ? "CC-INV" : "CC-DISC";
+    setFormEmployeeNo(`${prefix}-${Date.now().toString().slice(-4)}`);
     setFormName("");
     setFormEmail("");
     setFormPassword("123456");
     setFormStatus("Active");
     setErrors({});
     setIsModalOpen(true);
+  };
+
+  const handleBranchChange = (branch: "discipline" | "investigation") => {
+    setFormBranchType(branch);
+    // If employee number is default generated or empty, update prefix
+    if (!formEmployeeNo || formEmployeeNo.startsWith("CC-")) {
+      const prefix = branch === "investigation" ? "CC-INV" : "CC-DISC";
+      const numPart = formEmployeeNo.split("-").pop() || Date.now().toString().slice(-4);
+      setFormEmployeeNo(`${prefix}-${numPart}`);
+    }
   };
 
   // ── Save (Add) to register_officer_table ───────────────────────────────────
@@ -194,11 +218,16 @@ export default function ChiefClerksPage() {
 
     const currentAdmin = await getCurrentProfile();
 
+    const roleLabel = formBranchType === "investigation"
+      ? "Chief Clerk - Investigation Branch (ශාඛා ප්‍රධානී - විමර්ශන අංශය)"
+      : "Chief Clerk - Discipline Branch (ශාඛා ප්‍රධානී - විනය අංශය)";
+
+    const defaultPrefix = formBranchType === "investigation" ? "CC-INV" : "CC-DISC";
     const payload = {
-      employee_no: formEmployeeNo.trim() || `CC-${Date.now().toString().slice(-4)}`,
+      employee_no: formEmployeeNo.trim() || `${defaultPrefix}-${Date.now().toString().slice(-4)}`,
       full_name: formName.trim(),
       email: formEmail.trim().toLowerCase(),
-      role: "Chief Clerk (ශාඛා ප්‍රධානී)",
+      role: roleLabel,
       is_active: formStatus === "Active",
       password: formPassword.trim() || "123456",
       created_by: currentAdmin?.id || undefined,
@@ -233,7 +262,7 @@ export default function ChiefClerksPage() {
           employee_no: payload.employee_no,
           full_name: payload.full_name,
           email: payload.email,
-          role: "Chief Clerk (ශාඛා ප්‍රධානී)",
+          role: roleLabel,
           is_active: payload.is_active,
           password: payload.password,
         };
@@ -254,7 +283,7 @@ export default function ChiefClerksPage() {
         employeeNo: payload.employee_no,
         fullName: payload.full_name,
         email: payload.email,
-        role: "Chief Clerk (ශාඛා ප්‍රධානී)",
+        role: roleLabel,
         status: formStatus,
         createdAt: new Date().toISOString().slice(0, 10),
         createdByName: currentAdmin?.full_name || "Discipline Branch Admin",
@@ -328,13 +357,26 @@ export default function ChiefClerksPage() {
     fetchOfficers();
   };
 
-  const filteredOfficers = officers.filter(
-    (o) =>
+  const filteredOfficers = officers.filter((o) => {
+    const matchesSearch =
       o.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       o.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
       o.employeeNo.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      o.role.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+      o.role.toLowerCase().includes(searchQuery.toLowerCase());
+
+    if (!matchesSearch) return false;
+
+    if (branchFilter === "discipline") {
+      return getOfficerBranch(o.role) === "discipline";
+    }
+    if (branchFilter === "investigation") {
+      return getOfficerBranch(o.role) === "investigation";
+    }
+    return true;
+  });
+
+  const disciplineCount = officers.filter((o) => getOfficerBranch(o.role) === "discipline").length;
+  const investigationCount = officers.filter((o) => getOfficerBranch(o.role) === "investigation").length;
 
   return (
     <div className="admin-dashboard-container">
@@ -382,22 +424,49 @@ export default function ChiefClerksPage() {
             <p style={{ margin: "4px 0 0 0", fontSize: "0.85rem", color: "#3b82f6", lineHeight: 1.4 }}>
               {t(
                 "adminOnlyChiefClerkNotice",
-                "Only Discipline Branch Administrators have the security privilege to register, assign, and manage Chief Clerk (ශාඛා ප්‍රධානී) accounts in the system."
+                "Only Discipline Branch Administrators have the security privilege to register, assign, and manage Chief Clerk accounts for both Discipline Branch and Investigation Branch."
               )}
             </p>
           </div>
         </div>
 
-        <div style={{
-          background: "#ffffff",
-          border: "1px solid #bfdbfe",
-          borderRadius: "8px",
-          padding: "8px 16px",
-          textAlign: "center",
-          flexShrink: 0
-        }}>
-          <div style={{ fontSize: "0.75rem", color: "#64748b", fontWeight: 600 }}>{lang === "si" ? "ලියාපදිංචි ප්‍රධානීන්" : "Total Chief Clerks"}</div>
-          <div style={{ fontSize: "1.3rem", fontWeight: 800, color: "#1d4ed8" }}>{officers.length}</div>
+        <div style={{ display: "flex", gap: "10px", flexShrink: 0 }}>
+          <div style={{
+            background: "#ffffff",
+            border: "1.5px solid #bfdbfe",
+            borderRadius: "8px",
+            padding: "8px 14px",
+            textAlign: "center"
+          }}>
+            <div style={{ fontSize: "0.72rem", color: "#2563eb", fontWeight: 700 }}>
+              {lang === "si" ? "විනය අංශය" : "Discipline"}
+            </div>
+            <div style={{ fontSize: "1.2rem", fontWeight: 800, color: "#1d4ed8" }}>{disciplineCount}</div>
+          </div>
+          <div style={{
+            background: "#ffffff",
+            border: "1.5px solid #ddd6fe",
+            borderRadius: "8px",
+            padding: "8px 14px",
+            textAlign: "center"
+          }}>
+            <div style={{ fontSize: "0.72rem", color: "#7c3aed", fontWeight: 700 }}>
+              {lang === "si" ? "විමර්ශන" : "Investigation"}
+            </div>
+            <div style={{ fontSize: "1.2rem", fontWeight: 800, color: "#6d28d9" }}>{investigationCount}</div>
+          </div>
+          <div style={{
+            background: "#1d4ed8",
+            border: "1.5px solid #1e40af",
+            borderRadius: "8px",
+            padding: "8px 14px",
+            textAlign: "center"
+          }}>
+            <div style={{ fontSize: "0.72rem", color: "#dbeafe", fontWeight: 700 }}>
+              {lang === "si" ? "මුළු එකතුව" : "Total"}
+            </div>
+            <div style={{ fontSize: "1.2rem", fontWeight: 800, color: "#ffffff" }}>{officers.length}</div>
+          </div>
         </div>
       </div>
 
@@ -420,12 +489,14 @@ export default function ChiefClerksPage() {
             className="btn-export-excel"
             onClick={() => {
               const dataToExport = filteredOfficers.length > 0 ? filteredOfficers : officers;
-              const headers = ["Employee No", "Full Name", "Email Address", "Assigned Role", "Status", "Date Created", "Authorized By"];
+              const headers = ["Employee No", "Full Name", "Email Address", "Assigned System Role", "Status", "Date Created", "Authorized By"];
               const rows = dataToExport.map((o) => [
                 o.employeeNo || "",
                 o.fullName,
                 o.email,
-                "Chief Clerk (ශාඛා ප්‍රධානී)",
+                getOfficerBranch(o.role) === "investigation"
+                  ? "Chief Clerk - Investigation Branch (ශාඛා ප්‍රධානී - විමර්ශන අංශය)"
+                  : "Chief Clerk - Discipline Branch (ශාඛා ප්‍රධානී - විනය අංශය)",
                 o.status,
                 o.createdAt || "",
                 o.createdByName || "Discipline Branch Admin"
@@ -440,11 +511,109 @@ export default function ChiefClerksPage() {
             <span>{t("exportExcel", "Export to Excel")}</span>
           </button>
           
-          <button className="btn-admin-add" onClick={openAddModal} style={{ background: "#1d4ed8" }}>
+          <button className="btn-admin-add" onClick={() => openAddModal("discipline")} style={{ background: "#1d4ed8" }}>
             <UserPlus size={18} />
             <span>{t("addChiefClerk", "Add Chief Clerk (ශාඛා ප්‍රධානී)")}</span>
           </button>
         </div>
+      </div>
+
+      {/* ── Branch Filter Tabs ── */}
+      <div style={{ display: "flex", gap: "8px", marginBottom: "16px", flexWrap: "wrap", alignItems: "center" }}>
+        <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "#64748b", marginRight: "4px" }}>
+          {lang === "si" ? "අංශය අනුව පෙරන්න:" : "Filter by Branch:"}
+        </span>
+        <button
+          type="button"
+          onClick={() => setBranchFilter("all")}
+          style={{
+            padding: "6px 14px",
+            borderRadius: "20px",
+            fontSize: "0.82rem",
+            fontWeight: 600,
+            border: branchFilter === "all" ? "1.5px solid #2563eb" : "1px solid #cbd5e1",
+            background: branchFilter === "all" ? "#eff6ff" : "#ffffff",
+            color: branchFilter === "all" ? "#1d4ed8" : "#475569",
+            cursor: "pointer",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "6px",
+            transition: "all 0.15s ease"
+          }}
+        >
+          <span>{lang === "si" ? "සියලු ශාඛා ප්‍රධානීන්" : "All Chief Clerks"}</span>
+          <span style={{
+            background: branchFilter === "all" ? "#2563eb" : "#e2e8f0",
+            color: branchFilter === "all" ? "#ffffff" : "#475569",
+            fontSize: "0.72rem",
+            padding: "1px 6px",
+            borderRadius: "10px"
+          }}>
+            {officers.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setBranchFilter("discipline")}
+          style={{
+            padding: "6px 14px",
+            borderRadius: "20px",
+            fontSize: "0.82rem",
+            fontWeight: 600,
+            border: branchFilter === "discipline" ? "1.5px solid #2563eb" : "1px solid #cbd5e1",
+            background: branchFilter === "discipline" ? "#eff6ff" : "#ffffff",
+            color: branchFilter === "discipline" ? "#1d4ed8" : "#475569",
+            cursor: "pointer",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "6px",
+            transition: "all 0.15s ease"
+          }}
+        >
+          <Shield size={14} color="#2563eb" />
+          <span>{lang === "si" ? "විනය අංශය (Discipline Branch)" : "Discipline Branch"}</span>
+          <span style={{
+            background: branchFilter === "discipline" ? "#2563eb" : "#e2e8f0",
+            color: branchFilter === "discipline" ? "#ffffff" : "#475569",
+            fontSize: "0.72rem",
+            padding: "1px 6px",
+            borderRadius: "10px"
+          }}>
+            {disciplineCount}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setBranchFilter("investigation")}
+          style={{
+            padding: "6px 14px",
+            borderRadius: "20px",
+            fontSize: "0.82rem",
+            fontWeight: 600,
+            border: branchFilter === "investigation" ? "1.5px solid #7c3aed" : "1px solid #cbd5e1",
+            background: branchFilter === "investigation" ? "#f5f3ff" : "#ffffff",
+            color: branchFilter === "investigation" ? "#6d28d9" : "#475569",
+            cursor: "pointer",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "6px",
+            transition: "all 0.15s ease"
+          }}
+        >
+          <ShieldCheck size={14} color="#7c3aed" />
+          <span>{lang === "si" ? "විමර්ශන අංශය (Investigation Branch)" : "Investigation Branch"}</span>
+          <span style={{
+            background: branchFilter === "investigation" ? "#7c3aed" : "#e2e8f0",
+            color: branchFilter === "investigation" ? "#ffffff" : "#475569",
+            fontSize: "0.72rem",
+            padding: "1px 6px",
+            borderRadius: "10px"
+          }}>
+            {investigationCount}
+          </span>
+        </button>
       </div>
 
       {/* Chief Clerks Table */}
@@ -470,53 +639,75 @@ export default function ChiefClerksPage() {
                   </td>
                 </tr>
               ) : filteredOfficers.length > 0 ? (
-                filteredOfficers.map((item) => (
-                  <tr key={item.id} className="letter-table-row">
-                    <td className="font-mono text-sm" style={{ fontWeight: 600, color: "#1e40af" }}>
-                      {item.employeeNo || "—"}
-                    </td>
-                    <td className="admin-table-case-no font-semibold">
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                        <div style={{
-                          width: "30px",
-                          height: "30px",
-                          borderRadius: "50%",
-                          background: "#dbeafe",
-                          color: "#1d4ed8",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          fontWeight: 700,
-                          fontSize: "0.8rem"
-                        }}>
-                          {item.fullName.charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                          <div>{item.fullName}</div>
-                          <div style={{ fontSize: "0.75rem", color: "#64748b" }}>
-                            {lang === "si" ? "ශාඛා ප්‍රධානී" : "Branch Head Officer"}
+                filteredOfficers.map((item) => {
+                  const isInv = getOfficerBranch(item.role) === "investigation";
+                  return (
+                    <tr key={item.id} className="letter-table-row">
+                      <td className="font-mono text-sm" style={{ fontWeight: 600, color: isInv ? "#6d28d9" : "#1e40af" }}>
+                        {item.employeeNo || "—"}
+                      </td>
+                      <td className="admin-table-case-no font-semibold">
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <div style={{
+                            width: "30px",
+                            height: "30px",
+                            borderRadius: "50%",
+                            background: isInv ? "#ede9fe" : "#dbeafe",
+                            color: isInv ? "#6d28d9" : "#1d4ed8",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontWeight: 700,
+                            fontSize: "0.8rem"
+                          }}>
+                            {item.fullName.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <div>{item.fullName}</div>
+                            <div style={{ fontSize: "0.75rem", color: isInv ? "#7c3aed" : "#64748b", fontWeight: 500 }}>
+                              {isInv
+                                ? (lang === "si" ? "ශාඛා ප්‍රධානී (විමර්ශන අංශය)" : "Chief Clerk (Investigation Branch)")
+                                : (lang === "si" ? "ශාඛා ප්‍රධානී (විනය අංශය)" : "Chief Clerk (Discipline Branch)")}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </td>
-                    <td>{item.email || "—"}</td>
-                    <td>
-                      <span style={{
-                        background: "#eff6ff",
-                        color: "#1d4ed8",
-                        border: "1px solid #bfdbfe",
-                        padding: "3px 10px",
-                        borderRadius: "14px",
-                        fontSize: "0.78rem",
-                        fontWeight: 600,
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "5px"
-                      }}>
-                        <Shield size={13} />
-                        {lang === "si" ? "ශාඛා ප්‍රධානී (Chief Clerk)" : "Chief Clerk (ශාඛා ප්‍රධානී)"}
-                      </span>
-                    </td>
+                      </td>
+                      <td>{item.email || "—"}</td>
+                      <td>
+                        {isInv ? (
+                          <span style={{
+                            background: "#f5f3ff",
+                            color: "#6d28d9",
+                            border: "1px solid #ddd6fe",
+                            padding: "4px 10px",
+                            borderRadius: "14px",
+                            fontSize: "0.78rem",
+                            fontWeight: 600,
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "5px"
+                          }}>
+                            <ShieldCheck size={13} />
+                            {lang === "si" ? "ශාඛා ප්‍රධානී (විමර්ශන)" : "Chief Clerk (Investigation)"}
+                          </span>
+                        ) : (
+                          <span style={{
+                            background: "#eff6ff",
+                            color: "#1d4ed8",
+                            border: "1px solid #bfdbfe",
+                            padding: "4px 10px",
+                            borderRadius: "14px",
+                            fontSize: "0.78rem",
+                            fontWeight: 600,
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "5px"
+                          }}>
+                            <Shield size={13} />
+                            {lang === "si" ? "ශාඛා ප්‍රධානී (විනය)" : "Chief Clerk (Discipline)"}
+                          </span>
+                        )}
+                      </td>
                     <td style={{ fontSize: "0.82rem", color: "#475569" }}>
                       {item.createdByName || "Discipline Branch Admin"}
                     </td>
@@ -546,7 +737,8 @@ export default function ChiefClerksPage() {
                       </button>
                     </td>
                   </tr>
-                ))
+                );
+              })
               ) : (
                 <tr>
                   <td colSpan={7} className="admin-table-no-data table-no-data-padding">
@@ -561,172 +753,272 @@ export default function ChiefClerksPage() {
         </div>
       </section>
 
-      {/* ── Add Chief Clerk Modal (Admin Only) ── */}
+      {/* ── Add Chief Clerk Modal (Popup Form) ── */}
       {isModalOpen && (
-        <div className="admin-modal-overlay" onClick={() => setIsModalOpen(false)}>
-          <div className="admin-modal-box" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "560px" }}>
-            <div className="admin-modal-header" style={{ borderBottom: "1.5px solid #e2e8f0", paddingBottom: "14px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        <div
+          className="modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="modal-title"
+          onClick={() => setIsModalOpen(false)}
+        >
+          <div
+            className="modal-card"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: "560px", maxHeight: "90vh", overflowY: "auto" }}
+          >
+            <header className="modal-header">
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                 <div style={{
-                  background: "#dbeafe",
-                  color: "#1d4ed8",
-                  padding: "8px",
-                  borderRadius: "8px",
+                  background: formBranchType === "investigation" ? "#ede9fe" : "#dbeafe",
+                  color: formBranchType === "investigation" ? "#7c3aed" : "#1d4ed8",
+                  padding: "9px",
+                  borderRadius: "10px",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center"
                 }}>
-                  <UserPlus size={20} />
+                  <UserPlus size={22} />
                 </div>
                 <div>
-                  <h3 className="admin-modal-title" style={{ margin: 0, fontSize: "1.15rem", color: "#0f172a" }}>
+                  <h2 id="modal-title" className="modal-title" style={{ margin: 0, fontSize: "1.15rem", color: "#0f172a" }}>
                     {lang === "si" ? "ශාඛා ප්‍රධානී (Chief Clerk) ලියාපදිංචි කිරීම" : "Register Chief Clerk (ශාඛා ප්‍රධානී)"}
-                  </h3>
-                  <p style={{ margin: "2px 0 0 0", fontSize: "0.78rem", color: "#64748b" }}>
+                  </h2>
+                  <p className="modal-subtitle" style={{ margin: "2px 0 0 0", fontSize: "0.78rem", color: "#64748b" }}>
                     {lang === "si" ? "පරිපාලක විසින් පමණක් පත්කිරීමට අවසර ඇත" : "Authorized by Discipline Branch Admin only"}
                   </p>
                 </div>
               </div>
-              <button type="button" className="btn-modal-close" onClick={() => setIsModalOpen(false)}>
-                <X size={18} />
+              <button
+                type="button"
+                className="btn-modal-close"
+                onClick={() => setIsModalOpen(false)}
+                aria-label="Close modal"
+              >
+                <X size={20} />
               </button>
-            </div>
+            </header>
 
-            <form onSubmit={handleSave} className="admin-modal-form" style={{ marginTop: "16px" }}>
-              {/* Employee ID */}
-              <div className="form-group" style={{ marginBottom: "14px" }}>
-                <label className="form-label" style={{ fontWeight: 600, fontSize: "0.85rem", color: "#334155" }}>
-                  {lang === "si" ? "සේවක අංකය / කාර්ය මණ්ඩල හැඳුනුම් අංකය" : "Staff / Employee ID"} <span style={{ color: "#ef4444" }}>*</span>
-                </label>
-                <div style={{ position: "relative" }}>
-                  <Hash size={16} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} />
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder="e.g. CC-001 or EMP-1090"
-                    style={{ paddingLeft: "36px" }}
-                    value={formEmployeeNo}
-                    onChange={(e) => setFormEmployeeNo(e.target.value)}
-                  />
+            <form onSubmit={handleSave}>
+              <div className="modal-body" style={{ gap: "14px" }}>
+                {/* Employee ID */}
+                <div className="form-field-group">
+                  <label htmlFor="employeeNo" className="field-label">
+                    {lang === "si" ? "සේවක අංකය / කාර්ය මණ්ඩල හැඳුනුම් අංකය" : "Staff / Employee ID"} <span style={{ color: "#ef4444" }}>*</span>
+                  </label>
+                  <div style={{ position: "relative" }}>
+                    <Hash size={16} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} />
+                    <input
+                      id="employeeNo"
+                      type="text"
+                      className="field-input"
+                      placeholder={formBranchType === "investigation" ? "e.g. CC-INV-001" : "e.g. CC-DISC-001"}
+                      style={{ paddingLeft: "36px", width: "100%" }}
+                      value={formEmployeeNo}
+                      onChange={(e) => setFormEmployeeNo(e.target.value)}
+                    />
+                  </div>
+                  {errors.employeeNo && <span className="field-error-text">{errors.employeeNo}</span>}
                 </div>
-                {errors.employeeNo && <span className="field-error-msg" style={{ color: "#ef4444", fontSize: "0.78rem" }}>{errors.employeeNo}</span>}
-              </div>
 
-              {/* Full Name */}
-              <div className="form-group" style={{ marginBottom: "14px" }}>
-                <label className="form-label" style={{ fontWeight: 600, fontSize: "0.85rem", color: "#334155" }}>
-                  {lang === "si" ? "ශාඛා ප්‍රධානීගේ සම්පූර්ණ නම" : "Chief Clerk Full Name"} <span style={{ color: "#ef4444" }}>*</span>
-                </label>
-                <div style={{ position: "relative" }}>
-                  <User size={16} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} />
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder={lang === "si" ? "උදා: කේ. ඒ. නිමල් පෙරේරා" : "e.g. K. A. Nimal Perera"}
-                    style={{ paddingLeft: "36px" }}
-                    value={formName}
-                    onChange={(e) => setFormName(e.target.value)}
-                  />
+                {/* Full Name */}
+                <div className="form-field-group">
+                  <label htmlFor="fullName" className="field-label">
+                    {lang === "si" ? "ශාඛා ප්‍රධානීගේ සම්පූර්ණ නම" : "Chief Clerk Full Name"} <span style={{ color: "#ef4444" }}>*</span>
+                  </label>
+                  <div style={{ position: "relative" }}>
+                    <User size={16} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} />
+                    <input
+                      id="fullName"
+                      type="text"
+                      className="field-input"
+                      placeholder={lang === "si" ? "උදා: කේ. ඒ. නිමල් පෙරේරා" : "e.g. K. A. Nimal Perera"}
+                      style={{ paddingLeft: "36px", width: "100%" }}
+                      value={formName}
+                      onChange={(e) => setFormName(e.target.value)}
+                    />
+                  </div>
+                  {errors.name && <span className="field-error-text">{errors.name}</span>}
                 </div>
-                {errors.name && <span className="field-error-msg" style={{ color: "#ef4444", fontSize: "0.78rem" }}>{errors.name}</span>}
-              </div>
 
-              {/* Email Address */}
-              <div className="form-group" style={{ marginBottom: "14px" }}>
-                <label className="form-label" style={{ fontWeight: 600, fontSize: "0.85rem", color: "#334155" }}>
-                  {t("emailAddress", "Official E-mail Address")} <span style={{ color: "#ef4444" }}>*</span>
-                </label>
-                <div style={{ position: "relative" }}>
-                  <Mail size={16} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} />
-                  <input
-                    type="email"
-                    className="form-input"
-                    placeholder="e.g. chiefclerk.discipline@moe.gov.lk"
-                    style={{ paddingLeft: "36px" }}
-                    value={formEmail}
-                    onChange={(e) => setFormEmail(e.target.value)}
-                  />
+                {/* Email Address */}
+                <div className="form-field-group">
+                  <label htmlFor="emailAddress" className="field-label">
+                    {t("emailAddress", "Official E-mail Address")} <span style={{ color: "#ef4444" }}>*</span>
+                  </label>
+                  <div style={{ position: "relative" }}>
+                    <Mail size={16} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} />
+                    <input
+                      id="emailAddress"
+                      type="email"
+                      className="field-input"
+                      placeholder={formBranchType === "investigation" ? "e.g. chiefclerk.investigation@moe.gov.lk" : "e.g. chiefclerk.discipline@moe.gov.lk"}
+                      style={{ paddingLeft: "36px", width: "100%" }}
+                      value={formEmail}
+                      onChange={(e) => setFormEmail(e.target.value)}
+                    />
+                  </div>
+                  {errors.email && <span className="field-error-text">{errors.email}</span>}
                 </div>
-                {errors.email && <span className="field-error-msg" style={{ color: "#ef4444", fontSize: "0.78rem" }}>{errors.email}</span>}
-              </div>
 
-              {/* Assigned Role (Pre-set to Chief Clerk) */}
-              <div className="form-group" style={{ marginBottom: "14px" }}>
-                <label className="form-label" style={{ fontWeight: 600, fontSize: "0.85rem", color: "#334155" }}>
-                  {t("assignedSystemRole", "System Role")}
-                </label>
-                <div style={{
-                  padding: "10px 14px",
-                  background: "#f1f5f9",
-                  border: "1.5px solid #cbd5e1",
-                  borderRadius: "8px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between"
-                }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <Shield size={16} color="#1d4ed8" />
-                    <span style={{ fontWeight: 700, color: "#1e3a8a", fontSize: "0.9rem" }}>
-                      Chief Clerk (ශාඛා ප්‍රධානී)
+                {/* Assigned Role (Select Option: Discipline vs Investigation Branch) */}
+                <div className="form-field-group">
+                  <label htmlFor="chiefClerkBranchSelect" className="field-label" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span>{lang === "si" ? "ශාඛා ප්‍රධානී වර්ගය (Select Chief Clerk Type)" : "Chief Clerk Type / Assigned Branch"} <span style={{ color: "#ef4444" }}>*</span></span>
+                    <span style={{ fontSize: "0.75rem", color: "#64748b", fontWeight: 400 }}>
+                      {lang === "si" ? "අංශය තෝරන්න (Choose Branch)" : "Select branch to assign"}
+                    </span>
+                  </label>
+                  
+                  <div style={{ position: "relative" }}>
+                    <Shield 
+                      size={18} 
+                      style={{ 
+                        position: "absolute", 
+                        left: "12px", 
+                        top: "50%", 
+                        transform: "translateY(-50%)", 
+                        color: formBranchType === "investigation" ? "#7c3aed" : "#2563eb",
+                        pointerEvents: "none"
+                      }} 
+                    />
+                    <select
+                      id="chiefClerkBranchSelect"
+                      className="field-select"
+                      value={formBranchType}
+                      onChange={(e) => handleBranchChange(e.target.value as "discipline" | "investigation")}
+                      style={{
+                        paddingLeft: "38px",
+                        paddingRight: "36px",
+                        height: "44px",
+                        fontSize: "0.88rem",
+                        fontWeight: 600,
+                        color: formBranchType === "investigation" ? "#5b21b6" : "#1e40af",
+                        backgroundColor: formBranchType === "investigation" ? "#fbfbfe" : "#f8faff",
+                        border: formBranchType === "investigation" ? "1.5px solid #a78bfa" : "1.5px solid #93c5fd",
+                        borderRadius: "8px",
+                        cursor: "pointer",
+                        width: "100%",
+                        outline: "none"
+                      }}
+                    >
+                      <option value="discipline">
+                        {lang === "si" ? "1. විනය අංශය - Chief Clerk (Discipline Branch)" : "1. Discipline Branch - Chief Clerk (Discipline)"}
+                      </option>
+                      <option value="investigation">
+                        {lang === "si" ? "2. විමර්ශන අංශය - Chief Clerk (Investigation Branch)" : "2. Investigation Branch - Chief Clerk (Investigation)"}
+                      </option>
+                    </select>
+                    <ChevronDown 
+                      size={18} 
+                      style={{ 
+                        position: "absolute", 
+                        right: "12px", 
+                        top: "50%", 
+                        transform: "translateY(-50%)", 
+                        color: "#64748b",
+                        pointerEvents: "none"
+                      }} 
+                    />
+                  </div>
+
+                  {/* Branch Info Badge */}
+                  <div style={{ marginTop: "4px", display: "flex", alignItems: "center", gap: "6px" }}>
+                    <span style={{
+                      fontSize: "0.74rem",
+                      padding: "3px 10px",
+                      borderRadius: "6px",
+                      fontWeight: 600,
+                      background: formBranchType === "investigation" ? "#ede9fe" : "#dbeafe",
+                      color: formBranchType === "investigation" ? "#6d28d9" : "#1e40af",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "5px"
+                    }}>
+                      {formBranchType === "investigation" ? (
+                        <>
+                          <ShieldCheck size={13} color="#6d28d9" />
+                          {lang === "si" ? "විමර්ශන ලිපි හා පැමිණිලි පසු විපරම් (Inquiries & Investigations)" : "Inquiries & Investigations Management"}
+                        </>
+                      ) : (
+                        <>
+                          <Shield size={13} color="#1e40af" />
+                          {lang === "si" ? "විනය ලිපි හා පසු විපරම් පාලනය (Discipline Letters & Tracking)" : "Discipline Letters & Tracking Management"}
+                        </>
+                      )}
                     </span>
                   </div>
-                  <span style={{ fontSize: "0.75rem", background: "#e2e8f0", padding: "2px 8px", borderRadius: "10px", color: "#475569" }}>
-                    {lang === "si" ? "විනය ශාඛාව" : "Discipline Branch"}
-                  </span>
                 </div>
-              </div>
 
-              {/* Temporary Password */}
-              <div className="form-group" style={{ marginBottom: "14px" }}>
-                <label className="form-label" style={{ fontWeight: 600, fontSize: "0.85rem", color: "#334155" }}>
-                  {lang === "si" ? "ප්‍රවේශ මුරපදය (Default Password)" : "Initial Access Password"}
-                </label>
-                <div style={{ position: "relative" }}>
-                  <Lock size={16} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} />
-                  <input
-                    type="text"
-                    className="form-input"
-                    style={{ paddingLeft: "36px", fontFamily: "monospace" }}
-                    value={formPassword}
-                    onChange={(e) => setFormPassword(e.target.value)}
-                  />
+                {/* Temporary Password & Account Status in 2 Columns */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                  {/* Temporary Password */}
+                  <div className="form-field-group">
+                    <label htmlFor="tempPassword" className="field-label">
+                      {lang === "si" ? "ප්‍රවේශ මුරපදය" : "Initial Password"}
+                    </label>
+                    <div style={{ position: "relative" }}>
+                      <Lock size={16} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} />
+                      <input
+                        id="tempPassword"
+                        type="text"
+                        className="field-input"
+                        style={{ paddingLeft: "36px", fontFamily: "monospace", width: "100%", height: "42px" }}
+                        value={formPassword}
+                        onChange={(e) => setFormPassword(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Account Status Select */}
+                  <div className="form-field-group">
+                    <label htmlFor="accountStatusSelect" className="field-label">
+                      {t("accountStatus", "Account Status")}
+                    </label>
+                    <div style={{ position: "relative" }}>
+                      <select
+                        id="accountStatusSelect"
+                        className="field-select"
+                        value={formStatus}
+                        onChange={(e) => setFormStatus(e.target.value as "Active" | "Inactive")}
+                        style={{
+                          height: "42px",
+                          paddingRight: "36px",
+                          paddingLeft: "14px",
+                          borderRadius: "8px",
+                          cursor: "pointer",
+                          width: "100%",
+                          fontWeight: 600,
+                          color: formStatus === "Active" ? "#16a34a" : "#dc2626",
+                          backgroundColor: formStatus === "Active" ? "#f0fdf4" : "#fef2f2",
+                          border: formStatus === "Active" ? "1.5px solid #bbf7d0" : "1.5px solid #fecaca"
+                        }}
+                      >
+                        <option value="Active">{t("active", "Active")} (ක්‍රියාකාරී)</option>
+                        <option value="Inactive">{t("inactive", "Inactive")} (අක්‍රිය)</option>
+                      </select>
+                      <ChevronDown 
+                        size={18} 
+                        style={{ 
+                          position: "absolute", 
+                          right: "12px", 
+                          top: "50%", 
+                          transform: "translateY(-50%)", 
+                          color: "#64748b",
+                          pointerEvents: "none"
+                        }} 
+                      />
+                    </div>
+                  </div>
                 </div>
-                <span style={{ fontSize: "0.75rem", color: "#64748b", marginTop: "4px", display: "block" }}>
+
+                <span style={{ fontSize: "0.74rem", color: "#64748b", display: "block", marginTop: "-6px" }}>
                   {lang === "si" ? "පළමු පිවිසුමෙන් පසු නිලධාරියාට මුරපදය වෙනස් කළ හැක." : "Officer can change password upon initial login."}
                 </span>
               </div>
 
-              {/* Account Status */}
-              <div className="form-group" style={{ marginBottom: "20px" }}>
-                <label className="form-label" style={{ fontWeight: 600, fontSize: "0.85rem", color: "#334155" }}>
-                  {t("accountStatus", "Account Status")}
-                </label>
-                <div style={{ display: "flex", gap: "12px" }}>
-                  <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer", fontSize: "0.88rem" }}>
-                    <input
-                      type="radio"
-                      name="chiefClerkStatus"
-                      value="Active"
-                      checked={formStatus === "Active"}
-                      onChange={() => setFormStatus("Active")}
-                    />
-                    <span style={{ color: "#16a34a", fontWeight: 600 }}>{t("active", "Active")}</span>
-                  </label>
-                  <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer", fontSize: "0.88rem" }}>
-                    <input
-                      type="radio"
-                      name="chiefClerkStatus"
-                      value="Inactive"
-                      checked={formStatus === "Inactive"}
-                      onChange={() => setFormStatus("Inactive")}
-                    />
-                    <span style={{ color: "#dc2626", fontWeight: 600 }}>{t("inactive", "Inactive")}</span>
-                  </label>
-                </div>
-              </div>
-
-              {/* Modal Actions */}
-              <div className="admin-modal-actions" style={{ borderTop: "1.5px solid #e2e8f0", paddingTop: "14px", display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+              {/* Modal Footer / Actions */}
+              <footer className="modal-footer">
                 <button
                   type="button"
                   className="btn-modal-cancel"
@@ -739,7 +1031,12 @@ export default function ChiefClerksPage() {
                   type="submit"
                   className="btn-modal-save"
                   disabled={isSaving}
-                  style={{ background: "#1d4ed8", display: "inline-flex", alignItems: "center", gap: "6px" }}
+                  style={{
+                    backgroundColor: formBranchType === "investigation" ? "#7c3aed" : "#2563eb",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px"
+                  }}
                 >
                   {isSaving ? (
                     <>
@@ -753,7 +1050,7 @@ export default function ChiefClerksPage() {
                     </>
                   )}
                 </button>
-              </div>
+              </footer>
             </form>
           </div>
         </div>

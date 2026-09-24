@@ -1506,7 +1506,7 @@ export default function InvestigationPage() {
   // ── Session guard ──────────────────────────────────────────────────────────
   useEffect(() => {
     getCurrentProfile().then((profile) => {
-      const allowedRoles = ["investigation_officer", "assistant_secretary_investigation", "system_admin"];
+      const allowedRoles = ["investigation_officer", "assistant_secretary_investigation", "chief_clerk_investigation", "chief_clerk", "system_admin"];
       if (!profile) {
         router.replace("/");
         return;

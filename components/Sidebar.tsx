@@ -49,10 +49,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
       effectiveRole === "assistant_secretary_discipline" ||
       effectiveRole === "senior_assistant_secretary" ||
       effectiveRole === "additional_secretary" ||
-      effectiveRole === "chief_clerk"
+      effectiveRole === "chief_clerk" ||
+      effectiveRole === "chief_clerk_discipline"
     ) {
       activeRole = "admin";
-    } else if (effectiveRole === "investigation" || effectiveRole === "investigation_officer" || effectiveRole === "assistant_secretary_investigation") {
+    } else if (
+      effectiveRole === "investigation" ||
+      effectiveRole === "investigation_officer" ||
+      effectiveRole === "assistant_secretary_investigation" ||
+      effectiveRole === "chief_clerk_investigation"
+    ) {
       activeRole = "investigation";
     } else if (effectiveRole === "system_admin") {
       activeRole = "system_admin";

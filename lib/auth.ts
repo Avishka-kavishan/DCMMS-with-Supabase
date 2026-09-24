@@ -7,7 +7,9 @@ export type UserRole =
   | "assistant_secretary_investigation"
   | "senior_assistant_secretary"
   | "additional_secretary"
-  | "chief_clerk";
+  | "chief_clerk"
+  | "chief_clerk_discipline"
+  | "chief_clerk_investigation";
 
 export interface UserProfile {
   id: string;
@@ -23,16 +25,25 @@ export function normalizeRole(roleStr?: string): UserRole {
   const lower = roleStr.toLowerCase().trim();
   if (lower.includes("system") || lower === "system_admin") return "system_admin";
   
-  // Chief Clerk (ශාඛා ප්‍රධානී)
+  // Chief Clerk - Investigation Branch (ශාඛා ප්‍රධානී - විමර්ශන අංශය)
+  if (
+    (lower.includes("chief") || lower.includes("clerk") || lower.includes("clack") || lower.includes("ශාඛා ප්‍රධානී") || lower.includes("ශාඛා ප්රධානී") || lower.includes("chief_clerk")) &&
+    (lower.includes("investigation") || lower.includes("විමර්ශන") || lower.includes("inv"))
+  ) {
+    return "chief_clerk_investigation";
+  }
+
+  // Chief Clerk - Discipline Branch (ශාඛා ප්‍රධානී - විනය අංශය)
   if (
     lower.includes("chief") ||
     lower.includes("clerk") ||
     lower.includes("clack") ||
     lower.includes("ශාඛා ප්‍රධානී") ||
     lower.includes("ශාඛා ප්රධානී") ||
-    lower === "chief_clerk"
+    lower === "chief_clerk" ||
+    lower === "chief_clerk_discipline"
   ) {
-    return "chief_clerk";
+    return "chief_clerk_discipline";
   }
 
   // Specific secretary & investigation roles
@@ -74,16 +85,25 @@ export function getRoleDisplayName(
   }
   const lower = roleStr.toLowerCase().trim();
 
-  // Chief Clerk (ශාඛා ප්‍රධානී)
+  // Chief Clerk - Investigation Branch (ශාඛා ප්‍රධානී - විමර්ශන අංශය)
+  if (
+    (lower.includes("chief") || lower.includes("clerk") || lower.includes("clack") || lower.includes("ශාඛා ප්‍රධානී") || lower.includes("ශාඛා ප්රධානී") || lower === "chief_clerk_investigation") &&
+    (lower.includes("investigation") || lower.includes("විමර්ශන") || lower.includes("inv"))
+  ) {
+    return t ? t("roleChiefClerkInvestigation", "Chief Clerk - Investigation Branch (ශාඛා ප්‍රධානී - විමර්ශන අංශය)") : "Chief Clerk - Investigation Branch (ශාඛා ප්‍රධානී - විමර්ශන අංශය)";
+  }
+
+  // Chief Clerk - Discipline Branch (ශාඛා ප්‍රධානී - විනය අංශය)
   if (
     lower.includes("chief") ||
     lower.includes("clerk") ||
     lower.includes("clack") ||
     lower.includes("ශාඛා ප්‍රධානී") ||
     lower.includes("ශාඛා ප්රධානී") ||
-    lower === "chief_clerk"
+    lower === "chief_clerk" ||
+    lower === "chief_clerk_discipline"
   ) {
-    return t ? t("roleChiefClerk", "Chief Clerk (ශාඛා ප්‍රධානී)") : "Chief Clerk (ශාඛා ප්‍රධානී)";
+    return t ? t("roleChiefClerkDiscipline", "Chief Clerk - Discipline Branch (ශාඛා ප්‍රධානී - විනය අංශය)") : "Chief Clerk - Discipline Branch (ශාඛා ප්‍රධානී - විනය අංශය)";
   }
 
   // Assistant Secretary Discipline Branch
@@ -154,9 +174,21 @@ export function getAddLetterButtonLabel(
   const norm = normalizeRole(roleStr || rawRoleStr);
   const rawLower = `${roleStr || ""} ${rawRoleStr || ""}`.toLowerCase();
 
-  // Chief Clerk (ශාඛා ප්‍රධානී)
+  // Chief Clerk - Investigation Branch (ශාඛා ප්‍රධානී - විමර්ශන අංශය)
+  if (
+    norm === "chief_clerk_investigation" ||
+    (rawLower.includes("chief") && (rawLower.includes("investigation") || rawLower.includes("විමර්ශන"))) ||
+    (rawLower.includes("ශාඛා ප්‍රධානී") && rawLower.includes("විමර්ශන"))
+  ) {
+    return t
+      ? t("addLetterRoleChiefClerkInv", "විමර්ශන ශාඛා ප්‍රධානී වෙත ලැබෙන ලිපි එක් කරන්න")
+      : "විමර්ශන ශාඛා ප්‍රධානී වෙත ලැබෙන ලිපි එක් කරන්න";
+  }
+
+  // Chief Clerk - Discipline Branch (ශාඛා ප්‍රධානී - විනය අංශය)
   if (
     norm === "chief_clerk" ||
+    norm === "chief_clerk_discipline" ||
     rawLower.includes("chief") ||
     rawLower.includes("clerk") ||
     rawLower.includes("clack") ||
@@ -164,8 +196,8 @@ export function getAddLetterButtonLabel(
     rawLower.includes("ශාඛා ප්රධානී")
   ) {
     return t
-      ? t("addLetterRoleChiefClerk", "ශාඛා ප්‍රධානී වෙත ලැබෙන ලිපි එක් කරන්න")
-      : "ශාඛා ප්‍රධානී වෙත ලැබෙන ලිපි එක් කරන්න";
+      ? t("addLetterRoleChiefClerkDisc", "විනය ශාඛා ප්‍රධානී වෙත ලැබෙන ලිපි එක් කරන්න")
+      : "විනය ශාඛා ප්‍රධානී වෙත ලැබෙන ලිපි එක් කරන්න";
   }
 
   // 1. Assistant Secretary Investigation Branch
@@ -275,11 +307,13 @@ export function dashboardPath(role: string): string {
     case "senior_assistant_secretary":
     case "additional_secretary":
     case "chief_clerk":
+    case "chief_clerk_discipline":
       return "/admin";
     case "subject_officer":
       return "/subject";
     case "investigation_officer":
     case "assistant_secretary_investigation":
+    case "chief_clerk_investigation":
       return "/investigation";
     case "system_admin":
       return "/system-admin";

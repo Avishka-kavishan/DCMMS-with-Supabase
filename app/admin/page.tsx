@@ -287,6 +287,8 @@ function AdminDashboardContent() {
         "senior_assistant_secretary",
         "additional_secretary",
         "chief_clerk",
+        "chief_clerk_discipline",
+        "chief_clerk_investigation",
         "assistant_secretary_investigation",
         "system_admin"
       ];
