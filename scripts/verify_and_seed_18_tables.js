@@ -67,7 +67,8 @@ const path = require('path');
       { role_id: 2, role_name: 'System Administrator' },
       { role_id: 3, role_name: 'Daily Mail Reporter' },
       { role_id: 4, role_name: 'Subject Officer' },
-      { role_id: 5, role_name: 'Investigation Branch Administrator' }
+      { role_id: 5, role_name: 'Investigation Branch Administrator' },
+      { role_id: 6, role_name: 'Chief Clerk' }
     ];
     const { error: rolesErr } = await supabase.from('roles').upsert(rolesData, { onConflict: 'role_id' });
     if (rolesErr) console.log('Roles seed note:', rolesErr.message);

@@ -126,6 +126,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         subtitle: t("subjectOfficerDescAdmin", "Oversee subject officer tasks")
       };
     }
+    if (cleanPath === "/admin/chief-clerks" || cleanPath === "/admin/chief-clerk") {
+      return {
+        title: t("chiefClerksTitle", "Chief Clerk (ශාඛා ප්‍රධානී)"),
+        subtitle: t("chiefClerksDescAdmin", "Manage and register Chief Clerk accounts (Admin exclusive)")
+      };
+    }
     if (cleanPath === "/admin/investigation-officers") {
       return {
         title: t("investigationAdminTitle", "Investigation Administrators"),

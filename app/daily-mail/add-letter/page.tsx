@@ -568,6 +568,9 @@ export default function AddNewLetterPage() {
                         <option value="assistant_secretary_investigation">
                           {lang === "si" ? "සහකාර ලේකම් - විමර්ශන ශාඛාව (Assistant Secretary - Investigation Branch)" : lang === "ta" ? "உதவிச் செயலாளர் - விசாரணைப் பிரிவு (Assistant Secretary - Investigation Branch)" : "Assistant Secretary - Investigation Branch"}
                         </option>
+                        <option value="chief_clerk">
+                          {lang === "si" ? "ශාඛා ප්‍රධානී (Chief Clerk)" : lang === "ta" ? "முதன்மை எழுதுநர் (Chief Clerk)" : "Chief Clerk"}
+                        </option>
                       </select>
                       <span style={{ fontSize: "0.8rem", color: "#64748b", marginTop: 4, display: "block" }}>
                         {lang === "si" 

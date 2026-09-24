@@ -30,30 +30,39 @@ export async function checkDatabaseConnection() {
 // -------------------------------------------------------------
 // 1. Daily Mail & Letters Operations
 // -------------------------------------------------------------
+let dailyMailColumnsEnsured = false;
+async function ensureDailyMailColumnsOnce() {
+  if (dailyMailColumnsEnsured) return;
+  dailyMailColumnsEnsured = true;
+  const ensureCols = [
+    `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS document_url TEXT`,
+    `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS document_name VARCHAR(255)`,
+    `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS addressed_to VARCHAR(255)`,
+    `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS addressed_role VARCHAR(255)`,
+    `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS forwarded_to VARCHAR(255)`,
+    `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS forward_reason TEXT`,
+    `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS document_url TEXT`,
+    `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS document_name VARCHAR(255)`,
+    `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS addressed_to VARCHAR(255)`,
+    `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS addressed_role VARCHAR(255)`,
+    `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS forwarded_to VARCHAR(255)`,
+    `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS forward_reason TEXT`
+  ];
+  for (const sql of ensureCols) {
+    try {
+      await prisma.$executeRawUnsafe(sql);
+    } catch (e) {}
+  }
+}
+
 export async function getDailyMailRecordsServer() {
   try {
     let combinedData: any[] = [];
     const idsSeen = new Set<string>();
 
-    // Ensure document and forwarding columns exist
-    const ensureCols = [
-      `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS document_url TEXT`,
-      `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS document_name VARCHAR(255)`,
-      `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS addressed_to VARCHAR(255)`,
-      `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS addressed_role VARCHAR(255)`,
-      `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS forwarded_to VARCHAR(255)`,
-      `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS forward_reason TEXT`,
-      `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS document_url TEXT`,
-      `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS document_name VARCHAR(255)`,
-      `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS addressed_to VARCHAR(255)`,
-      `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS addressed_role VARCHAR(255)`,
-      `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS forwarded_to VARCHAR(255)`,
-      `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS forward_reason TEXT`
-    ];
-    for (const sql of ensureCols) {
-      try {
-        await prisma.$executeRawUnsafe(sql);
-      } catch (e) {}
+    // Ensure document and forwarding columns exist once
+    if (!dailyMailColumnsEnsured) {
+      await ensureDailyMailColumnsOnce();
     }
 
     // 1. Fetch from daily_mail_letter_table (User's PostgreSQL table)
@@ -116,59 +125,7 @@ export async function getDailyMailRecordsServer() {
       console.warn("Could not query daily_mail_letter_table:", e);
     }
 
-    // 2. Fetch from daily_mail table
-    try {
-      const rawDailyMail: any[] = await prisma.$queryRaw`
-        SELECT 
-          daily_mail_id::text as id,
-          letter_number as letter_no,
-          received_letter_number as serial_no,
-          mode_of_receipt as method,
-          sender_party as sender,
-          nature_of_letter as type,
-          subject_category as classification,
-          subject_of_letter as subject,
-          date_received_by_additional_secretary as received_date,
-          date_letter_handed_over_to_dicipline_branch as submitted_date,
-          priority,
-          created_at,
-          updated_at
-        FROM daily_mail
-        ORDER BY created_at DESC;
-      `;
-      if (rawDailyMail && rawDailyMail.length > 0) {
-        rawDailyMail.forEach((row) => {
-          const key = row.serial_no || row.letter_no || row.id;
-          if (!idsSeen.has(key)) {
-            combinedData.push({
-              id: row.id,
-              serial_no: row.serial_no || row.letter_no,
-              letter_no: row.letter_no,
-              received_date: row.received_date ? new Date(row.received_date).toISOString().split("T")[0] : "",
-              submitted_date: row.submitted_date ? new Date(row.submitted_date).toISOString().split("T")[0] : "",
-              subject: row.subject,
-              sender: row.sender || "N/A",
-              method: row.method || "Post",
-              type: row.type || "Complaint",
-              classification: row.classification || "",
-              action_officer: "",
-              priority: row.priority ? row.priority.toLowerCase() : "normal",
-              status: "registered",
-              document_url: null,
-              document_name: null,
-              created_at: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
-              updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString(),
-            });
-            if (row.serial_no) idsSeen.add(row.serial_no);
-            if (row.letter_no) idsSeen.add(row.letter_no);
-          }
-        });
-      }
-    } catch (e) {
-      console.warn("Could not query daily_mail table:", e);
-    }
-
-    // 3. Fetch from dcmms_daily_mail as fallback/legacy merge
+    // 2. Fetch from dcmms_daily_mail as fallback/legacy merge
     try {
       const rawDcmmsDailyMail: any[] = await prisma.$queryRaw`
         SELECT 
@@ -2232,6 +2189,8 @@ export async function getRegisterOfficersServer(roleFilter?: string) {
       const lowerFilter = roleFilter.toLowerCase();
       if (lowerFilter.includes("branch")) {
         query += ` WHERE (r.role ILIKE '%branch%' OR r.role ILIKE '%secretary%' OR (r.role ILIKE '%admin%' AND r.role NOT ILIKE '%system%'))`;
+      } else if (lowerFilter.includes("chief") || lowerFilter.includes("clerk") || lowerFilter.includes("clack") || lowerFilter.includes("ශාඛා")) {
+        query += ` WHERE (r.role ILIKE '%chief%' OR r.role ILIKE '%clerk%' OR r.role ILIKE '%clack%' OR r.role ILIKE '%ශාඛා%')`;
       } else if (lowerFilter.includes("secretary")) {
         query += ` WHERE r.role ILIKE '%secretary%'`;
       } else if (lowerFilter.includes("additional")) {
@@ -2559,6 +2518,7 @@ export async function createLetterEditRequestServer(payload: {
   }
 }
 
+let editRequestsTableEnsured = false;
 /**
  * Get Letter Edit Approval Requests
  */
@@ -2570,23 +2530,26 @@ export async function getLetterEditRequestsServer(params?: {
   try {
     let requests: any[] = [];
     try {
-      await prisma.$executeRawUnsafe(`
-        CREATE TABLE IF NOT EXISTS dcmms_letter_edit_requests (
-          id VARCHAR(100) PRIMARY KEY,
-          letter_id VARCHAR(100) NOT NULL,
-          ref_no VARCHAR(100) NOT NULL,
-          requested_by VARCHAR(255) NOT NULL,
-          requester_email VARCHAR(255),
-          requester_role VARCHAR(100),
-          target_branch_admin VARCHAR(255),
-          reason TEXT,
-          status VARCHAR(50) DEFAULT 'Pending',
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-          reviewed_by VARCHAR(255),
-          reviewed_at TIMESTAMP WITH TIME ZONE,
-          reviewer_comments TEXT
-        );
-      `);
+      if (!editRequestsTableEnsured) {
+        editRequestsTableEnsured = true;
+        await prisma.$executeRawUnsafe(`
+          CREATE TABLE IF NOT EXISTS dcmms_letter_edit_requests (
+            id VARCHAR(100) PRIMARY KEY,
+            letter_id VARCHAR(100) NOT NULL,
+            ref_no VARCHAR(100) NOT NULL,
+            requested_by VARCHAR(255) NOT NULL,
+            requester_email VARCHAR(255),
+            requester_role VARCHAR(100),
+            target_branch_admin VARCHAR(255),
+            reason TEXT,
+            status VARCHAR(50) DEFAULT 'Pending',
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            reviewed_by VARCHAR(255),
+            reviewed_at TIMESTAMP WITH TIME ZONE,
+            reviewer_comments TEXT
+          );
+        `);
+      }
 
       if (params?.letter_id) {
         requests = await prisma.$queryRaw`
@@ -8052,6 +8015,29 @@ export async function getDirectlyAssignedLettersServer(
   }
 }
 
+let notificationsTableEnsured = false;
+async function ensureNotificationsTableOnce() {
+  if (notificationsTableEnsured) return;
+  notificationsTableEnsured = true;
+  try {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS public.dcmms_notifications (
+        id VARCHAR(100) PRIMARY KEY,
+        target_officer_name VARCHAR(255),
+        target_role VARCHAR(100),
+        case_no VARCHAR(100),
+        letter_no VARCHAR(100),
+        type VARCHAR(100),
+        title VARCHAR(255),
+        message TEXT,
+        sender_name VARCHAR(255),
+        is_read BOOLEAN DEFAULT false,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+    `);
+  } catch (e) {}
+}
+
 export async function createOfficerNotificationServer(notifData: {
   targetOfficerName?: string;
   targetRole?: string;
@@ -8063,24 +8049,10 @@ export async function createOfficerNotificationServer(notifData: {
   senderName?: string;
 }) {
   try {
-    // Ensure notifications table exists in PostgreSQL
-    try {
-      await prisma.$executeRawUnsafe(`
-        CREATE TABLE IF NOT EXISTS public.dcmms_notifications (
-          id VARCHAR(100) PRIMARY KEY,
-          target_officer_name VARCHAR(255),
-          target_role VARCHAR(100),
-          case_no VARCHAR(100),
-          letter_no VARCHAR(100),
-          type VARCHAR(100),
-          title VARCHAR(255),
-          message TEXT,
-          sender_name VARCHAR(255),
-          is_read BOOLEAN DEFAULT false,
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-        );
-      `);
-    } catch (e) {}
+    // Ensure notifications table exists in PostgreSQL once
+    if (!notificationsTableEnsured) {
+      await ensureNotificationsTableOnce();
+    }
 
     const notifId = `notif-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     
@@ -8111,23 +8083,9 @@ export async function createOfficerNotificationServer(notifData: {
 
 export async function getOfficerNotificationsServer(targetOfficerName?: string, targetRole?: string) {
   try {
-    try {
-      await prisma.$executeRawUnsafe(`
-        CREATE TABLE IF NOT EXISTS public.dcmms_notifications (
-          id VARCHAR(100) PRIMARY KEY,
-          target_officer_name VARCHAR(255),
-          target_role VARCHAR(100),
-          case_no VARCHAR(100),
-          letter_no VARCHAR(100),
-          type VARCHAR(100),
-          title VARCHAR(255),
-          message TEXT,
-          sender_name VARCHAR(255),
-          is_read BOOLEAN DEFAULT false,
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-        );
-      `);
-    } catch (e) {}
+    if (!notificationsTableEnsured) {
+      await ensureNotificationsTableOnce();
+    }
 
     const cleanName = (targetOfficerName || "").trim().toLowerCase();
     const cleanRole = (targetRole || "").trim().toLowerCase();

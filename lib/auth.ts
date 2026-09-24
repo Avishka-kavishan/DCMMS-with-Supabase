@@ -6,7 +6,8 @@ export type UserRole =
   | "assistant_secretary_discipline"
   | "assistant_secretary_investigation"
   | "senior_assistant_secretary"
-  | "additional_secretary";
+  | "additional_secretary"
+  | "chief_clerk";
 
 export interface UserProfile {
   id: string;
@@ -22,6 +23,18 @@ export function normalizeRole(roleStr?: string): UserRole {
   const lower = roleStr.toLowerCase().trim();
   if (lower.includes("system") || lower === "system_admin") return "system_admin";
   
+  // Chief Clerk (ශාඛා ප්‍රධානී)
+  if (
+    lower.includes("chief") ||
+    lower.includes("clerk") ||
+    lower.includes("clack") ||
+    lower.includes("ශාඛා ප්‍රධානී") ||
+    lower.includes("ශාඛා ප්රධානී") ||
+    lower === "chief_clerk"
+  ) {
+    return "chief_clerk";
+  }
+
   // Specific secretary & investigation roles
   if (lower.includes("investigation branch") || (lower.includes("assistant secretary") && lower.includes("investigation"))) {
     return "assistant_secretary_investigation";
@@ -60,6 +73,18 @@ export function getRoleDisplayName(
     return t ? t("roleAdmin", "Discipline Branch Administrator") : "Discipline Branch Administrator";
   }
   const lower = roleStr.toLowerCase().trim();
+
+  // Chief Clerk (ශාඛා ප්‍රධානී)
+  if (
+    lower.includes("chief") ||
+    lower.includes("clerk") ||
+    lower.includes("clack") ||
+    lower.includes("ශාඛා ප්‍රධානී") ||
+    lower.includes("ශාඛා ප්රධානී") ||
+    lower === "chief_clerk"
+  ) {
+    return t ? t("roleChiefClerk", "Chief Clerk (ශාඛා ප්‍රධානී)") : "Chief Clerk (ශාඛා ප්‍රධානී)";
+  }
 
   // Assistant Secretary Discipline Branch
   if (
@@ -129,6 +154,20 @@ export function getAddLetterButtonLabel(
   const norm = normalizeRole(roleStr || rawRoleStr);
   const rawLower = `${roleStr || ""} ${rawRoleStr || ""}`.toLowerCase();
 
+  // Chief Clerk (ශාඛා ප්‍රධානී)
+  if (
+    norm === "chief_clerk" ||
+    rawLower.includes("chief") ||
+    rawLower.includes("clerk") ||
+    rawLower.includes("clack") ||
+    rawLower.includes("ශාඛා ප්‍රධානී") ||
+    rawLower.includes("ශාඛා ප්රධානී")
+  ) {
+    return t
+      ? t("addLetterRoleChiefClerk", "ශාඛා ප්‍රධානී වෙත ලැබෙන ලිපි එක් කරන්න")
+      : "ශාඛා ප්‍රධානී වෙත ලැබෙන ලිපි එක් කරන්න";
+  }
+
   // 1. Assistant Secretary Investigation Branch
   if (
     norm === "assistant_secretary_investigation" ||
@@ -138,7 +177,7 @@ export function getAddLetterButtonLabel(
       ? t("addLetterRoleAsstSecInvestigation", "විමර්ශන අංශය වෙත ලැබෙන ලිපි එක් කරන්න")
       : "විමර්ශන අංශය වෙත ලැබෙන ලිපි එක් කරන්න";
   }
-
+  
   // 2. Senior Assistant Secretary
   if (
     norm === "senior_assistant_secretary" ||
@@ -235,6 +274,7 @@ export function dashboardPath(role: string): string {
     case "assistant_secretary_discipline":
     case "senior_assistant_secretary":
     case "additional_secretary":
+    case "chief_clerk":
       return "/admin";
     case "subject_officer":
       return "/subject";

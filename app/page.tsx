@@ -33,6 +33,8 @@ export default function Home() {
         setInfoMessage("Your session was terminated by a system administrator.");
       } else if (params.get("reason") === "inactivity_timeout") {
         setInfoMessage("Your session has timed out due to inactivity. Please log in again.");
+      } else if (params.get("reason") === "unauthorized") {
+        setInfoMessage("You do not have access to that page. Please log in with appropriate credentials.");
       }
     }
   }, []);
@@ -50,6 +52,32 @@ export default function Home() {
           localStorage.removeItem("dcmms_current_user");
           localStorage.removeItem("dcmms_current_session_id");
           localStorage.removeItem("dcmms_last_activity");
+          return;
+        }
+
+        // Safeguard: detect rapid redirect bouncing (auto fresh loop)
+        const redirectCountKey = "dcmms_login_redirect_count";
+        const lastRedirectTime = parseInt(sessionStorage.getItem("dcmms_last_redirect_time") || "0", 10);
+        const now = Date.now();
+        let count = parseInt(sessionStorage.getItem(redirectCountKey) || "0", 10);
+        if (now - lastRedirectTime < 3000) {
+          count += 1;
+        } else {
+          count = 1;
+        }
+        sessionStorage.setItem("dcmms_last_redirect_time", now.toString());
+        sessionStorage.setItem(redirectCountKey, count.toString());
+
+        if (count > 3) {
+          console.warn("Redirect loop detected. Clearing session to stop loop.");
+          localStorage.removeItem("dcmms_simulated_session");
+          localStorage.removeItem("dcmms_username");
+          localStorage.removeItem("dcmms_user_role");
+          localStorage.removeItem("dcmms_current_user");
+          localStorage.removeItem("dcmms_current_session_id");
+          localStorage.removeItem("dcmms_last_activity");
+          sessionStorage.removeItem(redirectCountKey);
+          setInfoMessage("Session was reset to prevent a redirect loop. Please log in again.");
           return;
         }
       }

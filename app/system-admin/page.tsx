@@ -111,10 +111,10 @@ export default function SystemAdminDashboard() {
       setAdminName(profile.full_name);
       if (profile.role !== "system_admin") {
         const target = dashboardPath(profile.role);
-        if (target !== "/system-admin" && target !== "/") {
+        if (target && target !== "/system-admin" && target !== "/") {
           router.replace(target);
         } else {
-          router.replace("/");
+          router.replace("/?reason=unauthorized");
         }
         return;
       }

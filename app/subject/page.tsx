@@ -2553,10 +2553,10 @@ function SubjectOfficerDashboardContent() {
       }
       if (profile.role !== "subject_officer") {
         const target = dashboardPath(profile.role);
-        if (target !== "/subject" && target !== "/") {
+        if (target && target !== "/subject" && target !== "/") {
           router.replace(target);
         } else {
-          router.replace("/");
+          router.replace("/?reason=unauthorized");
         }
       }
     });

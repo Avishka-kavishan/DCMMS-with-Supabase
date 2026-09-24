@@ -209,8 +209,7 @@ function getLetterOfficerRole(letter: any, lang: string = "si"): string {
   return lang === "si" ? "දෛනික තැපැල් නිලධාරී" : "Daily Mail Officer";
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
-export default function AdminDashboard() {
+function AdminDashboardContent() {
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
   const router = useRouter();
@@ -282,17 +281,25 @@ export default function AdminDashboard() {
     } catch {}
 
     getCurrentProfile().then(async (profile) => {
-      const allowedRoles = ["admin", "assistant_secretary_discipline", "senior_assistant_secretary", "additional_secretary", "assistant_secretary_investigation", "system_admin"];
+      const allowedRoles = [
+        "admin",
+        "assistant_secretary_discipline",
+        "senior_assistant_secretary",
+        "additional_secretary",
+        "chief_clerk",
+        "assistant_secretary_investigation",
+        "system_admin"
+      ];
       if (!profile) {
         router.replace("/");
         return;
       }
       if (!allowedRoles.includes(profile.role)) {
         const target = dashboardPath(profile.role);
-        if (target !== "/admin" && target !== "/") {
+        if (target && target !== "/admin" && target !== "/") {
           router.replace(target);
         } else {
-          router.replace("/");
+          router.replace("/?reason=unauthorized");
         }
         return;
       }
@@ -2136,5 +2143,13 @@ function StatCard({
         </div>
       </div>
     </div>
+  );
+}
+
+export default function AdminDashboard() {
+  return (
+    <React.Suspense fallback={<div className="p-8 text-center text-slate-500 font-sans">Loading Dashboard...</div>}>
+      <AdminDashboardContent />
+    </React.Suspense>
   );
 }

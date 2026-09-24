@@ -1513,10 +1513,10 @@ export default function InvestigationPage() {
       }
       if (!allowedRoles.includes(profile.role)) {
         const target = dashboardPath(profile.role);
-        if (target !== "/investigation" && target !== "/") {
+        if (target && target !== "/investigation" && target !== "/") {
           router.replace(target);
         } else {
-          router.replace("/");
+          router.replace("/?reason=unauthorized");
         }
       }
     });
