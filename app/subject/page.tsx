@@ -52,7 +52,7 @@ interface Case {
   disciplinaryCharge?: string;
 }
 
-export const formatToInputDate = (dateStr?: string | null): string => {
+const formatToInputDate = (dateStr?: string | null): string => {
   if (!dateStr || typeof dateStr !== "string") return "";
   const trimmed = dateStr.trim();
   if (!trimmed) return "";
@@ -71,7 +71,7 @@ export const formatToInputDate = (dateStr?: string | null): string => {
   return "";
 };
 
-export function parseCommitteeDetails(asgn: any) {
+function parseCommitteeDetails(asgn: any) {
   let chairmanName = "";
   let chairmanEmail = "";
   let chairmanNic = "";
@@ -189,7 +189,7 @@ function formatExtensionTermDisplay(term?: string | null, currentLang: string = 
   return term;
 }
 
-export function formatRelativeTime(dateString?: string | null, currentLang: string = "en"): string {
+function formatRelativeTime(dateString?: string | null, currentLang: string = "en"): string {
   if (!dateString) return currentLang === "si" ? "මෑතකදී" : currentLang === "ta" ? "சமீபத்தில்" : "Recently";
   const date = new Date(dateString);
   if (isNaN(date.getTime())) {
@@ -244,7 +244,7 @@ export interface SeparateNotification {
   rawDate: string;
 }
 
-export function buildSeparateNotifications(assignments: any[], currentLang: string = "en", directLetters: any[] = []): SeparateNotification[] {
+function buildSeparateNotifications(assignments: any[], currentLang: string = "en", directLetters: any[] = []): SeparateNotification[] {
   const notifs: SeparateNotification[] = [];
   const adminName = currentLang === "si" ? "විමර්ශන පරිපාලක (Admin)" : currentLang === "ta" ? "விசாரணை நிர்வாகி" : "Investigation Admin";
 
@@ -444,7 +444,7 @@ export function buildSeparateNotifications(assignments: any[], currentLang: stri
   return notifs;
 }
 
-export function getNotifMeta(asgn: any, currentLang: string = "en") {
+function getNotifMeta(asgn: any, currentLang: string = "en") {
   const isDatesSubmitted = !!asgn.datesSubmittedBySubject;
   const isExtensionRequested = !!(
     (asgn.extensionStartDate && asgn.extensionEndDate) ||
@@ -540,7 +540,7 @@ export function getNotifMeta(asgn: any, currentLang: string = "en") {
 }
 
 
-export function collectAnswerLetters(
+function collectAnswerLetters(
   lettersData: any[],
   subsequentData: any[],
   assignedRefNos: string[],

@@ -480,13 +480,13 @@ export default function OfficerWorkflowPage() {
   };
 
   return (
-    <div className="admin-dashboard-container">
+    <div className="admin-dashboard-container" suppressHydrationWarning>
       {/* ── Top Header Section ── */}
-      <div className="admin-dashboard-header">
-        <div>
-          <h3 className="admin-dashboard-title1">{t("officerWorkflow", "Officer Workflow")}</h3>
-          <h2 className="admin-dashboard-title">{t("officerWorkloadSummary", "Officer Workload & Workflow Summary")}</h2>
-          <p className="admin-dashboard-subtitle">
+      <div className="admin-dashboard-header" suppressHydrationWarning>
+        <div suppressHydrationWarning>
+          <h3 className="admin-dashboard-title1" suppressHydrationWarning>{t("officerWorkflow", "Officer Workflow")}</h3>
+          <h2 className="admin-dashboard-title" suppressHydrationWarning>{t("officerWorkloadSummary", "Officer Workload & Workflow Summary")}</h2>
+          <p className="admin-dashboard-subtitle" suppressHydrationWarning>
             {t("officerWorkflowSubtitle", "Real-time summary of case loads, assigned letters, and disciplinary workflow status across all registered officers.")}
           </p>
         </div>

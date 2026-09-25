@@ -118,6 +118,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }
   };
 
+  const isChief = Boolean(
+    currentUserProfile?.role === "chief_clerk" ||
+    currentUserProfile?.role === "chief_clerk_discipline" ||
+    currentUserProfile?.role === "chief_clerk_investigation" ||
+    (currentUserProfile?.role || "").toLowerCase().includes("chief") ||
+    (currentUserProfile?.raw_role || "").toLowerCase().includes("chief") ||
+    (currentUserProfile?.raw_role || "").toLowerCase().includes("clerk") ||
+    (currentUserProfile?.raw_role || "").toLowerCase().includes("ශාඛා ප්‍රධානී")
+  );
+
   const getPageTitleAndSubtitle = () => {
     const cleanPath = (pathname || "").replace(/\/$/, "");
     if (cleanPath === "/admin/subject-officers") {
@@ -168,10 +178,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         subtitle: t("viewLetterDesc", "Official letter record, sender information, and routing assignment")
       };
     }
+    if (cleanPath === "/admin/branch-selection") {
+      return {
+        title: lang === "si" ? "ශාඛා තේරීම" : lang === "ta" ? "கிளை தேர்வு" : "Branch Selection",
+        subtitle: lang === "si" ? "ලිපිය යොමු කළ යුතු ශාඛාව තෝරන්න" : lang === "ta" ? "கடிதம் அனுப்பப்பட வேண்டிய கிளையை தேர்ந்தெடுக்கவும்" : "Forward the letter to the appropriate branch"
+      };
+    }
     const dynamicRoleTitle = getRoleDisplayName(currentUserProfile?.raw_role || currentUserProfile?.role, t);
     return {
       title: dynamicRoleTitle || t("adminDashboardTitle", "Discipline Branch Administrator"),
-      subtitle: t("adminDashboardDesc", "Manage cases and user access")
+      subtitle: isChief
+        ? (lang === "si" ? "ශාඛා ලිපි සහ නඩු කටයුතු කළමනාකරණය" : lang === "ta" ? "கிளைக் கடிதங்கள் மற்றும் வழக்குகளை நிர்வகிக்கவும்" : "Manage branch letters and case workflow")
+        : t("adminDashboardDesc", "Manage cases and user access")
     };
   };
 
@@ -211,7 +229,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         isSidebarOpen={isSidebarOpen}
         setIsSidebarOpen={setIsSidebarOpen}
         handleLogout={handleLogout}
-        role="admin"
+        role={currentUserProfile?.role || "admin"}
       />
 
       {/* ── Layout Grid Wrapper ── */}
@@ -247,24 +265,25 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 </svg>
               </div>
 
-              {/* Notification Bell with Badge & Dropdown */}
-              <div className="admin-notification-container" ref={notifRef}>
-                <button
-                  type="button"
-                  className={`admin-notification-btn ${pendingRequests.length > 0 ? "has-notifications" : ""}`}
-                  onClick={() => setShowNotifDropdown(!showNotifDropdown)}
-                  aria-label="Pending Edit Approval Requests Notifications"
-                  title="Approval Requests"
-                >
-                  <svg style={{ width: "20px", height: "20px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                  </svg>
-                  {pendingRequests.length > 0 && (
-                    <span className="admin-notification-badge">
-                      {pendingRequests.length}
-                    </span>
-                  )}
-                </button>
+              {/* Notification Bell with Badge & Dropdown (Administrator only - approvals) */}
+              {!isChief && (
+                <div className="admin-notification-container" ref={notifRef}>
+                  <button
+                    type="button"
+                    className={`admin-notification-btn ${pendingRequests.length > 0 ? "has-notifications" : ""}`}
+                    onClick={() => setShowNotifDropdown(!showNotifDropdown)}
+                    aria-label="Pending Edit Approval Requests Notifications"
+                    title="Approval Requests"
+                  >
+                    <svg style={{ width: "20px", height: "20px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                    </svg>
+                    {pendingRequests.length > 0 && (
+                      <span className="admin-notification-badge">
+                        {pendingRequests.length}
+                      </span>
+                    )}
+                  </button>
 
                 {showNotifDropdown && (
                   <div className="admin-notification-dropdown">
@@ -335,6 +354,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   </div>
                 )}
               </div>
+            )}
 
               <div className="divider-line" aria-hidden="true" />
 

@@ -825,7 +825,20 @@
   "forwardedLetterNotification": "முன்னனுப்பப்பட்ட புதிய கடிதம் பெறப்பட்டது",
   "forwardedLetterNotifDesc": "{{addressedTo}} அவர்களுக்கு முகவரியிடப்பட்ட கடிதம் உங்கள் (கூடுதல் செயலாளர்) பார்வைக்காக அனுப்பப்பட்டுள்ளது.",
   "addressedOfficerNotifTitle": "உங்களுக்கு வந்த கடிதம் கூடுதல் செயலாளருக்கு அனுப்பப்பட்டது",
-  "addressedOfficerNotifDesc": "உங்களுக்கு முகவரியிடப்பட்ட கடிதம் {{letterNo}} அமைச்சின் நடைமுறைப்படி கூடுதல் செயலாளருக்கு அனுப்பப்பட்டுள்ளது."
+  "addressedOfficerNotifDesc": "உங்களுக்கு முகவரியிடப்பட்ட கடிதம் {{letterNo}} அமைச்சின் நடைமுறைப்படி கூடுதல் செயலாளருக்கு அனுப்பப்பட்டுள்ளது.",
+  "tabAllLetters": "அனைத்து கடிதங்களும்",
+  "tabDeputySecretary": "பிரதிச் செயலாளர்",
+  "tabAsstSecDiscipline": "உதவிச் செயலாளர் (ஒழுக்கம்)",
+  "tabAsstSecInvestigation": "உதவிச் செயலாளர் (விசாரணை)",
+  "tabOnlyAddSec": "கூடுதல் செயலாளருக்கு மட்டும்",
+  "forwardLetterBtn": "அனுப்பவும்",
+  "forwardLetterModalTitle": "கடிதத்தை அதிகாரிக்கு அனுப்பவும்",
+  "forwardToRecipientLabel": "பெறும் அதிகாரியைத் தேர்ந்தெடுக்கவும்",
+  "forwardReasonLabel": "அனுப்புவதற்கான வழிமுறைகள் / காரணம்",
+  "confirmForwardBtn": "உறுதிசெய்து அனுப்பவும்",
+  "forwardSuccessToast": "கடிதம் வெற்றிகரமாக அனுப்பப்பட்டது!",
+  "meantForAddSecBadge": "கூடுதல் செயலாளருக்கு மட்டும்",
+  "roleDeputySecretary": "பிரதிச் செயலாளர்"
 }
 
 

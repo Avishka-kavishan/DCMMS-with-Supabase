@@ -41,12 +41,16 @@ async function ensureDailyMailColumnsOnce() {
     `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS addressed_role VARCHAR(255)`,
     `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS forwarded_to VARCHAR(255)`,
     `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS forward_reason TEXT`,
+    `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS created_by_name VARCHAR(255)`,
+    `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS created_by_role VARCHAR(255)`,
     `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS document_url TEXT`,
     `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS document_name VARCHAR(255)`,
     `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS addressed_to VARCHAR(255)`,
     `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS addressed_role VARCHAR(255)`,
     `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS forwarded_to VARCHAR(255)`,
-    `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS forward_reason TEXT`
+    `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS forward_reason TEXT`,
+    `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS created_by_name VARCHAR(255)`,
+    `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS created_by_role VARCHAR(255)`
   ];
   for (const sql of ensureCols) {
     try {
@@ -86,6 +90,8 @@ export async function getDailyMailRecordsServer() {
           addressed_role,
           forwarded_to,
           forward_reason,
+          created_by_name,
+          created_by_role,
           created_at,
           updated_at
         FROM public.daily_mail_letter_table
@@ -110,6 +116,8 @@ export async function getDailyMailRecordsServer() {
             addressed_role: row.addressed_role || "",
             forwarded_to: row.forwarded_to || "",
             forward_reason: row.forward_reason || "",
+            created_by_name: row.created_by_name || "",
+            created_by_role: row.created_by_role || "",
             priority: "normal",
             status: row.action_officer ? "assigned" : "registered",
             document_url: row.document_url || null,
@@ -147,6 +155,8 @@ export async function getDailyMailRecordsServer() {
           addressed_role,
           forwarded_to,
           forward_reason,
+          created_by_name,
+          created_by_role,
           created_at,
           updated_at
         FROM public.dcmms_daily_mail
@@ -161,6 +171,8 @@ export async function getDailyMailRecordsServer() {
                 ...rec,
                 received_date: rec.received_date ? new Date(rec.received_date).toISOString().split("T")[0] : "",
                 submitted_date: rec.submitted_date ? new Date(rec.submitted_date).toISOString().split("T")[0] : "",
+                created_by_name: rec.created_by_name || "",
+                created_by_role: rec.created_by_role || "",
                 created_at: rec.created_at ? new Date(rec.created_at).toISOString() : new Date().toISOString(),
                 updated_at: rec.updated_at ? new Date(rec.updated_at).toISOString() : new Date().toISOString(),
               });
@@ -7893,11 +7905,16 @@ export async function getDirectlyAssignedLettersServer(
           }
         }
       } else if (activeRole.includes("investigation") && !activeRole.includes("secretary")) {
-        // Investigation Officer (non-secretary): letters assigned to this investigation officer
-        if (activeName) {
-          if (actOfficer.includes(activeName) || activeName.includes(actOfficer)) {
-            isMatch = true;
-          }
+        // Investigation Officer / Investigation Branch: letters assigned to this officer OR forwarded to Investigation branch
+        if (
+          (activeName && (actOfficer.includes(activeName) || activeName.includes(actOfficer) || fwdTo.includes(activeName) || addrTo.includes(activeName))) ||
+          fwdTo.includes("investigation") ||
+          actOfficer.includes("investigation") ||
+          actOfficer.includes("ranjith") ||
+          addrRole.includes("investigation") ||
+          fwdReason.includes("investigation")
+        ) {
+          isMatch = true;
         }
       } else {
         // Assistant Secretaries (Discipline, Investigation), Senior Assistant Secretary, Admins:
@@ -7915,13 +7932,18 @@ export async function getDirectlyAssignedLettersServer(
           return false;
         };
 
-        const isSenior = activeRole.includes("senior") || activeName.includes("dharshana") || activeRole === "senior_assistant_secretary";
+        const isSenior =
+          activeRole.includes("senior") ||
+          activeRole.includes("deputy") ||
+          activeName.includes("dharshana") ||
+          activeRole === "senior_assistant_secretary" ||
+          activeRole === "deputy_secretary";
 
         if (isSenior) {
-          // Senior Assistant Secretary sees:
-          // 1. Letters assigned or forwarded to Senior Assistant Secretary (by name or role)
-          // 2. Letters addressed to Senior Assistant Secretary
-          // 3. Letters created by Senior Assistant Secretary
+          // Deputy Secretary / Senior Assistant Secretary sees:
+          // 1. Letters assigned or forwarded to Deputy / Senior Assistant Secretary (by name or role)
+          // 2. Letters addressed to Deputy / Senior Assistant Secretary
+          // 3. Letters created by Deputy / Senior Assistant Secretary
           if (
             matchesName(actOfficer) ||
             matchesName(fwdTo) ||
@@ -7930,12 +7952,18 @@ export async function getDirectlyAssignedLettersServer(
             matchesName(fwdReason) ||
             actOfficer.includes("senior assistant") ||
             actOfficer.includes("senior_assistant") ||
+            actOfficer.includes("deputy") ||
             fwdTo.includes("senior assistant") ||
             fwdTo.includes("senior_assistant") ||
+            fwdTo.includes("deputy") ||
             addrTo.includes("senior assistant") ||
+            addrTo.includes("deputy") ||
             addrRole.includes("senior") ||
+            addrRole.includes("deputy") ||
             createdByRole.includes("senior") ||
-            fwdReason.includes("senior assistant")
+            createdByRole.includes("deputy") ||
+            fwdReason.includes("senior assistant") ||
+            fwdReason.includes("deputy")
           ) {
             isMatch = true;
           }
@@ -7947,28 +7975,35 @@ export async function getDirectlyAssignedLettersServer(
             }
           }
 
-          // 2. Check forward_reason for the officer's name (e.g. "Forwarded by Assistant Secretary (Bandula Gunawardena)...")
+          // 2. Direct match if letter was forwarded or assigned to this officer
+          if (!isMatch && activeName) {
+            if (matchesName(fwdTo) || matchesName(actOfficer) || matchesName(addrTo)) {
+              isMatch = true;
+            }
+          }
+
+          // 3. Check forward_reason for the officer's name (e.g. "Forwarded by Assistant Secretary (Bandula Gunawardena)...")
           if (!isMatch && fwdReason && activeName) {
             if (matchesName(fwdReason)) {
               isMatch = true;
             }
           }
 
-          // 3. Check addressed_to or action_officer ONLY if created_by_name is empty (historical data where addressed_to held creator's name)
+          // 4. Check addressed_to or action_officer ONLY if created_by_name is empty (historical data where addressed_to held creator's name)
           if (!isMatch && !createdByName && activeName) {
             if (matchesName(addrTo) || matchesName(actOfficer)) {
               isMatch = true;
             }
           }
 
-          // 4. Role-based fallback ONLY if created_by_name is completely empty and no other officer name is attached
-          if (!isMatch && !createdByName && !addrTo && activeRole) {
+          // 5. Branch role match: letter was addressed or forwarded to this branch
+          if (!isMatch && activeRole) {
             const isDiscipline = activeRole.includes("discipline");
             const isInvestigation = activeRole.includes("investigation");
 
-            if (isDiscipline && (createdByRole.includes("discipline") || addrRole.includes("discipline") || fwdReason.includes("discipline"))) {
+            if (isDiscipline && (createdByRole.includes("discipline") || addrRole.includes("discipline") || fwdReason.includes("discipline") || fwdTo.includes("discipline") || actOfficer.includes("bandula") || addrTo.includes("bandula"))) {
               isMatch = true;
-            } else if (isInvestigation && (createdByRole.includes("investigation") || addrRole.includes("investigation") || fwdReason.includes("investigation"))) {
+            } else if (isInvestigation && (createdByRole.includes("investigation") || addrRole.includes("investigation") || fwdReason.includes("investigation") || fwdTo.includes("investigation") || actOfficer.includes("ranjith") || addrTo.includes("ranjith"))) {
               isMatch = true;
             }
           }
@@ -8195,6 +8230,459 @@ export async function getLettersForwardedToSeniorServer() {
     return serializeForServerAction({ success: false, error: error?.message, data: [] });
   }
 }
+
+/**
+ * Forward a letter originating or retained at Additional Secretary to one of the 3 key officers:
+ * - Deputy Secretary / Senior Assistant Secretary
+ * - Assistant Secretary of Discipline
+ * - Assistant Secretary of Investigations
+ */
+export async function forwardLetterFromAdditionalSecretaryServer(params: {
+  letterId?: string;
+  letterNo?: string;
+  refNo?: string;
+  forwardToOfficerName: string;
+  forwardToRole: string;
+  forwardReason?: string;
+  senderName?: string;
+}) {
+  try {
+    const { letterId, letterNo, refNo, forwardToOfficerName, forwardToRole, forwardReason, senderName } = params;
+    const finalReason = forwardReason || "Forwarded by Additional Secretary for review and necessary action";
+    const forwardedToStr = `${forwardToOfficerName} (${forwardToRole})`;
+    const idKey = letterNo || refNo || letterId || "";
+
+    if (!idKey) {
+      return serializeForServerAction({ success: false, error: "No letter identifier provided" });
+    }
+
+    // 1. Update in daily_mail_letter_table
+    try {
+      await prisma.$executeRawUnsafe(`
+        UPDATE public.daily_mail_letter_table SET
+          forwarded_to = $1,
+          forward_reason = $2,
+          action_officer = $3,
+          addressed_to = $3,
+          addressed_role = $4,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE letter_number = $5 OR ref_number = $6 OR id::text = $7
+      `, forwardedToStr, finalReason, forwardToOfficerName, forwardToRole, letterNo || "", refNo || "", String(letterId || ""));
+    } catch (err) {
+      console.warn("Update warning in daily_mail_letter_table:", err);
+    }
+
+    // 2. Update in dcmms_daily_mail
+    try {
+      await prisma.$executeRawUnsafe(`
+        UPDATE public.dcmms_daily_mail SET
+          forwarded_to = $1,
+          forward_reason = $2,
+          action_officer = $3,
+          addressed_to = $3,
+          addressed_role = $4,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE letter_no = $5 OR serial_no = $6 OR id::text = $7
+      `, forwardedToStr, finalReason, forwardToOfficerName, forwardToRole, letterNo || "", refNo || "", String(letterId || ""));
+    } catch (err) {
+      console.warn("Update warning in dcmms_daily_mail:", err);
+    }
+
+    // 3. Create real-time notification for target officer
+    try {
+      await createOfficerNotificationServer({
+        targetOfficerName: forwardToOfficerName,
+        targetRole: forwardToRole,
+        letterNo: letterNo || refNo || idKey,
+        caseNo: refNo || letterNo || idKey,
+        type: "secretary_letter_forwarded",
+        title: "New Letter Forwarded by Additional Secretary",
+        message: `Letter ${letterNo || refNo || idKey} from "${senderName || "Sender"}" has been forwarded to you by Additional Secretary with instructions: "${finalReason}".`,
+        senderName: "Additional Secretary",
+      });
+    } catch (notifErr) {
+      console.warn("Notification dispatch warning in forwardLetterFromAdditionalSecretaryServer:", notifErr);
+    }
+
+    return serializeForServerAction({
+      success: true,
+      data: {
+        letterNo: letterNo || refNo,
+        forwardedTo: forwardedToStr,
+        forwardReason: finalReason,
+        actionOfficer: forwardToOfficerName,
+        addressedTo: forwardToOfficerName,
+        addressedRole: forwardToRole,
+        isForwarded: true
+      }
+    });
+  } catch (error: any) {
+    console.error("Error in forwardLetterFromAdditionalSecretaryServer:", error);
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to forward letter" });
+  }
+}
+
+/**
+ * Update / Edit Letter Record (Additional Secretary / Admin)
+ * Allows Additional Secretary to edit any letter in the system and syncs across tables
+ */
+export async function updateLetterRecordServer(payload: {
+  letterId?: string | number;
+  originalLetterNo?: string;
+  originalRefNo?: string;
+  letterNo: string;
+  refNo?: string;
+  senderName?: string;
+  subject: string;
+  letterType?: string;
+  subjectCategory?: string;
+  instituteName?: string;
+  regionProvince?: string;
+  priority?: string;
+  letterDate?: string;
+  receivedDate?: string;
+  actionOfficer?: string;
+  addressedTo?: string;
+  addressedRole?: string;
+  forwardedTo?: string;
+  forwardReason?: string;
+  addSecInstructions?: string;
+  addSecNotes?: string;
+  addSecForwardMethod?: string;
+  documentUrl?: string;
+  documentName?: string;
+  isAnswerLetter?: boolean;
+  editedByName?: string;
+  editedByRole?: string;
+}) {
+  try {
+    const {
+      letterId,
+      originalLetterNo,
+      originalRefNo,
+      letterNo,
+      refNo,
+      senderName,
+      subject,
+      letterType,
+      subjectCategory,
+      instituteName,
+      regionProvince,
+      priority = "Normal",
+      letterDate,
+      receivedDate,
+      actionOfficer,
+      addressedTo,
+      addressedRole,
+      forwardedTo,
+      forwardReason,
+      addSecInstructions,
+      addSecNotes,
+      addSecForwardMethod,
+      documentUrl,
+      documentName,
+      isAnswerLetter = false,
+      editedByName = "Additional Secretary",
+      editedByRole = "additional_secretary",
+    } = payload;
+
+    const formatDateForSql = (val: any) => {
+      if (!val || val === "" || val === "N/A" || val === "—") return null;
+      try {
+        const d = new Date(val);
+        if (isNaN(d.getTime())) return null;
+        return d.toISOString().split("T")[0];
+      } catch (e) {
+        return null;
+      }
+    };
+
+    const sqlLetterDate = formatDateForSql(letterDate);
+    const sqlReceivedDate = formatDateForSql(receivedDate);
+    const cleanLetterNo = (letterNo || originalLetterNo || "").trim();
+    const cleanRefNo = (refNo || originalRefNo || "").trim();
+    const cleanSender = (senderName || "").trim();
+    const cleanSubject = (subject || "").trim();
+    const cleanType = (letterType || "Complaint").trim();
+    const cleanCategory = (subjectCategory || "").trim();
+    const cleanPriority = (priority || "Normal").trim();
+    const cleanActionOfficer = (actionOfficer || addressedTo || "").trim();
+    const cleanAddressedTo = (addressedTo || actionOfficer || "").trim();
+    const cleanForwardedTo = (forwardedTo || "").trim();
+    const cleanForwardReason = (forwardReason || "").trim();
+
+    const origNo = (originalLetterNo || cleanLetterNo).trim();
+    const origRef = (originalRefNo || cleanRefNo).trim();
+    const idStr = letterId ? String(letterId).trim() : "";
+
+    // Check if letter originated from Senior Assistant Secretary, Assistant Secretary Discipline, or Assistant Secretary Investigation
+    // In accordance with ministry governance, Additional Secretary cannot edit the original filled data of letters sent by these officers.
+    let isLockedSubordinateOrigin = false;
+    let lockedData: any = null;
+
+    try {
+      const existingDml: any[] = await prisma.$queryRawUnsafe(`
+        SELECT letter_number, ref_number, senders_party, subject_of_letter, nature_of_letter, subject_category, institute_name, region_province, date_received_by_add_secretary, date_letter_handover_discipline, created_by_name, created_by_role, forward_reason, action_officer, addressed_to, addressed_role
+        FROM public.daily_mail_letter_table
+        WHERE (CASE WHEN $1 <> '' THEN id::text = $1 ELSE FALSE END)
+           OR (CASE WHEN $2 <> '' THEN letter_number = $2 ELSE FALSE END)
+           OR (CASE WHEN $3 <> '' THEN ref_number = $3 ELSE FALSE END)
+        LIMIT 1
+      `, idStr, origNo, origRef);
+
+      const existingMail: any[] = await prisma.$queryRawUnsafe(`
+        SELECT letter_no, serial_no, sender, subject, type, classification, institute_name, region_province, received_date, submitted_date, created_by_name, created_by_role, forward_reason, action_officer, addressed_to, addressed_role
+        FROM public.dcmms_daily_mail
+        WHERE (CASE WHEN $1 <> '' THEN id = $1 ELSE FALSE END)
+           OR (CASE WHEN $2 <> '' THEN letter_no = $2 ELSE FALSE END)
+           OR (CASE WHEN $3 <> '' THEN serial_no = $3 ELSE FALSE END)
+        LIMIT 1
+      `, idStr, origNo, origRef);
+
+      const er = (existingDml && existingDml.length > 0) ? existingDml[0] : (existingMail && existingMail.length > 0 ? existingMail[0] : null);
+
+      if (er) {
+        const creatorRole = (er.created_by_role || "").toLowerCase().trim();
+        const creatorName = (er.created_by_name || "").toLowerCase().trim();
+        const fReason = (er.forward_reason || "").toLowerCase().trim();
+
+        if (
+          creatorRole.includes("deputy") ||
+          creatorRole.includes("senior") ||
+          creatorRole.includes("discipline") ||
+          creatorRole.includes("investigation") ||
+          creatorName.includes("dharshana") ||
+          creatorName.includes("bandula") ||
+          creatorName.includes("ranjith") ||
+          creatorName.includes("සහකාර") ||
+          creatorName.includes("ජ්‍යෙෂ්ඨ") ||
+          fReason.includes("administrative procedure: letters addressed to assistant secretary") ||
+          fReason.includes("senior assistant") ||
+          fReason.includes("discipline") ||
+          fReason.includes("investigation")
+        ) {
+          isLockedSubordinateOrigin = true;
+          lockedData = er;
+        }
+      }
+    } catch (checkErr) {
+      console.warn("Provenance check warning in updateLetterRecordServer:", checkErr);
+    }
+
+    // Apart from these 4 sections (Letter No, Letter Type, Letter Date, and Sender/Send By),
+    // all other parts of the letter received by the Additional Secretary can be included or modified.
+    const finalLetterNo = isLockedSubordinateOrigin && lockedData ? (lockedData.letter_number || lockedData.letter_no || origNo) : cleanLetterNo;
+    const finalType = isLockedSubordinateOrigin && lockedData ? (lockedData.nature_of_letter || lockedData.type || cleanType) : cleanType;
+    const finalLetterDate = isLockedSubordinateOrigin && lockedData ? (formatDateForSql(lockedData.date_letter_handover_discipline || lockedData.submitted_date) || sqlLetterDate) : sqlLetterDate;
+    const finalSender = isLockedSubordinateOrigin && lockedData ? (lockedData.senders_party || lockedData.sender || cleanSender) : cleanSender;
+
+    // The other parts can be included or modified:
+    const finalRefNo = cleanRefNo;
+    const finalSubject = cleanSubject;
+    const finalCategory = cleanCategory;
+    const finalInstitute = instituteName;
+    const finalRegion = regionProvince;
+    const finalReceivedDate = sqlReceivedDate;
+
+    // 1. Update daily_mail_letter_table
+    try {
+      await prisma.$executeRawUnsafe(`
+        UPDATE public.daily_mail_letter_table SET
+          letter_number = $1,
+          ref_number = $2,
+          senders_party = $3,
+          subject_of_letter = $4,
+          nature_of_letter = $5,
+          subject_category = $6,
+          institute_name = $7,
+          region_province = $8,
+          priority = $9,
+          date_received_by_add_secretary = $10::date,
+          date_letter_handover_discipline = $11::date,
+          action_officer = $12,
+          addressed_to = $13,
+          addressed_role = $14,
+          forwarded_to = $15,
+          forward_reason = $16,
+          add_sec_instructions = $17,
+          add_sec_notes = $18,
+          add_sec_forward_method = $19,
+          document_url = COALESCE($20, daily_mail_letter_table.document_url),
+          document_name = COALESCE($21, daily_mail_letter_table.document_name),
+          last_edited_by = $22,
+          last_edited_at = CURRENT_TIMESTAMP,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE
+          (CASE WHEN $23 <> '' THEN id::text = $23 ELSE FALSE END)
+          OR (CASE WHEN $24 <> '' THEN letter_number = $24 ELSE FALSE END)
+          OR (CASE WHEN $25 <> '' THEN ref_number = $25 ELSE FALSE END)
+          OR letter_number = $1
+      `,
+        finalLetterNo,
+        finalRefNo,
+        finalSender,
+        finalSubject,
+        finalType,
+        finalCategory,
+        finalInstitute || null,
+        finalRegion || null,
+        cleanPriority,
+        finalReceivedDate,
+        finalLetterDate,
+        cleanActionOfficer || null,
+        cleanAddressedTo || null,
+        addressedRole || null,
+        cleanForwardedTo || null,
+        cleanForwardReason || null,
+        addSecInstructions || null,
+        addSecNotes || null,
+        addSecForwardMethod || null,
+        documentUrl || null,
+        documentName || null,
+        `${editedByName} (${editedByRole})`,
+        idStr,
+        origNo,
+        origRef
+      );
+    } catch (e) {
+      console.warn("Update error on daily_mail_letter_table in updateLetterRecordServer:", e);
+    }
+
+    // 2. Update dcmms_daily_mail
+    try {
+      await prisma.$executeRawUnsafe(`
+        UPDATE public.dcmms_daily_mail SET
+          letter_no = $1,
+          serial_no = $2,
+          sender = $3,
+          subject = $4,
+          type = $5,
+          classification = $6,
+          institute_name = $7,
+          region_province = $8,
+          priority = $9,
+          received_date = $10::date,
+          submitted_date = $11::date,
+          action_officer = $12,
+          addressed_to = $13,
+          addressed_role = $14,
+          forwarded_to = $15,
+          forward_reason = $16,
+          add_sec_instructions = $17,
+          add_sec_notes = $18,
+          add_sec_forward_method = $19,
+          document_url = COALESCE($20, dcmms_daily_mail.document_url),
+          document_name = COALESCE($21, dcmms_daily_mail.document_name),
+          is_answer_letter = $22,
+          last_edited_by = $23,
+          last_edited_at = CURRENT_TIMESTAMP,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE
+          (CASE WHEN $24 <> '' THEN id::text = $24 ELSE FALSE END)
+          OR (CASE WHEN $25 <> '' THEN letter_no = $25 ELSE FALSE END)
+          OR (CASE WHEN $26 <> '' THEN serial_no = $26 ELSE FALSE END)
+          OR letter_no = $1
+      `,
+        finalLetterNo,
+        finalRefNo,
+        finalSender,
+        finalSubject,
+        finalType,
+        finalCategory,
+        finalInstitute || null,
+        finalRegion || null,
+        cleanPriority,
+        finalReceivedDate,
+        finalLetterDate,
+        cleanActionOfficer || null,
+        cleanAddressedTo || null,
+        addressedRole || null,
+        cleanForwardedTo || null,
+        cleanForwardReason || null,
+        addSecInstructions || null,
+        addSecNotes || null,
+        addSecForwardMethod || null,
+        documentUrl || null,
+        documentName || null,
+        Boolean(isAnswerLetter),
+        `${editedByName} (${editedByRole})`,
+        idStr,
+        origNo,
+        origRef
+      );
+    } catch (e) {
+      console.warn("Update error on dcmms_daily_mail in updateLetterRecordServer:", e);
+    }
+
+    // 3. Log Audit
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS public.dcmms_audit_logs (
+          id BIGSERIAL PRIMARY KEY,
+          action VARCHAR(255),
+          entity_type VARCHAR(100),
+          entity_id VARCHAR(255),
+          user_name VARCHAR(255),
+          user_role VARCHAR(100),
+          details TEXT,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      await prisma.$executeRawUnsafe(`
+        INSERT INTO public.dcmms_audit_logs (action, entity_type, entity_id, user_name, user_role, details)
+        VALUES ('LETTER_EDITED_BY_ADDITIONAL_SECRETARY', 'LETTER', $1, $2, $3, $4)
+      `,
+        cleanLetterNo || cleanRefNo || idStr,
+        editedByName,
+        editedByRole,
+        JSON.stringify({
+          letterNo: cleanLetterNo,
+          refNo: cleanRefNo,
+          sender: cleanSender,
+          subject: cleanSubject,
+          officer: cleanActionOfficer,
+          updatedAt: new Date().toISOString()
+        })
+      );
+    } catch (auditErr) {
+      console.warn("Audit log notice in updateLetterRecordServer:", auditErr);
+    }
+
+    return serializeForServerAction({
+      success: true,
+      data: {
+        letterNo: cleanLetterNo,
+        refNo: cleanRefNo,
+        sender: cleanSender,
+        subject: cleanSubject,
+        letterType: cleanType,
+        subjectCategory: cleanCategory,
+        instituteName,
+        regionProvince,
+        priority: cleanPriority,
+        letterDate: sqlLetterDate,
+        receivedDate: sqlReceivedDate,
+        actionOfficer: cleanActionOfficer,
+        addressedTo: cleanAddressedTo,
+        forwardedTo: cleanForwardedTo,
+        forwardReason: cleanForwardReason,
+        addSecInstructions,
+        addSecNotes,
+        addSecForwardMethod,
+        documentUrl,
+        documentName,
+        isAnswerLetter: Boolean(isAnswerLetter),
+        lastEditedBy: `${editedByName} (${editedByRole})`,
+        lastEditedAt: new Date().toISOString()
+      }
+    });
+  } catch (error: any) {
+    console.error("Error in updateLetterRecordServer:", error);
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to update letter" });
+  }
+}
+
+
 
 
 

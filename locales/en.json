@@ -826,7 +826,20 @@
   "forwardedLetterNotification": "New Forwarded Letter Received",
   "forwardedLetterNotifDesc": "A letter addressed to {{addressedTo}} has been forwarded to you (Additional Secretary) for review and directives.",
   "addressedOfficerNotifTitle": "Letter Addressed to You Forwarded",
-  "addressedOfficerNotifDesc": "Letter {{letterNo}} addressed to you has been forwarded to the Additional Secretary in accordance with ministry administrative workflow."
+  "addressedOfficerNotifDesc": "Letter {{letterNo}} addressed to you has been forwarded to the Additional Secretary in accordance with ministry administrative workflow.",
+  "tabAllLetters": "All Letters",
+  "tabDeputySecretary": "Deputy Secretary",
+  "tabAsstSecDiscipline": "Asst. Secretary (Discipline)",
+  "tabAsstSecInvestigation": "Asst. Secretary (Investigations)",
+  "tabOnlyAddSec": "Only for Additional Secretary",
+  "forwardLetterBtn": "Forward",
+  "forwardLetterModalTitle": "Forward Letter to Officer",
+  "forwardToRecipientLabel": "Select Recipient Officer",
+  "forwardReasonLabel": "Forwarding Instructions / Reason",
+  "confirmForwardBtn": "Confirm Forward",
+  "forwardSuccessToast": "Letter forwarded successfully!",
+  "meantForAddSecBadge": "Meant for Addl. Sec",
+  "roleDeputySecretary": "Deputy Secretary"
 }
 
 

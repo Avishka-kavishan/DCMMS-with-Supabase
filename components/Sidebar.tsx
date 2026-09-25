@@ -116,9 +116,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
   // Determine user information dynamically from the logged-in profile session
   const userName = profile?.full_name || getRoleDisplayName(profile?.raw_role || profile?.role || activeRole, t);
 
+  // Check if current user is Chief Clerk (Branch Head clerk, not an administrator)
+  const isChiefClerk = Boolean(
+    profile?.role === "chief_clerk" ||
+    profile?.role === "chief_clerk_discipline" ||
+    profile?.role === "chief_clerk_investigation" ||
+    (profile?.role || "").toLowerCase().includes("chief") ||
+    (profile?.raw_role || "").toLowerCase().includes("chief") ||
+    (profile?.raw_role || "").toLowerCase().includes("clerk") ||
+    (profile?.raw_role || "").toLowerCase().includes("ශාඛා ප්‍රධානී") ||
+    (role || "").toLowerCase().includes("chief")
+  );
+
   const userEmail = profile?.email || (
     activeRole === "system_admin"
       ? "sysadmin@dcmms.gov.lk"
+      : isChiefClerk
+      ? "chief.clerk@dcmms.gov.lk"
       : activeRole === "admin"
       ? "admin@dcmms.gov.lk"
       : activeRole === "subject"
@@ -218,50 +232,53 @@ export const Sidebar: React.FC<SidebarProps> = ({
           isActive: pathname.includes("/daily-mail/register"),
         },
       ] : []),
-      {
-        id: "subject-officers",
-        label: t("subjectOfficers", "Subject Officers"),
-        href: `${basePath}/admin/subject-officers`,
-        icon: (
-          <svg className="menu-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-          </svg>
-        ),
-        isActive: pathname.includes("/admin/subject-officers"),
-      },
-      {
-        id: "chief-clerks",
-        label: t("chiefClerks", "Chief Clerks (ශාඛා ප්‍රධානී)"),
-        href: `${basePath}/admin/chief-clerks`,
-        icon: (
-          <svg className="menu-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-          </svg>
-        ),
-        isActive: pathname.includes("/admin/chief-clerks"),
-      },
-      {
-        id: "investigation-officers",
-        label: t("investigationAdmins", "Investigation Admins"),
-        href: `${basePath}/admin/investigation-officers`,
-        icon: (
-          <svg className="menu-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-        ),
-        isActive: pathname.includes("/admin/investigation-officers"),
-      },
-      {
-        id: "institutes",
-        label: t("institutes", "Institutes"),
-        href: `${basePath}/admin/institutes`,
-        icon: (
-          <svg className="menu-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-          </svg>
-        ),
-        isActive: pathname.includes("/admin/institutes"),
-      },
+      // Admin-exclusive management tabs: hidden from Chief Clerk because Chief Clerk is not an administrator
+      ...( (!isChiefClerk) ? [
+        {
+          id: "subject-officers",
+          label: t("subjectOfficers", "Subject Officers"),
+          href: `${basePath}/admin/subject-officers`,
+          icon: (
+            <svg className="menu-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+            </svg>
+          ),
+          isActive: pathname.includes("/admin/subject-officers"),
+        },
+        {
+          id: "chief-clerks",
+          label: t("chiefClerks", "Chief Clerks (ශාඛා ප්‍රධානී)"),
+          href: `${basePath}/admin/chief-clerks`,
+          icon: (
+            <svg className="menu-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+          ),
+          isActive: pathname.includes("/admin/chief-clerks"),
+        },
+        {
+          id: "investigation-officers",
+          label: t("investigationAdmins", "Investigation Admins"),
+          href: `${basePath}/admin/investigation-officers`,
+          icon: (
+            <svg className="menu-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          ),
+          isActive: pathname.includes("/admin/investigation-officers"),
+        },
+        {
+          id: "institutes",
+          label: t("institutes", "Institutes"),
+          href: `${basePath}/admin/institutes`,
+          icon: (
+            <svg className="menu-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+            </svg>
+          ),
+          isActive: pathname.includes("/admin/institutes"),
+        },
+      ] : []),
       {
         id: "officer-workflow",
         label: t("officerWorkflow", "Officer Workflow"),

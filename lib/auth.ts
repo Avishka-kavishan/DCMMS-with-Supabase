@@ -50,7 +50,7 @@ export function normalizeRole(roleStr?: string): UserRole {
   if (lower.includes("investigation branch") || (lower.includes("assistant secretary") && lower.includes("investigation"))) {
     return "assistant_secretary_investigation";
   }
-  if (lower.includes("senior assistant") || lower.includes("senior_assistant_secretary")) {
+  if (lower.includes("deputy") || lower.includes("senior assistant") || lower.includes("senior_assistant_secretary") || lower.includes("නියෝජ්‍ය ලේකම්")) {
     return "senior_assistant_secretary";
   }
   if (lower.includes("additional secretary") || lower.includes("additional_secretary")) {
@@ -125,9 +125,9 @@ export function getRoleDisplayName(
     return t ? t("roleAsstSecInvestigation", "Assistant Secretary Investigation Branch") : "Assistant Secretary Investigation Branch";
   }
 
-  // Senior Assistant Secretary
-  if (lower.includes("senior assistant") || lower === "senior_assistant_secretary") {
-    return t ? t("roleSnrAsstSec", "Senior Assistant Secretary") : "Senior Assistant Secretary";
+  // Deputy Secretary / Senior Assistant Secretary
+  if (lower.includes("deputy") || lower.includes("senior assistant") || lower === "senior_assistant_secretary" || lower === "deputy_secretary" || lower.includes("නියෝජ්‍ය ලේකම්")) {
+    return t ? t("roleSnrAsstSec", "Deputy Secretary / Senior Assistant Secretary (නියෝජ්‍ය ලේකම්)") : "Deputy Secretary / Senior Assistant Secretary (නියෝජ්‍ය ලේකම්)";
   }
 
   // Additional Secretary
@@ -210,16 +210,18 @@ export function getAddLetterButtonLabel(
       : "විමර්ශන අංශය වෙත ලැබෙන ලිපි එක් කරන්න";
   }
   
-  // 2. Senior Assistant Secretary
+  // 2. Deputy Secretary / Senior Assistant Secretary
   if (
     norm === "senior_assistant_secretary" ||
+    rawLower.includes("deputy") ||
     rawLower.includes("senior assistant") ||
     rawLower.includes("senior_assistant") ||
+    rawLower.includes("නියෝජ්‍ය") ||
     rawLower.includes("ජෙසලේ")
   ) {
     return t
-      ? t("addLetterRoleSnrAsstSec", "ජෙසලේ වෙත ලැබෙන ලිපි එක් කරන්න")
-      : "ජෙසලේ වෙත ලැබෙන ලිපි එක් කරන්න";
+      ? t("addLetterRoleSnrAsstSec", "නියෝජ්‍ය ලේකම් / ජෙසලේ වෙත ලැබෙන ලිපි එක් කරන්න")
+      : "නියෝජ්‍ය ලේකම් / ජෙසලේ වෙත ලැබෙන ලිපි එක් කරන්න";
   }
 
   // 3. Assistant Secretary Discipline Branch

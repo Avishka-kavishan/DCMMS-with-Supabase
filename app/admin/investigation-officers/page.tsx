@@ -1,8 +1,9 @@
 "use client";
 import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import "../../../i18n";
-import { UserPlus, X, ToggleLeft, ToggleRight, Check, ShieldCheck } from "lucide-react";
+import { UserPlus, X, ToggleLeft, ToggleRight, Check, ShieldCheck, ShieldAlert } from "lucide-react";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 import { 
   getRegisterOfficersServer, 
@@ -23,8 +24,11 @@ interface Officer {
 }
 
 export default function InvestigationOfficersPage() {
-  const { t } = useTranslation();
+  const router = useRouter();
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language;
 
+  const [accessDenied, setAccessDenied] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [officers, setOfficers] = useState<Officer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -124,6 +128,21 @@ export default function InvestigationOfficersPage() {
   };
 
   useEffect(() => {
+    getCurrentProfile().then((prof) => {
+      const isChief = Boolean(
+        prof?.role === "chief_clerk" ||
+        prof?.role === "chief_clerk_discipline" ||
+        prof?.role === "chief_clerk_investigation" ||
+        (prof?.role || "").toLowerCase().includes("chief") ||
+        (prof?.raw_role || "").toLowerCase().includes("chief") ||
+        (prof?.raw_role || "").toLowerCase().includes("clerk") ||
+        (prof?.raw_role || "").toLowerCase().includes("ශාඛා ප්‍රධානී")
+      );
+      if (isChief) {
+        setAccessDenied(true);
+      }
+    });
+
     fetchOfficers();
 
     let channel: any = null;
@@ -319,6 +338,31 @@ export default function InvestigationOfficersPage() {
       o.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (o.employeeNo || "").toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  if (accessDenied) {
+    return (
+      <div style={{ padding: "40px 24px", maxWidth: "600px", margin: "60px auto", textAlign: "center", backgroundColor: "#ffffff", borderRadius: "16px", border: "1px solid #fee2e2", boxShadow: "0 10px 25px rgba(0,0,0,0.05)" }}>
+        <div style={{ width: "64px", height: "64px", borderRadius: "50%", backgroundColor: "#fef2f2", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 18px", color: "#dc2626" }}>
+          <ShieldAlert size={36} />
+        </div>
+        <h3 style={{ fontSize: "1.3rem", fontWeight: 700, color: "#1e293b", marginBottom: "8px" }}>
+          {lang === "si" ? "ප්‍රවේශය සීමා කර ඇත (පරිපාලක පමණි)" : "Access Restricted (Admin Only)"}
+        </h3>
+        <p style={{ color: "#64748b", fontSize: "0.95rem", lineHeight: 1.6, marginBottom: "24px" }}>
+          {lang === "si"
+            ? "ශාඛා ප්‍රධානී (Chief Clerk) පරිපාලකයෙකු නොවන බැවින්, විමර්ශන නිලධාරීන් ලියාපදිංචි කිරීම හෝ කළමනාකරණය කිරීමේ අවසර නොමැත."
+            : "Chief Clerk accounts do not have administrator privileges to manage or register investigation officers."}
+        </p>
+        <button
+          type="button"
+          onClick={() => router.push("/admin")}
+          style={{ padding: "10px 20px", backgroundColor: "#2563eb", color: "#ffffff", borderRadius: "8px", fontWeight: 600, border: "none", cursor: "pointer", boxShadow: "0 2px 6px rgba(37,99,235,0.25)" }}
+        >
+          {lang === "si" ? "ප්‍රධාන පුවරුව වෙත යන්න" : "Return to Dashboard"}
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="admin-dashboard-container">

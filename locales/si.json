@@ -826,5 +826,18 @@
   "forwardedLetterNotification": "යොමු කරන ලද නව ලිපියක් ලැබී ඇත",
   "forwardedLetterNotifDesc": "{{addressedTo}} වෙත අමතන ලද ලිපියක් ඔබ (අතිරේක ලේකම්) වෙත සමාලෝචනය සහ උපදෙස් සඳහා යොමු කර ඇත.",
   "addressedOfficerNotifTitle": "ඔබ වෙත ලැබුණු ලිපිය අතිරේක ලේකම් වෙත යොමු කරන ලදී",
-  "addressedOfficerNotifDesc": "ඔබ වෙත අමතන ලද {{letterNo}} අංක දරන ලිපිය අමාත්‍යාංශ පරිපාලන පටිපාටියට අනුව අතිරේක ලේකම් වෙත යොමු කරන ලදී."
+  "addressedOfficerNotifDesc": "ඔබ වෙත අමතන ලද {{letterNo}} අංක දරන ලිපිය අමාත්‍යාංශ පරිපාලන පටිපාටියට අනුව අතිරේක ලේකම් වෙත යොමු කරන ලදී.",
+  "tabAllLetters": "සියලුම ලිපි",
+  "tabDeputySecretary": "නියෝජ්‍ය ලේකම්",
+  "tabAsstSecDiscipline": "සහකාර ලේකම් (විනය)",
+  "tabAsstSecInvestigation": "සහකාර ලේකම් (විමර්ශන)",
+  "tabOnlyAddSec": "අතිරේක ලේකම් වෙත පමණි",
+  "forwardLetterBtn": "යොමු කරන්න",
+  "forwardLetterModalTitle": "ලිපිය නිලධාරියෙකු වෙත යොමු කිරීම",
+  "forwardToRecipientLabel": "ලබන්නා වූ නිලධාරියා තෝරන්න",
+  "forwardReasonLabel": "යොමු කිරීමේ උපදෙස් / හේතුව",
+  "confirmForwardBtn": "ලිපිය යොමු කරන්න",
+  "forwardSuccessToast": "ලිපිය සාර්ථකව යොමු කරන ලදී!",
+  "meantForAddSecBadge": "අතිරේක ලේකම් වෙත පමණි",
+  "roleDeputySecretary": "නියෝජ්‍ය ලේකම්"
 }
