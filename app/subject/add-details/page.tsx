@@ -30,7 +30,7 @@ const formatStepTaken = (step: string, t: any) => {
   return step;
 };
 
-export function parseCommitteeDetails(asgn: any) {
+function parseCommitteeDetails(asgn: any) {
   let chairmanName = "";
   let chairmanNic = "";
   let memberList: string[] = [];

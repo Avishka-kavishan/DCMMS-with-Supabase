@@ -297,10 +297,25 @@ CREATE TABLE IF NOT EXISTS charge_sheet_table (
     date_the_charge_sheet_issued DATE,
     date_the_response_to_the_charge_sheet_was_given DATE,
     disciplinary_order TEXT,
+    disciplinary_authority VARCHAR(100),
+    date_request_documents DATE,
+    date_submission_documents DATE,
+    agree_with_answers VARCHAR(20),
+    date_draft_submitted_psc DATE,
+    agree_with_psc_decision VARCHAR(20),
+    category_recommendation VARCHAR(255),
+    case_status VARCHAR(100) DEFAULT 'Pending',
+    target_implementation_date DATE,
+    recommendation_text TEXT,
+    circular_reference VARCHAR(255),
+    minute_ref VARCHAR(255),
+    date_approved_by_secretory DATE,
+    secretory_recommendation TEXT,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_charge_sheet_ref_number ON charge_sheet_table(ref_number);
+
 
 -- Reply Letter Details Table
 CREATE TABLE IF NOT EXISTS reply_letter_details_table (

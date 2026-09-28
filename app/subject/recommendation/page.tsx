@@ -77,6 +77,12 @@ interface RecommendationRecord {
   chargeSheetIssuedDate?: string;
   chargeSheetResponseDate?: string;
   disciplinaryOrder?: string;
+  disciplinaryAuthority?: string;
+  dateRequestDocuments?: string;
+  dateSubmissionDocuments?: string;
+  agreeWithAnswers?: string;
+  dateDraftSubmittedPsc?: string;
+  agreeWithPscDecision?: string;
   secretaryApprovalDate?: string;
   secretaryApprovedRecommendation?: string;
   status: string;
@@ -141,6 +147,12 @@ function RecommendationFormContent() {
   const [chargeSheetIssuedDate, setChargeSheetIssuedDate] = useState("");
   const [chargeSheetResponseDate, setChargeSheetResponseDate] = useState("");
   const [disciplinaryOrder, setDisciplinaryOrder] = useState("");
+  const [disciplinaryAuthority, setDisciplinaryAuthority] = useState("secretary_of_education");
+  const [dateRequestDocuments, setDateRequestDocuments] = useState("");
+  const [dateSubmissionDocuments, setDateSubmissionDocuments] = useState("");
+  const [agreeWithAnswers, setAgreeWithAnswers] = useState<"yes" | "no" | "">("");
+  const [dateDraftSubmittedPsc, setDateDraftSubmittedPsc] = useState("");
+  const [agreeWithPscDecision, setAgreeWithPscDecision] = useState<"yes" | "no" | "">("");
 
   // Secretary of Education Approval State
   const [secretaryApprovalDate, setSecretaryApprovalDate] = useState("");
@@ -152,6 +164,9 @@ function RecommendationFormContent() {
   const [recUrgencyFilter, setRecUrgencyFilter] = useState("all");
   const [recStatusFilter, setRecStatusFilter] = useState("all");
   const [selectedRecModal, setSelectedRecModal] = useState<RecommendationRecord | null>(null);
+
+  // Derived state: Whether either decision is agreed as 'yes'
+  const isDecisionApproved = agreeWithAnswers === "yes" || agreeWithPscDecision === "yes";
 
   // Loading & Feedback State
   const [isLoading, setIsLoading] = useState(false);
@@ -173,7 +188,7 @@ function RecommendationFormContent() {
 
   // Sync document title
   useEffect(() => {
-    document.title = `${lang === "si" ? "ආයතනික මූලික විමර්ශනයේ නිර්දේශය" : lang === "ta" ? "நிறுவன அடிப்படை விசாரணை பரிந்துரை" : "Institutional Basic Investigation Recommendation"} | DCMMS`;
+    document.title = `${lang === "si" ? "චෝදනා පත්‍ර පෝරමය (Charge Sheet Form)" : lang === "ta" ? "குற்றப்பத்திரிகை படிவம் (Charge Sheet Form)" : "Charge Sheet Form"} | DCMMS`;
   }, [lang]);
 
   // Load all available cases and registered recommendations
@@ -220,6 +235,12 @@ function RecommendationFormContent() {
           chargeSheetIssuedDate: r.chargeSheetIssuedDate ? String(r.chargeSheetIssuedDate).slice(0, 10) : "",
           chargeSheetResponseDate: r.chargeSheetResponseDate ? String(r.chargeSheetResponseDate).slice(0, 10) : "",
           disciplinaryOrder: r.disciplinaryOrder || r.disciplinary_order,
+          disciplinaryAuthority: r.disciplinaryAuthority || r.disciplinary_authority || "",
+          dateRequestDocuments: r.dateRequestDocuments ? String(r.dateRequestDocuments).slice(0, 10) : "",
+          dateSubmissionDocuments: r.dateSubmissionDocuments ? String(r.dateSubmissionDocuments).slice(0, 10) : "",
+          agreeWithAnswers: r.agreeWithAnswers || r.agree_with_answers || "",
+          dateDraftSubmittedPsc: r.dateDraftSubmittedPsc ? String(r.dateDraftSubmittedPsc).slice(0, 10) : "",
+          agreeWithPscDecision: r.agreeWithPscDecision || r.agree_with_psc_decision || "",
           secretaryApprovalDate: r.secretaryApprovalDate ? String(r.secretaryApprovalDate).slice(0, 10) : "",
           secretaryApprovedRecommendation: r.secretaryApprovedRecommendation || r.secretary_approved_recommendation,
           status: r.status || "Submitted",
@@ -256,6 +277,12 @@ function RecommendationFormContent() {
                   chargeSheetIssuedDate: lr.chargeSheetIssuedDate || lr.charge_sheet_issued_date || lr.issuedChargeSheetDate,
                   chargeSheetResponseDate: lr.chargeSheetResponseDate || lr.charge_sheet_response_date || lr.responseChargeSheetDate,
                   disciplinaryOrder: lr.disciplinaryOrder || lr.disciplinary_order,
+                  disciplinaryAuthority: lr.disciplinaryAuthority || lr.disciplinary_authority || "",
+                  dateRequestDocuments: lr.dateRequestDocuments || lr.date_request_documents || "",
+                  dateSubmissionDocuments: lr.dateSubmissionDocuments || lr.date_submission_documents || "",
+                  agreeWithAnswers: lr.agreeWithAnswers || lr.agree_with_answers || "",
+                  dateDraftSubmittedPsc: lr.dateDraftSubmittedPsc || lr.date_draft_submitted_psc || "",
+                  agreeWithPscDecision: lr.agreeWithPscDecision || lr.agree_with_psc_decision || "",
                   secretaryApprovalDate: lr.secretaryApprovalDate || lr.secretary_approval_date || lr.date_approved_by_secretary || "",
                   secretaryApprovedRecommendation: lr.secretaryApprovedRecommendation || lr.secretary_approved_recommendation || lr.recommendation_approved_by_secretary || "",
                   status: lr.status || "Submitted",
@@ -381,6 +408,12 @@ function RecommendationFormContent() {
           chargeSheetIssuedDate: "",
           chargeSheetResponseDate: "",
           disciplinaryOrder: "",
+          disciplinaryAuthority: "",
+          dateRequestDocuments: "",
+          dateSubmissionDocuments: "",
+          agreeWithAnswers: "",
+          dateDraftSubmittedPsc: "",
+          agreeWithPscDecision: "",
           secretaryApprovalDate: "",
           secretaryApprovedRecommendation: "",
           status: "Awaiting Recommendation",
@@ -429,6 +462,12 @@ function RecommendationFormContent() {
     setChargeSheetIssuedDate("");
     setChargeSheetResponseDate("");
     setDisciplinaryOrder("");
+    setDisciplinaryAuthority("secretary_of_education");
+    setDateRequestDocuments("");
+    setDateSubmissionDocuments("");
+    setAgreeWithAnswers("");
+    setDateDraftSubmittedPsc("");
+    setAgreeWithPscDecision("");
     setSecretaryApprovalDate("");
     setSecretaryApprovedRecommendation("");
 
@@ -460,6 +499,12 @@ function RecommendationFormContent() {
           if (rec.chargeSheetIssuedDate) setChargeSheetIssuedDate(rec.chargeSheetIssuedDate);
           if (rec.chargeSheetResponseDate) setChargeSheetResponseDate(rec.chargeSheetResponseDate);
           if (rec.disciplinaryOrder) setDisciplinaryOrder(rec.disciplinaryOrder);
+          if (rec.disciplinaryAuthority || rec.disciplinary_authority) setDisciplinaryAuthority(rec.disciplinaryAuthority || rec.disciplinary_authority);
+          if (rec.dateRequestDocuments || rec.date_request_documents) setDateRequestDocuments(rec.dateRequestDocuments || rec.date_request_documents);
+          if (rec.dateSubmissionDocuments || rec.date_submission_documents) setDateSubmissionDocuments(rec.dateSubmissionDocuments || rec.date_submission_documents);
+          if (rec.agreeWithAnswers || rec.agree_with_answers) setAgreeWithAnswers(rec.agreeWithAnswers || rec.agree_with_answers);
+          if (rec.dateDraftSubmittedPsc || rec.date_draft_submitted_psc) setDateDraftSubmittedPsc(rec.dateDraftSubmittedPsc || rec.date_draft_submitted_psc);
+          if (rec.agreeWithPscDecision || rec.agree_with_psc_decision) setAgreeWithPscDecision(rec.agreeWithPscDecision || rec.agree_with_psc_decision);
           if (rec.secretaryApprovalDate) setSecretaryApprovalDate(rec.secretaryApprovalDate);
           if (rec.secretaryApprovedRecommendation) setSecretaryApprovedRecommendation(rec.secretaryApprovedRecommendation);
         }
@@ -500,6 +545,12 @@ function RecommendationFormContent() {
           if (foundRec.chargeSheetIssuedDate) setChargeSheetIssuedDate((prev) => prev || foundRec.chargeSheetIssuedDate);
           if (foundRec.chargeSheetResponseDate) setChargeSheetResponseDate((prev) => prev || foundRec.chargeSheetResponseDate);
           if (foundRec.disciplinaryOrder) setDisciplinaryOrder((prev) => prev || foundRec.disciplinaryOrder);
+          if (foundRec.disciplinaryAuthority || foundRec.disciplinary_authority) setDisciplinaryAuthority((prev) => prev || foundRec.disciplinaryAuthority || foundRec.disciplinary_authority);
+          if (foundRec.dateRequestDocuments || foundRec.date_request_documents) setDateRequestDocuments((prev) => prev || foundRec.dateRequestDocuments || foundRec.date_request_documents);
+          if (foundRec.dateSubmissionDocuments || foundRec.date_submission_documents) setDateSubmissionDocuments((prev) => prev || foundRec.dateSubmissionDocuments || foundRec.date_submission_documents);
+          if (foundRec.agreeWithAnswers || foundRec.agree_with_answers) setAgreeWithAnswers((prev) => prev || foundRec.agreeWithAnswers || foundRec.agree_with_answers);
+          if (foundRec.dateDraftSubmittedPsc || foundRec.date_draft_submitted_psc) setDateDraftSubmittedPsc((prev) => prev || foundRec.dateDraftSubmittedPsc || foundRec.date_draft_submitted_psc);
+          if (foundRec.agreeWithPscDecision || foundRec.agree_with_psc_decision) setAgreeWithPscDecision((prev) => prev || foundRec.agreeWithPscDecision || foundRec.agree_with_psc_decision);
           if (foundRec.secretaryApprovalDate) setSecretaryApprovalDate((prev) => prev || foundRec.secretaryApprovalDate);
           if (foundRec.secretaryApprovedRecommendation) setSecretaryApprovedRecommendation((prev) => prev || foundRec.secretaryApprovedRecommendation);
         }
@@ -536,14 +587,16 @@ function RecommendationFormContent() {
 
     setIsSaving(true);
     const now = new Date().toISOString().slice(0, 10);
+    const isDecisionApproved = agreeWithAnswers === "yes" || agreeWithPscDecision === "yes";
+    const statusToSave = isDecisionApproved ? "Closed" : "Draft";
     const payload: any = {
       ref_number: caseNo,
       case_no: caseNo,
       letter_no: letterNo || null,
       category_recommendation: recommendationCategory,
       category: recommendationCategory,
-      case_status: "Draft",
-      status: "Draft",
+      case_status: statusToSave,
+      status: statusToSave,
       target_implementation_date: targetDate || null,
       target_date: targetDate || null,
       investigation_recommendation: recommendationText,
@@ -565,6 +618,12 @@ function RecommendationFormContent() {
       charge_sheet_response_date: recommendationCategory === "issuing_charge_sheet" ? (chargeSheetResponseDate || null) : null,
       date_the_response_to_the_charge_sheet_was_given: recommendationCategory === "issuing_charge_sheet" ? (chargeSheetResponseDate || null) : null,
       disciplinary_order: recommendationCategory === "issuing_charge_sheet" ? disciplinaryOrder : null,
+      disciplinary_authority: recommendationCategory === "issuing_charge_sheet" ? disciplinaryAuthority : null,
+      date_request_documents: recommendationCategory === "issuing_charge_sheet" ? (dateRequestDocuments || null) : null,
+      date_submission_documents: recommendationCategory === "issuing_charge_sheet" ? (dateSubmissionDocuments || null) : null,
+      agree_with_answers: (recommendationCategory === "issuing_charge_sheet" && disciplinaryAuthority !== "psc_esc") ? (agreeWithAnswers || null) : null,
+      date_draft_submitted_psc: (recommendationCategory === "issuing_charge_sheet" && disciplinaryAuthority === "psc_esc") ? (dateDraftSubmittedPsc || null) : null,
+      agree_with_psc_decision: (recommendationCategory === "issuing_charge_sheet" && disciplinaryAuthority === "psc_esc") ? (agreeWithPscDecision || null) : null,
     };
 
     try {
@@ -596,9 +655,16 @@ function RecommendationFormContent() {
           chargeSheetIssuedDate: recommendationCategory === "issuing_charge_sheet" ? chargeSheetIssuedDate : "",
           chargeSheetResponseDate: recommendationCategory === "issuing_charge_sheet" ? chargeSheetResponseDate : "",
           disciplinaryOrder: recommendationCategory === "issuing_charge_sheet" ? disciplinaryOrder : "",
+          disciplinaryAuthority: recommendationCategory === "issuing_charge_sheet" ? disciplinaryAuthority : "",
+          dateRequestDocuments: recommendationCategory === "issuing_charge_sheet" ? dateRequestDocuments : "",
+          dateSubmissionDocuments: recommendationCategory === "issuing_charge_sheet" ? dateSubmissionDocuments : "",
+          agreeWithAnswers: (recommendationCategory === "issuing_charge_sheet" && disciplinaryAuthority !== "psc_esc") ? agreeWithAnswers : "",
+          dateDraftSubmittedPsc: (recommendationCategory === "issuing_charge_sheet" && disciplinaryAuthority === "psc_esc") ? dateDraftSubmittedPsc : "",
+          agreeWithPscDecision: (recommendationCategory === "issuing_charge_sheet" && disciplinaryAuthority === "psc_esc") ? agreeWithPscDecision : "",
           secretaryApprovalDate,
           secretaryApprovedRecommendation,
-          status: "Draft",
+          status: statusToSave,
+          letterStatus: isDecisionApproved ? "Closed" : "",
           updatedAt: now
         });
         localStorage.setItem("dcmms_recommendations", JSON.stringify(recList));
@@ -612,14 +678,41 @@ function RecommendationFormContent() {
             if (String(c.caseNo || c.refNo || "").trim().toLowerCase() === caseNo.trim().toLowerCase()) {
               return {
                 ...c,
-                stage: "Formal Charge Sheet Issued",
-                stageKey: "charge_sheet",
+                status: isDecisionApproved ? "Closed" : c.status,
+                stage: isDecisionApproved ? "Closed" : "Formal Charge Sheet Issued",
+                stageKey: isDecisionApproved ? "closed" : "charge_sheet",
                 isProperDisciplinary: true,
               };
             }
             return c;
           });
           localStorage.setItem("dcmms_cases", JSON.stringify(caseList));
+        }
+
+        // Sync dcmms_letters status to Closed if decision approved
+        if (isDecisionApproved) {
+          try {
+            const storedLetters = localStorage.getItem("dcmms_letters") || "[]";
+            let letterList = JSON.parse(storedLetters);
+            if (Array.isArray(letterList)) {
+              const matchKey = caseNo.trim().toLowerCase();
+              const letKey = (letterNo || "").trim().toLowerCase();
+              letterList = letterList.map((l: any) => {
+                const cMatch = String(l.caseNo || l.refNo || "").trim().toLowerCase() === matchKey;
+                const lMatch = letKey && String(l.letterNo || l.letter_no || "").trim().toLowerCase() === letKey;
+                if (cMatch || lMatch) {
+                  return {
+                    ...l,
+                    status: "Closed",
+                    letterStatus: "Closed",
+                    stage: "Closed",
+                  };
+                }
+                return l;
+              });
+              localStorage.setItem("dcmms_letters", JSON.stringify(letterList));
+            }
+          } catch (lErr) {}
         }
 
         window.dispatchEvent(new Event("storage"));
@@ -644,14 +737,10 @@ function RecommendationFormContent() {
       return;
     }
 
-    if (!recommendationText.trim()) {
-      showToast(lang === "si" ? "කරුණාකර නිර්දේශ විස්තර ඇතුළත් කරන්න." : "Please provide detailed recommendation text.");
-      return;
-    }
-
     setIsSaving(true);
     const now = new Date().toISOString().slice(0, 10);
-    const statusToSave = recommendationStatus || "Submitted";
+    const isDecisionApproved = agreeWithAnswers === "yes" || agreeWithPscDecision === "yes";
+    const statusToSave = isDecisionApproved ? "Closed" : (recommendationStatus || "Submitted");
     const payload: any = {
       ref_number: caseNo,
       case_no: caseNo,
@@ -681,6 +770,12 @@ function RecommendationFormContent() {
       charge_sheet_response_date: recommendationCategory === "issuing_charge_sheet" ? (chargeSheetResponseDate || null) : null,
       date_the_response_to_the_charge_sheet_was_given: recommendationCategory === "issuing_charge_sheet" ? (chargeSheetResponseDate || null) : null,
       disciplinary_order: recommendationCategory === "issuing_charge_sheet" ? disciplinaryOrder : null,
+      disciplinary_authority: recommendationCategory === "issuing_charge_sheet" ? disciplinaryAuthority : null,
+      date_request_documents: recommendationCategory === "issuing_charge_sheet" ? (dateRequestDocuments || null) : null,
+      date_submission_documents: recommendationCategory === "issuing_charge_sheet" ? (dateSubmissionDocuments || null) : null,
+      agree_with_answers: (recommendationCategory === "issuing_charge_sheet" && disciplinaryAuthority !== "psc_esc") ? (agreeWithAnswers || null) : null,
+      date_draft_submitted_psc: (recommendationCategory === "issuing_charge_sheet" && disciplinaryAuthority === "psc_esc") ? (dateDraftSubmittedPsc || null) : null,
+      agree_with_psc_decision: (recommendationCategory === "issuing_charge_sheet" && disciplinaryAuthority === "psc_esc") ? (agreeWithPscDecision || null) : null,
     };
 
     try {
@@ -712,16 +807,25 @@ function RecommendationFormContent() {
           chargeSheetIssuedDate: recommendationCategory === "issuing_charge_sheet" ? chargeSheetIssuedDate : "",
           chargeSheetResponseDate: recommendationCategory === "issuing_charge_sheet" ? chargeSheetResponseDate : "",
           disciplinaryOrder: recommendationCategory === "issuing_charge_sheet" ? disciplinaryOrder : "",
+          disciplinaryAuthority: recommendationCategory === "issuing_charge_sheet" ? disciplinaryAuthority : "",
+          dateRequestDocuments: recommendationCategory === "issuing_charge_sheet" ? dateRequestDocuments : "",
+          dateSubmissionDocuments: recommendationCategory === "issuing_charge_sheet" ? dateSubmissionDocuments : "",
+          agreeWithAnswers: (recommendationCategory === "issuing_charge_sheet" && disciplinaryAuthority !== "psc_esc") ? agreeWithAnswers : "",
+          dateDraftSubmittedPsc: (recommendationCategory === "issuing_charge_sheet" && disciplinaryAuthority === "psc_esc") ? dateDraftSubmittedPsc : "",
+          agreeWithPscDecision: (recommendationCategory === "issuing_charge_sheet" && disciplinaryAuthority === "psc_esc") ? agreeWithPscDecision : "",
           secretaryApprovalDate,
           secretaryApprovedRecommendation,
-          status: "Submitted",
+          status: statusToSave,
+          letterStatus: isDecisionApproved ? "Closed" : "",
           submittedAt: now,
           updatedAt: now
         });
         localStorage.setItem("dcmms_recommendations", JSON.stringify(recList));
 
         const isChargeSheetCategory = recommendationCategory === "issuing_charge_sheet";
-        const targetStatus = isChargeSheetCategory ? "Formal Charge Sheet Issued" : "Implementation of Recommendations";
+        const targetStatus = (isChargeSheetCategory && isDecisionApproved)
+          ? "Closed"
+          : (isChargeSheetCategory ? "Formal Charge Sheet Issued" : "Implementation of Recommendations");
 
         const storedAsgns = localStorage.getItem("dcmms_subject_assignments") || "[]";
         let asgnList = [];
@@ -731,8 +835,8 @@ function RecommendationFormContent() {
             return {
               ...a,
               status: targetStatus,
-              stage: isChargeSheetCategory ? "Formal Charge Sheet Issued" : a.stage,
-              stageKey: isChargeSheetCategory ? "charge_sheet" : a.stageKey,
+              stage: isDecisionApproved ? "Closed" : (isChargeSheetCategory ? "Formal Charge Sheet Issued" : a.stage),
+              stageKey: isDecisionApproved ? "closed" : (isChargeSheetCategory ? "charge_sheet" : a.stageKey),
               isProperDisciplinary: isChargeSheetCategory ? true : a.isProperDisciplinary,
               recommendationSubmitted: true,
               recommendationSubmittedAt: now,
@@ -742,6 +846,12 @@ function RecommendationFormContent() {
               chargeSheetIssuedDate: isChargeSheetCategory ? chargeSheetIssuedDate : a.chargeSheetIssuedDate,
               chargeSheetResponseDate: isChargeSheetCategory ? chargeSheetResponseDate : a.chargeSheetResponseDate,
               disciplinaryOrder: isChargeSheetCategory ? disciplinaryOrder : a.disciplinaryOrder,
+              disciplinaryAuthority: isChargeSheetCategory ? disciplinaryAuthority : a.disciplinaryAuthority,
+              dateRequestDocuments: isChargeSheetCategory ? dateRequestDocuments : a.dateRequestDocuments,
+              dateSubmissionDocuments: isChargeSheetCategory ? dateSubmissionDocuments : a.dateSubmissionDocuments,
+              agreeWithAnswers: isChargeSheetCategory ? agreeWithAnswers : a.agreeWithAnswers,
+              dateDraftSubmittedPsc: isChargeSheetCategory ? dateDraftSubmittedPsc : a.dateDraftSubmittedPsc,
+              agreeWithPscDecision: isChargeSheetCategory ? agreeWithPscDecision : a.agreeWithPscDecision,
             };
           }
           return a;
@@ -756,14 +866,38 @@ function RecommendationFormContent() {
             return {
               ...c,
               status: targetStatus,
-              stage: isChargeSheetCategory ? "Formal Charge Sheet Issued" : c.stage,
-              stageKey: isChargeSheetCategory ? "charge_sheet" : c.stageKey,
+              stage: isDecisionApproved ? "Closed" : (isChargeSheetCategory ? "Formal Charge Sheet Issued" : c.stage),
+              stageKey: isDecisionApproved ? "closed" : (isChargeSheetCategory ? "charge_sheet" : c.stageKey),
               isProperDisciplinary: isChargeSheetCategory ? true : c.isProperDisciplinary,
             };
           }
           return c;
         });
         localStorage.setItem("dcmms_cases", JSON.stringify(caseList));
+
+        // Sync dcmms_letters status to Closed if decision approved
+        try {
+          const storedLetters = localStorage.getItem("dcmms_letters") || "[]";
+          let letterList = JSON.parse(storedLetters);
+          if (Array.isArray(letterList)) {
+            const matchKey = caseNo.trim().toLowerCase();
+            const letKey = (letterNo || "").trim().toLowerCase();
+            letterList = letterList.map((l: any) => {
+              const cMatch = String(l.caseNo || l.refNo || "").trim().toLowerCase() === matchKey;
+              const lMatch = letKey && String(l.letterNo || l.letter_no || "").trim().toLowerCase() === letKey;
+              if (cMatch || lMatch) {
+                return {
+                  ...l,
+                  status: isDecisionApproved ? "Closed" : l.status,
+                  letterStatus: isDecisionApproved ? "Closed" : l.letterStatus,
+                  stage: isDecisionApproved ? "Closed" : l.stage,
+                };
+              }
+              return l;
+            });
+            localStorage.setItem("dcmms_letters", JSON.stringify(letterList));
+          }
+        } catch (lErr) {}
 
         window.dispatchEvent(new Event("storage"));
         window.dispatchEvent(new CustomEvent("dcmms_assignment_updated"));
@@ -773,10 +907,10 @@ function RecommendationFormContent() {
       if (recommendationCategory === "issuing_charge_sheet") {
         showToast(
           lang === "si"
-            ? "චෝදනා පත්‍ර නිර්දේශය සාර්ථකයි! නඩුව විධිමත් විනය පරීක්ෂණ (Proper Disciplinary Inspection) වෙත යොමු කරන ලදී."
+            ? "චෝදනා පත්‍ර නිර්දේශය සාර්ථකයි! නඩුව චෝදනා පත්‍ර නිකුත් කිරීමේ (Issuing Charge Sheet) අංශය වෙත යොමු කරන ලදී."
             : lang === "ta"
-            ? "குற்றப்பத்திரிகை பரிந்துரை சமர்ப்பிக்கப்பட்டது! வழக்கு சரியான ஒழுங்கு நடவடிக்கை ஆய்வுக்கு நகர்த்தப்பட்டது."
-            : "Charge sheet recommendation submitted! Case moved to Proper Disciplinary Inspection section."
+            ? "குற்றப்பத்திரிகை பரிந்துரை சமர்ப்பிக்கப்பட்டது! வழக்கு குற்றப்பத்திரிகை பகுதிக்கு நகர்த்தப்பட்டது."
+            : "Charge sheet recommendation submitted! Case moved to Issuing Charge Sheet section."
         );
       } else {
         showToast(lang === "si" ? "නිර්දේශය සාර්ථකව ඉදිරිපත් කරන ලදී!" : "Recommendation submitted successfully!");
@@ -785,7 +919,7 @@ function RecommendationFormContent() {
 
       setTimeout(() => {
         if (recommendationCategory === "issuing_charge_sheet") {
-          router.push(`/subject?tab=disciplinary_inspection&caseNo=${encodeURIComponent(caseNo)}`);
+          router.push(`/subject?tab=issuing_charge_sheet&caseNo=${encodeURIComponent(caseNo)}`);
         } else {
           setViewMode("list");
         }
@@ -846,6 +980,7 @@ function RecommendationFormContent() {
       if (recStatusFilter === "Draft" && item.status !== "Draft") return false;
       if (recStatusFilter === "Submitted" && item.status !== "Submitted" && item.status !== "Implementation of Recommendations") return false;
       if (recStatusFilter === "Approved" && item.status !== "Approved") return false;
+      if (recStatusFilter === "Closed" && item.status !== "Closed" && item.agreeWithAnswers !== "yes" && item.agreeWithPscDecision !== "yes") return false;
     }
 
     if (recSearchQuery.trim()) {
@@ -862,12 +997,12 @@ function RecommendationFormContent() {
     return true;
   });
 
-  const pendingCases = allRecommendations.filter((r) => r.status === "Awaiting Recommendation" || !r.recommendationText);
+  const pendingCases = allRecommendations.filter((r) => r.status === "Awaiting Recommendation" || (!r.category && !r.recommendationText));
 
   if (!mounted) {
     return (
       <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "#f8fafc" }}>
-        <div style={{ color: "#64748b", fontWeight: 600, fontSize: "14px" }}>Loading Investigation Recommendation...</div>
+        <div style={{ color: "#64748b", fontWeight: 600, fontSize: "14px" }}>Loading Charge Sheet Form...</div>
       </div>
     );
   }
@@ -901,7 +1036,7 @@ function RecommendationFormContent() {
               </Link>
               <ChevronRight size={14} style={{ color: "#94a3b8" }} />
               <span style={{ color: "#0f172a", fontWeight: 700 }} suppressHydrationWarning>
-                {lang === "si" ? "ආයතනික මූලික විමර්ශනයේ නිර්දේශය" : lang === "ta" ? "நிறுவன அடிப்படை விசாரணை பரிந்துரை" : "Institutional Basic Investigation Recommendation"}
+                {lang === "si" ? "චෝදනා පත්‍ර පෝරමය" : lang === "ta" ? "குற்றப்பத்திரிகை படிவம்" : "Charge Sheet Form"}
               </span>
             </div>
           </div>
@@ -925,7 +1060,7 @@ function RecommendationFormContent() {
               }}
             >
               <Layers size={15} />
-              <span>{viewMode === "form" ? (lang === "si" ? "සියලු නිර්දේශ ලැයිස්තුව" : "View All Recommendations") : (lang === "si" ? "නිර්දේශ පෝරමය" : "Open Form")}</span>
+              <span>{viewMode === "form" ? (lang === "si" ? "සියලු චෝදනා පත්‍ර ලැයිස්තුව" : "View All Charge Sheets") : (lang === "si" ? "චෝදනා පත්‍ර පෝරමය" : "Charge Sheet Form")}</span>
             </button>
           </div>
         </header>
@@ -946,15 +1081,15 @@ function RecommendationFormContent() {
               <h1>
                 <ClipboardList size={28} style={{ color: "#059669" }} />
                 {lang === "si"
-                  ? "මූලික විමර්ශන නිර්දේශ සහ විනය ක්‍රියාමාර්ග පෝරමය"
+                  ? "චෝදනා පත්‍ර පෝරමය (Charge Sheet Form)"
                   : lang === "ta"
-                  ? "விசாரணை பரிந்துரை மற்றும் ஒழுங்கு நடவடிக்கை படிவம்"
-                  : "Investigation Recommendation & Action Page"}
+                  ? "குற்றப்பத்திரிகை படிவம் (Charge Sheet Form)"
+                  : "Charge Sheet Form"}
               </h1>
               <p>
                 {lang === "si"
-                  ? "මූලික විමර්ශනය අවසන් වූ නඩු සඳහා නිල නිර්දේශ, සොයාගැනීම් සහ ඉදිරි විනය ක්‍රියාමාර්ග ඇතුළත් කිරීමේ වෙනම පිටුව."
-                  : "Dedicated page to review completed investigation cases, submit formal disciplinary recommendations, and route findings."}
+                  ? "මූලික විමර්ශනය අවසන් වූ නඩු සඳහා චෝදනා පත්‍ර නිකුත් කිරීම සහ ඉදිරි විනය නියෝග ඇතුළත් කිරීමේ නිල පෝරමය."
+                  : "Official form to issue formal charge sheets, record responses, and submit disciplinary orders."}
               </p>
             </div>
 
@@ -973,7 +1108,7 @@ function RecommendationFormContent() {
 
                   <button type="button" onClick={handleSubmit} disabled={isSaving} className="btn-submit-recommendation">
                     <Send size={16} />
-                    <span>{lang === "si" ? "නිර්දේශය ඉදිරිපත් කරන්න" : "Submit Recommendation"}</span>
+                    <span>{lang === "si" ? "චෝදනා පත්‍රය ඉදිරිපත් කරන්න" : "Submit Charge Sheet"}</span>
                   </button>
                 </>
               )}
@@ -991,7 +1126,7 @@ function RecommendationFormContent() {
               <div style={{ backgroundColor: "#ffffff", border: "1px solid #cbd5e1", borderRadius: "12px", padding: "14px 18px", marginBottom: "20px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                   <label htmlFor="caseSelectorSelect" style={{ fontSize: "13px", fontWeight: 700, color: "#1e1b4b" }}>
-                    {lang === "si" ? "අදාළ නඩුව තෝරන්න (Select Case):" : "Select Target Case for Recommendation:"}
+                    {lang === "si" ? "අදාළ නඩුව තෝරන්න (Select Case):" : "Select Case for Charge Sheet:"}
                   </label>
                   <select
                     id="caseSelectorSelect"
@@ -1021,7 +1156,7 @@ function RecommendationFormContent() {
               {/* Case Summary Top Card */}
               <section className="case-summary-card">
                 <div className="case-summary-top">
-                  <div className="case-badge-group">
+                    <div className="case-badge-group">
                     <span className="badge-case-no">
                       {lang === "si" ? "නඩු අංකය:" : "Case Ref:"} {caseNo || "N/A"}
                     </span>
@@ -1030,10 +1165,17 @@ function RecommendationFormContent() {
                         {lang === "si" ? "ලිපි අංකය:" : "Letter Ref:"} {letterNo}
                       </span>
                     )}
-                    <span className="badge-status-completed">
-                      <CheckCircle2 size={14} />
-                      {lang === "si" ? "මූලික විමර්ශනය අවසන්" : "Preliminary Investigation Complete"}
-                    </span>
+                    {isDecisionApproved ? (
+                      <span className="badge-status-completed" style={{ backgroundColor: "#ecfdf5", color: "#166534", border: "1px solid #86efac", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                        <CheckCircle2 size={14} style={{ color: "#16a34a" }} />
+                        {lang === "si" ? "ලිපි තත්ත්වය: අවසන් (Closed)" : "Letter Status: Closed"}
+                      </span>
+                    ) : (
+                      <span className="badge-status-completed">
+                        <CheckCircle2 size={14} />
+                        {lang === "si" ? "මූලික විමර්ශනය අවසන්" : "Preliminary Investigation Complete"}
+                      </span>
+                    )}
                   </div>
 
                   <div style={{ fontSize: "12.5px", color: "#047857", fontWeight: 600 }}>
@@ -1078,173 +1220,158 @@ function RecommendationFormContent() {
 
               {/* Main Form */}
               <form onSubmit={handleSubmit}>
-                {/* Card 1: Recommendation Category & Summary */}
-                <section className="recommendation-form-card">
-                  <div className="section-header-pill">
-                    <Sparkles size={16} />
-                    <span>{lang === "si" ? "1. නිර්දේශ වර්ගීකරණය සහ ප්‍රමුඛතාව" : "1. Recommendation Classification & Priority"}</span>
+                {/* Card 1: Charge Sheet & Disciplinary Authority Details */}
+                <section className="recommendation-form-card charge-sheet-card">
+                  <div className="section-header-pill charge-sheet-pill">
+                    <FileCheck size={16} />
+                    <span>
+                      {lang === "si"
+                        ? "1. චෝදනා පත්‍රය සහ විනය බලධාරියා පිළිබඳ විස්තර"
+                        : lang === "ta"
+                        ? "1. குற்றப்பத்திரிகை மற்றும் ஒழுங்கு நடவடிக்கை அதிகார விவரங்கள்"
+                        : "1. Charge Sheet & Disciplinary Authority Details"}
+                    </span>
                   </div>
 
-                  <div className="form-grid-2">
-                    <div className="form-field-group">
-                      <label className="form-field-label">
-                        {lang === "si"
-                          ? "නිර්දේශ වර්ගය / කාණ්ඩය (Type / Category)"
-                          : "Type / Category of Recommendation"}
-                        <span className="required-asterisk">*</span>
-                      </label>
-                      <select
-                        value={recommendationCategory}
-                        onChange={(e) => setRecommendationCategory(e.target.value)}
-                        className="form-field-select"
-                        required
-                      >
-                        <option value="issuing_charge_sheet">
-                          {lang === "si" ? "චෝදනා පත්‍රයක් නිකුත් කිරීම (Issuing a charge sheet)" : "Issuing a charge sheet"}
-                        </option>
-                        <option value="action_based_on_court_verdict">
-                          {lang === "si" ? "අවසන් අධිකරණ තීන්දුව මත පදනම්ව ක්‍රියාමාර්ග ගැනීම" : "Action based on court verdict"}
-                        </option>
-                        <option value="giving_warnings_advice">
-                          {lang === "si" ? "අවවාද / උපදෙස් ලබා දීම (Giving warnings/advice)" : "Giving warnings/advice"}
-                        </option>
-                        <option value="transfers">
-                          {lang === "si" ? "ස්ථාන මාරු කිරීම් (Transfers)" : "Transfers"}
-                        </option>
-                        <option value="charging_based_on_more_104">
-                          {lang === "si" ? "MoRE 104 පරීක්ෂණය මත පදනම්ව චෝදනා ගොනු කිරීම" : "Charging based on MoRE 104"}
-                        </option>
-                        <option value="terminating_service">
-                          {lang === "si" ? "සේවය අවසන් කිරීම (Terminating service)" : "Terminating service"}
-                        </option>
-                        <option value="sending_recommendation_other_departments">
-                          {lang === "si" ? "නිර්දේශය වෙනත් දෙපාර්තමේන්තු වෙත යොමු කිරීම" : "Sending to other departments"}
-                        </option>
-                        <option value="closing_action_non_disclosure">
-                          {lang === "si" ? "කරුණු අනාවරණය නොවීම හේතුවෙන් අවසන් කිරීම" : "Closing (non-disclosure of facts)"}
-                        </option>
-                        <option value="other">
-                          {lang === "si" ? "වෙනත් විශේෂ නිර්දේශ (Other)" : "Other"}
-                        </option>
-                      </select>
-                    </div>
-
-                    <div className="form-field-group">
-                      <label className="form-field-label">
-                        {lang === "si" ? "ප්‍රමුඛතා මට්ටම" : "Urgency / Priority"}
-                      </label>
-                      <select
-                        value={recommendationUrgency}
-                        onChange={(e) => setRecommendationUrgency(e.target.value)}
-                        className="form-field-select"
-                      >
-                        <option value="high">{lang === "si" ? "🔴 ඉහළ / කඩිනම් (High / Urgent)" : "🔴 High / Urgent"}</option>
-                        <option value="normal">{lang === "si" ? "🟡 සාමාන්‍ය (Normal / Medium)" : "🟡 Normal / Medium"}</option>
-                        <option value="low">{lang === "si" ? "🟢 අඩු (Low)" : "🟢 Low"}</option>
-                      </select>
-                    </div>
-
-                    <div className="form-field-group">
-                      <label className="form-field-label">
-                        {lang === "si" ? "නඩුවේ තත්ත්වය (Case Status Update)" : "Case Status Update"}
-                      </label>
-                      <select
-                        value={recommendationStatus}
-                        onChange={(e) => setRecommendationStatus(e.target.value)}
-                        className="form-field-select"
-                      >
-                        <option value="Submitted">{lang === "si" ? "නිර්දේශය ඉදිරිපත් කරන ලදී (Recommendation Submitted)" : "Recommendation Submitted"}</option>
-                        <option value="Implementation of Recommendations">{lang === "si" ? "නිර්දේශ ක්‍රියාත්මක කිරීමේ අදියර (Implementation of Recommendations)" : "Implementation of Recommendations"}</option>
-                        <option value="Draft">{lang === "si" ? "කෙටුම්පතක් ලෙස පමණක් සුරකින්න (Draft)" : "Draft"}</option>
-                      </select>
-                    </div>
-
-                    <div className="form-field-group">
-                      <label className="form-field-label">
-                        {lang === "si" ? "ක්‍රියාත්මක කළ යුතු ඉලක්කගත දිනය" : "Target Implementation Date"}
-                      </label>
-                      <input
-                        type="date"
-                        value={targetDate}
-                        onChange={(e) => setTargetDate(e.target.value)}
-                        className="form-field-input"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Informative routing alert when 'issuing_charge_sheet' is selected */}
-                  {recommendationCategory === "issuing_charge_sheet" && (
-                    <div className="charge-sheet-routing-alert">
-                      <div className="charge-sheet-alert-icon">
-                        <ShieldAlert size={20} />
-                      </div>
-                      <div className="charge-sheet-alert-text">
-                        <strong>
-                          {lang === "si"
-                            ? "🛡️ මෙම නඩුව 'විධිමත් විනය පරීක්ෂණ (Proper Disciplinary Inspection)' අංශය වෙත ස්වයංක්‍රීයව යොමු කෙරේ"
-                            : lang === "ta"
-                            ? "🛡️ இந்த வழக்கு தானாகவே 'சரியான ஒழுங்கு நடவடிக்கை ஆய்வு (Proper Disciplinary Inspection)' பகுதிக்கு நகர்த்தப்படும்"
-                            : "🛡️ This case will automatically move to the 'Proper Disciplinary Inspection' workflow upon submission"}
-                        </strong>
-                        <p>
-                          {lang === "si"
-                            ? "නිර්දේශ වර්ගය ලෙස 'චෝදනා පත්‍රයක් නිකුත් කිරීම' තෝරාගෙන ඇති බැවින්, චෝදනා පත්‍ර විස්තර සහ ඉදිරි ක්‍රියාමාර්ග ආයතන සංග්‍රහය සහ රාජ්‍ය සේවා කොමිෂන් සභා නීතිරීති යටතේ විධිමත් විනය පරීක්ෂණ අංශයේ සටහන් වේ."
-                            : lang === "ta"
-                            ? "பரிந்துரை வகையாக 'குற்றப்பத்திரிகை வழங்குதல்' தேர்ந்தெடுக்கப்பட்டுள்ளதால், நிறுவனக் குறியீட்டின் கீழ் இந்த வழக்கு முறையான ஒழுங்கு நடவடிக்கை ஆய்வுக்கு நகர்த்தப்படும்."
-                            : "Selecting 'Issuing a charge sheet' transitions this case to formal disciplinary proceedings under the Establishment Code & PSC rules. Charge sheet parameters will be tracked in the Proper Disciplinary Inspection dossier."}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </section>
-
-                {/* Conditional Section: Charge Sheet & Disciplinary Order Details (Displayed ONLY when 'issuing a charge sheet' is selected) */}
-                {recommendationCategory === "issuing_charge_sheet" && (
-                  <section className="recommendation-form-card charge-sheet-card">
-                    <div className="section-header-pill charge-sheet-pill">
-                      <FileCheck size={16} />
-                      <span>
-                        {lang === "si"
-                          ? "චෝදනා පත්‍රය සහ විනය නියෝගය පිළිබඳ විස්තර"
-                          : lang === "ta"
-                          ? "குற்றப்பத்திரிகை மற்றும் ஒழுங்கு நடவடிக்கை உத்தரவு விவரங்கள்"
-                          : "Charge Sheet & Disciplinary Order Details"}
-                      </span>
-                    </div>
-
-                    <div className="form-grid-3">
-                      {/* 1. Issued charge sheet */}
+                    {/* (1) Issues charge sheet & (2) Disciplinary authority */}
+                    <div className="form-grid-2">
+                      {/* (1) Issues charge sheet */}
                       <div className="form-field-group">
                         <label className="form-field-label">
                           {lang === "si"
-                            ? "නිකුත් කරන ලද චෝදනා පත්‍රය (Issued charge sheet)"
+                            ? "(1) නිකුත් කරන ලද චෝදනා පත්‍රය (Issues charge sheet)"
                             : lang === "ta"
-                            ? "வழங்கப்பட்ட குற்றப்பத்திரிகை (Issued charge sheet)"
-                            : "Issued charge sheet"}
+                            ? "(1) வழங்கப்பட்ட குற்றப்பத்திரிகை (Issues charge sheet)"
+                            : "(1) Issues charge sheet"}
                           <span className="required-asterisk">*</span>
                         </label>
-                        <input
-                          type="text"
+                        <select
                           value={issuedChargeSheet}
                           onChange={(e) => setIssuedChargeSheet(e.target.value)}
-                          placeholder={
-                            lang === "si"
-                              ? "උදා: CS/2026/044 - මුදල් අක්‍රමිකතා චෝදනා පත්‍රය"
-                              : "e.g., Charge Sheet No. / Specific charges / Reference"
-                          }
-                          className="form-field-input"
+                          className="form-field-select"
                           required={recommendationCategory === "issuing_charge_sheet"}
-                        />
+                        >
+                          <option value="">
+                            {lang === "si"
+                              ? "-- උපලේඛනය තෝරන්න (Select Schedule) --"
+                              : lang === "ta"
+                              ? "-- அட்டவணையைத் தேர்ந்தெடுக்கவும் --"
+                              : "-- Select Schedule --"}
+                          </option>
+                          <option value="first_schedule">
+                            {lang === "si"
+                              ? "පළමු උපලේඛනය (First schedule)"
+                              : lang === "ta"
+                              ? "முதல் அட்டவணை (First schedule)"
+                              : "First schedule"}
+                          </option>
+                          <option value="second_schedule">
+                            {lang === "si"
+                              ? "දෙවන උපලේඛනය (Second schedule)"
+                              : lang === "ta"
+                              ? "இரண்டாம் அட்டவணை (Second schedule)"
+                              : "Second schedule"}
+                          </option>
+                          {issuedChargeSheet &&
+                            issuedChargeSheet !== "first_schedule" &&
+                            issuedChargeSheet !== "second_schedule" && (
+                              <option value={issuedChargeSheet}>{issuedChargeSheet}</option>
+                            )}
+                        </select>
                       </div>
 
-                      {/* 2. Date the charge sheet was issued */}
+                      {/* (2) Disciplinary authority */}
                       <div className="form-field-group">
                         <label className="form-field-label">
                           {lang === "si"
-                            ? "චෝදනා පත්‍රය නිකුත් කළ දිනය"
+                            ? "(2) විනය බලධාරියා (Disciplinary authority)"
                             : lang === "ta"
-                            ? "குற்றப்பத்திரிகை வழங்கப்பட்ட திகதி"
-                            : "Date the charge sheet was issued"}
+                            ? "(2) ஒழுங்கு நடவடிக்கை அதிகாரம் (Disciplinary authority)"
+                            : "(2) Disciplinary authority"}
+                          <span className="required-asterisk">*</span>
+                        </label>
+                        <select
+                          value={disciplinaryAuthority}
+                          onChange={(e) => setDisciplinaryAuthority(e.target.value)}
+                          className="form-field-select"
+                          required={recommendationCategory === "issuing_charge_sheet"}
+                        >
+                          <option value="secretary_of_education">
+                            {lang === "si"
+                              ? "අධ්‍යාපන ලේකම් (Secretary of education)"
+                              : lang === "ta"
+                              ? "கல்விச் செயலாளர் (Secretary of education)"
+                              : "Secretary of education"}
+                          </option>
+                          <option value="psc_esc">
+                            {lang === "si"
+                              ? "රාජ්‍ය සේවා කොමිෂන් සභාව / අධ්‍යාපන සේවා කමිටුව (PSC / ESC)"
+                              : lang === "ta"
+                              ? "பொதுச் சேவை ஆணைக்குழு / கல்விச் சேவைக் குழு (PSC / ESC)"
+                              : "PSC / ESC"}
+                          </option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* (3) Details of the accused officer */}
+                    <div className="accused-preview-card" style={{ marginTop: "12px", marginBottom: "18px" }}>
+                      <div className="accused-preview-title" style={{ fontSize: "12px", fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "8px", display: "flex", alignItems: "center", gap: "6px" }}>
+                        <User size={14} style={{ color: "#6366f1" }} />
+                        <span>
+                          {lang === "si"
+                            ? "(3) චෝදනා ලැබූ නිලධාරියාගේ විස්තර (Details of the accused officer)"
+                            : lang === "ta"
+                            ? "(3) குற்றம் சாட்டப்பட்ட அதிகாரியின் விவரங்கள் (Details of the accused officer)"
+                            : "(3) Details of the accused officer"}
+                        </span>
+                      </div>
+                      <div className="accused-preview-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "10px", padding: "12px 16px", backgroundColor: "#f8fafc", borderRadius: "10px", border: "1px solid #e2e8f0" }}>
+                        <div>
+                          <span style={{ fontSize: "11px", color: "#64748b", fontWeight: 600, display: "block" }}>
+                            {lang === "si" ? "නිලධාරියාගේ නම" : "Officer Name"}
+                          </span>
+                          <span style={{ fontSize: "13px", fontWeight: 700, color: "#1e293b" }}>
+                            {accusedName || "—"}
+                          </span>
+                        </div>
+                        <div>
+                          <span style={{ fontSize: "11px", color: "#64748b", fontWeight: 600, display: "block" }}>
+                            {lang === "si" ? "තනතුර" : "Designation / Position"}
+                          </span>
+                          <span style={{ fontSize: "13px", fontWeight: 600, color: "#334155" }}>
+                            {accusedDesignation || "—"}
+                          </span>
+                        </div>
+                        <div>
+                          <span style={{ fontSize: "11px", color: "#64748b", fontWeight: 600, display: "block" }}>
+                            {lang === "si" ? "පාසල / ආයතනය" : "School / Institution"}
+                          </span>
+                          <span style={{ fontSize: "13px", fontWeight: 600, color: "#334155" }}>
+                            {schoolName || "—"}
+                          </span>
+                        </div>
+                        <div>
+                          <span style={{ fontSize: "11px", color: "#64748b", fontWeight: 600, display: "block" }}>
+                            {lang === "si" ? "නඩු ලිපිගොනු අංකය" : "Case / File Ref No"}
+                          </span>
+                          <span style={{ fontSize: "13px", fontWeight: 700, color: "#4f46e5" }}>
+                            {caseNo || "—"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* (4) Date of the charge sheet issued & (5) Date of the request for document required to provide a response */}
+                    <div className="form-grid-2">
+                      {/* (4) Date of the charge sheet issued */}
+                      <div className="form-field-group">
+                        <label className="form-field-label">
+                          {lang === "si"
+                            ? "(4) චෝදනා පත්‍රය නිකුත් කළ දිනය (Date of the charge sheet issued)"
+                            : lang === "ta"
+                            ? "(4) குற்றப்பத்திரிகை வழங்கப்பட்ட திகதி (Date of the charge sheet issued)"
+                            : "(4) Date of the charge sheet issued"}
                           <span className="required-asterisk">*</span>
                         </label>
                         <input
@@ -1256,14 +1383,51 @@ function RecommendationFormContent() {
                         />
                       </div>
 
-                      {/* 3. Date the response to the charge sheet was given */}
+                      {/* (5) Date of the request for document required to provide a response */}
                       <div className="form-field-group">
                         <label className="form-field-label">
                           {lang === "si"
-                            ? "චෝදනා පත්‍රයට පිළිතුරු ලබා දුන් දිනය"
+                            ? "(5) පිළිතුරක් ලබා දීමට අවශ්‍ය ලිපි ලේඛන ඉල්ලා සිටි දිනය (Date of the request for document required to provide a response)"
                             : lang === "ta"
-                            ? "குற்றப்பத்திரிகைக்கு பதில் அளிக்கப்பட்ட திகதி"
-                            : "Date the response to the charge sheet was given"}
+                            ? "(5) பதில் அளிக்க தேவையான ஆவணங்களை கோரிய திகதி"
+                            : "(5) Date of the request for document required to provide a response"}
+                        </label>
+                        <input
+                          type="date"
+                          value={dateRequestDocuments}
+                          onChange={(e) => setDateRequestDocuments(e.target.value)}
+                          className="form-field-input"
+                        />
+                      </div>
+                    </div>
+
+                    {/* (6) Date of the submition of document & (7) Date of the response to the charge sheet was given */}
+                    <div className="form-grid-2">
+                      {/* (6) Date of the submition of document */}
+                      <div className="form-field-group">
+                        <label className="form-field-label">
+                          {lang === "si"
+                            ? "(6) ලිපි ලේඛන ඉදිරිපත් කළ දිනය (Date of the submition of document)"
+                            : lang === "ta"
+                            ? "(6) ஆவணங்கள் சமர்ப்பிக்கப்பட்ட திகதி (Date of the submition of document)"
+                            : "(6) Date of the submition of document"}
+                        </label>
+                        <input
+                          type="date"
+                          value={dateSubmissionDocuments}
+                          onChange={(e) => setDateSubmissionDocuments(e.target.value)}
+                          className="form-field-input"
+                        />
+                      </div>
+
+                      {/* (7) Date of the response to the charge sheet was given */}
+                      <div className="form-field-group">
+                        <label className="form-field-label">
+                          {lang === "si"
+                            ? "(7) චෝදනා පත්‍රයට පිළිතුරු ලබා දුන් දිනය (Date of the response to the charge sheet was given)"
+                            : lang === "ta"
+                            ? "(7) குற்றப்பத்திரிகைக்கு பதில் அளிக்கப்பட்ட திகதி"
+                            : "(7) Date of the response to the charge sheet was given"}
                         </label>
                         <input
                           type="date"
@@ -1274,310 +1438,279 @@ function RecommendationFormContent() {
                       </div>
                     </div>
 
-                    {/* 4. Disciplinary order */}
-                    <div className="form-field-group" style={{ marginTop: "14px" }}>
+                    {/* (8) Agree or disagree with the answers ? (Hidden when Disciplinary Authority is PSC / ESC) */}
+                    {disciplinaryAuthority !== "psc_esc" && (
+                      <div className="form-field-group" style={{ marginTop: "4px", marginBottom: "18px" }}>
+                        <label className="form-field-label">
+                          {lang === "si"
+                            ? "(8) පිළිතුරු සමඟ එකඟ වන්නේද නැද්ද? (Agree or disagree with the answers ?)"
+                            : lang === "ta"
+                            ? "(8) பதில்களுடன் உடன்படுகிறீர்களா அல்லது உடன்படவில்லையா? (Agree or disagree with the answers ?)"
+                            : "(8) Agree or disagree with the answers ?"}
+                        </label>
+                        <div style={{ display: "flex", gap: "20px", marginTop: "8px", alignItems: "center" }}>
+                          <label style={{ display: "inline-flex", alignItems: "center", gap: "6px", cursor: "pointer", fontWeight: 600, fontSize: "14px", color: agreeWithAnswers === "yes" ? "#15803d" : "#475569" }}>
+                            <input
+                              type="radio"
+                              name="agreeWithAnswers"
+                              value="yes"
+                              checked={agreeWithAnswers === "yes"}
+                              onChange={() => setAgreeWithAnswers("yes")}
+                              style={{ width: "16px", height: "16px", accentColor: "#16a34a" }}
+                            />
+                            <span>{lang === "si" ? "ඔව් (Yes)" : lang === "ta" ? "ஆம் (Yes)" : "Yes"}</span>
+                          </label>
+                          <label style={{ display: "inline-flex", alignItems: "center", gap: "6px", cursor: "pointer", fontWeight: 600, fontSize: "14px", color: agreeWithAnswers === "no" ? "#b91c1c" : "#475569" }}>
+                            <input
+                              type="radio"
+                              name="agreeWithAnswers"
+                              value="no"
+                              checked={agreeWithAnswers === "no"}
+                              onChange={() => setAgreeWithAnswers("no")}
+                              style={{ width: "16px", height: "16px", accentColor: "#dc2626" }}
+                            />
+                            <span>{lang === "si" ? "නැත (No)" : lang === "ta" ? "இல்லை (No)" : "No"}</span>
+                          </label>
+                        </div>
+                        {agreeWithAnswers === "yes" && (
+                          <div style={{ marginTop: "10px", padding: "10px 14px", backgroundColor: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: "8px", color: "#065f46", fontSize: "13px", display: "inline-flex", alignItems: "center", gap: "8px", fontWeight: 600 }}>
+                            <CheckCircle2 size={16} style={{ color: "#059669" }} />
+                            <span>{lang === "si" ? "පිළිතුරු සමඟ එකඟයි — ලිපි තත්ත්වය: අවසන් (Letter Status: Closed)" : "Agreed with answers — Letter Status: Closed"}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Conditional Section: If selected Disciplinary authority as PSC / ESC */}
+                    {disciplinaryAuthority === "psc_esc" && (
+                      <div style={{ marginTop: "8px", marginBottom: "18px", padding: "18px 20px", borderRadius: "14px", border: "2px dashed #818cf8", backgroundColor: "#f5f7ff" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "14px" }}>
+                          <span style={{ backgroundColor: "#e0e7ff", color: "#3730a3", fontSize: "12px", fontWeight: 700, padding: "4px 12px", borderRadius: "9999px" }}>
+                            {lang === "si"
+                              ? "විනය බලධාරියා PSC / ESC ලෙස තෝරාගෙන ඇති විට (If selected Disciplinary authority as PSC / ESC)"
+                              : "If selected Disciplinary authority as PSC / ESC"}
+                          </span>
+                        </div>
+
+                        <div className="form-grid-2">
+                          {/* Date draft was submitted to the PSC / ESC */}
+                          <div className="form-field-group">
+                            <label className="form-field-label">
+                              {lang === "si"
+                                ? "කෙටුම්පත PSC / ESC වෙත ඉදිරිපත් කළ දිනය (Date draft was submitted to the PSC / ESC)"
+                                : lang === "ta"
+                                ? "வரைவு PSC / ESC க்கு சமர்ப்பிக்கப்பட்ட திகதி"
+                                : "Date draft was submitted to the PSC / ESC"}
+                            </label>
+                            <input
+                              type="date"
+                              value={dateDraftSubmittedPsc}
+                              onChange={(e) => setDateDraftSubmittedPsc(e.target.value)}
+                              className="form-field-input"
+                            />
+                          </div>
+
+                          {/* Agree or disagree with the decision made by the PSC / ESC ? */}
+                          <div className="form-field-group">
+                            <label className="form-field-label">
+                              {lang === "si"
+                                ? "PSC / ESC විසින් ගන්නා ලද තීරණය සමඟ එකඟ වන්නේද නැද්ද? (Agree or disagree with the decision made by the PSC / ESC ?)"
+                                : lang === "ta"
+                                ? "PSC / ESC எடுத்த முடிவை ஏற்றுக்கொள்கிறீர்களா அல்லது உடன்படவில்ලையா?"
+                                : "Agree or disagree with the decision made by the PSC / ESC ?"}
+                            </label>
+                            <div style={{ display: "flex", gap: "20px", marginTop: "8px", alignItems: "center" }}>
+                              <label style={{ display: "inline-flex", alignItems: "center", gap: "6px", cursor: "pointer", fontWeight: 600, fontSize: "14px", color: agreeWithPscDecision === "yes" ? "#15803d" : "#475569" }}>
+                                <input
+                                  type="radio"
+                                  name="agreeWithPscDecision"
+                                  value="yes"
+                                  checked={agreeWithPscDecision === "yes"}
+                                  onChange={() => setAgreeWithPscDecision("yes")}
+                                  style={{ width: "16px", height: "16px", accentColor: "#16a34a" }}
+                                />
+                                <span>{lang === "si" ? "ඔව් (Yes)" : lang === "ta" ? "ஆம் (Yes)" : "Yes"}</span>
+                              </label>
+                              <label style={{ display: "inline-flex", alignItems: "center", gap: "6px", cursor: "pointer", fontWeight: 600, fontSize: "14px", color: agreeWithPscDecision === "no" ? "#b91c1c" : "#475569" }}>
+                                <input
+                                  type="radio"
+                                  name="agreeWithPscDecision"
+                                  value="no"
+                                  checked={agreeWithPscDecision === "no"}
+                                  onChange={() => setAgreeWithPscDecision("no")}
+                                  style={{ width: "16px", height: "16px", accentColor: "#dc2626" }}
+                                />
+                                <span>{lang === "si" ? "නැත (No)" : lang === "ta" ? "இல்லை (No)" : "No"}</span>
+                              </label>
+                            </div>
+                            {agreeWithPscDecision === "yes" && (
+                              <div style={{ marginTop: "10px", padding: "10px 14px", backgroundColor: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: "8px", color: "#065f46", fontSize: "13px", display: "inline-flex", alignItems: "center", gap: "8px", fontWeight: 600 }}>
+                                <CheckCircle2 size={16} style={{ color: "#059669" }} />
+                                <span>{lang === "si" ? "PSC / ESC තීරණය සමඟ එකඟයි — ලිපි තත්ත්වය: අවසන් (Letter Status: Closed)" : "Agreed with PSC / ESC decision — Letter Status: Closed"}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                  </section>
+
+                {/* Card 2: Secretary of Education Approval Details (Displayed only when answer is 'yes') */}
+                {isDecisionApproved && (
+                  <section className="recommendation-form-card secretary-approval-card">
+                    <div className="section-header-pill secretary-approval-pill">
+                      <UserCheck size={16} />
+                      <span>
+                        {lang === "si"
+                          ? "2. අධ්‍යාපන ලේකම්ගේ අනුමැතිය සහ නියෝග"
+                          : lang === "ta"
+                          ? "2. கல்விச் செயலாளரின் ஒப்புதல் மற்றும் உத்தரவு"
+                          : "2. Secretary of Education Approval & Directive"}
+                      </span>
+                    </div>
+
+                    <div className="form-grid-2">
+                      {/* Date approved by the Secretary of Education */}
+                      <div className="form-field-group">
+                        <label className="form-field-label">
+                          {lang === "si"
+                            ? "අධ්‍යාපන ලේකම් අනුමත කළ දිනය (Date approved by the Secretary of Education)"
+                            : lang === "ta"
+                            ? "கல்விச் செயலாளரால் அங்கீகரிக்கப்பட்ட திகதி (Date approved by the Secretary of Education)"
+                            : "Date approved by the Secretary of Education"}
+                        </label>
+                        <input
+                          type="date"
+                          value={secretaryApprovalDate}
+                          onChange={(e) => setSecretaryApprovalDate(e.target.value)}
+                          className="form-field-input"
+                        />
+                      </div>
+
+                      {/* Secretary Approval Quick Indicator */}
+                      <div className="form-field-group">
+                        <label className="form-field-label">
+                          {lang === "si" ? "අනුමැතියේ තත්ත්වය" : "Secretary Approval Status"}
+                        </label>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", minHeight: "42px" }}>
+                          {secretaryApprovalDate ? (
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12.5px", fontWeight: 700, color: "#92400e", backgroundColor: "#fef3c7", padding: "6px 14px", borderRadius: "8px", border: "1px solid #fde68a" }}>
+                              <CheckCircle2 size={15} style={{ color: "#d97706" }} />
+                              {lang === "si" ? `අධ්‍යාපන ලේකම් විසින් ${secretaryApprovalDate} දින අනුමතයි` : `Approved by Secretary on ${secretaryApprovalDate}`}
+                            </span>
+                          ) : (
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "#64748b", backgroundColor: "#f1f5f9", padding: "6px 12px", borderRadius: "8px" }}>
+                              <Clock size={14} />
+                              {lang === "si" ? "අධ්‍යාපන ලේකම්ගේ අනුමැතිය අපේක්ෂිතයි" : "Awaiting Secretary of Education approval"}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Recommendation approved by the Secretary of Education */}
+                    <div className="form-field-group" style={{ marginTop: "12px" }}>
                       <label className="form-field-label">
                         {lang === "si"
-                          ? "විනය නියෝගය (Disciplinary order)"
+                          ? "අධ්‍යාපන ලේකම් අනුමත කළ නිර්දේශය (Recommendation approved by the Secretary of Education)"
                           : lang === "ta"
-                          ? "ஒழுங்கு நடவடிக்கை உத்தரவு (Disciplinary order)"
-                          : "Disciplinary order"}
+                          ? "கல்விச் செயலாளரால் அங்கீகரிக்கப்பட்ட பரிந்துரை (Recommendation approved by the Secretary of Education)"
+                          : "Recommendation approved by the Secretary of Education"}
                       </label>
-                      <input
-                        type="text"
-                        value={disciplinaryOrder}
-                        onChange={(e) => setDisciplinaryOrder(e.target.value)}
+                      <textarea
+                        value={secretaryApprovedRecommendation}
+                        onChange={(e) => setSecretaryApprovedRecommendation(e.target.value)}
+                        rows={3}
                         placeholder={
                           lang === "si"
-                            ? "උදා: විධිමත් විනය පරීක්ෂණයක් පැවැත්වීමට නියෝග කිරීම / වැඩ තහනම් කිරීම"
-                            : "e.g., Disciplinary inquiry ordered / Interdiction / Formal order details"
+                            ? "අධ්‍යාපන අමාත්‍යාංශ ලේකම්වරයා විසින් අනුමත කරන ලද නිල නිර්දේශය, තීරණය හෝ විනය නියෝගය මෙහි සටහන් කරන්න..."
+                            : lang === "ta"
+                            ? "கல்விச் செயலாளரால் அங்கீகரிக்கப்பட்ட பரிந்துரை அல்லது உத்தரவை இங்கு உள்ளிடவும்..."
+                            : "Enter the formal recommendation, directive, or disciplinary order approved and signed by the Secretary of Education..."
                         }
-                        className="form-field-input"
+                        className="form-field-textarea"
+                        style={{ minHeight: "85px" }}
                       />
+
+                      {/* Quick presets for Secretary Approved Recommendation */}
+                      <div className="presets-container" style={{ marginTop: "8px" }}>
+                        <span style={{ fontSize: "12px", color: "#64748b", fontWeight: 600, alignSelf: "center" }}>
+                          {lang === "si" ? "ඉක්මන් ආකෘති:" : "Quick Presets:"}
+                        </span>
+                        <button
+                          type="button"
+                          className="preset-chip"
+                          onClick={() =>
+                            setSecretaryApprovedRecommendation(
+                              lang === "si"
+                                ? "මූලික විමර්ශන නිර්දේශය අධ්‍යාපන අමාත්‍යාංශ ලේකම් විසින් එලෙසම අනුමත කරන ලදී."
+                                : "Approved as recommended by the preliminary investigation committee."
+                            )
+                          }
+                        >
+                          + {lang === "si" ? "නිර්දේශය එලෙසම අනුමතයි" : "Approved as Recommended"}
+                        </button>
+                        <button
+                          type="button"
+                          className="preset-chip"
+                          onClick={() =>
+                            setSecretaryApprovedRecommendation(
+                              lang === "si"
+                                ? "අදාළ නිලධාරියා වෙත චෝදනා පත්‍රයක් නිකුත් කර විධිමත් විනය පරීක්ෂණයක් පැවැත්වීමට අධ්‍යාපන ලේකම් විසින් අනුමත කරන ලදී."
+                                : "Approved issuance of formal charge sheet and formal disciplinary inquiry."
+                            )
+                          }
+                        >
+                          + {lang === "si" ? "චෝදනා පත්‍ර නිකුත් කිරීමට අනුමැතිය" : "Approve Charge Sheet"}
+                        </button>
+                        <button
+                          type="button"
+                          className="preset-chip"
+                          onClick={() =>
+                            setSecretaryApprovedRecommendation(
+                              lang === "si"
+                                ? "නිලධාරියා වෙත දැඩි ලිඛිත අවවාදයක් නිකුත් කර විනය ගොනුව අවසන් කිරීමට අධ්‍යාපන ලේකම් අනුමැතිය ලබා දෙන ලදී."
+                                : "Approved issuance of severe written warning and closure of disciplinary file."
+                            )
+                          }
+                        >
+                          + {lang === "si" ? "අවවාද කර ගොනුව අවසන් කිරීමට අනුමැතිය" : "Approve Warning & Close"}
+                        </button>
+                        <button
+                          type="button"
+                          className="preset-chip"
+                          onClick={() =>
+                            setSecretaryApprovedRecommendation(
+                              lang === "si"
+                                ? "පරිපාලන අවශ්‍යතාවය මත නිලධාරියා වහාම වෙනත් සේවා ස්ථානයකට මාරු කිරීමට අධ්‍යාපන ලේකම් අනුමැතිය ලබා දෙන ලදී."
+                                : "Approved administrative transfer of the officer with immediate effect."
+                            )
+                          }
+                        >
+                          + {lang === "si" ? "ස්ථාන මාරුව අනුමතයි" : "Approve Transfer"}
+                        </button>
+                      </div>
                     </div>
                   </section>
                 )}
 
-                {/* Card 2: Detailed Findings & Recommendation */}
-                <section className="recommendation-form-card">
-                  <div className="section-header-pill">
-                    <FileText size={16} />
-                    <span>{lang === "si" ? "2. විස්තරාත්මක නිර්දේශ සහ නිරීක්ෂණ" : "2. Detailed Recommendation & Findings"}</span>
-                  </div>
+                {/* Form Submission Action Buttons */}
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", marginTop: "20px", padding: "16px 20px", backgroundColor: "#ffffff", borderRadius: "12px", border: "1px solid #e2e8f0", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                  <button type="button" onClick={() => setViewMode("list")} className="btn-back-gray">
+                    {lang === "si" ? "ලැයිස්තුවට යන්න" : "View List"}
+                  </button>
 
-                  <div className="form-field-group">
-                    <label className="form-field-label">
-                      {lang === "si" ? "මූලික විමර්ශන වාර්තාව මත පදනම් වූ විස්තරාත්මක නිර්දේශය" : "Detailed Recommendation Text based on Preliminary Investigation Report"}
-                      <span className="required-asterisk">*</span>
-                    </label>
-                    <textarea
-                      value={recommendationText}
-                      onChange={(e) => setRecommendationText(e.target.value)}
-                      rows={6}
-                      placeholder={
-                        lang === "si"
-                          ? "මූලික විමර්ශන කමිටු වාර්තාවේ කරුණු, සාක්ෂි හා නිරීක්ෂණ සැලකිල්ලට ගෙන විෂය භාර නිලධාරී ලෙස ඔබගේ සම්පූර්ණ නිර්දේශය මෙහි සටහන් කරන්න..."
-                          : "State detailed findings, conclusions of the preliminary inquiry committee, and exact recommendations to be executed..."
-                      }
-                      className="form-field-textarea"
-                      required
-                    />
+                  <button type="button" onClick={handleSaveDraft} disabled={isSaving} className="btn-save-draft">
+                    <Save size={16} />
+                    <span>{lang === "si" ? "කෙටුම්පත සුරකින්න" : "Save Draft"}</span>
+                  </button>
 
-                    {/* Quick action presets */}
-                    <div className="presets-container">
-                      <span style={{ fontSize: "12px", color: "#64748b", fontWeight: 600, alignSelf: "center" }}>
-                        {lang === "si" ? "ඉක්මන් ආකෘති:" : "Quick Presets:"}
-                      </span>
-                      <button
-                        type="button"
-                        className="preset-chip"
-                        onClick={() =>
-                          handleApplyPreset(
-                            lang === "si"
-                              ? "මූලික විමර්ශන වාර්තාවේ සාක්ෂි අනුව අදාළ නිලධාරියාට විධිමත් චෝදනා පත්‍රයක් නිකුත් කිරීමට නිර්දේශ කරමි."
-                              : "Evidence indicates prima facie misconduct; recommend issuing a formal charge sheet under the Establishment Code."
-                          )
-                        }
-                      >
-                        + {lang === "si" ? "චෝදනා පත්‍රයක් නිකුත් කිරීම" : "Issuing a Charge Sheet"}
-                      </button>
-                      <button
-                        type="button"
-                        className="preset-chip"
-                        onClick={() =>
-                          handleApplyPreset(
-                            lang === "si"
-                              ? "අදාළ අඩුපාඩු නිවැරදි කරගැනීමට නිලධාරියා වෙත ලිඛිත අවවාද සහ උපදෙස් ලබා දීමට නිර්දේශ කරමි."
-                              : "Recommend issuing formal written warnings and administrative advice to the officer."
-                          )
-                        }
-                      >
-                        + {lang === "si" ? "අවවාද / උපදෙස් ලබා දීම" : "Warnings / Advice"}
-                      </button>
-                      <button
-                        type="button"
-                        className="preset-chip"
-                        onClick={() =>
-                          handleApplyPreset(
-                            lang === "si"
-                              ? "පරීක්ෂණයේ සාධාරණත්වය හා ආයතනික අවශ්‍යතාවය මත නිලධාරියා වහාම වෙනත් සේවා ස්ථානයකට මාරු කිරීමට නිර්දේශ කරමි."
-                              : "Recommend administrative transfer of the officer with immediate effect."
-                          )
-                        }
-                      >
-                        + {lang === "si" ? "ස්ථාන මාරු කිරීම" : "Transfers"}
-                      </button>
-                      <button
-                        type="button"
-                        className="preset-chip"
-                        onClick={() =>
-                          handleApplyPreset(
-                            lang === "si"
-                              ? "MoRE 104 විමර්ශන වාර්තාවේ නිරීක්ෂණ මත පදනම්ව චෝදනා ගොනු කිරීමට නිර්දේශ කරමි."
-                              : "Recommend filing charges based on the findings of MoRE 104 investigation."
-                          )
-                        }
-                      >
-                        + {lang === "si" ? "MoRE 104 පරීක්ෂණය මත චෝදනා" : "MoRE 104 Charging"}
-                      </button>
-                      <button
-                        type="button"
-                        className="preset-chip"
-                        onClick={() =>
-                          handleApplyPreset(
-                            lang === "si"
-                              ? "පරීක්ෂණයේදී කරුණු අනාවරණය නොවීම හේතුවෙන් මෙම නඩුවේ ක්‍රියාමාර්ගය අවසන් කිරීමට නිර්දේශ කරමි."
-                              : "Allegations remain unsubstantiated due to non-disclosure of facts; recommend closing the action."
-                          )
-                        }
-                      >
-                        + {lang === "si" ? "කරුණු අනාවරණය නොවීම මත අවසන් කිරීම" : "Close (Non-disclosure)"}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="form-grid-2" style={{ marginTop: "20px" }}>
-                    <div className="form-field-group">
-                      <label className="form-field-label">
-                        {lang === "si" ? "ආයතන සංග්‍රහය / චක්‍රලේඛ අදාළ වගන්ති" : "Establishment Code / Circular Reference"}
-                      </label>
-                      <input
-                        type="text"
-                        value={disciplinaryAction}
-                        onChange={(e) => setDisciplinaryAction(e.target.value)}
-                        placeholder={lang === "si" ? "උදා: ආයතන සංග්‍රහයේ II කාණ්ඩයේ XLVIII පරිච්ඡේදය" : "e.g., Chapter XLVIII of Establishment Code / Ministry Circular No. 2024/08"}
-                        className="form-field-input"
-                      />
-                    </div>
-
-                    <div className="form-field-group">
-                      <label className="form-field-label">
-                        {lang === "si" ? "අදාළ ලේඛන / ලිපි ගොනු යොමු අංක" : "Supporting Documents / Minute Ref"}
-                      </label>
-                      <input
-                        type="text"
-                        value={referenceNotes}
-                        onChange={(e) => setReferenceNotes(e.target.value)}
-                        placeholder={lang === "si" ? "උදා: ED/DISC/2026/044 අංක දරන ලිපිගොනුව" : "e.g., Doc Ref: ED/DISC/2026/044"}
-                        className="form-field-input"
-                      />
-                    </div>
-                  </div>
-                </section>
-
-                {/* Card 3: Secretary of Education Approval Details */}
-                <section className="recommendation-form-card secretary-approval-card">
-                  <div className="section-header-pill secretary-approval-pill">
-                    <UserCheck size={16} />
-                    <span>
-                      {lang === "si"
-                        ? "3. අධ්‍යාපන ලේකම්ගේ අනුමැතිය සහ නියෝග"
-                        : lang === "ta"
-                        ? "3. கல்விச் செயலாளரின் ஒப்புதல் மற்றும் உத்தரவு"
-                        : "3. Secretary of Education Approval & Directive"}
-                    </span>
-                  </div>
-
-                  <div className="form-grid-2">
-                    {/* Date approved by the Secretary of Education */}
-                    <div className="form-field-group">
-                      <label className="form-field-label">
-                        {lang === "si"
-                          ? "අධ්‍යාපන ලේකම් අනුමත කළ දිනය (Date approved by the Secretary of Education)"
-                          : lang === "ta"
-                          ? "கல்விச் செயலாளரால் அங்கீகரிக்கப்பட்ட திகதி (Date approved by the Secretary of Education)"
-                          : "Date approved by the Secretary of Education"}
-                      </label>
-                      <input
-                        type="date"
-                        value={secretaryApprovalDate}
-                        onChange={(e) => setSecretaryApprovalDate(e.target.value)}
-                        className="form-field-input"
-                      />
-                    </div>
-
-                    {/* Secretary Approval Quick Indicator */}
-                    <div className="form-field-group">
-                      <label className="form-field-label">
-                        {lang === "si" ? "අනුමැතියේ තත්ත්වය" : "Secretary Approval Status"}
-                      </label>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", minHeight: "42px" }}>
-                        {secretaryApprovalDate ? (
-                          <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12.5px", fontWeight: 700, color: "#92400e", backgroundColor: "#fef3c7", padding: "6px 14px", borderRadius: "8px", border: "1px solid #fde68a" }}>
-                            <CheckCircle2 size={15} style={{ color: "#d97706" }} />
-                            {lang === "si" ? `අධ්‍යාපන ලේකම් විසින් ${secretaryApprovalDate} දින අනුමතයි` : `Approved by Secretary on ${secretaryApprovalDate}`}
-                          </span>
-                        ) : (
-                          <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "#64748b", backgroundColor: "#f1f5f9", padding: "6px 12px", borderRadius: "8px" }}>
-                            <Clock size={14} />
-                            {lang === "si" ? "අධ්‍යාපන ලේකම්ගේ අනුමැතිය අපේක්ෂිතයි" : "Awaiting Secretary of Education approval"}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Recommendation approved by the Secretary of Education */}
-                  <div className="form-field-group" style={{ marginTop: "12px" }}>
-                    <label className="form-field-label">
-                      {lang === "si"
-                        ? "අධ්‍යාපන ලේකම් අනුමත කළ නිර්දේශය (Recommendation approved by the Secretary of Education)"
-                        : lang === "ta"
-                        ? "கல்விச் செயலாளரால் அங்கீகரிக்கப்பட்ட பரிந்துரை (Recommendation approved by the Secretary of Education)"
-                        : "Recommendation approved by the Secretary of Education"}
-                    </label>
-                    <textarea
-                      value={secretaryApprovedRecommendation}
-                      onChange={(e) => setSecretaryApprovedRecommendation(e.target.value)}
-                      rows={3}
-                      placeholder={
-                        lang === "si"
-                          ? "අධ්‍යාපන අමාත්‍යාංශ ලේකම්වරයා විසින් අනුමත කරන ලද නිල නිර්දේශය, තීරණය හෝ විනය නියෝගය මෙහි සටහන් කරන්න..."
-                          : lang === "ta"
-                          ? "கல்விச் செயலாளரால் அங்கீகரிக்கப்பட்ட பரிந்துரை அல்லது உத்தரவை இங்கு உள்ளிடவும்..."
-                          : "Enter the formal recommendation, directive, or disciplinary order approved and signed by the Secretary of Education..."
-                      }
-                      className="form-field-textarea"
-                      style={{ minHeight: "85px" }}
-                    />
-
-                    {/* Quick presets for Secretary Approved Recommendation */}
-                    <div className="presets-container" style={{ marginTop: "8px" }}>
-                      <span style={{ fontSize: "12px", color: "#64748b", fontWeight: 600, alignSelf: "center" }}>
-                        {lang === "si" ? "ඉක්මන් ආකෘති:" : "Quick Presets:"}
-                      </span>
-                      <button
-                        type="button"
-                        className="preset-chip"
-                        onClick={() =>
-                          setSecretaryApprovedRecommendation(
-                            lang === "si"
-                              ? "මූලික විමර්ශන නිර්දේශය අධ්‍යාපන අමාත්‍යාංශ ලේකම් විසින් එලෙසම අනුමත කරන ලදී."
-                              : "Approved as recommended by the preliminary investigation committee."
-                          )
-                        }
-                      >
-                        + {lang === "si" ? "නිර්දේශය එලෙසම අනුමතයි" : "Approved as Recommended"}
-                      </button>
-                      <button
-                        type="button"
-                        className="preset-chip"
-                        onClick={() =>
-                          setSecretaryApprovedRecommendation(
-                            lang === "si"
-                              ? "අදාළ නිලධාරියා වෙත චෝදනා පත්‍රයක් නිකුත් කර විධිමත් විනය පරීක්ෂණයක් පැවැත්වීමට අධ්‍යාපන ලේකම් විසින් අනුමත කරන ලදී."
-                              : "Approved issuance of formal charge sheet and formal disciplinary inquiry."
-                          )
-                        }
-                      >
-                        + {lang === "si" ? "චෝදනා පත්‍ර නිකුත් කිරීමට අනුමැතිය" : "Approve Charge Sheet"}
-                      </button>
-                      <button
-                        type="button"
-                        className="preset-chip"
-                        onClick={() =>
-                          setSecretaryApprovedRecommendation(
-                            lang === "si"
-                              ? "නිලධාරියා වෙත දැඩි ලිඛිත අවවාදයක් නිකුත් කර විනය ගොනුව අවසන් කිරීමට අධ්‍යාපන ලේකම් අනුමැතිය ලබා දෙන ලදී."
-                              : "Approved issuance of severe written warning and closure of disciplinary file."
-                          )
-                        }
-                      >
-                        + {lang === "si" ? "අවවාද කර ගොනුව අවසන් කිරීමට අනුමැතිය" : "Approve Warning & Close"}
-                      </button>
-                      <button
-                        type="button"
-                        className="preset-chip"
-                        onClick={() =>
-                          setSecretaryApprovedRecommendation(
-                            lang === "si"
-                              ? "පරිපාලන අවශ්‍යතාවය මත නිලධාරියා වහාම වෙනත් සේවා ස්ථානයකට මාරු කිරීමට අධ්‍යාපන ලේකම් අනුමැතිය ලබා දෙන ලදී."
-                              : "Approved administrative transfer of the officer with immediate effect."
-                          )
-                        }
-                      >
-                        + {lang === "si" ? "ස්ථාන මාරුව අනුමතයි" : "Approve Transfer"}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Form Submission Action Buttons */}
-                  <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", marginTop: "24px", paddingTop: "16px", borderTop: "1px solid #fde68a" }}>
-                    <button type="button" onClick={() => setViewMode("list")} className="btn-back-gray">
-                      {lang === "si" ? "ලැයිස්තුවට යන්න" : "View List"}
-                    </button>
-
-                    <button type="button" onClick={handleSaveDraft} disabled={isSaving} className="btn-save-draft">
-                      <Save size={16} />
-                      <span>{lang === "si" ? "කෙටුම්පත සුරකින්න" : "Save Draft"}</span>
-                    </button>
-
-                    <button type="submit" disabled={isSaving} className="btn-submit-recommendation">
-                      <Send size={16} />
-                      <span>{lang === "si" ? "නිර්දේශය ඉදිරිපත් කරන්න" : "Submit Recommendation"}</span>
-                    </button>
-                  </div>
-                </section>
+                  <button type="submit" disabled={isSaving} className="btn-submit-recommendation">
+                    <Send size={16} />
+                    <span>{lang === "si" ? "චෝදනා පත්‍රය ඉදිරිපත් කරන්න" : "Submit Charge Sheet"}</span>
+                  </button>
+                </div>
               </form>
             </>
           )}
@@ -1757,6 +1890,7 @@ function RecommendationFormContent() {
                       <option value="Draft">{lang === "si" ? "📝 කෙටුම්පත් (Draft)" : "📝 Draft"}</option>
                       <option value="Submitted">{lang === "si" ? "✈️ යොමු කළා (Submitted)" : "✈️ Submitted"}</option>
                       <option value="Approved">{lang === "si" ? "✓ අනුමතයි (Approved)" : "✓ Approved"}</option>
+                      <option value="Closed">{lang === "si" ? "🔒 අවසන් කළ ලිපි (Closed)" : "🔒 Closed"}</option>
                     </select>
                   </div>
 
@@ -1796,7 +1930,7 @@ function RecommendationFormContent() {
                   <tbody>
                     {filteredRecommendations.length > 0 ? (
                       filteredRecommendations.map((item, idx) => {
-                        const isAwaiting = item.status === "Awaiting Recommendation" || !item.recommendationText;
+                        const isAwaiting = item.status === "Awaiting Recommendation" || (!item.category && !item.recommendationText);
                         const isDraft = item.status === "Draft";
                         const isApproved = item.status === "Approved";
                         const isSubmitted = item.status === "Submitted" || item.status === "Implementation of Recommendations";
@@ -1844,12 +1978,13 @@ function RecommendationFormContent() {
                                       </span>
                                       {item.category === "issuing_charge_sheet" && (
                                         <Link
-                                          href={`/subject?tab=disciplinary_inspection&caseNo=${encodeURIComponent(item.caseNo)}`}
+                                          href={`/subject?tab=issuing_charge_sheet&caseNo=${encodeURIComponent(item.caseNo)}`}
                                           className="badge-proper-inspection"
-                                          title="View in Proper Disciplinary Inspection"
+                                          style={{ backgroundColor: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" }}
+                                          title="View in Issuing Charge Sheet"
                                         >
-                                          <ShieldAlert size={11} />
-                                          <span>{lang === "si" ? "විධිමත් විනය පරීක්ෂණ" : "Proper Inspection"}</span>
+                                          <FileCheck size={11} />
+                                          <span>{lang === "si" ? "චෝදනා පත්‍ර නිකුත් කිරීම" : "Charge Sheet"}</span>
                                         </Link>
                                       )}
                                     </div>
@@ -1879,6 +2014,10 @@ function RecommendationFormContent() {
                               {isAwaiting ? (
                                 <span style={{ fontSize: "11px", fontWeight: 700, color: "#b91c1c", backgroundColor: "#fee2e2", padding: "3px 10px", borderRadius: "12px", border: "1px solid #fecaca", display: "inline-flex", alignItems: "center", gap: "4px" }}>
                                   ⚡ {lang === "si" ? "අපේක්ෂිතයි" : "Action Required"}
+                                </span>
+                              ) : (item.status === "Closed" || item.agreeWithAnswers === "yes" || item.agreeWithPscDecision === "yes") ? (
+                                <span className="badge-status-submitted-rec" style={{ backgroundColor: "#ecfdf5", color: "#166534", borderColor: "#86efac", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                  <CheckCircle2 size={12} style={{ color: "#16a34a" }} /> {lang === "si" ? "ලිපිය අවසන් (Closed)" : "Closed"}
                                 </span>
                               ) : isDraft ? (
                                 <span className="badge-status-draft-rec">
@@ -1946,12 +2085,13 @@ function RecommendationFormContent() {
                                     </button>
                                     {item.category === "issuing_charge_sheet" && (
                                       <Link
-                                        href={`/subject?tab=disciplinary_inspection&caseNo=${encodeURIComponent(item.caseNo)}`}
+                                        href={`/subject?tab=issuing_charge_sheet&caseNo=${encodeURIComponent(item.caseNo)}`}
                                         className="btn-view-inspection"
-                                        title="Open Proper Disciplinary Inspection Dossier"
+                                        style={{ backgroundColor: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" }}
+                                        title="Open Issuing Charge Sheet Dossier"
                                       >
-                                        <ShieldAlert size={12} />
-                                        <span>{lang === "si" ? "විනය පරීක්ෂණ" : "Inspection"}</span>
+                                        <FileCheck size={12} />
+                                        <span>{lang === "si" ? "චෝදනා පත්‍ර" : "Charge Sheet"}</span>
                                       </Link>
                                     )}
                                     <button
@@ -2061,28 +2201,94 @@ function RecommendationFormContent() {
                     </div>
                   </div>
 
-                  {/* Charge Sheet & Disciplinary Order Details (If present) */}
-                  {(selectedRecModal.issuedChargeSheet || selectedRecModal.chargeSheetIssuedDate || selectedRecModal.chargeSheetResponseDate || selectedRecModal.disciplinaryOrder) && (
+                  {/* Charge Sheet & Disciplinary Authority Details (If present) */}
+                  {(selectedRecModal.issuedChargeSheet || selectedRecModal.disciplinaryAuthority || selectedRecModal.dateRequestDocuments || selectedRecModal.dateSubmissionDocuments || selectedRecModal.agreeWithAnswers || selectedRecModal.dateDraftSubmittedPsc || selectedRecModal.agreeWithPscDecision || selectedRecModal.chargeSheetIssuedDate || selectedRecModal.chargeSheetResponseDate || selectedRecModal.disciplinaryOrder) && (
                     <div style={{ backgroundColor: "#f0f4ff", padding: "14px 16px", borderRadius: "10px", border: "1.5px solid #c7d2fe", display: "flex", flexDirection: "column", gap: "10px" }}>
                       <div style={{ fontSize: "12.5px", fontWeight: 700, color: "#3730a3", display: "flex", alignItems: "center", gap: "6px" }}>
                         <FileCheck size={16} />
-                        <span>{lang === "si" ? "චෝදනා පත්‍රය සහ විනය නියෝග විස්තර" : "Charge Sheet & Disciplinary Order Details"}</span>
+                        <span>{lang === "si" ? "චෝදනා පත්‍රය සහ විනය බලධාරියා පිළිබඳ විස්තර" : "Charge Sheet & Disciplinary Authority Details"}</span>
                       </div>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
                         {selectedRecModal.issuedChargeSheet && (
-                          <div style={{ gridColumn: "span 2" }}>
+                          <div>
                             <div style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>
-                              {lang === "si" ? "නිකුත් කරන ලද චෝදනා පත්‍රය (Issued Charge Sheet)" : "Issued Charge Sheet"}
+                              {lang === "si" ? "චෝදනා පත්‍රය (Issued Charge Sheet)" : "Issued Charge Sheet"}
                             </div>
                             <div style={{ fontSize: "13px", fontWeight: 600, color: "#1e1b4b", marginTop: "2px" }}>
-                              {selectedRecModal.issuedChargeSheet}
+                              {selectedRecModal.issuedChargeSheet === "first_schedule"
+                                ? "First Schedule (පළමු උපලේඛනය)"
+                                : selectedRecModal.issuedChargeSheet === "second_schedule"
+                                ? "Second Schedule (දෙවන උපලේඛනය)"
+                                : selectedRecModal.issuedChargeSheet}
+                            </div>
+                          </div>
+                        )}
+                        {selectedRecModal.disciplinaryAuthority && (
+                          <div>
+                            <div style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>
+                              {lang === "si" ? "විනය බලධාරියා (Disciplinary Authority)" : "Disciplinary Authority"}
+                            </div>
+                            <div style={{ fontSize: "13px", fontWeight: 600, color: "#1e1b4b", marginTop: "2px" }}>
+                              {selectedRecModal.disciplinaryAuthority === "psc_esc"
+                                ? "PSC / ESC (රාජ්‍ය සේවා කොමිෂන් සභාව)"
+                                : "Secretary of Education (අධ්‍යාපන ලේකම්)"}
+                            </div>
+                          </div>
+                        )}
+                        {selectedRecModal.dateRequestDocuments && (
+                          <div style={{ gridColumn: "span 2" }}>
+                            <div style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>
+                              {lang === "si" ? "ලිපි ලේඛන ඉල්ලා සිටි දිනය (Request for Documents)" : "Request for Documents Date"}
+                            </div>
+                            <div style={{ fontSize: "13px", fontWeight: 600, color: "#1e1b4b", marginTop: "2px" }}>
+                              {selectedRecModal.dateRequestDocuments}
+                            </div>
+                          </div>
+                        )}
+                        {selectedRecModal.dateSubmissionDocuments && (
+                          <div>
+                            <div style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>
+                              {lang === "si" ? "ලිපි ලේඛන ඉදිරිපත් කළ දිනය" : "Document Submission Date"}
+                            </div>
+                            <div style={{ fontSize: "13px", fontWeight: 600, color: "#1e1b4b", marginTop: "2px" }}>
+                              {selectedRecModal.dateSubmissionDocuments}
+                            </div>
+                          </div>
+                        )}
+                        {selectedRecModal.agreeWithAnswers && selectedRecModal.disciplinaryAuthority !== "psc_esc" && (
+                          <div>
+                            <div style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>
+                              {lang === "si" ? "පිළිතුරු සමඟ එකඟ වන්නේද?" : "Agree with Answers?"}
+                            </div>
+                            <div style={{ fontSize: "13px", fontWeight: 700, marginTop: "2px", color: selectedRecModal.agreeWithAnswers === "yes" ? "#16a34a" : "#dc2626" }}>
+                              {selectedRecModal.agreeWithAnswers === "yes" ? "Yes (ඔව්)" : "No (නැත)"}
+                            </div>
+                          </div>
+                        )}
+                        {selectedRecModal.dateDraftSubmittedPsc && (
+                          <div>
+                            <div style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>
+                              {lang === "si" ? "කෙටුම්පත PSC/ESC වෙත යැවූ දිනය" : "Date Draft Submitted to PSC/ESC"}
+                            </div>
+                            <div style={{ fontSize: "13px", fontWeight: 600, color: "#1e1b4b", marginTop: "2px" }}>
+                              {selectedRecModal.dateDraftSubmittedPsc}
+                            </div>
+                          </div>
+                        )}
+                        {selectedRecModal.agreeWithPscDecision && (
+                          <div>
+                            <div style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>
+                              {lang === "si" ? "PSC/ESC තීරණයට එකඟද?" : "Agree with PSC/ESC Decision?"}
+                            </div>
+                            <div style={{ fontSize: "13px", fontWeight: 700, marginTop: "2px", color: selectedRecModal.agreeWithPscDecision === "yes" ? "#16a34a" : "#dc2626" }}>
+                              {selectedRecModal.agreeWithPscDecision === "yes" ? "Yes (ඔව්)" : "No (නැත)"}
                             </div>
                           </div>
                         )}
                         {selectedRecModal.chargeSheetIssuedDate && (
                           <div>
                             <div style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>
-                              {lang === "si" ? "නිකුත් කළ දිනය" : "Date Issued"}
+                              {lang === "si" ? "චෝදනා පත්‍රය නිකුත් කළ දිනය" : "Date Issued"}
                             </div>
                             <div style={{ fontSize: "13px", fontWeight: 600, color: "#1e1b4b", marginTop: "2px" }}>
                               {selectedRecModal.chargeSheetIssuedDate}
@@ -2107,6 +2313,14 @@ function RecommendationFormContent() {
                             <div style={{ fontSize: "13px", fontWeight: 600, color: "#1e1b4b", marginTop: "2px" }}>
                               {selectedRecModal.disciplinaryOrder}
                             </div>
+                          </div>
+                        )}
+                        {(selectedRecModal.agreeWithAnswers === "yes" || selectedRecModal.agreeWithPscDecision === "yes" || selectedRecModal.status === "Closed") && (
+                          <div style={{ gridColumn: "span 2", marginTop: "6px", padding: "10px 14px", backgroundColor: "#ecfdf5", border: "1px solid #86efac", borderRadius: "8px", display: "flex", alignItems: "center", gap: "8px" }}>
+                            <CheckCircle2 size={16} style={{ color: "#16a34a" }} />
+                            <span style={{ fontSize: "13px", fontWeight: 700, color: "#166534" }}>
+                              {lang === "si" ? "ලිපි තත්ත්වය: අවසන් (Letter Status: Closed)" : "Letter Status: Closed"}
+                            </span>
                           </div>
                         )}
                       </div>
@@ -2190,12 +2404,12 @@ function RecommendationFormContent() {
                   </button>
                   {selectedRecModal?.category === "issuing_charge_sheet" && (
                     <Link
-                      href={`/subject?tab=disciplinary_inspection&caseNo=${encodeURIComponent(selectedRecModal.caseNo)}`}
+                      href={`/subject?tab=issuing_charge_sheet&caseNo=${encodeURIComponent(selectedRecModal.caseNo)}`}
                       className="btn-view-inspection"
-                      style={{ padding: "8px 16px", fontSize: "13px" }}
+                      style={{ padding: "8px 16px", fontSize: "13px", backgroundColor: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" }}
                     >
-                      <ShieldAlert size={14} />
-                      <span>{lang === "si" ? "විධිමත් විනය පරීක්ෂණ වෙත යන්න" : "Go to Disciplinary Inspection"}</span>
+                      <FileCheck size={14} />
+                      <span>{lang === "si" ? "චෝදනා පත්‍ර නිකුත් කිරීම වෙත යන්න" : "Go to Issuing Charge Sheet"}</span>
                     </Link>
                   )}
                   <button

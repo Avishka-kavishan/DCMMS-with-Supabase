@@ -1334,7 +1334,7 @@ function SubjectOfficerDashboardContent() {
   }, [profile, t]);
 
   // Tab navigation state
-  const [activeTab, setActiveTab] = useState<"cases" | "answer_letters" | "recommendations" | "conducting_inquiry" | "disciplinary_inspection" | "provincial_investigation">("cases");
+  const [activeTab, setActiveTab] = useState<"cases" | "answer_letters" | "recommendations" | "conducting_inquiry" | "issuing_charge_sheet" | "disciplinary_inspection" | "provincial_investigation">("cases");
   const [assignedAnswerLetters, setAssignedAnswerLetters] = useState<any[]>([]);
   const [replyLettersList, setReplyLettersList] = useState<any[]>([]);
   const [concernedOfficersMap, setConcernedOfficersMap] = useState<Record<string, any>>({});
@@ -1343,12 +1343,15 @@ function SubjectOfficerDashboardContent() {
   // Sync tab and search from URL search parameters if provided
   useEffect(() => {
     if (tabParam) {
-      if (["cases", "answer_letters", "recommendations", "conducting_inquiry", "disciplinary_inspection", "provincial_investigation"].includes(tabParam)) {
+      if (["cases", "answer_letters", "recommendations", "conducting_inquiry", "issuing_charge_sheet", "disciplinary_inspection", "provincial_investigation"].includes(tabParam)) {
         setActiveTab(tabParam as any);
       }
     }
     if (caseNoParam && tabParam === "conducting_inquiry") {
       setInquirySearchQuery(caseNoParam);
+    }
+    if (caseNoParam && tabParam === "issuing_charge_sheet") {
+      setChargeSheetSearchQuery(caseNoParam);
     }
     if (caseNoParam && tabParam === "disciplinary_inspection") {
       setInspectionSearchQuery(caseNoParam);
@@ -1467,6 +1470,13 @@ function SubjectOfficerDashboardContent() {
   const [inspectionStageFilter, setInspectionStageFilter] = useState("all");
   const [inspectionPriorityFilter, setInspectionPriorityFilter] = useState<"all" | "high" | "medium" | "low">("all");
   const [selectedInspectionModal, setSelectedInspectionModal] = useState<any | null>(null);
+
+  // Issuing Charge Sheet state
+  const [chargeSheetSearchQuery, setChargeSheetSearchQuery] = useState("");
+  const [chargeSheetScheduleFilter, setChargeSheetScheduleFilter] = useState("all");
+  const [chargeSheetAuthorityFilter, setChargeSheetAuthorityFilter] = useState("all");
+  const [chargeSheetPriorityFilter, setChargeSheetPriorityFilter] = useState<"all" | "high" | "medium" | "low">("all");
+  const [selectedChargeSheetModal, setSelectedChargeSheetModal] = useState<any | null>(null);
 
   // Investigation Recommendations state
   const [recommendations, setRecommendations] = useState<any[]>([]);
@@ -3551,6 +3561,124 @@ function SubjectOfficerDashboardContent() {
     });
   }, [disciplinaryInspectionCases, inspectionSearchQuery, inspectionStageFilter, inspectionPriorityFilter]);
 
+  // ── Issuing Charge Sheet Case List ──
+  const issuingChargeSheetCases = useMemo(() => {
+    const csMap = new Map<string, any>();
+
+    // 1. Process all recommendations
+    recommendations.forEach((rec) => {
+      const cNo = (rec.caseNo || rec.letterNo || "").trim();
+      const cNoKey = cNo.toLowerCase();
+      if (!cNoKey) return;
+
+      const isChargeSheet =
+        rec.category === "issuing_charge_sheet" ||
+        rec.actionType === "charge_sheet" ||
+        !!rec.issuedChargeSheet ||
+        !!rec.chargeSheetIssuedDate ||
+        (rec.futureAction && rec.futureAction.toLowerCase().includes("charge sheet")) ||
+        (rec.disciplinaryAction && rec.disciplinaryAction.toLowerCase().includes("charge sheet"));
+
+      if (isChargeSheet) {
+        const matchingCase = cases.find((c) => (c.caseNo || "").trim().toLowerCase() === cNoKey);
+        csMap.set(cNoKey, {
+          id: rec.id || matchingCase?.id || `cs-${cNo}`,
+          caseNo: cNo,
+          letterNo: rec.letterNo || matchingCase?.caseNo || cNo,
+          subject: rec.subject || matchingCase?.subject || (lang === "si" ? `චෝදනා පත්‍ර නඩුව #${cNo}` : `Charge Sheet Case #${cNo}`),
+          accusedName: rec.accusedName || matchingCase?.accusedName || (lang === "si" ? "අදාළ නිලධාරී" : "Concerned Officer"),
+          accusedDesignation: rec.accusedDesignation || matchingCase?.accusedDesignation || (lang === "si" ? "අධ්‍යාපන නිලධාරී" : "Educational Officer"),
+          schoolName: rec.schoolName || matchingCase?.schoolName || (lang === "si" ? "රජයේ අධ්‍යාපන ආයතනය" : "Government Educational Institute"),
+          priority: rec.urgency || matchingCase?.priority || "medium",
+          issuedChargeSheet: rec.issuedChargeSheet || "first_schedule",
+          chargeSheetIssuedDate: rec.chargeSheetIssuedDate || rec.submittedAt?.slice(0, 10) || "—",
+          chargeSheetResponseDate: rec.chargeSheetResponseDate || "—",
+          disciplinaryAuthority: rec.disciplinaryAuthority || "secretary_of_education",
+          disciplinaryOrder: rec.disciplinaryOrder || "",
+          dateRequestDocuments: rec.dateRequestDocuments || "",
+          dateSubmissionDocuments: rec.dateSubmissionDocuments || "",
+          agreeWithAnswers: rec.agreeWithAnswers || "",
+          dateDraftSubmittedPsc: rec.dateDraftSubmittedPsc || "",
+          agreeWithPscDecision: rec.agreeWithPscDecision || "",
+          status: rec.status || "Submitted",
+          notes: rec.referenceNotes || rec.recommendationText || matchingCase?.subject || "",
+          rawRec: rec
+        });
+      }
+    });
+
+    // 2. Add cases from cases list with charge sheet markers
+    cases.forEach((c) => {
+      const cNoKey = (c.caseNo || "").trim().toLowerCase();
+      if (!cNoKey || csMap.has(cNoKey)) return;
+
+      if (
+        c.stageKey === "charge_sheet" ||
+        (c as any).hasChargeSheet ||
+        c.stage?.toLowerCase().includes("charge sheet") ||
+        c.disciplinaryCharge?.toLowerCase().includes("charge sheet")
+      ) {
+        csMap.set(cNoKey, {
+          id: c.id || `cs-${c.caseNo}`,
+          caseNo: c.caseNo,
+          letterNo: c.caseNo,
+          subject: c.subject || (lang === "si" ? `චෝදනා පත්‍ර නඩුව #${c.caseNo}` : `Charge Sheet Case #${c.caseNo}`),
+          accusedName: (c as any).accusedName || (lang === "si" ? "අදාළ නිලධාරී" : "Concerned Officer"),
+          accusedDesignation: (c as any).accusedDesignation || (lang === "si" ? "අධ්‍යාපන නිලධාරී" : "Educational Officer"),
+          schoolName: (c as any).schoolName || (lang === "si" ? "රජයේ අධ්‍යාපන ආයතනය" : "Government Educational Institute"),
+          priority: c.priority || "medium",
+          issuedChargeSheet: (c as any).issuedChargeSheet || "first_schedule",
+          chargeSheetIssuedDate: (c as any).chargeSheetIssuedDate || c.assignedDate || "—",
+          chargeSheetResponseDate: (c as any).chargeSheetResponseDate || "—",
+          disciplinaryAuthority: (c as any).disciplinaryAuthority || "secretary_of_education",
+          disciplinaryOrder: (c as any).disciplinaryOrder || "",
+          dateRequestDocuments: (c as any).dateRequestDocuments || "",
+          dateSubmissionDocuments: (c as any).dateSubmissionDocuments || "",
+          agreeWithAnswers: (c as any).agreeWithAnswers || "",
+          dateDraftSubmittedPsc: (c as any).dateDraftSubmittedPsc || "",
+          agreeWithPscDecision: (c as any).agreeWithPscDecision || "",
+          status: c.status || "In Progress",
+          notes: c.subject || "Charge Sheet Issued",
+        });
+      }
+    });
+
+    return Array.from(csMap.values());
+  }, [cases, recommendations, lang]);
+
+  // Filtered Issuing Charge Sheet cases
+  const filteredChargeSheetCases = useMemo(() => {
+    return issuingChargeSheetCases.filter((item) => {
+      const q = chargeSheetSearchQuery.trim().toLowerCase();
+      const matchesSearch =
+        !q ||
+        (item.caseNo && item.caseNo.toLowerCase().includes(q)) ||
+        (item.letterNo && item.letterNo.toLowerCase().includes(q)) ||
+        (item.subject && item.subject.toLowerCase().includes(q)) ||
+        (item.accusedName && item.accusedName.toLowerCase().includes(q)) ||
+        (item.accusedDesignation && item.accusedDesignation.toLowerCase().includes(q)) ||
+        (item.schoolName && item.schoolName.toLowerCase().includes(q)) ||
+        (item.issuedChargeSheet && item.issuedChargeSheet.toLowerCase().includes(q)) ||
+        (item.disciplinaryAuthority && item.disciplinaryAuthority.toLowerCase().includes(q)) ||
+        (item.disciplinaryOrder && item.disciplinaryOrder.toLowerCase().includes(q));
+
+      const matchesSchedule =
+        chargeSheetScheduleFilter === "all" ||
+        (chargeSheetScheduleFilter === "first_schedule" && (item.issuedChargeSheet === "first_schedule" || item.issuedChargeSheet?.toLowerCase().includes("first") || item.issuedChargeSheet?.toLowerCase().includes("පළමු"))) ||
+        (chargeSheetScheduleFilter === "second_schedule" && (item.issuedChargeSheet === "second_schedule" || item.issuedChargeSheet?.toLowerCase().includes("second") || item.issuedChargeSheet?.toLowerCase().includes("දෙවන")));
+
+      const matchesAuthority =
+        chargeSheetAuthorityFilter === "all" ||
+        item.disciplinaryAuthority === chargeSheetAuthorityFilter;
+
+      const matchesPriority =
+        chargeSheetPriorityFilter === "all" ||
+        item.priority === chargeSheetPriorityFilter;
+
+      return matchesSearch && matchesSchedule && matchesAuthority && matchesPriority;
+    });
+  }, [issuingChargeSheetCases, chargeSheetSearchQuery, chargeSheetScheduleFilter, chargeSheetAuthorityFilter, chargeSheetPriorityFilter]);
+
   // ── Provincial Basic Investigation Case List ──
   const provincialInvestigationCases = useMemo(() => {
     const provMap = new Map<string, any>();
@@ -4372,6 +4500,29 @@ function SubjectOfficerDashboardContent() {
                   {recommendations.length}
                 </span>
               ) : null}
+            </button>
+            <button
+              type="button"
+              className={`nav-tab-btn${activeTab === "issuing_charge_sheet" ? " active" : ""}`}
+              onClick={() => setActiveTab("issuing_charge_sheet")}
+              title={lang === "si" ? "චෝදනා පත්‍ර නිකුත් කිරීම (Issuing Charge Sheet)" : "Issuing Charge Sheet"}
+            >
+              <FileCheck className="tab-icon" />
+              <span>{lang === "si" ? "චෝදනා පත්‍ර නිකුත් කිරීම" : lang === "ta" ? "குற்றப்பத்திரிகை வழங்குதல்" : "Issuing Charge Sheet"}</span>
+              {issuingChargeSheetCases.length > 0 && (
+                <span style={{
+                  backgroundColor: activeTab === "issuing_charge_sheet" ? "#d97706" : "#94a3b8",
+                  color: "#ffffff",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  padding: "2px 8px",
+                  borderRadius: "12px",
+                  marginLeft: "4px",
+                  transition: "all 0.2s ease"
+                }}>
+                  {issuingChargeSheetCases.length}
+                </span>
+              )}
             </button>
             <button
               type="button"
@@ -5823,6 +5974,400 @@ function SubjectOfficerDashboardContent() {
                                   setInquirySearchQuery("");
                                   setInquiryStageFilter("all");
                                   setInquiryPriorityFilter("all");
+                                }}
+                                className="btn-create-rec"
+                                style={{ marginTop: "4px", backgroundColor: "#f1f5f9", color: "#334155", border: "1px solid #cbd5e1" }}
+                              >
+                                {t("viewAll", "Reset Filters")}
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
+          {/* ==================== TAB: ISSUING CHARGE SHEET ==================== */}
+          {activeTab === "issuing_charge_sheet" && (
+            <section style={{ marginBottom: "30px" }}>
+              {/* Header Row with Action */}
+              <div className="section-header-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "12px" }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "20px", fontWeight: 800, color: "#1e1b4b", display: "flex", alignItems: "center", gap: "10px" }}>
+                    <FileCheck style={{ color: "#d97706", width: "26px", height: "26px" }} />
+                    <span>{lang === "si" ? "චෝදනා පත්‍ර නිකුත් කිරීම (Issuing Charge Sheet)" : lang === "ta" ? "குற்றப்பத்திரிகை வழங்குதல் (Issuing Charge Sheet)" : "Issuing Charge Sheet"}</span>
+                  </h3>
+                  <p style={{ margin: "4px 0 0 0", fontSize: "13px", color: "#64748b" }}>
+                    {t("issuingChargeSheetDesc", "Formal charge sheet proceedings under Establishment Code & PSC rules, tracking of 1st/2nd schedules, disciplinary authorities, and response submissions.")}
+                  </p>
+                </div>
+
+                <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                  <Link
+                    href="/subject/recommendation?category=issuing_charge_sheet"
+                    className="btn-create-rec"
+                    style={{ background: "linear-gradient(135deg, #d97706 0%, #b45309 100%)" }}
+                  >
+                    <Plus size={16} />
+                    <span>{lang === "si" ? "නව චෝදනා පත්‍ර නිර්දේශය" : "New Charge Sheet Minute"}</span>
+                  </Link>
+                </div>
+              </div>
+
+              {/* Charge Sheet KPI Cards */}
+              <div className="inquiry-kpi-grid">
+                <div className="inquiry-kpi-card inquiry-card-amber">
+                  <div className="premium-card-top">
+                    <div className="premium-card-title-area">
+                      <FileCheck className="premium-card-icon" />
+                      <span>{lang === "si" ? "මුළු චෝදනා පත්‍ර නඩු" : "Total Charge Sheet Cases"}</span>
+                    </div>
+                  </div>
+                  <div className="premium-card-bottom">
+                    <div className="premium-card-value-area">
+                      <span className="premium-card-value">{String(issuingChargeSheetCases.length).padStart(2, "0")}</span>
+                      <span className="premium-card-label">{lang === "si" ? "නඩු" : "cases"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="inquiry-kpi-card inquiry-card-sky">
+                  <div className="premium-card-top">
+                    <div className="premium-card-title-area">
+                      <FileText className="premium-card-icon" />
+                      <span>{lang === "si" ? "පළමු උපලේඛනය (1st Schedule)" : "First Schedule (1st)"}</span>
+                    </div>
+                  </div>
+                  <div className="premium-card-bottom">
+                    <div className="premium-card-value-area">
+                      <span className="premium-card-value">
+                        {String(issuingChargeSheetCases.filter((c: any) => c.issuedChargeSheet === "first_schedule" || c.issuedChargeSheet?.toLowerCase().includes("first") || c.issuedChargeSheet?.toLowerCase().includes("පළමු")).length).padStart(2, "0")}
+                      </span>
+                      <span className="premium-card-label">{lang === "si" ? "චෝදනා" : "charges"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="inquiry-kpi-card inquiry-card-purple">
+                  <div className="premium-card-top">
+                    <div className="premium-card-title-area">
+                      <ShieldCheck className="premium-card-icon" />
+                      <span>{lang === "si" ? "දෙවන උපලේඛනය (2nd Schedule)" : "Second Schedule (2nd)"}</span>
+                    </div>
+                  </div>
+                  <div className="premium-card-bottom">
+                    <div className="premium-card-value-area">
+                      <span className="premium-card-value">
+                        {String(issuingChargeSheetCases.filter((c: any) => c.issuedChargeSheet === "second_schedule" || c.issuedChargeSheet?.toLowerCase().includes("second") || c.issuedChargeSheet?.toLowerCase().includes("දෙවන")).length).padStart(2, "0")}
+                      </span>
+                      <span className="premium-card-label">{lang === "si" ? "චෝදනා" : "charges"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="inquiry-kpi-card inquiry-card-rose">
+                  <div className="premium-card-top">
+                    <div className="premium-card-title-area">
+                      <Clock className="premium-card-icon" />
+                      <span>{lang === "si" ? "පිළිතුරු ලැබී ඇති නඩු" : "Responses Recorded"}</span>
+                    </div>
+                  </div>
+                  <div className="premium-card-bottom">
+                    <div className="premium-card-value-area">
+                      <span className="premium-card-value">
+                        {String(issuingChargeSheetCases.filter((c: any) => c.chargeSheetResponseDate && c.chargeSheetResponseDate !== "—").length).padStart(2, "0")}
+                      </span>
+                      <span className="premium-card-label">{lang === "si" ? "පිළිතුරු" : "answers"}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Search & Filter Toolbar */}
+              <div className="letters-filter-section" style={{ marginTop: "24px" }}>
+                <div className="search-filter-controls-row">
+                  {/* Search Input */}
+                  <div className="search-input-wrapper">
+                    <svg className="search-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    <input
+                      type="text"
+                      value={chargeSheetSearchQuery}
+                      onChange={(e) => setChargeSheetSearchQuery(e.target.value)}
+                      placeholder={lang === "si" ? "චෝදනා පත්‍ර නඩු සොයන්න (නඩු අංකය, නිලධාරී, උපලේඛනය, බලධාරියා)..." : "Search charge sheets (Case No, Officer, Schedule, Authority)..."}
+                      className="search-input"
+                    />
+                  </div>
+
+                  {/* Schedule Filter */}
+                  <div className="filter-dropdown-wrapper">
+                    <select
+                      value={chargeSheetScheduleFilter}
+                      onChange={(e) => setChargeSheetScheduleFilter(e.target.value)}
+                      className="filter-priority-select"
+                      style={{ maxWidth: "220px" }}
+                    >
+                      <option value="all">{lang === "si" ? "සියලුම උපලේඛන (All Schedules)" : "All Schedules"}</option>
+                      <option value="first_schedule">{lang === "si" ? "පළමු උපලේඛනය (First Schedule)" : "First Schedule"}</option>
+                      <option value="second_schedule">{lang === "si" ? "දෙවන උපලේඛනය (Second Schedule)" : "Second Schedule"}</option>
+                    </select>
+                  </div>
+
+                  {/* Authority Filter */}
+                  <div className="filter-dropdown-wrapper">
+                    <select
+                      value={chargeSheetAuthorityFilter}
+                      onChange={(e) => setChargeSheetAuthorityFilter(e.target.value)}
+                      className="filter-priority-select"
+                      style={{ maxWidth: "230px" }}
+                    >
+                      <option value="all">{lang === "si" ? "සියලුම විනය බලධාරීන් (All Authorities)" : "All Authorities"}</option>
+                      <option value="secretary_of_education">{lang === "si" ? "අධ්‍යාපන ලේකම්" : "Secretary of Education"}</option>
+                      <option value="psc_esc">{lang === "si" ? "රා.සේ.කො. / අධ්‍යාපන සේවා කමිටුව (PSC/ESC)" : "PSC / ESC"}</option>
+                    </select>
+                  </div>
+
+                  {/* Priority Filter */}
+                  <div className="filter-dropdown-wrapper">
+                    <select
+                      value={chargeSheetPriorityFilter}
+                      onChange={(e: any) => setChargeSheetPriorityFilter(e.target.value)}
+                      className="filter-priority-select"
+                    >
+                      <option value="all">{t("priorityAll", "All Priorities")}</option>
+                      <option value="high">🔴 {t("priorityHigh", "High Priority")}</option>
+                      <option value="medium">🟡 {t("priorityMedium", "Medium Priority")}</option>
+                      <option value="low">🟢 {t("priorityLow", "Low Priority")}</option>
+                    </select>
+                  </div>
+
+                  {(chargeSheetSearchQuery || chargeSheetScheduleFilter !== "all" || chargeSheetAuthorityFilter !== "all" || chargeSheetPriorityFilter !== "all") && (
+                    <a
+                      href="#"
+                      className="view-all-reset-link"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setChargeSheetSearchQuery("");
+                        setChargeSheetScheduleFilter("all");
+                        setChargeSheetAuthorityFilter("all");
+                        setChargeSheetPriorityFilter("all");
+                      }}
+                    >
+                      {t("viewAll", "Reset Filters")} <span className="arrow-span">→</span>
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              {/* Charge Sheet Data Table */}
+              <div className="table-responsive-container">
+                <table className="letters-data-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">{t("caseNo", "Case No / Ref")}</th>
+                      <th scope="col">{t("accusedOfficerAndInstitute", "Accused Officer & Institution")}</th>
+                      <th scope="col">{lang === "si" ? "නිකුත් කළ චෝදනා පත්‍රය" : "Issued Charge Sheet / Schedule"}</th>
+                      <th scope="col">{lang === "si" ? "විනය බලධාරියා" : "Disciplinary Authority"}</th>
+                      <th scope="col">{lang === "si" ? "චෝදනා සහ පිළිතුරු දිනයන්" : "Charge & Response Dates"}</th>
+                      <th scope="col">{lang === "si" ? "විනය නියෝගය / තත්ත්වය" : "Disciplinary Order / Status"}</th>
+                      <th scope="col">{t("priority", "Priority")}</th>
+                      <th scope="col" className="text-center">{t("actions", "Actions")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredChargeSheetCases.length > 0 ? (
+                      filteredChargeSheetCases.map((item, idx) => {
+                        const isSecondSchedule = item.issuedChargeSheet === "second_schedule" || item.issuedChargeSheet?.toLowerCase().includes("second") || item.issuedChargeSheet?.toLowerCase().includes("දෙවන");
+                        const isPscAuthority = item.disciplinaryAuthority === "psc_esc" || item.disciplinaryAuthority?.toLowerCase().includes("psc");
+
+                        return (
+                          <tr key={item.id ? `${item.id}-${idx}` : `cs-${item.caseNo}-${idx}`} className="letter-table-row">
+                            {/* Case No */}
+                            <td className="font-semibold" style={{ color: "#1e1b4b" }}>
+                              <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                                <span style={{ fontWeight: 800, color: "#b45309", fontSize: "14px" }}>{item.caseNo}</span>
+                                {item.letterNo && item.letterNo !== item.caseNo && (
+                                  <span style={{ fontSize: "11px", color: "#64748b" }}>
+                                    Ref: {item.letterNo}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Accused Officer & Institution */}
+                            <td>
+                              <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+                                <span style={{ fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: "5px", fontSize: "13px" }}>
+                                  <User size={13} style={{ color: "#d97706" }} />
+                                  {item.accusedName || "—"}
+                                </span>
+                                {(item.accusedDesignation || item.schoolName) && (
+                                  <span style={{ fontSize: "11px", color: "#64748b", display: "flex", alignItems: "center", gap: "4px" }}>
+                                    <Building size={11} style={{ color: "#94a3b8" }} />
+                                    {[item.accusedDesignation, item.schoolName].filter(Boolean).join(" • ")}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Issued Charge Sheet */}
+                            <td>
+                              {isSecondSchedule ? (
+                                <span style={{
+                                  backgroundColor: "#fef3c7",
+                                  color: "#92400e",
+                                  border: "1px solid #fde68a",
+                                  padding: "3px 9px",
+                                  borderRadius: "6px",
+                                  fontSize: "12px",
+                                  fontWeight: 700,
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "5px"
+                                }}>
+                                  📜 {lang === "si" ? "දෙවන උපලේඛනය (2nd Schedule)" : "Second Schedule"}
+                                </span>
+                              ) : (
+                                <span style={{
+                                  backgroundColor: "#e0f2fe",
+                                  color: "#0369a1",
+                                  border: "1px solid #bae6fd",
+                                  padding: "3px 9px",
+                                  borderRadius: "6px",
+                                  fontSize: "12px",
+                                  fontWeight: 700,
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "5px"
+                                }}>
+                                  📄 {lang === "si" ? "පළමු උපලේඛනය (1st Schedule)" : "First Schedule"}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Disciplinary Authority */}
+                            <td>
+                              {isPscAuthority ? (
+                                <span style={{
+                                  backgroundColor: "#f3e8ff",
+                                  color: "#6b21a8",
+                                  border: "1px solid #e9d5ff",
+                                  padding: "3px 9px",
+                                  borderRadius: "6px",
+                                  fontSize: "11.5px",
+                                  fontWeight: 700,
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "5px"
+                                }}>
+                                  🏛️ {lang === "si" ? "රා.සේ.කො. / අධ්‍යාපන සේවා කමිටුව" : "PSC / ESC"}
+                                </span>
+                              ) : (
+                                <span style={{
+                                  backgroundColor: "#ecfdf5",
+                                  color: "#047857",
+                                  border: "1px solid #a7f3d0",
+                                  padding: "3px 9px",
+                                  borderRadius: "6px",
+                                  fontSize: "11.5px",
+                                  fontWeight: 700,
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "5px"
+                                }}>
+                                  🏛️ {lang === "si" ? "අධ්‍යාපන ලේකම්" : "Secretary of Education"}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Charge & Response Dates */}
+                            <td>
+                              <div style={{ display: "flex", flexDirection: "column", gap: "2px", fontSize: "12px", color: "#475569" }}>
+                                {item.chargeSheetIssuedDate && (
+                                  <span style={{ fontWeight: 600, color: "#1e1b4b" }}>
+                                    📋 {lang === "si" ? "නිකුත් කළ දිනය" : "Issued"}: {item.chargeSheetIssuedDate}
+                                  </span>
+                                )}
+                                {item.chargeSheetResponseDate && item.chargeSheetResponseDate !== "—" ? (
+                                  <span style={{ fontSize: "11px", color: "#047857", fontWeight: 600 }}>
+                                    📬 {lang === "si" ? "පිළිතුරු දිනය" : "Response"}: {item.chargeSheetResponseDate}
+                                  </span>
+                                ) : (
+                                  <span style={{ fontSize: "11px", color: "#d97706", fontWeight: 600 }}>
+                                    ⏳ {lang === "si" ? "දින 14 ක පිළිතුරු කාලය" : "14 Days Response Period"}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Disciplinary Order / Status */}
+                            <td>
+                              {item.disciplinaryOrder ? (
+                                <div style={{ fontSize: "12px", color: "#14532d", backgroundColor: "#f0fdf4", border: "1px solid #bbf7d0", padding: "4px 8px", borderRadius: "6px", fontWeight: 600, maxWidth: "200px" }}>
+                                  ⚖️ {item.disciplinaryOrder}
+                                </div>
+                              ) : (
+                                <span className="inquiry-stage-pill inquiry-stage-charge">
+                                  <FileText size={12} />
+                                  {lang === "si" ? "චෝදනා පත්‍ර නිකුත් කර ඇත" : "Charge Sheet Issued"}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Priority */}
+                            <td>
+                              <span className={`priority-text-container priority-text-${item.priority}`}>
+                                <span className={`priority-dot dot-${item.priority}`} aria-hidden="true"></span>
+                                {item.priority === "high" ? t("priorityHigh", "High") : item.priority === "medium" ? t("priorityMedium", "Medium") : t("priorityLow", "Low")}
+                              </span>
+                            </td>
+
+                            {/* Actions */}
+                            <td className="text-center actions-cell">
+                              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+                                <Link
+                                  href={`/subject/recommendation?caseNo=${encodeURIComponent(item.caseNo)}`}
+                                  className="add-details-link"
+                                  style={{ padding: "4px 12px", fontSize: "11px", backgroundColor: "#d97706" }}
+                                  title={lang === "si" ? "චෝදනා පත්‍ර විස්තර සංස්කරණය" : "Edit Charge Sheet Details"}
+                                >
+                                  {t("addDetails", "Add Details")}
+                                </Link>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedChargeSheetModal(item)}
+                                  className="btn-quick-view"
+                                  title={lang === "si" ? "චෝදනා පත්‍ර ලේඛනය බලන්න" : "Open Charge Sheet Dossier"}
+                                  style={{ backgroundColor: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" }}
+                                >
+                                  <Eye size={13} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={8} className="text-center py-5 text-muted" style={{ padding: "40px 20px" }}>
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
+                            <FileCheck size={44} style={{ color: "#cbd5e1" }} />
+                            <span style={{ fontSize: "15px", fontWeight: 600, color: "#64748b" }}>
+                              {lang === "si" ? "සෙවුමට ගැළපෙන චෝදනා පත්‍ර නඩු කිසිවක් හමු නොවීය." : "No charge sheet cases found matching search criteria."}
+                            </span>
+                            {(chargeSheetSearchQuery || chargeSheetScheduleFilter !== "all" || chargeSheetAuthorityFilter !== "all" || chargeSheetPriorityFilter !== "all") && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setChargeSheetSearchQuery("");
+                                  setChargeSheetScheduleFilter("all");
+                                  setChargeSheetAuthorityFilter("all");
+                                  setChargeSheetPriorityFilter("all");
                                 }}
                                 className="btn-create-rec"
                                 style={{ marginTop: "4px", backgroundColor: "#f1f5f9", color: "#334155", border: "1px solid #cbd5e1" }}
@@ -7839,6 +8384,197 @@ function SubjectOfficerDashboardContent() {
               >
                 <ExternalLink size={14} />
                 <span>Disciplinary Minute</span>
+              </Link>
+            </footer>
+
+          </div>
+        </div>
+      )}
+
+      {/* ==================== QUICK ISSUING CHARGE SHEET DOSSIER MODAL ==================== */}
+      {selectedChargeSheetModal && (
+        <div className="inquiry-dossier-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="chargesheet-dossier-title">
+          <div className="inquiry-dossier-modal-content" style={{ maxWidth: "780px" }}>
+            
+            {/* Modal Header */}
+            <div className="inquiry-dossier-header" style={{ background: "linear-gradient(135deg, #b45309 0%, #d97706 100%)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div style={{ width: "42px", height: "42px", borderRadius: "12px", backgroundColor: "rgba(255,255,255,0.18)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <FileCheck size={22} style={{ color: "#ffffff" }} />
+                </div>
+                <div>
+                  <h3 id="chargesheet-dossier-title" style={{ margin: 0, fontSize: "18px", fontWeight: 800, letterSpacing: "-0.2px", color: "#ffffff" }}>
+                    {t("chargeSheetDossierTitle", "Issuing Charge Sheet Dossier")}
+                  </h3>
+                  <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.9)", marginTop: "2px" }}>
+                    Case Ref: <strong>{selectedChargeSheetModal.caseNo}</strong> • Status: {selectedChargeSheetModal.status || "Charge Sheet Issued"}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedChargeSheetModal(null)}
+                className="inquiry-dossier-close-btn"
+                aria-label="Close Dossier"
+                style={{ color: "#ffffff" }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="inquiry-dossier-body">
+              
+              {/* Accused Officer Summary */}
+              <div className="inquiry-dossier-section">
+                <div className="inquiry-dossier-section-title">
+                  <User size={14} style={{ color: "#d97706" }} />
+                  <span>Accused Officer & Institution (චූදිත නිලධාරී සහ ආයතනය)</span>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "10px", fontSize: "13px" }}>
+                  <div>
+                    <span style={{ color: "#64748b", fontSize: "11px", fontWeight: 600, display: "block" }}>Full Name:</span>
+                    <strong style={{ color: "#1e293b" }}>{selectedChargeSheetModal.accusedName || "—"}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: "#64748b", fontSize: "11px", fontWeight: 600, display: "block" }}>Designation / Post:</span>
+                    <span style={{ color: "#334155", fontWeight: 600 }}>{selectedChargeSheetModal.accusedDesignation || "—"}</span>
+                  </div>
+                  <div>
+                    <span style={{ color: "#64748b", fontSize: "11px", fontWeight: 600, display: "block" }}>Educational Institute:</span>
+                    <span style={{ color: "#334155", fontWeight: 600 }}>{selectedChargeSheetModal.schoolName || "—"}</span>
+                  </div>
+                  <div>
+                    <span style={{ color: "#64748b", fontSize: "11px", fontWeight: 600, display: "block" }}>Priority Rating:</span>
+                    <span style={{ textTransform: "capitalize", fontWeight: 700, color: selectedChargeSheetModal.priority === "high" ? "#dc2626" : selectedChargeSheetModal.priority === "medium" ? "#d97706" : "#16a34a" }}>
+                      {selectedChargeSheetModal.priority} Priority
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Charge Sheet & Disciplinary Authority Details */}
+              <div className="inquiry-dossier-section" style={{ backgroundColor: "#fffbeb", borderColor: "#fde68a" }}>
+                <div className="inquiry-dossier-section-title" style={{ color: "#92400e" }}>
+                  <FileCheck size={14} style={{ color: "#d97706" }} />
+                  <span>Formal Charge Sheet & Authority Parameters (චෝදනා පත්‍රය සහ විනය බලධාරියා)</span>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "12px", fontSize: "13px" }}>
+                  <div>
+                    <span style={{ color: "#92400e", fontSize: "11px", fontWeight: 700, display: "block" }}>Issued Charge Sheet / Schedule:</span>
+                    <strong style={{ color: "#78350f", fontSize: "13.5px" }}>
+                      {selectedChargeSheetModal.issuedChargeSheet === "second_schedule" || selectedChargeSheetModal.issuedChargeSheet?.toLowerCase().includes("second") || selectedChargeSheetModal.issuedChargeSheet?.toLowerCase().includes("දෙවන")
+                        ? (lang === "si" ? "📜 දෙවන උපලේඛනය (Second schedule)" : "Second Schedule")
+                        : (lang === "si" ? "📄 පළමු උපලේඛනය (First schedule)" : "First Schedule")}
+                    </strong>
+                  </div>
+                  <div>
+                    <span style={{ color: "#92400e", fontSize: "11px", fontWeight: 700, display: "block" }}>Disciplinary Authority:</span>
+                    <span style={{ color: "#78350f", fontWeight: 700 }}>
+                      {selectedChargeSheetModal.disciplinaryAuthority === "psc_esc"
+                        ? (lang === "si" ? "🏛️ රාජ්‍ය සේවා කොමිෂන් සභාව / අධ්‍යාපන සේවා කමිටුව (PSC / ESC)" : "Public Service Commission / ESC")
+                        : (lang === "si" ? "🏛️ අධ්‍යාපන ලේකම් (Secretary of Education)" : "Secretary of Education")}
+                    </span>
+                  </div>
+                  <div>
+                    <span style={{ color: "#92400e", fontSize: "11px", fontWeight: 700, display: "block" }}>Date Charge Sheet Issued:</span>
+                    <span style={{ color: "#1e293b", fontWeight: 600 }}>{selectedChargeSheetModal.chargeSheetIssuedDate || "—"}</span>
+                  </div>
+                  <div>
+                    <span style={{ color: "#92400e", fontSize: "11px", fontWeight: 700, display: "block" }}>Defense Response Date:</span>
+                    <span style={{ color: "#1e293b", fontWeight: 600 }}>
+                      {selectedChargeSheetModal.chargeSheetResponseDate && selectedChargeSheetModal.chargeSheetResponseDate !== "—"
+                        ? selectedChargeSheetModal.chargeSheetResponseDate
+                        : (lang === "si" ? "⏳ අපේක්ෂිතයි (Pending - 14 Days)" : "Pending (14 Days Period)")}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Supplemental Documentation & PSC Compliance (if any filled) */}
+              {(selectedChargeSheetModal.dateRequestDocuments || selectedChargeSheetModal.dateSubmissionDocuments || selectedChargeSheetModal.agreeWithAnswers || selectedChargeSheetModal.dateDraftSubmittedPsc || selectedChargeSheetModal.agreeWithPscDecision) && (
+                <div className="inquiry-dossier-section" style={{ backgroundColor: "#f8fafc", borderColor: "#e2e8f0" }}>
+                  <div className="inquiry-dossier-section-title">
+                    <Clock size={14} style={{ color: "#475569" }} />
+                    <span>Documentation & Procedural Compliance (ලේඛන සහ ක්‍රියාපටිපාටි විස්තර)</span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "10px", fontSize: "12.5px" }}>
+                    {selectedChargeSheetModal.dateRequestDocuments && (
+                      <div>
+                        <span style={{ color: "#64748b", fontSize: "11px", fontWeight: 600, display: "block" }}>Date Request Documents:</span>
+                        <span style={{ color: "#1e293b", fontWeight: 600 }}>{selectedChargeSheetModal.dateRequestDocuments}</span>
+                      </div>
+                    )}
+                    {selectedChargeSheetModal.dateSubmissionDocuments && (
+                      <div>
+                        <span style={{ color: "#64748b", fontSize: "11px", fontWeight: 600, display: "block" }}>Date Submission Documents:</span>
+                        <span style={{ color: "#1e293b", fontWeight: 600 }}>{selectedChargeSheetModal.dateSubmissionDocuments}</span>
+                      </div>
+                    )}
+                    {selectedChargeSheetModal.agreeWithAnswers && (
+                      <div>
+                        <span style={{ color: "#64748b", fontSize: "11px", fontWeight: 600, display: "block" }}>Agree with Answers:</span>
+                        <span style={{ color: "#1e293b", fontWeight: 600 }}>{selectedChargeSheetModal.agreeWithAnswers}</span>
+                      </div>
+                    )}
+                    {selectedChargeSheetModal.dateDraftSubmittedPsc && (
+                      <div>
+                        <span style={{ color: "#64748b", fontSize: "11px", fontWeight: 600, display: "block" }}>Date Draft Submitted to PSC:</span>
+                        <span style={{ color: "#1e293b", fontWeight: 600 }}>{selectedChargeSheetModal.dateDraftSubmittedPsc}</span>
+                      </div>
+                    )}
+                    {selectedChargeSheetModal.agreeWithPscDecision && (
+                      <div>
+                        <span style={{ color: "#64748b", fontSize: "11px", fontWeight: 600, display: "block" }}>Agree with PSC Decision:</span>
+                        <span style={{ color: "#1e293b", fontWeight: 600 }}>{selectedChargeSheetModal.agreeWithPscDecision}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Disciplinary Order & Notes */}
+              {(selectedChargeSheetModal.disciplinaryOrder || selectedChargeSheetModal.notes) && (
+                <div className="inquiry-dossier-section" style={{ backgroundColor: "#f0fdf4", borderColor: "#86efac" }}>
+                  <div className="inquiry-dossier-section-title" style={{ color: "#15803d" }}>
+                    <ShieldCheck size={14} style={{ color: "#16a34a" }} />
+                    <span>Disciplinary Order & Minutes (විනය නියෝගය සහ සටහන්)</span>
+                  </div>
+                  {selectedChargeSheetModal.disciplinaryOrder && (
+                    <div style={{ marginBottom: "8px" }}>
+                      <span style={{ color: "#166534", fontSize: "11px", fontWeight: 700, display: "block" }}>Final Disciplinary Order:</span>
+                      <div style={{ backgroundColor: "#ffffff", padding: "8px 12px", borderRadius: "6px", border: "1px solid #bbf7d0", color: "#14532d", fontWeight: 600, marginTop: "3px" }}>
+                        {selectedChargeSheetModal.disciplinaryOrder}
+                      </div>
+                    </div>
+                  )}
+                  {selectedChargeSheetModal.notes && (
+                    <div style={{ fontSize: "12px", color: "#475569", backgroundColor: "#ffffff", padding: "8px 12px", borderRadius: "6px", border: "1px solid #e2e8f0" }}>
+                      <strong>Reference Notes:</strong> {selectedChargeSheetModal.notes}
+                    </div>
+                  )}
+                </div>
+              )}
+
+            </div>
+
+            {/* Modal Footer */}
+            <footer className="inquiry-dossier-footer">
+              <button
+                type="button"
+                onClick={() => setSelectedChargeSheetModal(null)}
+                className="inquiry-dossier-btn-cancel"
+              >
+                Close
+              </button>
+              <Link
+                href={`/subject/recommendation?caseNo=${encodeURIComponent(selectedChargeSheetModal.caseNo)}`}
+                className="btn-create-rec"
+                style={{ padding: "8px 16px", fontSize: "13px", background: "linear-gradient(135deg, #d97706 0%, #b45309 100%)" }}
+              >
+                <Plus size={14} />
+                <span>{lang === "si" ? "චෝදනා පත්‍ර විස්තර සංස්කරණය" : "Edit Charge Sheet Details"}</span>
               </Link>
             </footer>
 

@@ -66,7 +66,7 @@ export const formatToInputDate = (dateStr?: string | null): string => {
   return "";
 };
 
-export function parseCommitteeDetails(asgn: any) {
+function parseCommitteeDetails(asgn: any) {
   let chairmanName = "";
   let chairmanEmail = "";
   let memberList: Array<{ name: string; email: string; idNo?: string }> = [];

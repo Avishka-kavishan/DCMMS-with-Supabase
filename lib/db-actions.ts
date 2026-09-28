@@ -5929,15 +5929,29 @@ async function ensureRecommendationsTable() {
       );
     `);
 
-    // 2. Ensure charge_sheet_table exists in PostgreSQL
+    // 1.1 Ensure charge_sheet_table exists in PostgreSQL (Holds all charge sheet and recommendation data)
     await prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS public.charge_sheet_table (
         id BIGSERIAL PRIMARY KEY,
         ref_number VARCHAR(100) NOT NULL UNIQUE REFERENCES public.subject_officer_form_table(ref_number) ON DELETE CASCADE,
+        category_recommendation VARCHAR(255),
+        case_status VARCHAR(100) DEFAULT 'Pending',
+        target_implementation_date DATE,
+        recommendation_text TEXT,
+        circular_reference VARCHAR(255),
+        minute_ref VARCHAR(255),
+        date_approved_by_secretory DATE,
+        secretory_recommendation TEXT,
         issued_charge_sheet TEXT,
         date_the_charge_sheet_issued DATE,
         date_the_response_to_the_charge_sheet_was_given DATE,
         disciplinary_order TEXT,
+        disciplinary_authority VARCHAR(100),
+        date_request_documents DATE,
+        date_submission_documents DATE,
+        agree_with_answers VARCHAR(20),
+        date_draft_submitted_psc DATE,
+        agree_with_psc_decision VARCHAR(20),
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );
@@ -5962,6 +5976,41 @@ async function ensureRecommendationsTable() {
       `);
     } catch (e) {}
 
+    // Migrate all fields for charge_sheet_table if they don't exist
+    const chargeSheetMigrations = [
+      "ALTER TABLE public.charge_sheet_table ADD COLUMN IF NOT EXISTS category_recommendation VARCHAR(255);",
+      "ALTER TABLE public.charge_sheet_table ADD COLUMN IF NOT EXISTS case_status VARCHAR(100) DEFAULT 'Pending';",
+      "ALTER TABLE public.charge_sheet_table ADD COLUMN IF NOT EXISTS target_implementation_date DATE;",
+      "ALTER TABLE public.charge_sheet_table ADD COLUMN IF NOT EXISTS recommendation_text TEXT;",
+      "ALTER TABLE public.charge_sheet_table ADD COLUMN IF NOT EXISTS circular_reference VARCHAR(255);",
+      "ALTER TABLE public.charge_sheet_table ADD COLUMN IF NOT EXISTS minute_ref VARCHAR(255);",
+      "ALTER TABLE public.charge_sheet_table ADD COLUMN IF NOT EXISTS date_approved_by_secretory DATE;",
+      "ALTER TABLE public.charge_sheet_table ADD COLUMN IF NOT EXISTS secretory_recommendation TEXT;",
+      "ALTER TABLE public.charge_sheet_table ADD COLUMN IF NOT EXISTS issued_charge_sheet TEXT;",
+      "ALTER TABLE public.charge_sheet_table ADD COLUMN IF NOT EXISTS date_the_charge_sheet_issued DATE;",
+      "ALTER TABLE public.charge_sheet_table ADD COLUMN IF NOT EXISTS date_the_response_to_the_charge_sheet_was_given DATE;",
+      "ALTER TABLE public.charge_sheet_table ADD COLUMN IF NOT EXISTS disciplinary_order TEXT;",
+      "ALTER TABLE public.charge_sheet_table ADD COLUMN IF NOT EXISTS disciplinary_authority VARCHAR(100);",
+      "ALTER TABLE public.charge_sheet_table ADD COLUMN IF NOT EXISTS date_request_documents DATE;",
+      "ALTER TABLE public.charge_sheet_table ADD COLUMN IF NOT EXISTS date_submission_documents DATE;",
+      "ALTER TABLE public.charge_sheet_table ADD COLUMN IF NOT EXISTS agree_with_answers VARCHAR(20);",
+      "ALTER TABLE public.charge_sheet_table ADD COLUMN IF NOT EXISTS date_draft_submitted_psc DATE;",
+      "ALTER TABLE public.charge_sheet_table ADD COLUMN IF NOT EXISTS agree_with_psc_decision VARCHAR(20);"
+    ];
+    for (const q of chargeSheetMigrations) {
+      try {
+        await prisma.$executeRawUnsafe(q);
+      } catch (colErr) {}
+    }
+
+    // 1.2 Compatibility view: recommendation_table points directly to charge_sheet_table
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE OR REPLACE VIEW public.recommendation_table AS
+        SELECT * FROM public.charge_sheet_table;
+      `);
+    } catch (viewErr) {}
+
     // 3. Ensure fallback dcmms_recommendations exists
     await prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS public.dcmms_recommendations (
@@ -5980,6 +6029,12 @@ async function ensureRecommendationsTable() {
         charge_sheet_issued_date DATE,
         charge_sheet_response_date DATE,
         disciplinary_order TEXT,
+        disciplinary_authority VARCHAR(100),
+        date_request_documents DATE,
+        date_submission_documents DATE,
+        agree_with_answers VARCHAR(20),
+        date_draft_submitted_psc DATE,
+        agree_with_psc_decision VARCHAR(20),
         secretary_approval_date DATE,
         secretary_approved_recommendation TEXT,
         status VARCHAR(50) DEFAULT 'Submitted',
@@ -5988,6 +6043,20 @@ async function ensureRecommendationsTable() {
         updated_at TIMESTAMP DEFAULT NOW()
       );
     `);
+
+    const dcmmsMigrations = [
+      "ALTER TABLE public.dcmms_recommendations ADD COLUMN IF NOT EXISTS disciplinary_authority VARCHAR(100);",
+      "ALTER TABLE public.dcmms_recommendations ADD COLUMN IF NOT EXISTS date_request_documents DATE;",
+      "ALTER TABLE public.dcmms_recommendations ADD COLUMN IF NOT EXISTS date_submission_documents DATE;",
+      "ALTER TABLE public.dcmms_recommendations ADD COLUMN IF NOT EXISTS agree_with_answers VARCHAR(20);",
+      "ALTER TABLE public.dcmms_recommendations ADD COLUMN IF NOT EXISTS date_draft_submitted_psc DATE;",
+      "ALTER TABLE public.dcmms_recommendations ADD COLUMN IF NOT EXISTS agree_with_psc_decision VARCHAR(20);"
+    ];
+    for (const q of dcmmsMigrations) {
+      try {
+        await prisma.$executeRawUnsafe(q);
+      } catch (colErr) {}
+    }
   } catch (e: any) {
     console.warn("Table verification notice for recommendations / investigation_table / charge_sheet_table:", e?.message);
   }
@@ -6306,19 +6375,19 @@ export async function getCaseDetailsForRecommendationServer(caseRef: string) {
       console.warn("Appts query error:", e);
     }
 
-    // 4. Query recommendation record from investigation_table (Primary source)
+    // 4. Query recommendation and charge sheet record from charge_sheet_table
     let existingRec: any = null;
     try {
-      const invs: any[] = await prisma.$queryRaw`
-        SELECT * FROM investigation_table
+      const recsFromTable: any[] = await prisma.$queryRaw`
+        SELECT * FROM public.charge_sheet_table
         WHERE LOWER(TRIM(ref_number)) = LOWER(${clean})
            OR LOWER(TRIM(ref_number)) = LOWER(${matchedRef})
            OR (${actualSubNo.trim()} != '' AND LOWER(TRIM(ref_number)) = LOWER(${actualSubNo.trim()}))
         ORDER BY updated_at DESC
         LIMIT 1;
       `;
-      if (invs && invs.length > 0) {
-        const r = invs[0];
+      if (recsFromTable && recsFromTable.length > 0) {
+        const r = recsFromTable[0];
         existingRec = {
           id: String(r.id),
           caseNo: r.ref_number || clean,
@@ -6326,15 +6395,21 @@ export async function getCaseDetailsForRecommendationServer(caseRef: string) {
           category: r.category_recommendation || "issuing_charge_sheet",
           urgency: "normal",
           title: "Preliminary Investigation Recommendation",
-          recommendationText: r.investigation_recommendation || "",
+          recommendationText: r.recommendation_text || "",
           disciplinaryAction: r.circular_reference || "",
           forwardTo: "disciplinary_branch",
           targetDate: r.target_implementation_date ? new Date(r.target_implementation_date).toISOString().slice(0, 10) : "",
           referenceNotes: r.minute_ref || "",
-          issuedChargeSheet: "",
-          chargeSheetIssuedDate: "",
-          chargeSheetResponseDate: "",
-          disciplinaryOrder: "",
+          issuedChargeSheet: r.issued_charge_sheet || "",
+          chargeSheetIssuedDate: r.date_the_charge_sheet_issued ? new Date(r.date_the_charge_sheet_issued).toISOString().slice(0, 10) : "",
+          chargeSheetResponseDate: r.date_the_response_to_the_charge_sheet_was_given ? new Date(r.date_the_response_to_the_charge_sheet_was_given).toISOString().slice(0, 10) : "",
+          disciplinaryOrder: r.disciplinary_order || "",
+          disciplinaryAuthority: r.disciplinary_authority || "",
+          dateRequestDocuments: r.date_request_documents ? new Date(r.date_request_documents).toISOString().slice(0, 10) : "",
+          dateSubmissionDocuments: r.date_submission_documents ? new Date(r.date_submission_documents).toISOString().slice(0, 10) : "",
+          agreeWithAnswers: r.agree_with_answers || "",
+          dateDraftSubmittedPsc: r.date_draft_submitted_psc ? new Date(r.date_draft_submitted_psc).toISOString().slice(0, 10) : "",
+          agreeWithPscDecision: r.agree_with_psc_decision || "",
           secretaryApprovalDate: r.date_approved_by_secretory ? new Date(r.date_approved_by_secretory).toISOString().slice(0, 10) : "",
           secretaryApprovedRecommendation: r.secretory_recommendation || "",
           status: r.case_status || "Submitted",
@@ -6342,8 +6417,48 @@ export async function getCaseDetailsForRecommendationServer(caseRef: string) {
           updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : ""
         };
       }
-    } catch (invErr) {
-      console.warn("Error querying investigation_table in getCaseDetailsForRecommendationServer:", invErr);
+    } catch (recErr) {
+      console.warn("Error querying charge_sheet_table in getCaseDetailsForRecommendationServer:", recErr);
+    }
+
+    if (!existingRec) {
+      try {
+        const invs: any[] = await prisma.$queryRaw`
+          SELECT * FROM investigation_table
+          WHERE LOWER(TRIM(ref_number)) = LOWER(${clean})
+             OR LOWER(TRIM(ref_number)) = LOWER(${matchedRef})
+             OR (${actualSubNo.trim()} != '' AND LOWER(TRIM(ref_number)) = LOWER(${actualSubNo.trim()}))
+          ORDER BY updated_at DESC
+          LIMIT 1;
+        `;
+        if (invs && invs.length > 0) {
+          const r = invs[0];
+          existingRec = {
+            id: String(r.id),
+            caseNo: r.ref_number || clean,
+            letterNo: letterNo || "",
+            category: r.category_recommendation || "issuing_charge_sheet",
+            urgency: "normal",
+            title: "Preliminary Investigation Recommendation",
+            recommendationText: r.investigation_recommendation || "",
+            disciplinaryAction: r.circular_reference || "",
+            forwardTo: "disciplinary_branch",
+            targetDate: r.target_implementation_date ? new Date(r.target_implementation_date).toISOString().slice(0, 10) : "",
+            referenceNotes: r.minute_ref || "",
+            issuedChargeSheet: "",
+            chargeSheetIssuedDate: "",
+            chargeSheetResponseDate: "",
+            disciplinaryOrder: "",
+            secretaryApprovalDate: r.date_approved_by_secretory ? new Date(r.date_approved_by_secretory).toISOString().slice(0, 10) : "",
+            secretaryApprovedRecommendation: r.secretory_recommendation || "",
+            status: r.case_status || "Submitted",
+            submittedAt: r.created_at ? new Date(r.created_at).toISOString() : "",
+            updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : ""
+          };
+        }
+      } catch (invErr) {
+        console.warn("Error querying investigation_table in getCaseDetailsForRecommendationServer:", invErr);
+      }
     }
 
     // 5. Query and merge supplemental details from dcmms_recommendations
@@ -6374,6 +6489,12 @@ export async function getCaseDetailsForRecommendationServer(caseRef: string) {
             chargeSheetIssuedDate: r.charge_sheet_issued_date ? new Date(r.charge_sheet_issued_date).toISOString().slice(0, 10) : "",
             chargeSheetResponseDate: r.charge_sheet_response_date ? new Date(r.charge_sheet_response_date).toISOString().slice(0, 10) : "",
             disciplinaryOrder: r.disciplinary_order || "",
+            disciplinaryAuthority: r.disciplinary_authority || "",
+            dateRequestDocuments: r.date_request_documents ? new Date(r.date_request_documents).toISOString().slice(0, 10) : "",
+            dateSubmissionDocuments: r.date_submission_documents ? new Date(r.date_submission_documents).toISOString().slice(0, 10) : "",
+            agreeWithAnswers: r.agree_with_answers || "",
+            dateDraftSubmittedPsc: r.date_draft_submitted_psc ? new Date(r.date_draft_submitted_psc).toISOString().slice(0, 10) : "",
+            agreeWithPscDecision: r.agree_with_psc_decision || "",
             secretaryApprovalDate: r.secretary_approval_date ? new Date(r.secretary_approval_date).toISOString().slice(0, 10) : "",
             secretaryApprovedRecommendation: r.secretary_approved_recommendation || "",
             status: r.status || "Submitted",
@@ -6388,6 +6509,12 @@ export async function getCaseDetailsForRecommendationServer(caseRef: string) {
           if (r.charge_sheet_issued_date) existingRec.chargeSheetIssuedDate = new Date(r.charge_sheet_issued_date).toISOString().slice(0, 10);
           if (r.charge_sheet_response_date) existingRec.chargeSheetResponseDate = new Date(r.charge_sheet_response_date).toISOString().slice(0, 10);
           if (r.disciplinary_order) existingRec.disciplinaryOrder = r.disciplinary_order;
+          if (r.disciplinary_authority) existingRec.disciplinaryAuthority = r.disciplinary_authority;
+          if (r.date_request_documents) existingRec.dateRequestDocuments = new Date(r.date_request_documents).toISOString().slice(0, 10);
+          if (r.date_submission_documents) existingRec.dateSubmissionDocuments = new Date(r.date_submission_documents).toISOString().slice(0, 10);
+          if (r.agree_with_answers) existingRec.agreeWithAnswers = r.agree_with_answers;
+          if (r.date_draft_submitted_psc) existingRec.dateDraftSubmittedPsc = new Date(r.date_draft_submitted_psc).toISOString().slice(0, 10);
+          if (r.agree_with_psc_decision) existingRec.agreeWithPscDecision = r.agree_with_psc_decision;
         }
       }
     } catch (dcmmsFetchErr) {
@@ -6409,6 +6536,12 @@ export async function getCaseDetailsForRecommendationServer(caseRef: string) {
           if (cs.date_the_charge_sheet_issued) existingRec.chargeSheetIssuedDate = new Date(cs.date_the_charge_sheet_issued).toISOString().slice(0, 10);
           if (cs.date_the_response_to_the_charge_sheet_was_given) existingRec.chargeSheetResponseDate = new Date(cs.date_the_response_to_the_charge_sheet_was_given).toISOString().slice(0, 10);
           if (cs.disciplinary_order) existingRec.disciplinaryOrder = cs.disciplinary_order;
+          if (cs.disciplinary_authority) existingRec.disciplinaryAuthority = cs.disciplinary_authority;
+          if (cs.date_request_documents) existingRec.dateRequestDocuments = new Date(cs.date_request_documents).toISOString().slice(0, 10);
+          if (cs.date_submission_documents) existingRec.dateSubmissionDocuments = new Date(cs.date_submission_documents).toISOString().slice(0, 10);
+          if (cs.agree_with_answers) existingRec.agreeWithAnswers = cs.agree_with_answers;
+          if (cs.date_draft_submitted_psc) existingRec.dateDraftSubmittedPsc = new Date(cs.date_draft_submitted_psc).toISOString().slice(0, 10);
+          if (cs.agree_with_psc_decision) existingRec.agreeWithPscDecision = cs.agree_with_psc_decision;
         }
       }
     } catch (csFetchErr) {
@@ -6449,7 +6582,8 @@ export async function saveRecommendationServer(recData: any) {
     }
 
     const category = recData.category_recommendation || recData.category || "issuing_charge_sheet";
-    const status = recData.case_status || recData.status || "Submitted";
+    const isClosedDecision = recData.agree_with_answers === "yes" || recData.agreeWithAnswers === "yes" || recData.agree_with_psc_decision === "yes" || recData.agreeWithPscDecision === "yes";
+    const status = isClosedDecision ? "Closed" : (recData.case_status || recData.status || "Submitted");
     const targetDate = parseSafeDate(recData.target_implementation_date || recData.target_date || recData.targetDate);
     const recommendationText = recData.investigation_recommendation || recData.recommendation_text || recData.recommendationText || "";
     const circularReference = recData.circular_reference || recData.disciplinary_action || recData.disciplinaryAction || null;
@@ -6466,6 +6600,12 @@ export async function saveRecommendationServer(recData: any) {
     const chargeSheetIssuedDate = parseSafeDate(recData.date_the_charge_sheet_issued || recData.charge_sheet_issued_date || recData.chargeSheetIssuedDate);
     const chargeSheetResponseDate = parseSafeDate(recData.date_the_response_to_the_charge_sheet_was_given || recData.charge_sheet_response_date || recData.chargeSheetResponseDate);
     const disciplinaryOrder = recData.disciplinary_order || recData.disciplinaryOrder || null;
+    const disciplinaryAuthority = recData.disciplinary_authority || recData.disciplinaryAuthority || null;
+    const dateRequestDocuments = parseSafeDate(recData.date_request_documents || recData.dateRequestDocuments);
+    const dateSubmissionDocuments = parseSafeDate(recData.date_submission_documents || recData.dateSubmissionDocuments);
+    const agreeWithAnswers = recData.agree_with_answers || recData.agreeWithAnswers || null;
+    const dateDraftSubmittedPsc = parseSafeDate(recData.date_draft_submitted_psc || recData.dateDraftSubmittedPsc);
+    const agreeWithPscDecision = recData.agree_with_psc_decision || recData.agreeWithPscDecision || null;
     const submittedAt = status === "Submitted" ? new Date() : null;
 
     // 1. Resolve / ensure parent record in subject_officer_form_table (FK target for investigation_table)
@@ -6537,34 +6677,74 @@ export async function saveRecommendationServer(recData: any) {
       throw invErr;
     }
 
-    // 3. Save / Upsert directly to charge_sheet_table
+    // 2.1 Save / Upsert directly to charge_sheet_table (Charge Sheet Table)
     try {
-      if (category === "issuing_charge_sheet" || issuedChargeSheet || chargeSheetIssuedDate || chargeSheetResponseDate || disciplinaryOrder) {
-        await prisma.$executeRaw`
-          INSERT INTO public.charge_sheet_table (
-            ref_number,
-            issued_charge_sheet,
-            date_the_charge_sheet_issued,
-            date_the_response_to_the_charge_sheet_was_given,
-            disciplinary_order,
-            updated_at
-          ) VALUES (
-            ${matchedRef},
-            ${issuedChargeSheet},
-            ${chargeSheetIssuedDate},
-            ${chargeSheetResponseDate},
-            ${disciplinaryOrder},
-            NOW()
-          )
-          ON CONFLICT (ref_number) DO UPDATE SET
-            issued_charge_sheet = EXCLUDED.issued_charge_sheet,
-            date_the_charge_sheet_issued = EXCLUDED.date_the_charge_sheet_issued,
-            date_the_response_to_the_charge_sheet_was_given = EXCLUDED.date_the_response_to_the_charge_sheet_was_given,
-            disciplinary_order = EXCLUDED.disciplinary_order,
-            updated_at = NOW();
-        `;
+      await prisma.$executeRaw`
+        INSERT INTO public.charge_sheet_table (
+          ref_number, category_recommendation, case_status, target_implementation_date,
+          recommendation_text, circular_reference, minute_ref,
+          date_approved_by_secretory, secretory_recommendation,
+          issued_charge_sheet, date_the_charge_sheet_issued, date_the_response_to_the_charge_sheet_was_given,
+          disciplinary_order, disciplinary_authority, date_request_documents, date_submission_documents,
+          agree_with_answers, date_draft_submitted_psc, agree_with_psc_decision,
+          created_at, updated_at
+        ) VALUES (
+          ${matchedRef}, ${category}, ${status}, ${targetDate},
+          ${recommendationText}, ${circularReference}, ${minuteRef},
+          ${secretaryApprovalDate}, ${secretaryApprovedRecommendation},
+          ${issuedChargeSheet}, ${chargeSheetIssuedDate}, ${chargeSheetResponseDate},
+          ${disciplinaryOrder}, ${disciplinaryAuthority}, ${dateRequestDocuments}, ${dateSubmissionDocuments},
+          ${agreeWithAnswers}, ${dateDraftSubmittedPsc}, ${agreeWithPscDecision},
+          NOW(), NOW()
+        )
+        ON CONFLICT (ref_number) DO UPDATE SET
+          category_recommendation = EXCLUDED.category_recommendation,
+          case_status = EXCLUDED.case_status,
+          target_implementation_date = EXCLUDED.target_implementation_date,
+          recommendation_text = EXCLUDED.recommendation_text,
+          circular_reference = EXCLUDED.circular_reference,
+          minute_ref = EXCLUDED.minute_ref,
+          date_approved_by_secretory = EXCLUDED.date_approved_by_secretory,
+          secretory_recommendation = EXCLUDED.secretory_recommendation,
+          issued_charge_sheet = COALESCE(EXCLUDED.issued_charge_sheet, public.charge_sheet_table.issued_charge_sheet),
+          date_the_charge_sheet_issued = COALESCE(EXCLUDED.date_the_charge_sheet_issued, public.charge_sheet_table.date_the_charge_sheet_issued),
+          date_the_response_to_the_charge_sheet_was_given = COALESCE(EXCLUDED.date_the_response_to_the_charge_sheet_was_given, public.charge_sheet_table.date_the_response_to_the_charge_sheet_was_given),
+          disciplinary_order = COALESCE(EXCLUDED.disciplinary_order, public.charge_sheet_table.disciplinary_order),
+          disciplinary_authority = COALESCE(EXCLUDED.disciplinary_authority, public.charge_sheet_table.disciplinary_authority),
+          date_request_documents = COALESCE(EXCLUDED.date_request_documents, public.charge_sheet_table.date_request_documents),
+          date_submission_documents = COALESCE(EXCLUDED.date_submission_documents, public.charge_sheet_table.date_submission_documents),
+          agree_with_answers = COALESCE(EXCLUDED.agree_with_answers, public.charge_sheet_table.agree_with_answers),
+          date_draft_submitted_psc = COALESCE(EXCLUDED.date_draft_submitted_psc, public.charge_sheet_table.date_draft_submitted_psc),
+          agree_with_psc_decision = COALESCE(EXCLUDED.agree_with_psc_decision, public.charge_sheet_table.agree_with_psc_decision),
+          updated_at = NOW();
+      `;
 
-        // Update subject_officer_form_table future_action to reflect Proper Disciplinary Inspection progression
+      // Update subject_officer_form_table future_action to reflect Proper Disciplinary Inspection progression or Closed
+      if (agreeWithAnswers === "yes" || agreeWithPscDecision === "yes" || isClosedDecision) {
+        await prisma.$executeRaw`
+          UPDATE subject_officer_form_table
+          SET future_action = 'Closed',
+              updated_at = NOW()
+          WHERE LOWER(TRIM(ref_number)) = LOWER(${matchedRef})
+             OR LOWER(TRIM(subject_file_no)) = LOWER(${caseNo});
+        `;
+        try {
+          await prisma.$executeRaw`
+            UPDATE public.dcmms_daily_mail
+            SET status = 'Closed', updated_at = NOW()
+            WHERE (letter_no IS NOT NULL AND LOWER(TRIM(letter_no)) = LOWER(${letterNo}))
+               OR (serial_no IS NOT NULL AND LOWER(TRIM(serial_no)) = LOWER(${caseNo}));
+          `;
+        } catch (mErr) {}
+        try {
+          await prisma.$executeRaw`
+            UPDATE public.dcmms_subject_assignments
+            SET status = 'Closed', updated_at = NOW()
+            WHERE LOWER(TRIM(case_no)) = LOWER(${caseNo})
+               OR LOWER(TRIM(case_no)) = LOWER(${matchedRef});
+          `;
+        } catch (aErr) {}
+      } else if (category === "issuing_charge_sheet" || issuedChargeSheet) {
         await prisma.$executeRaw`
           UPDATE subject_officer_form_table
           SET future_action = 'Proper Disciplinary Inspection - Formal Charge Sheet Issued',
@@ -6602,6 +6782,12 @@ export async function saveRecommendationServer(recData: any) {
               charge_sheet_issued_date = ${chargeSheetIssuedDate},
               charge_sheet_response_date = ${chargeSheetResponseDate},
               disciplinary_order = ${disciplinaryOrder},
+              disciplinary_authority = ${disciplinaryAuthority},
+              date_request_documents = ${dateRequestDocuments},
+              date_submission_documents = ${dateSubmissionDocuments},
+              agree_with_answers = ${agreeWithAnswers},
+              date_draft_submitted_psc = ${dateDraftSubmittedPsc},
+              agree_with_psc_decision = ${agreeWithPscDecision},
               secretary_approval_date = ${secretaryApprovalDate},
               secretary_approved_recommendation = ${secretaryApprovedRecommendation},
               status = ${status},
@@ -6614,13 +6800,17 @@ export async function saveRecommendationServer(recData: any) {
           INSERT INTO public.dcmms_recommendations (
             case_no, letter_no, category, urgency, title, recommendation_text, disciplinary_action,
             forward_to, target_date, reference_notes, issued_charge_sheet, charge_sheet_issued_date,
-            charge_sheet_response_date, disciplinary_order, secretary_approval_date,
-            secretary_approved_recommendation, status, submitted_at
+            charge_sheet_response_date, disciplinary_order, disciplinary_authority,
+            date_request_documents, date_submission_documents, agree_with_answers,
+            date_draft_submitted_psc, agree_with_psc_decision,
+            secretary_approval_date, secretary_approved_recommendation, status, submitted_at
           ) VALUES (
             ${matchedRef}, ${letterNo}, ${category}, ${urgency}, ${title}, ${recommendationText}, ${circularReference},
             ${forwardTo}, ${targetDate}, ${minuteRef}, ${issuedChargeSheet}, ${chargeSheetIssuedDate},
-            ${chargeSheetResponseDate}, ${disciplinaryOrder}, ${secretaryApprovalDate},
-            ${secretaryApprovedRecommendation}, ${status}, ${submittedAt}
+            ${chargeSheetResponseDate}, ${disciplinaryOrder}, ${disciplinaryAuthority},
+            ${dateRequestDocuments}, ${dateSubmissionDocuments}, ${agreeWithAnswers},
+            ${dateDraftSubmittedPsc}, ${agreeWithPscDecision},
+            ${secretaryApprovalDate}, ${secretaryApprovedRecommendation}, ${status}, ${submittedAt}
           );
         `;
       }
@@ -6643,6 +6833,89 @@ export async function getRecommendationsListServer() {
   await ensureRecommendationsTable();
   try {
     const listMap = new Map<string, any>();
+
+    // 0. Fetch from charge_sheet_table (Charge Sheet Table)
+    try {
+      const rawRecs: any[] = await prisma.$queryRaw`
+        SELECT 
+          cs.id::text as id,
+          cs.ref_number as "caseNo",
+          cs.category_recommendation as "category",
+          cs.case_status as "status",
+          cs.target_implementation_date as "targetDate",
+          cs.recommendation_text as "recommendationText",
+          cs.circular_reference as "disciplinaryAction",
+          cs.minute_ref as "referenceNotes",
+          cs.date_approved_by_secretory as "secretaryApprovalDate",
+          cs.secretory_recommendation as "secretaryApprovedRecommendation",
+          cs.issued_charge_sheet as "issuedChargeSheet",
+          cs.date_the_charge_sheet_issued as "chargeSheetIssuedDate",
+          cs.date_the_response_to_the_charge_sheet_was_given as "chargeSheetResponseDate",
+          cs.disciplinary_order as "disciplinaryOrder",
+          cs.disciplinary_authority as "disciplinaryAuthority",
+          cs.date_request_documents as "dateRequestDocuments",
+          cs.date_submission_documents as "dateSubmissionDocuments",
+          cs.agree_with_answers as "agreeWithAnswers",
+          cs.date_draft_submitted_psc as "dateDraftSubmittedPsc",
+          cs.agree_with_psc_decision as "agreeWithPscDecision",
+          cs.created_at as "createdAt",
+          cs.updated_at as "updatedAt",
+          sof.subject_file_no as "subjectFileNo",
+          sof.classification_of_complaint_letter as "complaintClassification",
+          dml.letter_number as "letterNo",
+          dml.subject_of_letter as "mailSubject",
+          ao.accused_officer_name as "accusedName",
+          ao.position as "accusedDesignation",
+          sch.accused_school_name as "schoolName"
+        FROM public.charge_sheet_table cs
+        LEFT JOIN subject_officer_form_table sof ON cs.ref_number = sof.ref_number
+        LEFT JOIN daily_mail_letter_table dml ON sof.daily_mail_letter_id = dml.id
+        LEFT JOIN accused_officer_table ao ON sof.accused_officer_id = ao.id
+        LEFT JOIN accused_school_table sch ON ao.accused_school_id = sch.id
+        ORDER BY cs.updated_at DESC;
+      `;
+
+      if (rawRecs && Array.isArray(rawRecs)) {
+        for (const item of rawRecs) {
+          const key = (item.caseNo || "").trim().toLowerCase();
+          if (!key) continue;
+          listMap.set(key, {
+            id: item.id,
+            caseNo: item.caseNo,
+            letterNo: item.letterNo || item.caseNo,
+            category: item.category || "issuing_charge_sheet",
+            urgency: "normal",
+            title: "Preliminary Investigation Recommendation",
+            recommendationText: item.recommendationText || "",
+            disciplinaryAction: item.disciplinaryAction || "",
+            forwardTo: "disciplinary_branch",
+            targetDate: item.targetDate ? new Date(item.targetDate).toISOString().slice(0, 10) : "",
+            referenceNotes: item.referenceNotes || "",
+            issuedChargeSheet: item.issuedChargeSheet || "",
+            chargeSheetIssuedDate: item.chargeSheetIssuedDate ? new Date(item.chargeSheetIssuedDate).toISOString().slice(0, 10) : "",
+            chargeSheetResponseDate: item.chargeSheetResponseDate ? new Date(item.chargeSheetResponseDate).toISOString().slice(0, 10) : "",
+            disciplinaryOrder: item.disciplinaryOrder || "",
+            disciplinaryAuthority: item.disciplinaryAuthority || "",
+            dateRequestDocuments: item.dateRequestDocuments ? new Date(item.dateRequestDocuments).toISOString().slice(0, 10) : "",
+            dateSubmissionDocuments: item.dateSubmissionDocuments ? new Date(item.dateSubmissionDocuments).toISOString().slice(0, 10) : "",
+            agreeWithAnswers: item.agreeWithAnswers || "",
+            dateDraftSubmittedPsc: item.dateDraftSubmittedPsc ? new Date(item.dateDraftSubmittedPsc).toISOString().slice(0, 10) : "",
+            agreeWithPscDecision: item.agreeWithPscDecision || "",
+            secretaryApprovalDate: item.secretaryApprovalDate ? new Date(item.secretaryApprovalDate).toISOString().slice(0, 10) : "",
+            secretaryApprovedRecommendation: item.secretaryApprovedRecommendation || "",
+            status: item.status || "Submitted",
+            submittedAt: item.createdAt ? new Date(item.createdAt).toISOString() : "",
+            createdAt: item.createdAt ? new Date(item.createdAt).toISOString() : "",
+            updatedAt: item.updatedAt ? new Date(item.updatedAt).toISOString() : "",
+            accusedName: item.accusedName || "",
+            accusedDesignation: item.accusedDesignation || "",
+            schoolName: item.schoolName || "",
+          });
+        }
+      }
+    } catch (csTableErr) {
+      console.warn("Error querying charge_sheet_table in getRecommendationsListServer:", csTableErr);
+    }
 
     // 1. Fetch from investigation_table (Primary source of truth)
     try {
@@ -6695,6 +6968,12 @@ export async function getRecommendationsListServer() {
             chargeSheetIssuedDate: "",
             chargeSheetResponseDate: "",
             disciplinaryOrder: "",
+            disciplinaryAuthority: "",
+            dateRequestDocuments: "",
+            dateSubmissionDocuments: "",
+            agreeWithAnswers: "",
+            dateDraftSubmittedPsc: "",
+            agreeWithPscDecision: "",
             secretaryApprovalDate: item.secretaryApprovalDate ? new Date(item.secretaryApprovalDate).toISOString().slice(0, 10) : "",
             secretaryApprovedRecommendation: item.secretaryApprovedRecommendation || "",
             status: item.status || "Submitted",
@@ -6719,7 +6998,13 @@ export async function getRecommendationsListServer() {
           issued_charge_sheet as "issuedChargeSheet",
           date_the_charge_sheet_issued as "chargeSheetIssuedDate",
           date_the_response_to_the_charge_sheet_was_given as "chargeSheetResponseDate",
-          disciplinary_order as "disciplinaryOrder"
+          disciplinary_order as "disciplinaryOrder",
+          disciplinary_authority as "disciplinaryAuthority",
+          date_request_documents as "dateRequestDocuments",
+          date_submission_documents as "dateSubmissionDocuments",
+          agree_with_answers as "agreeWithAnswers",
+          date_draft_submitted_psc as "dateDraftSubmittedPsc",
+          agree_with_psc_decision as "agreeWithPscDecision"
         FROM public.charge_sheet_table;
       `;
       if (rawCS && Array.isArray(rawCS)) {
@@ -6732,6 +7017,43 @@ export async function getRecommendationsListServer() {
             if (cs.chargeSheetIssuedDate) item.chargeSheetIssuedDate = new Date(cs.chargeSheetIssuedDate).toISOString().slice(0, 10);
             if (cs.chargeSheetResponseDate) item.chargeSheetResponseDate = new Date(cs.chargeSheetResponseDate).toISOString().slice(0, 10);
             if (cs.disciplinaryOrder) item.disciplinaryOrder = cs.disciplinaryOrder;
+            if (cs.disciplinaryAuthority) item.disciplinaryAuthority = cs.disciplinaryAuthority;
+            if (cs.dateRequestDocuments) item.dateRequestDocuments = new Date(cs.dateRequestDocuments).toISOString().slice(0, 10);
+            if (cs.dateSubmissionDocuments) item.dateSubmissionDocuments = new Date(cs.dateSubmissionDocuments).toISOString().slice(0, 10);
+            if (cs.agreeWithAnswers) item.agreeWithAnswers = cs.agreeWithAnswers;
+            if (cs.dateDraftSubmittedPsc) item.dateDraftSubmittedPsc = new Date(cs.dateDraftSubmittedPsc).toISOString().slice(0, 10);
+            if (cs.agreeWithPscDecision) item.agreeWithPscDecision = cs.agreeWithPscDecision;
+          } else {
+            listMap.set(key, {
+              id: `cs-${cs.refNumber}`,
+              caseNo: cs.refNumber,
+              letterNo: cs.refNumber,
+              category: "issuing_charge_sheet",
+              urgency: "normal",
+              title: "Formal Charge Sheet",
+              recommendationText: "",
+              disciplinaryAction: cs.disciplinaryOrder || "Charge Sheet Issued",
+              forwardTo: "disciplinary_branch",
+              targetDate: "",
+              referenceNotes: "",
+              issuedChargeSheet: cs.issuedChargeSheet || "first_schedule",
+              chargeSheetIssuedDate: cs.chargeSheetIssuedDate ? new Date(cs.chargeSheetIssuedDate).toISOString().slice(0, 10) : "",
+              chargeSheetResponseDate: cs.chargeSheetResponseDate ? new Date(cs.chargeSheetResponseDate).toISOString().slice(0, 10) : "",
+              disciplinaryOrder: cs.disciplinaryOrder || "",
+              disciplinaryAuthority: cs.disciplinaryAuthority || "secretary_of_education",
+              dateRequestDocuments: cs.dateRequestDocuments ? new Date(cs.dateRequestDocuments).toISOString().slice(0, 10) : "",
+              dateSubmissionDocuments: cs.dateSubmissionDocuments ? new Date(cs.dateSubmissionDocuments).toISOString().slice(0, 10) : "",
+              agreeWithAnswers: cs.agreeWithAnswers || "",
+              dateDraftSubmittedPsc: cs.dateDraftSubmittedPsc ? new Date(cs.dateDraftSubmittedPsc).toISOString().slice(0, 10) : "",
+              agreeWithPscDecision: cs.agreeWithPscDecision || "",
+              status: "Submitted",
+              submittedAt: new Date().toISOString(),
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              accusedName: "",
+              accusedDesignation: "",
+              schoolName: "",
+            });
           }
         }
       }
@@ -6758,6 +7080,12 @@ export async function getRecommendationsListServer() {
           r.charge_sheet_issued_date as "chargeSheetIssuedDate",
           r.charge_sheet_response_date as "chargeSheetResponseDate",
           r.disciplinary_order as "disciplinaryOrder",
+          r.disciplinary_authority as "disciplinaryAuthority",
+          r.date_request_documents as "dateRequestDocuments",
+          r.date_submission_documents as "dateSubmissionDocuments",
+          r.agree_with_answers as "agreeWithAnswers",
+          r.date_draft_submitted_psc as "dateDraftSubmittedPsc",
+          r.agree_with_psc_decision as "agreeWithPscDecision",
           r.secretary_approval_date as "secretaryApprovalDate",
           r.secretary_approved_recommendation as "secretaryApprovedRecommendation",
           r.status,
@@ -6781,6 +7109,12 @@ export async function getRecommendationsListServer() {
             if (item.chargeSheetIssuedDate && !existing.chargeSheetIssuedDate) existing.chargeSheetIssuedDate = new Date(item.chargeSheetIssuedDate).toISOString().slice(0, 10);
             if (item.chargeSheetResponseDate && !existing.chargeSheetResponseDate) existing.chargeSheetResponseDate = new Date(item.chargeSheetResponseDate).toISOString().slice(0, 10);
             if (item.disciplinaryOrder && !existing.disciplinaryOrder) existing.disciplinaryOrder = item.disciplinaryOrder;
+            if (item.disciplinaryAuthority && !existing.disciplinaryAuthority) existing.disciplinaryAuthority = item.disciplinaryAuthority;
+            if (item.dateRequestDocuments && !existing.dateRequestDocuments) existing.dateRequestDocuments = new Date(item.dateRequestDocuments).toISOString().slice(0, 10);
+            if (item.dateSubmissionDocuments && !existing.dateSubmissionDocuments) existing.dateSubmissionDocuments = new Date(item.dateSubmissionDocuments).toISOString().slice(0, 10);
+            if (item.agreeWithAnswers && !existing.agreeWithAnswers) existing.agreeWithAnswers = item.agreeWithAnswers;
+            if (item.dateDraftSubmittedPsc && !existing.dateDraftSubmittedPsc) existing.dateDraftSubmittedPsc = new Date(item.dateDraftSubmittedPsc).toISOString().slice(0, 10);
+            if (item.agreeWithPscDecision && !existing.agreeWithPscDecision) existing.agreeWithPscDecision = item.agreeWithPscDecision;
           } else {
             listMap.set(key, {
               id: item.id,
@@ -6798,6 +7132,12 @@ export async function getRecommendationsListServer() {
               chargeSheetIssuedDate: item.chargeSheetIssuedDate ? new Date(item.chargeSheetIssuedDate).toISOString().slice(0, 10) : "",
               chargeSheetResponseDate: item.chargeSheetResponseDate ? new Date(item.chargeSheetResponseDate).toISOString().slice(0, 10) : "",
               disciplinaryOrder: item.disciplinaryOrder || "",
+              disciplinaryAuthority: item.disciplinaryAuthority || "",
+              dateRequestDocuments: item.dateRequestDocuments ? new Date(item.dateRequestDocuments).toISOString().slice(0, 10) : "",
+              dateSubmissionDocuments: item.dateSubmissionDocuments ? new Date(item.dateSubmissionDocuments).toISOString().slice(0, 10) : "",
+              agreeWithAnswers: item.agreeWithAnswers || "",
+              dateDraftSubmittedPsc: item.dateDraftSubmittedPsc ? new Date(item.dateDraftSubmittedPsc).toISOString().slice(0, 10) : "",
+              agreeWithPscDecision: item.agreeWithPscDecision || "",
               secretaryApprovalDate: item.secretaryApprovalDate ? new Date(item.secretaryApprovalDate).toISOString().slice(0, 10) : "",
               secretaryApprovedRecommendation: item.secretaryApprovedRecommendation || "",
               status: item.status || "Submitted",
@@ -6834,6 +7174,12 @@ export async function getChargeSheetDetailsServer(refNumber: string) {
         cs.date_the_charge_sheet_issued,
         cs.date_the_response_to_the_charge_sheet_was_given,
         cs.disciplinary_order,
+        cs.disciplinary_authority,
+        cs.date_request_documents,
+        cs.date_submission_documents,
+        cs.agree_with_answers,
+        cs.date_draft_submitted_psc,
+        cs.agree_with_psc_decision,
         cs.created_at,
         cs.updated_at
       FROM public.charge_sheet_table cs
@@ -6852,6 +7198,12 @@ export async function getChargeSheetDetailsServer(refNumber: string) {
           date_the_charge_sheet_issued: r.date_the_charge_sheet_issued ? new Date(r.date_the_charge_sheet_issued).toISOString().slice(0, 10) : "",
           date_the_response_to_the_charge_sheet_was_given: r.date_the_response_to_the_charge_sheet_was_given ? new Date(r.date_the_response_to_the_charge_sheet_was_given).toISOString().slice(0, 10) : "",
           disciplinary_order: r.disciplinary_order || "",
+          disciplinary_authority: r.disciplinary_authority || "",
+          date_request_documents: r.date_request_documents ? new Date(r.date_request_documents).toISOString().slice(0, 10) : "",
+          date_submission_documents: r.date_submission_documents ? new Date(r.date_submission_documents).toISOString().slice(0, 10) : "",
+          agree_with_answers: r.agree_with_answers || "",
+          date_draft_submitted_psc: r.date_draft_submitted_psc ? new Date(r.date_draft_submitted_psc).toISOString().slice(0, 10) : "",
+          agree_with_psc_decision: r.agree_with_psc_decision || "",
           created_at: r.created_at ? new Date(r.created_at).toISOString() : "",
           updated_at: r.updated_at ? new Date(r.updated_at).toISOString() : ""
         }
@@ -6871,6 +7223,12 @@ export async function saveChargeSheetDetailsServer(data: {
   date_the_charge_sheet_issued?: string | null;
   date_the_response_to_the_charge_sheet_was_given?: string | null;
   disciplinary_order?: string | null;
+  disciplinary_authority?: string | null;
+  date_request_documents?: string | null;
+  date_submission_documents?: string | null;
+  agree_with_answers?: string | null;
+  date_draft_submitted_psc?: string | null;
+  agree_with_psc_decision?: string | null;
 }) {
   try {
     await ensureRecommendationsTable();
@@ -6881,6 +7239,12 @@ export async function saveChargeSheetDetailsServer(data: {
     const dateIssued = parseSafeDate(data.date_the_charge_sheet_issued);
     const dateResponse = parseSafeDate(data.date_the_response_to_the_charge_sheet_was_given);
     const disciplinaryOrder = data.disciplinary_order || null;
+    const disciplinaryAuthority = data.disciplinary_authority || null;
+    const dateRequestDocuments = parseSafeDate(data.date_request_documents);
+    const dateSubmissionDocuments = parseSafeDate(data.date_submission_documents);
+    const agreeWithAnswers = data.agree_with_answers || null;
+    const dateDraftSubmittedPsc = parseSafeDate(data.date_draft_submitted_psc);
+    const agreeWithPscDecision = data.agree_with_psc_decision || null;
 
     // Ensure parent ref_number in subject_officer_form_table
     await prisma.$executeRaw`
@@ -6896,6 +7260,12 @@ export async function saveChargeSheetDetailsServer(data: {
         date_the_charge_sheet_issued,
         date_the_response_to_the_charge_sheet_was_given,
         disciplinary_order,
+        disciplinary_authority,
+        date_request_documents,
+        date_submission_documents,
+        agree_with_answers,
+        date_draft_submitted_psc,
+        agree_with_psc_decision,
         updated_at
       ) VALUES (
         ${cleanRef},
@@ -6903,6 +7273,12 @@ export async function saveChargeSheetDetailsServer(data: {
         ${dateIssued},
         ${dateResponse},
         ${disciplinaryOrder},
+        ${disciplinaryAuthority},
+        ${dateRequestDocuments},
+        ${dateSubmissionDocuments},
+        ${agreeWithAnswers},
+        ${dateDraftSubmittedPsc},
+        ${agreeWithPscDecision},
         NOW()
       )
       ON CONFLICT (ref_number) DO UPDATE SET
@@ -6910,6 +7286,12 @@ export async function saveChargeSheetDetailsServer(data: {
         date_the_charge_sheet_issued = EXCLUDED.date_the_charge_sheet_issued,
         date_the_response_to_the_charge_sheet_was_given = EXCLUDED.date_the_response_to_the_charge_sheet_was_given,
         disciplinary_order = EXCLUDED.disciplinary_order,
+        disciplinary_authority = EXCLUDED.disciplinary_authority,
+        date_request_documents = EXCLUDED.date_request_documents,
+        date_submission_documents = EXCLUDED.date_submission_documents,
+        agree_with_answers = EXCLUDED.agree_with_answers,
+        date_draft_submitted_psc = EXCLUDED.date_draft_submitted_psc,
+        agree_with_psc_decision = EXCLUDED.agree_with_psc_decision,
         updated_at = NOW();
     `;
 
