@@ -112,6 +112,8 @@ interface LetterData {
   priority?: string;
   status?: string;
   officerName?: string;
+  assignedOfficer?: string;
+  forwardReason?: string;
   instituteName?: string;
   receivedDate?: string;
   letterNo?: string;
@@ -328,6 +330,10 @@ function AdminViewCaseInner() {
 
         // Set case header letter info accurately
         const firstMail = (Array.isArray(dailyMailRows) && dailyMailRows.length > 0) ? dailyMailRows[0] : null;
+        const assignedActionOfficer = firstMail?.action_officer || firstMail?.addressed_to || (firstMail?.forwarded_to ? firstMail.forwarded_to.split("(")[0].trim() : "");
+        const rawSchool = firstMail?.institute_name || primarySchool;
+        const cleanInstName = rawSchool || (firstMail?.region_province ? `${t("educationZone", "Education Zone")} (${firstMail.region_province})` : "Ministry / Education Zone");
+
         setLetterData({
           refNo: subjectForm?.subject_file_no || subjectForm?.ref_number || firstMail?.ref_number || caseNo,
           letterNo: allLetterNos || firstMail?.letter_number || "—",
@@ -338,25 +344,72 @@ function AdminViewCaseInner() {
           receivedDate: formatEntryDate(firstMail?.date_received_by_add_secretary || firstMail?.created_at),
           submittedDate: formatEntryDate(firstMail?.date_letter_handover_discipline || subjectForm?.date_prepared_and_submitted_for_signature),
           officerName: primaryAccused?.accused_officer_name || "—",
-          instituteName: primarySchool || "Ministry / Education Zone",
-          province: primaryProvince,
+          assignedOfficer: assignedActionOfficer || subjOfficerName || "—",
+          forwardReason: firstMail?.forward_reason || "—",
+          instituteName: cleanInstName,
+          province: primaryProvince || firstMail?.region_province,
           district: primaryDistrict,
           zone: primaryZone,
-          status: "In Progress",
+          priority: firstMail?.priority || "Normal",
+          status: subjectForm ? "In Progress" : "Under Evaluation",
         });
 
         // ============================================================
-        // A. DAILY MAIL REPORTER TIMELINE ENTRIES
+        // A. REGISTER BASE CONNECTED OFFICERS
         // ============================================================
-        if (Array.isArray(dailyMailRows) && dailyMailRows.length > 0) {
-          officersMap.set("dm-officer", {
-            id: "dm-officer",
-            name: dmOfficerName,
-            role: "Daily Reporter",
-            designation: t("dailyMailRegistrationOfficer", "Daily Mail Registration Officer"),
+        // 1. Daily Reporter
+        officersMap.set("dm-officer", {
+          id: "dm-officer",
+          name: dmOfficerName,
+          role: "Daily Reporter",
+          designation: t("dailyMailRegistrationOfficer", "Daily Mail Registration Officer"),
+          status: "Completed",
+        });
+
+        // 2. Complainant / Senders Party
+        if (complainantName && complainantName !== "—") {
+          officersMap.set("complainant", {
+            id: "complainant",
+            name: complainantName,
+            role: "Connected Officer",
+            designation: subjectForm?.classification_of_complaint_letter === "anonymous" ? t("anonymousComplainant", "Anonymous Complainant") : t("complainantParty", "Complainant / Senders Party"),
+            institution: complainantAddress || firstMail?.institute_name || "",
+            status: "Active",
+          });
+        }
+
+        // 3. Assigned Subject Officer
+        const activeSubjOfficer = assignedActionOfficer || (subjectForm ? subjOfficerName : null);
+        if (activeSubjOfficer) {
+          const regSub = regList.find((o) => (o.full_name || "").toLowerCase().trim() === activeSubjOfficer.toLowerCase().trim());
+          officersMap.set("subj-officer", {
+            id: "subj-officer",
+            name: activeSubjOfficer,
+            role: "Subject Officer",
+            designation: regSub?.subject_type || t("disciplineSubjectOfficer", "Discipline Branch Subject Officer"),
+            email: regSub?.email || undefined,
+            status: subjectForm ? "Completed" : "Active",
+          });
+        }
+
+        // 4. Investigation Administrator / Directing Authority
+        const adminReviewer = firstMail?.last_edited_by ? firstMail.last_edited_by.split("(")[0].trim() : (firstMail?.created_by_name || null);
+        if (adminReviewer && adminReviewer.toLowerCase() !== dmOfficerName.toLowerCase() && !adminReviewer.toLowerCase().includes("daily mail")) {
+          const regAdmin = regList.find((o) => (o.full_name || "").toLowerCase().trim() === adminReviewer.toLowerCase().trim());
+          officersMap.set("inv-admin", {
+            id: "inv-admin",
+            name: adminReviewer,
+            role: "Investigation Administrator",
+            designation: regAdmin?.role || t("investigationAdminRole", "Additional Secretary / Investigation Administrator"),
+            email: regAdmin?.email || undefined,
             status: "Completed",
           });
+        }
 
+        // ============================================================
+        // B. DAILY MAIL & INTAKE TIMELINE ENTRIES
+        // ============================================================
+        if (Array.isArray(dailyMailRows) && dailyMailRows.length > 0) {
           // Deduplicate rows by (letter_number, ref_number, subject_of_letter)
           const seenMailKeys = new Set<string>();
           const uniqueMails: any[] = [];
@@ -373,7 +426,31 @@ function AdminViewCaseInner() {
             const subDate = formatEntryDate(mail.date_letter_handover_discipline);
             const ts = mail.created_at ? new Date(mail.created_at).getTime() : (mail.date_received_by_add_secretary ? new Date(mail.date_received_by_add_secretary).getTime() : Date.now());
 
-            // Entry 1: Registration by Daily Mail Reporter
+            // Step 1 (Connected Officers): Complaint lodged by sender
+            const senderName = mail.senders_party || complainantName;
+            if (senderName && senderName !== "—") {
+              raw.push({
+                id: `conn-complainant-${mail.id || idx}`,
+                role: "Connected Officer",
+                officerName: senderName,
+                action: idx === 0 
+                  ? `${t("complaintLodgedBySender", "Formal Complaint Lodged by Complainant")}: ${senderName}`
+                  : `${t("additionalLetterBySender", "Supplementary Submission by Complainant")}: ${senderName}`,
+                category: "connected-officers",
+                details: `${t("complaintReceivedDetails", "Formal complaint regarding")} "${mail.subject_of_letter || "Inquiry matter"}" ${t("lodgedVia", "submitted via")} ${mail.mode_of_receipt || "Post"}.${mail.institute_name ? ` Institute/School: ${mail.institute_name}.` : ""}`,
+                date: recDate,
+                sortTs: ts - 5000,
+                rawTime: mail.created_at,
+                status: "Completed",
+                metaInfo: {
+                  complainant: senderName,
+                  modeOfReceipt: mail.mode_of_receipt,
+                  subject: mail.subject_of_letter,
+                }
+              });
+            }
+
+            // Step 2 (Daily Mail): Registration by Daily Mail Reporter
             raw.push({
               id: `dm-rec-${mail.id || idx}`,
               role: "Daily Reporter",
@@ -395,7 +472,7 @@ function AdminViewCaseInner() {
               }
             });
 
-            // Entry 2: Handover to Discipline Branch
+            // Step 3 (Daily Mail): Handover to Discipline Branch
             if (mail.date_letter_handover_discipline) {
               const handoverTs = mail.date_letter_handover_discipline ? new Date(mail.date_letter_handover_discipline).getTime() : ts + 3600000;
               raw.push({
@@ -408,6 +485,79 @@ function AdminViewCaseInner() {
                 date: subDate,
                 sortTs: handoverTs >= ts ? handoverTs : ts + 3600000,
                 rawTime: mail.created_at,
+                status: "Completed",
+              });
+            }
+
+            // Step 4 (Investigation Administrator): Directive & Referral
+            if (mail.forward_reason || mail.forwarded_to || mail.add_sec_notes || mail.last_edited_by) {
+              const fwdPerson = mail.last_edited_by ? mail.last_edited_by.split("(")[0].trim() : (mail.created_by_name || adminOfficerName);
+              const directiveTs = mail.last_edited_at ? new Date(mail.last_edited_at).getTime() : (mail.date_letter_handover_discipline ? new Date(mail.date_letter_handover_discipline).getTime() + 1800000 : ts + 1800000);
+              raw.push({
+                id: `ia-directive-${mail.id || idx}`,
+                role: "Investigation Administrator",
+                officerName: fwdPerson,
+                action: t("adminDirectiveTitle", "Investigation Administrator Directive & Referral to Subject Officer"),
+                category: "investigation-admin",
+                details: `${mail.forward_reason || "Referral directive issued for disciplinary evaluation."}${mail.forwarded_to ? ` | Forwarded To: ${mail.forwarded_to}.` : ""}${mail.add_sec_notes ? ` | Notes: ${mail.add_sec_notes}` : ""}`,
+                date: formatEntryDate(mail.last_edited_at || mail.date_letter_handover_discipline || mail.created_at),
+                sortTs: directiveTs >= ts ? directiveTs : ts + 1800000,
+                rawTime: mail.last_edited_at || mail.date_letter_handover_discipline || mail.created_at,
+                status: "Completed",
+                metaInfo: {
+                  directiveOfficer: fwdPerson,
+                  forwardedTo: mail.forwarded_to,
+                  reason: mail.forward_reason,
+                  notes: mail.add_sec_notes,
+                }
+              });
+            }
+
+            // Step 5 (Subject Officer): Dossier Receipt & Review
+            const assignedSubj = mail.action_officer || mail.addressed_to || (mail.forwarded_to ? mail.forwarded_to.split("(")[0].trim() : subjOfficerName);
+            if (assignedSubj) {
+              const assignTs = mail.date_letter_handover_discipline ? new Date(mail.date_letter_handover_discipline).getTime() + 3600000 : ts + 3600000;
+              raw.push({
+                id: `so-assigned-${mail.id || idx}`,
+                role: "Subject Officer",
+                officerName: assignedSubj,
+                action: t("caseAssignedToSubjectOfficer", "Dossier Received by Discipline Subject Officer for Evaluation"),
+                category: "subject-officer",
+                details: `${t("assignedToOfficer", "Assigned to Subject Officer")} ${assignedSubj}. ${t("dossierAwaitingEvaluation", "Disciplinary dossier received; subject officer conducting preliminary facts check, school communication, and accused party identification.")}`,
+                date: formatEntryDate(mail.date_letter_handover_discipline || mail.created_at),
+                sortTs: assignTs,
+                rawTime: mail.date_letter_handover_discipline || mail.created_at,
+                status: subjectForm ? "Completed" : "Current",
+                metaInfo: {
+                  subjectOfficer: assignedSubj,
+                  status: subjectForm ? "Completed" : "In Progress",
+                }
+              });
+            }
+          });
+        }
+
+        // ============================================================
+        // C. INTAKE AUDIT LOGS (If any)
+        // ============================================================
+        const auditList: any[] = Array.isArray(serverRes.data.auditLogs) ? serverRes.data.auditLogs : [];
+        if (auditList.length > 0) {
+          auditList.forEach((log: any, aIdx: number) => {
+            const logDetails = log.details || "";
+            const logTs = log.timestamp ? new Date(log.timestamp).getTime() : Date.now();
+            if (logDetails.includes("Assigned Officer:") && !logDetails.includes("N/A")) {
+              const match = logDetails.match(/Assigned Officer:\s*"([^"]+)"/);
+              const officer = match ? match[1] : log.username;
+              raw.push({
+                id: `audit-assign-${log.id || aIdx}`,
+                role: "Investigation Administrator",
+                officerName: log.username || officer || adminOfficerName,
+                action: `${t("intakeAssignmentAudit", "Intake Audit Logged: Assigned to")} ${officer}`,
+                category: "investigation-admin",
+                details: logDetails,
+                date: formatEntryDate(log.timestamp),
+                sortTs: logTs,
+                rawTime: log.timestamp,
                 status: "Completed",
               });
             }
@@ -999,9 +1149,19 @@ function AdminViewCaseInner() {
                   <span className="case-info-value">{letterData?.submittedDate || "—"}</span>
                 </div>
                 <div className="case-info-field">
+                  <span className="case-info-label">{t("assignedSubjectOfficer", "Assigned Subject Officer")}</span>
+                  <span className="case-info-value highlight-val">{letterData?.assignedOfficer || "—"}</span>
+                </div>
+                <div className="case-info-field">
                   <span className="case-info-label">{t("totalStagesLogged", "Total Stages Logged")}</span>
                   <span className="case-info-value" style={{ color: "#16a34a" }}>{trackingEntries.length} {t("recordedSteps", "Recorded Steps")}</span>
                 </div>
+                {letterData?.forwardReason && letterData.forwardReason !== "—" && (
+                  <div className="case-info-field" style={{ gridColumn: "1 / -1" }}>
+                    <span className="case-info-label">{t("administrativeDirective", "Administrative Directive / Forwarding Reason")}</span>
+                    <span className="case-info-value" style={{ color: "#4338ca", fontSize: "calc(13px * var(--font-scale))" }}>{letterData.forwardReason}</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1034,6 +1194,7 @@ function AdminViewCaseInner() {
                         {off.role === "Committee Member" && <Users size={18} color="#6d28d9" />}
                         {off.role === "Accused Officer" && <AlertCircle size={18} color="#b91c1c" />}
                         {off.role === "Inquiry Officer" && <FileText size={18} color="#0284c7" />}
+                        {(off.role === "Connected Officer" || (off.role as any) === "Complainant") && <Users size={18} color="#475569" />}
                       </div>
                       <div className="officer-info-body">
                         <div className="officer-role-pill"><RoleBadge role={off.role as any} /></div>

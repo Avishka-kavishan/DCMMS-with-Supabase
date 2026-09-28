@@ -114,7 +114,7 @@ export const SUBJECT_TYPE_OPTIONS: SubjectTypeOption[] = [
   },
 ];
 
-export function getSubjectTypeLabel(codeOrValue: string | undefined | null): string {
+export function getSubjectTypeLabel(codeOrValue: string | undefined | null, lang: string = "si"): string {
   if (!codeOrValue) return "—";
   const found = SUBJECT_TYPE_OPTIONS.find(
     (opt) =>
@@ -124,5 +124,9 @@ export function getSubjectTypeLabel(codeOrValue: string | undefined | null): str
       opt.nameEn === codeOrValue ||
       codeOrValue.startsWith(opt.code)
   );
-  return found ? found.label : codeOrValue;
+  if (!found) return codeOrValue;
+  if (lang === "si") return found.value || found.nameSi || found.label;
+  if (lang === "en") return `${found.code} - ${found.nameEn}`;
+  return found.label;
 }
+

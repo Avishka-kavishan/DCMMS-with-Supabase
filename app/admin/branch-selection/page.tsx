@@ -7,9 +7,9 @@ import "../../../i18n";
 import "../admin.css";
 import "../../dashboard-common.css";
 import { ArrowLeft, Send, CheckCircle2, AlertCircle } from "lucide-react";
-import { forwardLetterFromAdditionalSecretaryServer } from "@/lib/db-actions";
+import { forwardLetterFromAdditionalSecretaryServer, getRegisterOfficersServer } from "@/lib/db-actions";
 
-const BRANCH_OPTIONS = [
+const DEFAULT_BRANCH_OPTIONS = [
   {
     value: "",
     label: "Select a branch...",
@@ -18,18 +18,18 @@ const BRANCH_OPTIONS = [
     officerName: "",
   },
   {
-    value: "assistant_secretary_discipline",
-    label: "Assistant Secretary - Discipline Branch",
-    labelSi: "සහකාර ලේකම් - විනය ශාඛාව",
-    labelTa: "உதவி செயலாளர் - ஒழுக்க கிளை",
-    officerName: "Bandula Gunawardena",
+    value: "chief_clerk_discipline",
+    label: "Chief Clerk - Discipline Branch",
+    labelSi: "ශාඛා ප්‍රධානී - විනය ශාඛාව (Chief Clerk - Discipline Branch)",
+    labelTa: "முதன்மை எழுதுநர் - ஒழுக்க கிளை (Chief Clerk - Discipline Branch)",
+    officerName: "Chief Clerk Officer (ශාඛා ප්‍රධානී)",
   },
   {
-    value: "assistant_secretary_investigation",
-    label: "Assistant Secretary - Investigation Branch",
-    labelSi: "සහකාර ලේකම් - විමර්ශන ශාඛාව",
-    labelTa: "உதவி செயலாளர் - விசாரணை கிளை",
-    officerName: "Ranjith Siyambalapitiya",
+    value: "chief_clerk_investigation",
+    label: "Chief Clerk - Investigation Branch",
+    labelSi: "ශාඛා ප්‍රධානී - විමර්ශන ශාඛාව (Chief Clerk - Investigation Branch)",
+    labelTa: "முதன்மை எழுதுநர் - விசாரணை கிளை (Chief Clerk - Investigation Branch)",
+    officerName: "Chief Clerk - Investigation Branch",
   },
 ];
 
@@ -49,8 +49,38 @@ function BranchSelectionInner() {
   const forwardReason = searchParams.get("forwardReason") || "";
 
   const [mounted, setMounted] = useState(false);
+  const [branchOptions, setBranchOptions] = useState(DEFAULT_BRANCH_OPTIONS);
+
   useEffect(() => {
     setMounted(true);
+    // Dynamically load active officers to resolve current registered Chief Clerks
+    getRegisterOfficersServer().then((res) => {
+      if (res && res.success && Array.isArray(res.data)) {
+        const officers = res.data;
+        setBranchOptions((prev) =>
+          prev.map((opt) => {
+            if (opt.value === "chief_clerk_discipline") {
+              const matched = officers.find((o: any) =>
+                (o.role || "").toLowerCase().includes("chief") &&
+                !(o.role || "").toLowerCase().includes("investigation")
+              );
+              if (matched?.full_name) {
+                return { ...opt, officerName: matched.full_name };
+              }
+            } else if (opt.value === "chief_clerk_investigation") {
+              const matched = officers.find((o: any) =>
+                (o.role || "").toLowerCase().includes("chief") &&
+                (o.role || "").toLowerCase().includes("investigation")
+              );
+              if (matched?.full_name) {
+                return { ...opt, officerName: matched.full_name };
+              }
+            }
+            return opt;
+          })
+        );
+      }
+    }).catch(() => {});
   }, []);
 
   const [selectedBranch, setSelectedBranch] = useState("");
@@ -60,7 +90,7 @@ function BranchSelectionInner() {
 
   const handleSubmit = async () => {
     if (!selectedBranch) return;
-    const option = BRANCH_OPTIONS.find((o) => o.value === selectedBranch);
+    const option = branchOptions.find((o) => o.value === selectedBranch);
     if (!option || !option.officerName) return;
     setIsSubmitting(true);
     setSubmitError("");
@@ -71,15 +101,23 @@ function BranchSelectionInner() {
         refNo:                refNo || undefined,
         forwardToOfficerName: option.officerName,
         forwardToRole:        option.value,
-        forwardReason:        forwardReason || ("Forwarded to " + option.label + " for review and disciplinary action"),
+        forwardReason:        forwardReason || (`Forwarded by Senior Assistant Secretary to ${option.label} for review and action`),
         senderName:           sender,
+        senderRole:           "Senior Assistant Secretary",
       });
       if (res && res.success) {
         setSubmitStatus("success");
-        const targetPage = option.value.includes("investigation") ? "/investigation" : "/admin";
+        let targetPage = "/admin";
+        if (option.value.includes("investigation")) {
+          targetPage = `/investigation?highlight=${encodeURIComponent(letterNo || refNo)}`;
+        } else if (option.value.includes("chief_clerk")) {
+          targetPage = `/admin?view=chief_clerk&highlight=${encodeURIComponent(letterNo || refNo)}`;
+        } else {
+          targetPage = `/admin?highlight=${encodeURIComponent(letterNo || refNo)}`;
+        }
         setTimeout(() => {
           router.push(targetPage);
-        }, 1800);
+        }, 1500);
       } else {
         setSubmitStatus("error");
         setSubmitError(res?.error || "Failed to forward letter. Please try again.");
@@ -118,7 +156,11 @@ function BranchSelectionInner() {
             <CheckCircle2 size={17} />
             <div>
               <strong>{lang === "si" ? "ලිපිය සාර්ථකව යොමු කරන ලදී!" : lang === "ta" ? "கடிதம் வெற்றிகரமாக அனுப்பப்பட்டது!" : "Letter forwarded successfully!"}</strong>
-              <div className="bs-alert-sub">{lang === "si" ? "අදාළ ශාඛා නිලධාරී පිටුවට ඔබව යොමු කරමින්..." : lang === "ta" ? "கிளை அதிகாரி பக்கத்திற்கு செல்கிறீர்கள்..." : "Redirecting to branch officer page..."}</div>
+              <div className="bs-alert-sub">
+                {selectedBranch === "chief_clerk_investigation"
+                  ? (lang === "si" ? "ශාඛා ප්‍රධානී - විමර්ශන ශාඛාව පිටුවට ඔබව යොමු කරමින්..." : lang === "ta" ? "விசாரணை கிளை முதன்மை எழுதுநர் பக்கத்திற்கு செல்கிறீர்கள்..." : "Redirecting to Chief Clerk - Investigation Branch page...")
+                  : (lang === "si" ? "ශාඛා ප්‍රධානී - විනය ශාඛාව පිටුවට ඔබව යොමු කරමින්..." : lang === "ta" ? "முதன்மை எழுதுநர் - ஒழுக்க கிளை பக்கத்திற்கு செல்கிறீர்கள்..." : "Redirecting to Chief Clerk - Discipline Branch page...")}
+              </div>
             </div>
           </div>
         )}
@@ -163,7 +205,7 @@ function BranchSelectionInner() {
         {/* ── Branch dropdown section ── */}
         <div className="bs-field">
           <label htmlFor="branchSelect" className="bs-label">
-            {lang === "si" ? "ලිපිය සඳහා ශාඛාව තෝරන්න" : lang === "ta" ? "கடிதத்திற்கான கிளையை தேர்ந்தெடுக்கவும்" : "Select the branch. in the letter"}
+            {lang === "si" ? "ලිපිය සඳහා ශාඛාව තෝරන්න" : lang === "ta" ? "கடிதத்திற்கான கிளையை தேர்ந்தெடுக்கவும்" : "Select the branch for the letter"}
           </label>
           <div className="bs-select-wrap">
             <select
@@ -172,7 +214,7 @@ function BranchSelectionInner() {
               onChange={(e) => setSelectedBranch(e.target.value)}
               className="bs-select"
             >
-              {BRANCH_OPTIONS.map((opt) => (
+              {branchOptions.map((opt) => (
                 <option key={opt.value} value={opt.value} disabled={opt.value === ""}>
                   {lang === "si" ? opt.labelSi : lang === "ta" ? opt.labelTa : opt.label}
                 </option>
@@ -182,7 +224,7 @@ function BranchSelectionInner() {
           </div>
           {/* Hints */}
           <ul className="bs-hints">
-            {BRANCH_OPTIONS.filter((o) => o.value !== "").map((opt) => (
+            {branchOptions.filter((o) => o.value !== "").map((opt) => (
               <li key={opt.value}>
                 {lang === "si" ? opt.labelSi : lang === "ta" ? opt.labelTa : opt.label}
               </li>

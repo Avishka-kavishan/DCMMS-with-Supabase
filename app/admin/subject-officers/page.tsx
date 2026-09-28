@@ -132,6 +132,8 @@ export default function SubjectOfficersPage() {
     setIsLoading(false);
   };
 
+  const [isChiefUser, setIsChiefUser] = useState(false);
+
   useEffect(() => {
     getCurrentProfile().then((prof) => {
       const isChief = Boolean(
@@ -144,7 +146,7 @@ export default function SubjectOfficersPage() {
         (prof?.raw_role || "").toLowerCase().includes("ශාඛා ප්‍රධානී")
       );
       if (isChief) {
-        setAccessDenied(true);
+        setIsChiefUser(true);
       }
     });
 
@@ -377,6 +379,74 @@ export default function SubjectOfficersPage() {
 
   return (
     <div className="admin-dashboard-container">
+      {/* ── Chief Clerk Directory Info Banner ── */}
+      {isChiefUser && (
+        <div style={{
+          background: "linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)",
+          border: "1.5px solid #93c5fd",
+          borderRadius: "12px",
+          padding: "16px 20px",
+          marginBottom: "20px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "16px",
+          boxShadow: "0 2px 8px rgba(37, 99, 235, 0.08)",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+            <div style={{
+              background: "#1d4ed8",
+              color: "#ffffff",
+              padding: "10px",
+              borderRadius: "10px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0
+            }}>
+              <ShieldAlert size={24} />
+            </div>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "#1e3a8a", display: "flex", alignItems: "center", gap: "8px" }}>
+                <span>{lang === "si" ? "විෂයභාර නිලධාරීන් නාමාවලිය (Subject Officers Directory)" : "Subject Officers Routing Directory"}</span>
+                <span style={{
+                  background: "#2563eb",
+                  color: "#ffffff",
+                  fontSize: "0.7rem",
+                  padding: "2px 8px",
+                  borderRadius: "12px",
+                  fontWeight: 600,
+                  letterSpacing: "0.5px"
+                }}>
+                  {lang === "si" ? "ශාඛා ප්‍රධානී යොමුව" : "CHIEF CLERK REFERENCE"}
+                </span>
+              </div>
+              <p style={{ margin: "4px 0 0 0", fontSize: "0.85rem", color: "#1e40af", lineHeight: 1.4 }}>
+                {lang === "si"
+                  ? "ශාඛා ප්‍රධානී (Chief Clerk) ලෙස, ලිපි සහ පැමිණිලි අදාළ පළාත, දිස්ත්‍රික්කය හෝ ආයතනය අනුව නියමිත විෂයභාර නිලධාරීන්ට නිවැරදිව පැවරීම සඳහා මෙම නාමාවලිය පරිශීලනය කරන්න."
+                  : "As Chief Clerk, use this directory to identify the assigned subject type, district, and zone of each Subject Officer when assigning incoming letters."}
+              </p>
+            </div>
+          </div>
+
+          <div style={{
+            background: "#ffffff",
+            border: "1.5px solid #bfdbfe",
+            borderRadius: "8px",
+            padding: "8px 16px",
+            textAlign: "center",
+            flexShrink: 0
+          }}>
+            <div style={{ fontSize: "0.72rem", color: "#2563eb", fontWeight: 700 }}>
+              {lang === "si" ? "සක්‍රීය නිලධාරීන්" : "Active Officers"}
+            </div>
+            <div style={{ fontSize: "1.2rem", fontWeight: 800, color: "#1d4ed8" }}>
+              {officers.filter((o) => o.status === "Active").length}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Action Bar */}
       <div className="admin-action-bar">
         <div className="search-box">
@@ -415,10 +485,12 @@ export default function SubjectOfficersPage() {
             </svg>
             <span>{t("exportExcel", "Export to Excel")}</span>
           </button>
-          <button className="btn-admin-add" onClick={openAddModal}>
-            <UserPlus size={18} />
-            {t("addSubjectOfficer", "Add Subject Officer")}
-          </button>
+          {!isChiefUser && (
+            <button className="btn-admin-add" onClick={openAddModal}>
+              <UserPlus size={18} />
+              {t("addSubjectOfficer", "Add Subject Officer")}
+            </button>
+          )}
         </div>
       </div>
 
@@ -434,7 +506,7 @@ export default function SubjectOfficersPage() {
                 <th scope="col">{t("assignedSystemRole", "Assigned System Role")}</th>
                 <th scope="col">{t("subjectType", "Subject Type")}</th>
                 <th scope="col">{t("accountStatus", "Account Status")}</th>
-                <th scope="col" className="admin-table-header-center">{t("actions", "Actions")}</th>
+                <th scope="col" className="admin-table-header-center">{isChiefUser ? (lang === "si" ? "තත්ත්වය" : "Status") : t("actions", "Actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -462,33 +534,48 @@ export default function SubjectOfficersPage() {
                       </span>
                     </td>
                     <td className="admin-table-cell-center">
-                      <button
-                        type="button"
-                        className={`btn-status-toggle ${item.status === "Active" ? "is-active" : "is-inactive"}`}
-                        onClick={() => handleToggleStatus(item)}
-                        title={item.status === "Active" ? t("clickToDeactivate", "Click to Deactivate") : t("clickToActivate", "Click to Activate")}
-                      >
-                        {item.status === "Active" ? (
-                          <>
-                            <ToggleRight size={18} className="status-toggle-icon" />
-                            <span>{t("active", "Active")}</span>
-                          </>
-                        ) : (
-                          <>
-                            <ToggleLeft size={18} className="status-toggle-icon" />
-                            <span>{t("inactive", "Inactive")}</span>
-                          </>
-                        )}
-                      </button>
+                      {isChiefUser ? (
+                        <span style={{
+                          padding: "4px 10px",
+                          borderRadius: "12px",
+                          fontSize: "0.78rem",
+                          fontWeight: 600,
+                          backgroundColor: item.status === "Active" ? "#ecfdf5" : "#f1f5f9",
+                          color: item.status === "Active" ? "#065f46" : "#64748b",
+                          border: item.status === "Active" ? "1px solid #a7f3d0" : "1px solid #cbd5e1",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px"
+                        }}>
+                          {item.status === "Active" ? "✓ Available" : "Inactive"}
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          className={`btn-status-toggle ${item.status === "Active" ? "is-active" : "is-inactive"}`}
+                          onClick={() => handleToggleStatus(item)}
+                          title={item.status === "Active" ? t("clickToDeactivate", "Click to Deactivate") : t("clickToActivate", "Click to Activate")}
+                        >
+                          {item.status === "Active" ? (
+                            <>
+                              <ToggleRight size={18} className="status-toggle-icon" />
+                              <span>{t("active", "Active")}</span>
+                            </>
+                          ) : (
+                            <>
+                              <ToggleLeft size={18} className="status-toggle-icon" />
+                              <span>{t("inactive", "Inactive")}</span>
+                            </>
+                          )}
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
                   <td colSpan={7} className="admin-table-no-data table-no-data-padding">
-                    {officers.length === 0
-                      ? t("noOfficersInDatabase", "No subject officers found in register_officer_table.")
-                      : t("noLettersFound", "No entries found matching search.")}
+                    {t("noOfficersFound", "No subject officers found.")}
                   </td>
                 </tr>
               )}

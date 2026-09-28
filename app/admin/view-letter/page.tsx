@@ -11,6 +11,8 @@ import {
   getDailyMailRecordsServer,
   forwardLetterFromAdditionalSecretaryServer,
   updateLetterRecordServer,
+  assignLetterToSubjectOfficerServer,
+  getRegisterOfficersServer,
 } from "@/lib/db-actions";
 import {
   getLetterOriginGroup,
@@ -19,6 +21,7 @@ import {
   isLetterFromAdministrativeOfficers,
   getOfficerSenderTitle,
 } from "@/lib/letter-hierarchy";
+import { SUBJECT_TYPE_OPTIONS, getSubjectTypeLabel } from "@/lib/subject-types";
 import {
   ArrowLeft,
   FileText,
@@ -43,6 +46,7 @@ import {
   RotateCcw,
   Lock,
   ShieldAlert,
+  UserCheck,
 } from "lucide-react";
 
 const fmt = (d?: any): string => {
@@ -160,12 +164,30 @@ function ViewLetterInner() {
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [editSuccessNotification, setEditSuccessNotification] = useState<string | null>(null);
 
+  // ── Subject Officer Assignment State for Chief Clerk ──
+  const [subjectOfficersList, setSubjectOfficersList] = useState<any[]>([]);
+  const [isAssignSubjectModalOpen, setIsAssignSubjectModalOpen] = useState(false);
+  const [selectedSubjectOfficerId, setSelectedSubjectOfficerId] = useState<string>("");
+  const [assignmentInstructions, setAssignmentInstructions] = useState<string>("");
+  const [isSubmittingAssignment, setIsSubmittingAssignment] = useState(false);
+  const [subjectOfficerSearchInModal, setSubjectOfficerSearchInModal] = useState<string>("");
+
   useEffect(() => { setMounted(true); }, []);
 
   useEffect(() => {
-    getCurrentProfile().then((prof) => {
+    getCurrentProfile().then(async (prof) => {
       if (!prof) router.replace("/");
-      else setCurrentUser(prof);
+      else {
+        setCurrentUser(prof);
+        try {
+          const soRes = await getRegisterOfficersServer("Subject");
+          if (soRes && soRes.success && Array.isArray(soRes.data)) {
+            setSubjectOfficersList(soRes.data);
+          }
+        } catch (e) {
+          console.warn("Failed to load subject officers in view-letter:", e);
+        }
+      }
     });
   }, [router]);
 
@@ -318,6 +340,169 @@ function ViewLetterInner() {
       alert("Error forwarding letter: " + (err?.message || "Unknown error"));
     } finally {
       setIsSubmittingForward(false);
+    }
+  };
+
+  const isChiefClerkUser = Boolean(
+    currentUser?.role === "chief_clerk" ||
+    currentUser?.role === "chief_clerk_discipline" ||
+    currentUser?.role === "chief_clerk_investigation" ||
+    (currentUser?.role || "").toLowerCase().includes("chief") ||
+    (currentUser?.role || "").toLowerCase().includes("clerk") ||
+    (currentUser?.role || "").toLowerCase().includes("clack") ||
+    (currentUser?.raw_role || "").toLowerCase().includes("chief") ||
+    (currentUser?.raw_role || "").toLowerCase().includes("clerk") ||
+    (currentUser?.raw_role || "").toLowerCase().includes("ශාඛා")
+  );
+
+  const isLetterAssignedToSubject = (l: any) => {
+    if (!l) return false;
+    const act = (l.action_officer || l.actionOfficer || l.officer_name || l.officerName || "").trim().toLowerCase();
+    const fwd = (l.forwarded_to || l.forwardedTo || "").trim().toLowerCase();
+    const role = (l.addressed_role || l.addressedRole || "").trim().toLowerCase();
+    const reason = (l.forward_reason || l.forwardReason || "").trim().toLowerCase();
+    const stat = (l.status || "").trim().toLowerCase();
+
+    if (role === "subject officer" || role.includes("subject")) return true;
+    if (stat.includes("subject")) return true;
+    if (reason.includes("assigned by chief clerk") || reason.includes("subject officer")) return true;
+    if (fwd.includes("subject")) return true;
+
+    if (subjectOfficersList.length > 0 && (act || fwd)) {
+      return subjectOfficersList.some((so: any) => {
+        const soName = (so.full_name || "").trim().toLowerCase();
+        return soName && (act.includes(soName) || soName.includes(act) || fwd.includes(soName));
+      });
+    }
+    return false;
+  };
+
+  const getAssignedSubjectOfficer = (l: any) => {
+    if (!l) return null;
+    const act = (l.action_officer || l.actionOfficer || l.officer_name || l.officerName || l.forwarded_to || l.forwardedTo || "").trim();
+    if (!act) return null;
+    const match = subjectOfficersList.find((so: any) => {
+      const soName = (so.full_name || "").trim().toLowerCase();
+      return soName && (act.toLowerCase().includes(soName) || soName.includes(act.toLowerCase()));
+    });
+    return match || { full_name: act, subject_type: "" };
+  };
+
+  const getRecommendedSubjectOfficer = (l: any) => {
+    if (!subjectOfficersList || subjectOfficersList.length === 0 || !l) return null;
+    const textToMatch = [
+      l.subject || l.subject_of_letter || "",
+      l.sender || l.sender_name || l.senders_party || "",
+      l.classification || l.subject_category || "",
+      l.type || l.nature_of_letter || "",
+      l.refNo || l.serial_no || l.ref_number || "",
+    ].join(" ").toLowerCase();
+
+    for (const so of subjectOfficersList) {
+      if (!so.subject_type) continue;
+      const subTypeOpt = SUBJECT_TYPE_OPTIONS.find((opt) => opt.value === so.subject_type);
+      const subLabel = subTypeOpt ? subTypeOpt.label.toLowerCase() : "";
+      const rawType = String(so.subject_type).toLowerCase();
+
+      const keywords = (subLabel + " " + rawType)
+        .replace(/\b\d+\s*-\s*/g, " ")
+        .split(/[\s,()/-]+/)
+        .filter((w) => w.length >= 3 && !["දිස්ත්‍රික්කය", "පළාත", "කලාපය", "district", "province", "zone"].includes(w));
+
+      for (const kw of keywords) {
+        if (textToMatch.includes(kw)) {
+          return so;
+        }
+      }
+    }
+    return null;
+  };
+
+  const openAssignSubjectModal = () => {
+    if (!letter) return;
+    setSubjectOfficerSearchInModal("");
+    const alreadyAssigned = getAssignedSubjectOfficer(letter);
+    if (alreadyAssigned && alreadyAssigned.id) {
+      setSelectedSubjectOfficerId(String(alreadyAssigned.id));
+    } else {
+      const rec = getRecommendedSubjectOfficer(letter);
+      if (rec && rec.id) {
+        setSelectedSubjectOfficerId(String(rec.id));
+      } else if (subjectOfficersList.length > 0) {
+        setSelectedSubjectOfficerId(String(subjectOfficersList[0].id));
+      } else {
+        setSelectedSubjectOfficerId("");
+      }
+    }
+    setAssignmentInstructions(letter.forward_reason || letter.forwardReason || "");
+    setIsAssignSubjectModalOpen(true);
+  };
+
+  const handleAssignSubjectSubmit = async () => {
+    if (!letter) return;
+    const targetOfficer = subjectOfficersList.find((so) => String(so.id) === String(selectedSubjectOfficerId));
+    if (!targetOfficer) {
+      alert(lang === "si" ? "කරුණාකර විෂයභාර නිලධාරියෙකු තෝරන්න." : "Please select a Subject Officer.");
+      return;
+    }
+
+    setIsSubmittingAssignment(true);
+    try {
+      const chiefName = currentUser?.full_name || "Chief Clerk";
+      const chiefRole = currentUser?.role || "chief_clerk";
+      const targetCaseNo = letterNo !== "—" ? letterNo : (letter.letterNo || letter.refNo || "Letter");
+
+      const res = await assignLetterToSubjectOfficerServer({
+        letterId: letter.id,
+        letterNo: letterNo !== "—" ? letterNo : (letter.letterNo || letter.refNo || ""),
+        refNo: refNo !== "—" ? refNo : (letter.refNo || letter.serial_no || ""),
+        subjectOfficerId: targetOfficer.id,
+        subjectOfficerName: targetOfficer.full_name,
+        subjectOfficerEmployeeNo: targetOfficer.employee_no,
+        subjectType: targetOfficer.subject_type,
+        instructions: assignmentInstructions.trim(),
+        chiefClerkName: chiefName,
+        chiefClerkRole: chiefRole,
+      });
+
+      if (res && res.success) {
+        setLetter((prev: any) => ({
+          ...prev,
+          action_officer: targetOfficer.full_name,
+          actionOfficer: targetOfficer.full_name,
+          officer_name: targetOfficer.full_name,
+          officerName: targetOfficer.full_name,
+          forwarded_to: targetOfficer.full_name,
+          forwardedTo: targetOfficer.full_name,
+          addressed_to: targetOfficer.full_name,
+          addressedTo: targetOfficer.full_name,
+          addressed_role: "Subject Officer",
+          addressedRole: "Subject Officer",
+          status: "Under Subject Officer",
+          forward_reason: assignmentInstructions.trim() || `Assigned to Subject Officer ${targetOfficer.full_name}`,
+          forwardReason: assignmentInstructions.trim() || `Assigned to Subject Officer ${targetOfficer.full_name}`,
+        }));
+
+        setForwardNotification(
+          lang === "si"
+            ? `ලිපිය (${targetCaseNo}) සාර්ථකව විෂයභාර නිලධාරී ${targetOfficer.full_name} වෙත පවරන ලදී!`
+            : `Letter (${targetCaseNo}) successfully assigned to Subject Officer ${targetOfficer.full_name}!`
+        );
+        setIsAssignSubjectModalOpen(false);
+        setTimeout(() => setForwardNotification(null), 5000);
+
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("dcmms_data_updated"));
+          window.dispatchEvent(new CustomEvent("dcmms_assignment_updated"));
+          window.dispatchEvent(new CustomEvent("dcmms_notifications_updated"));
+        }
+      } else {
+        alert(res?.error || "Failed to assign letter");
+      }
+    } catch (err: any) {
+      alert("Error assigning letter: " + (err?.message || "Unknown error"));
+    } finally {
+      setIsSubmittingAssignment(false);
     }
   };
 
@@ -612,6 +797,27 @@ function ViewLetterInner() {
             </button>
           )}
 
+          {isChiefClerkUser && (
+            <button
+              type="button"
+              onClick={openAssignSubjectModal}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: "7px",
+                padding: "8px 16px", borderRadius: "8px",
+                background: "linear-gradient(135deg, #0284c7 0%, #0369a1 100%)",
+                border: "none", color: "#ffffff",
+                fontWeight: 700, fontSize: "12.5px", cursor: "pointer",
+                boxShadow: "0 2px 6px rgba(2, 132, 199, 0.3)",
+                transition: "all 0.15s ease",
+              }}
+            >
+              <UserCheck size={14} />
+              {isLetterAssignedToSubject(letter)
+                ? (lang === "si" ? "නැවත පවරන්න" : "Reassign Subject Officer")
+                : (lang === "si" ? "විෂයභාර නිලධාරියාට පවරන්න" : "Assign to Subject Officer")}
+            </button>
+          )}
+
           <button
             type="button"
             onClick={() => window.print()}
@@ -859,6 +1065,26 @@ function ViewLetterInner() {
             >
               <Send size={15} />
               {lang === "si" ? "නිලධාරියෙකු වෙත යොමු කරන්න" : "Forward to Officer"}
+            </button>
+          )}
+
+          {isChiefClerkUser && (
+            <button
+              type="button"
+              onClick={openAssignSubjectModal}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: "7px",
+                padding: "10px 18px", borderRadius: "8px",
+                background: "#0284c7", color: "#ffffff",
+                border: "none", fontWeight: 700, fontSize: "13px",
+                cursor: "pointer", boxShadow: "0 2px 6px rgba(2, 132, 199, 0.25)",
+                transition: "all 0.15s ease",
+              }}
+            >
+              <UserCheck size={15} />
+              {isLetterAssignedToSubject(letter)
+                ? (lang === "si" ? "නැවත පවරන්න" : "Reassign Subject Officer")
+                : (lang === "si" ? "විෂයභාර නිලධාරියාට පවරන්න" : "Assign to Subject Officer")}
             </button>
           )}
         </div>
@@ -1777,6 +2003,364 @@ function ViewLetterInner() {
                 {isSubmittingForward 
                   ? (lang === "si" ? "යොමු කරමින්..." : "Forwarding...") 
                   : (lang === "si" ? "තහවුරු කර යොමු කරන්න" : "Confirm & Forward")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Assign Letter to Subject Officer Modal for Chief Clerk ── */}
+      {isAssignSubjectModalOpen && letter && (
+        <div style={{
+          position: "fixed",
+          inset: 0,
+          backgroundColor: "rgba(15, 23, 42, 0.7)",
+          backdropFilter: "blur(6px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 99999,
+          padding: "16px",
+        }}>
+          <div style={{
+            backgroundColor: "#ffffff",
+            borderRadius: "16px",
+            maxWidth: "620px",
+            width: "100%",
+            padding: "26px",
+            boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.35)",
+            border: "1px solid #e2e8f0",
+            maxHeight: "92vh",
+            overflowY: "auto"
+          }}>
+            {/* Modal Header */}
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "18px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div style={{
+                  width: "40px",
+                  height: "40px",
+                  borderRadius: "10px",
+                  backgroundColor: "#e0f2fe",
+                  color: "#0284c7",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center"
+                }}>
+                  <UserCheck size={22} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "17px", fontWeight: 800, color: "#0f172a" }}>
+                    {lang === "si" ? "විෂයභාර නිලධාරියා වෙත ලිපිය පැවරීම" : "Assign Letter to Subject Officer"}
+                  </h3>
+                  <p style={{ margin: 0, fontSize: "12px", color: "#64748b" }}>
+                    {lang === "si"
+                      ? "අදාළ කලාපය/දිස්ත්‍රික්කය භාර විෂය නිලධාරියා තෝරා උපදෙස් ඇතුළත් කරන්න."
+                      : "Select the relevant Subject Officer by district/zone and enter assignment instructions."}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAssignSubjectModalOpen(false)}
+                style={{
+                  background: "#f1f5f9",
+                  border: "none",
+                  borderRadius: "8px",
+                  width: "32px",
+                  height: "32px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  color: "#64748b"
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Letter Summary Card */}
+            <div style={{
+              backgroundColor: "#f8fafc",
+              borderRadius: "10px",
+              padding: "14px",
+              border: "1px solid #e2e8f0",
+              marginBottom: "16px"
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+                <span style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>
+                  {lang === "si" ? "ලිපි අංකය" : "Letter No"}:
+                </span>
+                <span style={{ fontSize: "13px", fontWeight: 700, color: "#0284c7", fontFamily: "monospace" }}>
+                  {letterNo !== "—" ? letterNo : (letter.letterNo || letter.refNo)}
+                </span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+                <span style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>
+                  {lang === "si" ? "එවූ පාර්ශවය" : "Sender"}:
+                </span>
+                <span style={{ fontSize: "12.5px", fontWeight: 600, color: "#334155" }}>
+                  {senderName}
+                </span>
+              </div>
+              {subject && subject !== "—" && (
+                <div style={{ marginTop: "4px", paddingTop: "6px", borderTop: "1px dashed #cbd5e1" }}>
+                  <span style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>
+                    {lang === "si" ? "විෂය" : "Subject"}:
+                  </span>
+                  <p style={{ margin: "2px 0 0", fontSize: "12.5px", color: "#1e293b", fontWeight: 500 }}>
+                    {subject}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Smart Subject Officer Recommendation Card */}
+            {(() => {
+              const rec = getRecommendedSubjectOfficer(letter);
+              if (!rec) return null;
+              const subLabel = getSubjectTypeLabel(rec.subject_type, lang);
+              return (
+                <div style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "10px 14px",
+                  borderRadius: "10px",
+                  backgroundColor: "#f5f3ff",
+                  border: "1.5px dashed #a855f7",
+                  marginBottom: "16px",
+                  gap: "10px"
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <Sparkles size={18} style={{ color: "#7c3aed" }} />
+                    <div>
+                      <div style={{ fontSize: "12px", fontWeight: 700, color: "#581c87" }}>
+                        {lang === "si" ? "ස්වයංක්‍රීය නිර්දේශිත විෂය නිලධාරියා:" : "Recommended Subject Officer:"}
+                      </div>
+                      <div style={{ fontSize: "12px", color: "#6b21a8" }}>
+                        <strong>{rec.full_name}</strong> • {subLabel}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedSubjectOfficerId(String(rec.id))}
+                    style={{
+                      padding: "5px 12px",
+                      borderRadius: "6px",
+                      border: "none",
+                      backgroundColor: "#7c3aed",
+                      color: "#ffffff",
+                      fontSize: "11.5px",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      whiteSpace: "nowrap"
+                    }}
+                  >
+                    {lang === "si" ? "තෝරන්න" : "Select"}
+                  </button>
+                </div>
+              );
+            })()}
+
+            {/* Select Subject Officer */}
+            <div style={{ marginBottom: "16px" }}>
+              <label style={{ display: "block", fontSize: "13px", fontWeight: 700, color: "#0f172a", marginBottom: "8px" }}>
+                {lang === "si" ? "අදාළ විෂයභාර නිලධාරියා තෝරන්න:" : "Select Subject Officer:"}
+              </label>
+
+              {/* Search filter for long officer lists */}
+              {subjectOfficersList.length > 4 && (
+                <input
+                  type="text"
+                  placeholder={lang === "si" ? "නිලධාරියාගේ නම හෝ දිස්ත්‍රික්කය සොයන්න..." : "Filter officers by name or district..."}
+                  value={subjectOfficerSearchInModal}
+                  onChange={(e) => setSubjectOfficerSearchInModal(e.target.value)}
+                  style={{
+                    width: "100%",
+                    borderRadius: "8px",
+                    border: "1px solid #cbd5e1",
+                    padding: "7px 10px",
+                    fontSize: "12px",
+                    marginBottom: "8px",
+                    outline: "none"
+                  }}
+                />
+              )}
+
+              {/* Officers selection list */}
+              <div style={{
+                maxHeight: "220px",
+                overflowY: "auto",
+                display: "flex",
+                flexDirection: "column",
+                gap: "6px",
+                border: "1px solid #e2e8f0",
+                borderRadius: "10px",
+                padding: "8px"
+              }}>
+                {subjectOfficersList
+                  .filter((so) => {
+                    if (!subjectOfficerSearchInModal.trim()) return true;
+                    const q = subjectOfficerSearchInModal.toLowerCase();
+                    const name = (so.full_name || "").toLowerCase();
+                    const subType = (so.subject_type || "").toLowerCase();
+                    const subLabel = getSubjectTypeLabel(so.subject_type, lang).toLowerCase();
+                    return name.includes(q) || subType.includes(q) || subLabel.includes(q);
+                  })
+                  .map((so) => {
+                    const isSelected = String(selectedSubjectOfficerId) === String(so.id);
+                    const label = getSubjectTypeLabel(so.subject_type, lang);
+                    return (
+                      <label
+                        key={so.id}
+                        onClick={() => setSelectedSubjectOfficerId(String(so.id))}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          padding: "9px 12px",
+                          borderRadius: "8px",
+                          border: isSelected ? "2px solid #0284c7" : "1px solid #e2e8f0",
+                          backgroundColor: isSelected ? "#f0f9ff" : "#ffffff",
+                          cursor: "pointer",
+                          transition: "all 0.15s ease"
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          <input
+                            type="radio"
+                            name="selectedSubjectOfficerViewLetter"
+                            checked={isSelected}
+                            onChange={() => setSelectedSubjectOfficerId(String(so.id))}
+                            style={{ accentColor: "#0284c7" }}
+                          />
+                          <div>
+                            <div style={{ fontSize: "13px", fontWeight: 700, color: isSelected ? "#0369a1" : "#0f172a" }}>
+                              {so.full_name}
+                            </div>
+                            <div style={{ fontSize: "11px", color: isSelected ? "#0284c7" : "#64748b" }}>
+                              {so.employee_no ? `${so.employee_no} • ` : ""}
+                              {label || (lang === "si" ? "විෂයභාර නිලධාරී" : "Subject Officer")}
+                            </div>
+                          </div>
+                        </div>
+                        {so.subject_type && (
+                          <span style={{
+                            padding: "2px 8px",
+                            borderRadius: "6px",
+                            backgroundColor: isSelected ? "#e0f2fe" : "#f1f5f9",
+                            color: isSelected ? "#0369a1" : "#475569",
+                            fontSize: "11px",
+                            fontWeight: 600
+                          }}>
+                            📍 {so.subject_type}
+                          </span>
+                        )}
+                      </label>
+                    );
+                  })}
+              </div>
+            </div>
+
+            {/* Assignment Instructions */}
+            <div style={{ marginBottom: "20px" }}>
+              <label style={{ display: "block", fontSize: "13px", fontWeight: 700, color: "#0f172a", marginBottom: "6px" }}>
+                {lang === "si" ? "පැවරීමේ උපදෙස් / නියෝග:" : "Assignment Instructions / Directives:"}
+              </label>
+              <textarea
+                rows={3}
+                value={assignmentInstructions}
+                onChange={(e) => setAssignmentInstructions(e.target.value)}
+                placeholder={lang === "si"
+                  ? "විෂය නිලධාරියා වෙත ලබාදෙන උපදෙස් හෝ කාලසීමාව ඇතුළත් කරන්න..."
+                  : "Enter directives, timeline or specific instructions for this subject officer..."}
+                style={{
+                  width: "100%",
+                  borderRadius: "8px",
+                  border: "1.5px solid #cbd5e1",
+                  padding: "8px 12px",
+                  fontSize: "13px",
+                  color: "#0f172a",
+                  outline: "none",
+                  resize: "vertical"
+                }}
+              />
+              {/* Quick Directive Chips */}
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "6px" }}>
+                {[
+                  lang === "si" ? "විමර්ශන වාර්තාවක් කැඳවන්න" : "Call for investigation report",
+                  lang === "si" ? "දින 14 ක් ඇතුළත වාර්තාවක් ඉදිරිපත් කරන්න" : "Submit report within 14 days",
+                  lang === "si" ? "අදාළ ලිපිගොනුවට අමුණන්න" : "Attach to relevant file",
+                  lang === "si" ? "නීති උපදෙස් ලබාගන්න" : "Seek legal advice",
+                  lang === "si" ? "පැමිණිලිකරුගෙන් ප්‍රකාශයක් සටහන් කරගන්න" : "Record statement from complainant",
+                ].map((chip) => (
+                  <button
+                    key={chip}
+                    type="button"
+                    onClick={() => setAssignmentInstructions(chip)}
+                    style={{
+                      background: "#f1f5f9",
+                      border: "1px solid #e2e8f0",
+                      borderRadius: "12px",
+                      padding: "3px 8px",
+                      fontSize: "11px",
+                      color: "#334155",
+                      fontWeight: 600,
+                      cursor: "pointer"
+                    }}
+                  >
+                    + {chip}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+              <button
+                type="button"
+                onClick={() => setIsAssignSubjectModalOpen(false)}
+                disabled={isSubmittingAssignment}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: "8px",
+                  border: "1px solid #cbd5e1",
+                  backgroundColor: "#f8fafc",
+                  color: "#475569",
+                  fontWeight: 600,
+                  fontSize: "13px",
+                  cursor: "pointer"
+                }}
+              >
+                {lang === "si" ? "අවලංගු කරන්න" : "Cancel"}
+              </button>
+              <button
+                type="button"
+                onClick={handleAssignSubjectSubmit}
+                disabled={isSubmittingAssignment || !selectedSubjectOfficerId}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "7px",
+                  padding: "8px 18px",
+                  borderRadius: "8px",
+                  border: "none",
+                  backgroundColor: (isSubmittingAssignment || !selectedSubjectOfficerId) ? "#94a3b8" : "#0284c7",
+                  color: "#ffffff",
+                  fontWeight: 700,
+                  fontSize: "13px",
+                  cursor: (isSubmittingAssignment || !selectedSubjectOfficerId) ? "not-allowed" : "pointer",
+                  boxShadow: "0 2px 6px rgba(2, 132, 199, 0.3)"
+                }}
+              >
+                <UserCheck size={14} />
+                <span>
+                  {isSubmittingAssignment
+                    ? (lang === "si" ? "පවරමින් පවතී..." : "Assigning...")
+                    : (lang === "si" ? "ලිපිය පවරන්න" : "Confirm Assignment")}
+                </span>
               </button>
             </div>
           </div>

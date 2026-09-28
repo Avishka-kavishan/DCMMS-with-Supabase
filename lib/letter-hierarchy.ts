@@ -34,6 +34,13 @@ export const KEY_ADMINISTRATIVE_OFFICERS: OfficerOption[] = [
     titleEn: "Assistant Secretary (Investigation)",
     titleTa: "உதவிச் செயலாளர் (விசாரணைகள்)",
   },
+  {
+    role: "chief_clerk",
+    name: "Chief Clerk Officer (ශාඛා ප්‍රධානී)",
+    titleSi: "ශාඛා ප්‍රධානී (විනය ශාඛාව)",
+    titleEn: "Chief Clerk (Discipline Branch)",
+    titleTa: "பிரதான எழுதுவினைஞர் (ஒழுக்கக் கிளை)",
+  },
 ];
 
 /**
@@ -227,18 +234,79 @@ export function isAssignedBySeniorAssistantSecretary(item: any): boolean {
     }
   } catch {}
 
-  // 5. Letter addressed/forwarded to Chief Clerk with Senior provenance
-  const isChiefTarget = (
-    forwardedTo.includes("chief") ||
-    forwardedTo.includes("clerk") ||
-    forwardedTo.includes("ශාඛා ප්‍රධානී") ||
-    addressedRole.includes("chief") ||
-    addressedTo.includes("chief")
-  );
-  if (isChiefTarget && (isSeniorMatch(forwardReason) || isSeniorMatch(createdByName) || isSeniorMatch(assignedTo) || isSeniorMatch(addressedRole))) {
+  return false;
+}
+
+/**
+ * Check if a letter or case is strictly routed, addressed, or assigned to Chief Clerk,
+ * or was assigned by the Chief Clerk to a Subject Officer.
+ */
+export function isLetterForChiefClerk(item: any, officerProfile?: any): boolean {
+  if (!item) return false;
+  const raw = item.rawLetter || item;
+
+  const assignedTo = String(item.assignedTo || raw.action_officer || raw.actionOfficer || raw.officer_name || "").toLowerCase().trim();
+  const forwardedTo = String(raw.forwarded_to || raw.forwardedTo || "").toLowerCase().trim();
+  const forwardReason = String(raw.forward_reason || raw.forwardReason || "").toLowerCase().trim();
+  const addressedRole = String(raw.addressed_role || raw.addressedRole || "").toLowerCase().trim();
+  const addressedTo = String(raw.addressed_to || raw.addressedTo || "").toLowerCase().trim();
+  const createdByName = String(raw.created_by_name || raw.createdByName || "").toLowerCase().trim();
+
+  const myName = String(officerProfile?.full_name || "").toLowerCase().trim();
+  const myEmpNo = String(officerProfile?.employee_no || "").toLowerCase().trim();
+
+  const isNameMatch = (field: string) => {
+    if (!field) return false;
+    if (myName && (field.includes(myName) || myName.includes(field))) return true;
+    if (myEmpNo && field.includes(myEmpNo)) return true;
+    return false;
+  };
+
+  const isChiefKeyword = (field: string) => {
+    if (!field) return false;
+    return (
+      field.includes("chief_clerk") ||
+      field.includes("chief clerk") ||
+      field.includes("ශාඛා ප්‍රධානී") ||
+      field.includes("chief_clerk_discipline") ||
+      field.includes("chief_clerk_investigation") ||
+      field === "chief clerk" ||
+      field === "chief_clerk"
+    );
+  };
+
+  // 1. Matched directly by logged-in Chief Clerk's name or employee no
+  if (isNameMatch(assignedTo) || isNameMatch(forwardedTo) || isNameMatch(addressedTo)) {
+    return true;
+  }
+
+  // 2. Explicitly assigned, forwarded, or addressed to Chief Clerk role
+  if (
+    isChiefKeyword(assignedTo) ||
+    isChiefKeyword(forwardedTo) ||
+    isChiefKeyword(addressedTo) ||
+    isChiefKeyword(addressedRole)
+  ) {
+    return true;
+  }
+
+  // 3. Forward reason notes specifically that it is routed to Chief Clerk or assigned by Chief Clerk
+  if (
+    forwardReason.includes("chief clerk") ||
+    forwardReason.includes("chief_clerk") ||
+    forwardReason.includes("ශාඛා ප්‍රධානී") ||
+    forwardReason.includes("assigned by chief clerk") ||
+    (myName && forwardReason.includes(myName))
+  ) {
+    return true;
+  }
+
+  // 4. Letters created by Chief Clerk
+  if (isNameMatch(createdByName) || isChiefKeyword(createdByName)) {
     return true;
   }
 
   return false;
 }
+
 

@@ -118,7 +118,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }
   };
 
-  const isChief = Boolean(
+  const [urlRole, setUrlRole] = useState("");
+  React.useEffect(() => {
+    if (typeof window !== "undefined") {
+      const sp = new URLSearchParams(window.location.search);
+      setUrlRole(sp.get("view") || sp.get("role") || "");
+    }
+  }, [pathname]);
+
+  const isChiefParam = Boolean(urlRole && urlRole.toLowerCase().includes("chief"));
+  const isChief = isChiefParam || Boolean(
     currentUserProfile?.role === "chief_clerk" ||
     currentUserProfile?.role === "chief_clerk_discipline" ||
     currentUserProfile?.role === "chief_clerk_investigation" ||
@@ -130,6 +139,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const getPageTitleAndSubtitle = () => {
     const cleanPath = (pathname || "").replace(/\/$/, "");
+    if (isChiefParam) {
+      return {
+        title: lang === "si" ? "ශාඛා ප්‍රධානී - විනය අංශය (Chief Clerk - Discipline Branch)" : "Chief Clerk - Discipline Branch",
+        subtitle: lang === "si" ? "ශාඛා ලිපි සහ නඩු කටයුතු කළමනාකරණය" : "Manage branch letters and case workflow"
+      };
+    }
     if (cleanPath === "/admin/subject-officers") {
       return {
         title: t("subjectOfficer", "Subject Officer"),
@@ -229,7 +244,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         isSidebarOpen={isSidebarOpen}
         setIsSidebarOpen={setIsSidebarOpen}
         handleLogout={handleLogout}
-        role={currentUserProfile?.role || "admin"}
+        role={isChief ? "chief_clerk_discipline" : (currentUserProfile?.role || "admin")}
       />
 
       {/* ── Layout Grid Wrapper ── */}

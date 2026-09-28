@@ -4822,6 +4822,23 @@ export async function getCaseFullTimelineServer(caseNo: string) {
           subject_of_letter,
           date_received_by_add_secretary,
           date_letter_handover_discipline,
+          action_officer,
+          addressed_to,
+          addressed_role,
+          forwarded_to,
+          forward_reason,
+          created_by_name,
+          created_by_role,
+          priority,
+          institute_name,
+          region_province,
+          add_sec_instructions,
+          add_sec_notes,
+          add_sec_forward_method,
+          last_edited_by,
+          last_edited_at,
+          document_url,
+          document_name,
           created_at,
           updated_at
         FROM public.daily_mail_letter_table
@@ -4835,30 +4852,42 @@ export async function getCaseFullTimelineServer(caseNo: string) {
       `;
     } catch (e) {}
 
-    // Fallback: daily_mail table
+    // Fallback: dcmms_daily_mail or daily_mail table
     if (!dailyMailRows || dailyMailRows.length === 0) {
       try {
         dailyMailRows = await prisma.$queryRaw`
           SELECT 
-            daily_mail_id::text as id,
-            letter_number,
-            received_letter_number as ref_number,
-            mode_of_receipt,
-            sender_party as senders_party,
-            nature_of_letter,
-            subject_category,
-            subject_of_letter,
-            date_received_by_additional_secretary as date_received_by_add_secretary,
-            date_letter_handed_over_to_dicipline_branch as date_letter_handover_discipline,
+            id::text as id,
+            letter_no as letter_number,
+            serial_no as ref_number,
+            method as mode_of_receipt,
+            sender as senders_party,
+            type as nature_of_letter,
+            classification as subject_category,
+            subject as subject_of_letter,
+            received_date as date_received_by_add_secretary,
+            submitted_date as date_letter_handover_discipline,
+            action_officer,
+            addressed_to,
+            addressed_role,
+            forwarded_to,
+            forward_reason,
+            created_by_name,
+            created_by_role,
+            priority,
+            institute_name,
+            region_province,
+            document_url,
+            document_name,
             created_at,
             updated_at
-          FROM daily_mail
-          WHERE LOWER(received_letter_number) = LOWER(${clean})
-             OR LOWER(received_letter_number) = LOWER(${actualSubNo})
-             OR LOWER(received_letter_number) = LOWER(${refNum})
-             OR LOWER(letter_number) = LOWER(${clean})
-             OR LOWER(letter_number) = LOWER(${actualSubNo})
-             OR LOWER(letter_number) = LOWER(${refNum})
+          FROM public.dcmms_daily_mail
+          WHERE LOWER(serial_no) = LOWER(${clean})
+             OR LOWER(serial_no) = LOWER(${actualSubNo})
+             OR LOWER(serial_no) = LOWER(${refNum})
+             OR LOWER(letter_no) = LOWER(${clean})
+             OR LOWER(letter_no) = LOWER(${actualSubNo})
+             OR LOWER(letter_no) = LOWER(${refNum})
           ORDER BY created_at ASC;
         `;
       } catch (e) {}
@@ -5017,6 +5046,26 @@ export async function getCaseFullTimelineServer(caseNo: string) {
       `;
     } catch (e) {}
 
+    // 10. Fetch Case Audit Logs
+    let auditLogs: any[] = [];
+    try {
+      auditLogs = await prisma.$queryRaw`
+        SELECT 
+          id::text as id,
+          timestamp,
+          username,
+          email,
+          action,
+          details
+        FROM public.dcmms_audit_logs
+        WHERE details ILIKE ${'%' + clean + '%'}
+           OR details ILIKE ${'%' + (actualSubNo || clean) + '%'}
+           OR details ILIKE ${'%' + (refNum || clean) + '%'}
+           OR action ILIKE ${'%' + clean + '%'}
+        ORDER BY timestamp ASC;
+      `;
+    } catch (e) {}
+
     return serializeForServerAction({
       success: true,
       data: {
@@ -5035,11 +5084,49 @@ export async function getCaseFullTimelineServer(caseNo: string) {
         assignment: assignmentData || null,
         preliminaryInvestigation: prelimData || null,
         registeredOfficers: registeredOfficers || [],
+        auditLogs: auditLogs || [],
       },
     });
   } catch (error: any) {
     console.error("Error fetching full case timeline from server:", error);
     return serializeForServerAction({ success: false, error: error?.message || "Failed to fetch timeline", data: null });
+  }
+}
+
+export async function saveSubjectDetailActionServer(data: {
+  id?: string | null;
+  case_no: string;
+  ref_no?: string | null;
+  received_date?: string | null;
+  report_state?: string | null;
+  special_notes?: string | null;
+  subject_officer_name?: string | null;
+  officer_name?: string | null;
+  step_taken?: string | null;
+}) {
+  try {
+    const idVal = data.id || `sd-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const recDate = data.received_date ? new Date(data.received_date) : null;
+    await prisma.$executeRaw`
+      INSERT INTO public.dcmms_subject_details (
+        id, case_no, ref_no, received_date, report_state, special_notes,
+        subject_officer_name, officer_name, step_taken, created_at, updated_at
+      ) VALUES (
+        ${idVal}, ${data.case_no}, ${data.ref_no || data.case_no},
+        ${recDate}, ${data.report_state || null}, ${data.special_notes || null},
+        ${data.subject_officer_name || null}, ${data.officer_name || null},
+        ${data.step_taken || null}, NOW(), NOW()
+      )
+      ON CONFLICT (id) DO UPDATE SET
+        report_state = EXCLUDED.report_state,
+        special_notes = EXCLUDED.special_notes,
+        step_taken = EXCLUDED.step_taken,
+        updated_at = NOW();
+    `;
+    return serializeForServerAction({ success: true, id: idVal });
+  } catch (error: any) {
+    console.error("Error in saveSubjectDetailActionServer:", error);
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to save subject detail" });
   }
 }
 
@@ -7932,6 +8019,14 @@ export async function getDirectlyAssignedLettersServer(
           return false;
         };
 
+        const isChiefClerkRole =
+          activeRole.includes("chief") ||
+          activeRole.includes("clerk") ||
+          activeRole.includes("ශාඛා") ||
+          activeRole === "chief_clerk" ||
+          activeRole === "chief_clerk_discipline" ||
+          activeRole === "chief_clerk_investigation";
+
         const isSenior =
           activeRole.includes("senior") ||
           activeRole.includes("deputy") ||
@@ -7939,7 +8034,35 @@ export async function getDirectlyAssignedLettersServer(
           activeRole === "senior_assistant_secretary" ||
           activeRole === "deputy_secretary";
 
-        if (isSenior) {
+        if (isChiefClerkRole) {
+          // Chief Clerk receives strictly:
+          // 1. Letters assigned or forwarded to Chief Clerk (by name, employee no, or role)
+          // 2. Letters addressed to Chief Clerk
+          // 3. Letters assigned by Chief Clerk to Subject Officers
+          const isChiefTarget = (
+            matchesName(actOfficer) ||
+            matchesName(fwdTo) ||
+            matchesName(addrTo) ||
+            matchesName(fwdReason) ||
+            fwdTo.includes("chief") ||
+            fwdTo.includes("clerk") ||
+            fwdTo.includes("ශාඛා ප්‍රධානී") ||
+            addrRole.includes("chief") ||
+            addrRole.includes("clerk") ||
+            addrRole.includes("ශාඛා ප්‍රධානී") ||
+            addrTo.includes("chief") ||
+            actOfficer.includes("chief") ||
+            actOfficer.includes("clerk") ||
+            actOfficer.includes("ශාඛා ප්‍රධානී") ||
+            fwdReason.includes("chief clerk") ||
+            fwdReason.includes("ශාඛා ප්‍රධානී") ||
+            fwdReason.includes("assigned by chief clerk")
+          );
+
+          if (isChiefTarget) {
+            isMatch = true;
+          }
+        } else if (isSenior) {
           // Deputy Secretary / Senior Assistant Secretary sees:
           // 1. Letters assigned or forwarded to Deputy / Senior Assistant Secretary (by name or role)
           // 2. Letters addressed to Deputy / Senior Assistant Secretary
@@ -8232,6 +8355,210 @@ export async function getLettersForwardedToSeniorServer() {
 }
 
 /**
+ * Assign a letter to a Subject Officer (Chief Clerk's primary responsibility).
+ * Updates daily_mail_letter_table, dcmms_daily_mail, dcmms_subject_assignments,
+ * and dcmms_subject with the assigned Subject Officer details.
+ */
+export async function assignLetterToSubjectOfficerServer(params: {
+  letterId?: string;
+  letterNo?: string;
+  refNo?: string;
+  subjectOfficerId?: string;
+  subjectOfficerName: string;
+  subjectOfficerEmployeeNo?: string;
+  subjectType?: string;
+  instructions?: string;
+  chiefClerkName?: string;
+  chiefClerkRole?: string;
+}) {
+  try {
+    const {
+      letterId,
+      letterNo,
+      refNo,
+      subjectOfficerId,
+      subjectOfficerName,
+      subjectOfficerEmployeeNo,
+      subjectType,
+      instructions,
+      chiefClerkName = "Chief Clerk",
+      chiefClerkRole = "chief_clerk",
+    } = params;
+
+    if (!subjectOfficerName || (!letterNo && !refNo && !letterId)) {
+      return serializeForServerAction({
+        success: false,
+        error: "Subject officer name and letter number/reference are required.",
+      });
+    }
+
+    const cleanLetterNo = String(letterNo || "").trim();
+    const cleanRefNo = String(refNo || "").trim();
+    const cleanTargetCaseNo = cleanRefNo || cleanLetterNo;
+    const cleanOfficerName = String(subjectOfficerName).trim();
+    const today = new Date().toISOString().split("T")[0];
+    const assignmentRemarks = instructions && instructions.trim()
+      ? instructions.trim()
+      : `Assigned by Chief Clerk ${chiefClerkName} to Subject Officer ${cleanOfficerName}${subjectType ? ` (${subjectType})` : ""}`;
+
+    // 1. Update daily_mail_letter_table in PostgreSQL
+    try {
+      await prisma.$executeRawUnsafe(
+        `UPDATE public.daily_mail_letter_table SET
+          action_officer = $1,
+          addressed_to = $1,
+          addressed_role = 'Subject Officer',
+          forwarded_to = $1,
+          forward_reason = $2,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE
+          (CASE WHEN $3 <> '' THEN id::text = $3 ELSE FALSE END)
+          OR (CASE WHEN $4 <> '' THEN letter_number = $4 ELSE FALSE END)
+          OR (CASE WHEN $5 <> '' THEN ref_number = $5 ELSE FALSE END);`,
+        cleanOfficerName,
+        assignmentRemarks,
+        letterId ? String(letterId) : "",
+        cleanLetterNo,
+        cleanRefNo
+      );
+    } catch (e) {
+      console.warn("daily_mail_letter_table assignment update warning:", e);
+    }
+
+    // 2. Update dcmms_daily_mail in PostgreSQL
+    try {
+      await prisma.$executeRawUnsafe(
+        `UPDATE public.dcmms_daily_mail SET
+          action_officer = $1,
+          addressed_to = $1,
+          addressed_role = 'Subject Officer',
+          forwarded_to = $1,
+          forward_reason = $2,
+          status = 'Under Subject Officer',
+          updated_at = CURRENT_TIMESTAMP
+        WHERE
+          (CASE WHEN $3 <> '' THEN id::text = $3 ELSE FALSE END)
+          OR (CASE WHEN $4 <> '' THEN letter_no = $4 ELSE FALSE END)
+          OR (CASE WHEN $5 <> '' THEN serial_no = $5 ELSE FALSE END);`,
+        cleanOfficerName,
+        assignmentRemarks,
+        letterId ? String(letterId) : "",
+        cleanLetterNo,
+        cleanRefNo
+      );
+    } catch (e) {
+      console.warn("dcmms_daily_mail assignment update warning:", e);
+    }
+
+    // 3. Upsert into dcmms_subject_assignments
+    if (cleanTargetCaseNo) {
+      try {
+        await prisma.$executeRawUnsafe(
+          `INSERT INTO public.dcmms_subject_assignments (
+            id, case_no, subject_officer_name, assigned_officers, status, assigned_date,
+            progress_details, created_at, updated_at
+          ) VALUES (
+            $1, $2, $3, $3, 'In Progress', $4::date, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+          )
+          ON CONFLICT (case_no) DO UPDATE SET
+            subject_officer_name = EXCLUDED.subject_officer_name,
+            assigned_officers = EXCLUDED.assigned_officers,
+            status = 'In Progress',
+            assigned_date = EXCLUDED.assigned_date,
+            progress_details = COALESCE(EXCLUDED.progress_details, dcmms_subject_assignments.progress_details),
+            updated_at = CURRENT_TIMESTAMP;`,
+          `asgn-${cleanTargetCaseNo}`,
+          cleanTargetCaseNo,
+          cleanOfficerName,
+          today,
+          assignmentRemarks
+        );
+      } catch (e) {
+        console.warn("dcmms_subject_assignments update warning:", e);
+      }
+
+      // 4. Upsert into dcmms_subject
+      try {
+        await prisma.$executeRawUnsafe(
+          `INSERT INTO public.dcmms_subject (
+            id, case_no, status, officer_name, assigned_date, created_at, updated_at
+          ) VALUES (
+            $1, $2, 'Under Subject Officer', $3, $4::date, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+          )
+          ON CONFLICT (case_no) DO UPDATE SET
+            officer_name = EXCLUDED.officer_name,
+            status = 'Under Subject Officer',
+            assigned_date = EXCLUDED.assigned_date,
+            updated_at = CURRENT_TIMESTAMP;`,
+          `case-${cleanTargetCaseNo}`,
+          cleanTargetCaseNo,
+          cleanOfficerName,
+          today
+        );
+      } catch (e) {
+        console.warn("dcmms_subject update warning:", e);
+      }
+    }
+
+    // 5. Send Notification to Subject Officer
+    try {
+      await createOfficerNotificationServer({
+        targetOfficerName: cleanOfficerName,
+        targetRole: "subject_officer",
+        letterNo: cleanLetterNo || cleanRefNo,
+        caseNo: cleanTargetCaseNo,
+        type: "letter_assigned",
+        title: "New Case Assigned by Chief Clerk",
+        message: `Letter ${cleanLetterNo || cleanRefNo} has been assigned to you by Chief Clerk ${chiefClerkName} for subject processing.${instructions ? ` Directives: ${instructions}` : ""}`,
+        senderName: chiefClerkName,
+      });
+    } catch (e) {
+      console.warn("Notification send warning in assignLetterToSubjectOfficerServer:", e);
+    }
+
+    // 6. Log Audit Event
+    try {
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO public.dcmms_audit_logs (action, entity_type, entity_id, user_name, user_role, details)
+        VALUES ('CHIEF_CLERK_ASSIGNED_LETTER_TO_SUBJECT_OFFICER', 'LETTER', $1, $2, $3, $4)`,
+        cleanLetterNo || cleanRefNo || String(letterId || ""),
+        chiefClerkName,
+        chiefClerkRole,
+        JSON.stringify({
+          letterNo: cleanLetterNo,
+          refNo: cleanRefNo,
+          subjectOfficer: cleanOfficerName,
+          subjectType,
+          instructions,
+          assignedAt: new Date().toISOString(),
+        })
+      );
+    } catch (auditErr) {
+      console.warn("Audit log notice in assignLetterToSubjectOfficerServer:", auditErr);
+    }
+
+    return serializeForServerAction({
+      success: true,
+      data: {
+        letterNo: cleanLetterNo,
+        refNo: cleanRefNo,
+        actionOfficer: cleanOfficerName,
+        forwardedTo: cleanOfficerName,
+        forwardReason: assignmentRemarks,
+        status: "Under Subject Officer",
+        assignedDate: today,
+      },
+    });
+  } catch (error: any) {
+    console.error("Error in assignLetterToSubjectOfficerServer:", error);
+    return serializeForServerAction({
+      success: false,
+      error: error?.message || "Failed to assign letter to Subject Officer",
+    });
+  }
+}
+
+/**
  * Forward a letter originating or retained at Additional Secretary to one of the 3 key officers:
  * - Deputy Secretary / Senior Assistant Secretary
  * - Assistant Secretary of Discipline
@@ -8245,10 +8572,12 @@ export async function forwardLetterFromAdditionalSecretaryServer(params: {
   forwardToRole: string;
   forwardReason?: string;
   senderName?: string;
+  senderRole?: string;
 }) {
   try {
-    const { letterId, letterNo, refNo, forwardToOfficerName, forwardToRole, forwardReason, senderName } = params;
-    const finalReason = forwardReason || "Forwarded by Additional Secretary for review and necessary action";
+    const { letterId, letterNo, refNo, forwardToOfficerName, forwardToRole, forwardReason, senderName, senderRole } = params;
+    const senderTitle = senderRole || "Senior Assistant Secretary";
+    const finalReason = forwardReason || `Forwarded by ${senderTitle} to ${forwardToOfficerName} for review and necessary action`;
     const forwardedToStr = `${forwardToOfficerName} (${forwardToRole})`;
     const idKey = letterNo || refNo || letterId || "";
 
@@ -8267,6 +8596,8 @@ export async function forwardLetterFromAdditionalSecretaryServer(params: {
           addressed_role = $4,
           updated_at = CURRENT_TIMESTAMP
         WHERE letter_number = $5 OR ref_number = $6 OR id::text = $7
+           OR (TRIM(letter_number) != '' AND TRIM(letter_number) = TRIM($5))
+           OR (TRIM(ref_number) != '' AND TRIM(ref_number) = TRIM($6))
       `, forwardedToStr, finalReason, forwardToOfficerName, forwardToRole, letterNo || "", refNo || "", String(letterId || ""));
     } catch (err) {
       console.warn("Update warning in daily_mail_letter_table:", err);
@@ -8283,6 +8614,8 @@ export async function forwardLetterFromAdditionalSecretaryServer(params: {
           addressed_role = $4,
           updated_at = CURRENT_TIMESTAMP
         WHERE letter_no = $5 OR serial_no = $6 OR id::text = $7
+           OR (TRIM(letter_no) != '' AND TRIM(letter_no) = TRIM($5))
+           OR (TRIM(serial_no) != '' AND TRIM(serial_no) = TRIM($6))
       `, forwardedToStr, finalReason, forwardToOfficerName, forwardToRole, letterNo || "", refNo || "", String(letterId || ""));
     } catch (err) {
       console.warn("Update warning in dcmms_daily_mail:", err);
@@ -8296,9 +8629,9 @@ export async function forwardLetterFromAdditionalSecretaryServer(params: {
         letterNo: letterNo || refNo || idKey,
         caseNo: refNo || letterNo || idKey,
         type: "secretary_letter_forwarded",
-        title: "New Letter Forwarded by Additional Secretary",
-        message: `Letter ${letterNo || refNo || idKey} from "${senderName || "Sender"}" has been forwarded to you by Additional Secretary with instructions: "${finalReason}".`,
-        senderName: "Additional Secretary",
+        title: `New Letter Forwarded by ${senderTitle}`,
+        message: `Letter ${letterNo || refNo || idKey} from "${senderName || "Sender"}" has been forwarded to you by ${senderTitle} with instructions: "${finalReason}".`,
+        senderName: senderTitle,
       });
     } catch (notifErr) {
       console.warn("Notification dispatch warning in forwardLetterFromAdditionalSecretaryServer:", notifErr);
@@ -8321,6 +8654,8 @@ export async function forwardLetterFromAdditionalSecretaryServer(params: {
     return serializeForServerAction({ success: false, error: error?.message || "Failed to forward letter" });
   }
 }
+
+export const forwardLetterFromSeniorSecretaryServer = forwardLetterFromAdditionalSecretaryServer;
 
 /**
  * Update / Edit Letter Record (Additional Secretary / Admin)

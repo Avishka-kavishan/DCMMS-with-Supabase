@@ -14,7 +14,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 import { getCurrentProfile, dashboardPath } from "@/lib/auth";
 import { CheckCircle, X, ShieldCheck, Users, UserCheck, CalendarClock, Calendar } from "lucide-react";
-import { getInstitutesServer, saveInstituteServer, saveAccusedOfficerServer, getAccusedOfficerByRefServer, saveReplyLetterDetailsServer, getReplyLetterDetailsByRefServer } from "@/lib/db-actions";
+import { getInstitutesServer, saveInstituteServer, saveAccusedOfficerServer, getAccusedOfficerByRefServer, saveReplyLetterDetailsServer, getReplyLetterDetailsByRefServer, saveSubjectDetailActionServer } from "@/lib/db-actions";
 const formatStepTaken = (step: string, t: any) => {
   if (!step) return "";
   if (step.startsWith("[EduSecApproval:")) {
@@ -1305,7 +1305,21 @@ function CaseDetailsForm() {
           })
           .eq("ref_no", refNo);
 
-        // 3. Save action/letters details as a new row in dcmms_subject_details
+        // 3. Save action/letters details as a new row in dcmms_subject_details (PostgreSQL & Supabase fallback)
+        try {
+          await saveSubjectDetailActionServer({
+            id: actionId,
+            case_no: refNo,
+            received_date: receivedDate || null,
+            report_state: finalCaseStatus,
+            special_notes: specialNotes || null,
+            subject_officer_name: subjectOfficer || null,
+            step_taken: serializedStepTaken || null,
+          });
+        } catch (dbErr) {
+          console.warn("Failed saving subject details to PostgreSQL:", dbErr);
+        }
+
         const { error: actionError } = await supabase
           .from("dcmms_subject_details")
           .insert({
@@ -1318,7 +1332,7 @@ function CaseDetailsForm() {
             step_taken: serializedStepTaken,
           });
 
-        if (actionError) throw actionError;
+        if (actionError) console.warn("Supabase action error (expected if disabled):", actionError);
 
         if (isConcerned === "yes") {
           try {
