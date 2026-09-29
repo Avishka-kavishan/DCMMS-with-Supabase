@@ -102,6 +102,7 @@ function RecommendationFormContent() {
   const searchParams = useSearchParams();
 
   const caseNoParam = searchParams?.get("caseNo") || searchParams?.get("refNo") || searchParams?.get("id") || "";
+  const categoryParam = searchParams?.get("category") || "";
   const lang = i18n.language;
 
   // Client mount state to prevent SSR/CSR hydration mismatches
@@ -115,7 +116,19 @@ function RecommendationFormContent() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // View Mode: 'form' (Formulate Recommendation) vs 'list' (All Recommendations & Completed Cases)
-  const [viewMode, setViewMode] = useState<"form" | "list">(caseNoParam ? "form" : "list");
+  const [viewMode, setViewMode] = useState<"form" | "list">(caseNoParam || categoryParam ? "form" : "list");
+
+  // Form Mode: 'recommendation' (Institutional Basic Investigation Recommendation) vs 'charge_sheet' (Issuing Charge Sheet)
+  const [activeFormType, setActiveFormType] = useState<"recommendation" | "charge_sheet">(
+    categoryParam === "issuing_charge_sheet" ? "charge_sheet" : "recommendation"
+  );
+
+  useEffect(() => {
+    if (categoryParam === "issuing_charge_sheet") {
+      setActiveFormType("charge_sheet");
+      setRecommendationCategory("issuing_charge_sheet");
+    }
+  }, [categoryParam]);
 
   // Available cases list for quick selector
   const [availableCases, setAvailableCases] = useState<CaseOption[]>([]);
@@ -132,7 +145,7 @@ function RecommendationFormContent() {
   const [initialCompletedDate, setInitialCompletedDate] = useState("");
 
   // Recommendation Form State
-  const [recommendationCategory, setRecommendationCategory] = useState("issuing_charge_sheet");
+  const [recommendationCategory, setRecommendationCategory] = useState(categoryParam || "formal_inquiry");
   const [recommendationUrgency, setRecommendationUrgency] = useState("normal");
   const [recommendationTitle, setRecommendationTitle] = useState("");
   const [recommendationText, setRecommendationText] = useState("");
@@ -165,8 +178,13 @@ function RecommendationFormContent() {
   const [recStatusFilter, setRecStatusFilter] = useState("all");
   const [selectedRecModal, setSelectedRecModal] = useState<RecommendationRecord | null>(null);
 
-  // Derived state: Whether either decision is agreed as 'yes'
-  const isDecisionApproved = agreeWithAnswers === "yes" || agreeWithPscDecision === "yes";
+  // Derived state: Whether decision is agreed as 'yes' based on selected disciplinary authority
+  const isDecisionApproved = recommendationCategory === "issuing_charge_sheet"
+    ? (disciplinaryAuthority === "psc_esc" ? agreeWithPscDecision === "yes" : agreeWithAnswers === "yes")
+    : (agreeWithAnswers === "yes" || agreeWithPscDecision === "yes");
+
+  // Whether PSC / ESC decision is explicitly disagreed ('no')
+  const isPscDisagreed = recommendationCategory === "issuing_charge_sheet" && disciplinaryAuthority === "psc_esc" && agreeWithPscDecision === "no";
 
   // Loading & Feedback State
   const [isLoading, setIsLoading] = useState(false);
@@ -188,7 +206,7 @@ function RecommendationFormContent() {
 
   // Sync document title
   useEffect(() => {
-    document.title = `${lang === "si" ? "චෝදනා පත්‍ර පෝරමය (Charge Sheet Form)" : lang === "ta" ? "குற்றப்பத்திரிகை படிவம் (Charge Sheet Form)" : "Charge Sheet Form"} | DCMMS`;
+    document.title = `${lang === "si" ? "ආයතනික මූලික විමර්ශනයේ නිර්දේශය" : lang === "ta" ? "நிறுவன அடிப்படை விசாரணை பரிந்துரை" : "Institutional Basic Investigation Recommendation"} | DCMMS`;
   }, [lang]);
 
   // Load all available cases and registered recommendations
@@ -452,6 +470,9 @@ function RecommendationFormContent() {
     setSchoolName("");
     setCaseSubject("");
     setInitialCompletedDate("");
+    setRecommendationCategory("formal_inquiry");
+    setRecommendationUrgency("normal");
+    setForwardTo("disciplinary_branch");
     setRecommendationTitle("");
     setRecommendationText("");
     setDisciplinaryAction("");
@@ -587,54 +608,65 @@ function RecommendationFormContent() {
 
     setIsSaving(true);
     const now = new Date().toISOString().slice(0, 10);
-    const isDecisionApproved = agreeWithAnswers === "yes" || agreeWithPscDecision === "yes";
-    const statusToSave = isDecisionApproved ? "Closed" : "Draft";
+    const isChargeSheet = activeFormType === "charge_sheet";
+    const categoryToSave = isChargeSheet ? "issuing_charge_sheet" : (recommendationCategory || "formal_inquiry");
+    const isApprovedDecision = isChargeSheet && (
+      (disciplinaryAuthority === "psc_esc" && agreeWithPscDecision === "yes") ||
+      (disciplinaryAuthority !== "psc_esc" && agreeWithAnswers === "yes")
+    );
+    const statusToSave = isApprovedDecision ? "Closed" : "Draft";
+
     const payload: any = {
       ref_number: caseNo,
       case_no: caseNo,
       letter_no: letterNo || null,
-      category_recommendation: recommendationCategory,
-      category: recommendationCategory,
+      category_recommendation: categoryToSave,
+      category: categoryToSave,
       case_status: statusToSave,
       status: statusToSave,
       target_implementation_date: targetDate || null,
       target_date: targetDate || null,
-      investigation_recommendation: recommendationText,
-      recommendation_text: recommendationText,
+      investigation_recommendation: recommendationText || (isChargeSheet ? (disciplinaryOrder || "Charge Sheet In Progress") : ""),
+      recommendation_text: recommendationText || (isChargeSheet ? (disciplinaryOrder || "Charge Sheet In Progress") : ""),
       circular_reference: disciplinaryAction || null,
       disciplinary_action: disciplinaryAction || null,
       minute_ref: referenceNotes || null,
       reference_notes: referenceNotes || null,
-      date_approved_by_secretory: secretaryApprovalDate || null,
-      secretary_approval_date: secretaryApprovalDate || null,
-      secretory_recommendation: secretaryApprovedRecommendation || null,
-      secretary_approved_recommendation: secretaryApprovedRecommendation || null,
       urgency: recommendationUrgency,
-      title: recommendationTitle || "Preliminary Investigation Recommendation",
+      title: recommendationTitle || (isChargeSheet
+        ? (lang === "si" ? "චෝදනා පත්‍ර කෙටුම්පත" : "Charge Sheet Draft")
+        : (lang === "si" ? "මූලික විමර්ශන කෙටුම්පත් නිර්දේශය" : "Draft Preliminary Recommendation")),
       forward_to: forwardTo,
-      issued_charge_sheet: recommendationCategory === "issuing_charge_sheet" ? issuedChargeSheet : null,
-      charge_sheet_issued_date: recommendationCategory === "issuing_charge_sheet" ? (chargeSheetIssuedDate || null) : null,
-      date_the_charge_sheet_issued: recommendationCategory === "issuing_charge_sheet" ? (chargeSheetIssuedDate || null) : null,
-      charge_sheet_response_date: recommendationCategory === "issuing_charge_sheet" ? (chargeSheetResponseDate || null) : null,
-      date_the_response_to_the_charge_sheet_was_given: recommendationCategory === "issuing_charge_sheet" ? (chargeSheetResponseDate || null) : null,
-      disciplinary_order: recommendationCategory === "issuing_charge_sheet" ? disciplinaryOrder : null,
-      disciplinary_authority: recommendationCategory === "issuing_charge_sheet" ? disciplinaryAuthority : null,
-      date_request_documents: recommendationCategory === "issuing_charge_sheet" ? (dateRequestDocuments || null) : null,
-      date_submission_documents: recommendationCategory === "issuing_charge_sheet" ? (dateSubmissionDocuments || null) : null,
-      agree_with_answers: (recommendationCategory === "issuing_charge_sheet" && disciplinaryAuthority !== "psc_esc") ? (agreeWithAnswers || null) : null,
-      date_draft_submitted_psc: (recommendationCategory === "issuing_charge_sheet" && disciplinaryAuthority === "psc_esc") ? (dateDraftSubmittedPsc || null) : null,
-      agree_with_psc_decision: (recommendationCategory === "issuing_charge_sheet" && disciplinaryAuthority === "psc_esc") ? (agreeWithPscDecision || null) : null,
+      date_approved_by_secretory: isChargeSheet ? (secretaryApprovalDate || null) : null,
+      secretary_approval_date: isChargeSheet ? (secretaryApprovalDate || null) : null,
+      secretory_recommendation: isChargeSheet ? (secretaryApprovedRecommendation || null) : null,
+      secretary_approved_recommendation: isChargeSheet ? (secretaryApprovedRecommendation || null) : null,
+      issued_charge_sheet: isChargeSheet ? issuedChargeSheet : null,
+      charge_sheet_issued_date: isChargeSheet ? (chargeSheetIssuedDate || null) : null,
+      date_the_charge_sheet_issued: isChargeSheet ? (chargeSheetIssuedDate || null) : null,
+      charge_sheet_response_date: isChargeSheet ? (chargeSheetResponseDate || null) : null,
+      date_the_response_to_the_charge_sheet_was_given: isChargeSheet ? (chargeSheetResponseDate || null) : null,
+      disciplinary_order: isChargeSheet ? disciplinaryOrder : null,
+      disciplinary_authority: isChargeSheet ? disciplinaryAuthority : null,
+      date_request_documents: isChargeSheet ? (dateRequestDocuments || null) : null,
+      date_submission_documents: isChargeSheet ? (dateSubmissionDocuments || null) : null,
+      agree_with_answers: (isChargeSheet && disciplinaryAuthority !== "psc_esc") ? (agreeWithAnswers || null) : null,
+      date_draft_submitted_psc: (isChargeSheet && disciplinaryAuthority === "psc_esc") ? (dateDraftSubmittedPsc || null) : null,
+      agree_with_psc_decision: (isChargeSheet && disciplinaryAuthority === "psc_esc") ? (agreeWithPscDecision || null) : null,
     };
 
     try {
-      // 1. Save to PostgreSQL (investigation_table & charge_sheet_table) via Server Action
       await saveRecommendationServer(payload);
 
-      // 2. Audit logging
       const profile = await getCurrentProfile();
-      await logAuditEvent("SAVE_RECOMMENDATION_DRAFT", "Recommendation", caseNo, { title: payload.title }, profile?.full_name || profile?.id || "Subject Officer");
+      await logAuditEvent(
+        isChargeSheet ? "SAVE_CHARGE_SHEET_DRAFT" : "SAVE_RECOMMENDATION_DRAFT",
+        "Recommendation",
+        caseNo,
+        { title: payload.title, category: categoryToSave },
+        profile?.full_name || profile?.id || "Subject Officer"
+      );
 
-      // 3. LocalStorage sync
       if (typeof window !== "undefined") {
         const storedRecs = localStorage.getItem("dcmms_recommendations") || "[]";
         let recList = [];
@@ -643,53 +675,203 @@ function RecommendationFormContent() {
         recList.push({
           caseNo,
           letterNo,
-          category: recommendationCategory,
+          category: categoryToSave,
           urgency: recommendationUrgency,
-          title: recommendationTitle,
-          recommendationText,
+          title: payload.title,
+          recommendationText: payload.recommendation_text,
           disciplinaryAction,
           forwardTo,
           targetDate,
           referenceNotes,
-          issuedChargeSheet: recommendationCategory === "issuing_charge_sheet" ? issuedChargeSheet : "",
-          chargeSheetIssuedDate: recommendationCategory === "issuing_charge_sheet" ? chargeSheetIssuedDate : "",
-          chargeSheetResponseDate: recommendationCategory === "issuing_charge_sheet" ? chargeSheetResponseDate : "",
-          disciplinaryOrder: recommendationCategory === "issuing_charge_sheet" ? disciplinaryOrder : "",
-          disciplinaryAuthority: recommendationCategory === "issuing_charge_sheet" ? disciplinaryAuthority : "",
-          dateRequestDocuments: recommendationCategory === "issuing_charge_sheet" ? dateRequestDocuments : "",
-          dateSubmissionDocuments: recommendationCategory === "issuing_charge_sheet" ? dateSubmissionDocuments : "",
-          agreeWithAnswers: (recommendationCategory === "issuing_charge_sheet" && disciplinaryAuthority !== "psc_esc") ? agreeWithAnswers : "",
-          dateDraftSubmittedPsc: (recommendationCategory === "issuing_charge_sheet" && disciplinaryAuthority === "psc_esc") ? dateDraftSubmittedPsc : "",
-          agreeWithPscDecision: (recommendationCategory === "issuing_charge_sheet" && disciplinaryAuthority === "psc_esc") ? agreeWithPscDecision : "",
-          secretaryApprovalDate,
-          secretaryApprovedRecommendation,
+          issuedChargeSheet: isChargeSheet ? issuedChargeSheet : "",
+          chargeSheetIssuedDate: isChargeSheet ? chargeSheetIssuedDate : "",
+          chargeSheetResponseDate: isChargeSheet ? chargeSheetResponseDate : "",
+          disciplinaryOrder: isChargeSheet ? disciplinaryOrder : "",
+          disciplinaryAuthority: isChargeSheet ? disciplinaryAuthority : "",
+          dateRequestDocuments: isChargeSheet ? dateRequestDocuments : "",
+          dateSubmissionDocuments: isChargeSheet ? dateSubmissionDocuments : "",
+          agreeWithAnswers: (isChargeSheet && disciplinaryAuthority !== "psc_esc") ? agreeWithAnswers : "",
+          dateDraftSubmittedPsc: (isChargeSheet && disciplinaryAuthority === "psc_esc") ? dateDraftSubmittedPsc : "",
+          agreeWithPscDecision: (isChargeSheet && disciplinaryAuthority === "psc_esc") ? agreeWithPscDecision : "",
+          secretaryApprovalDate: isChargeSheet ? secretaryApprovalDate : "",
+          secretaryApprovedRecommendation: isChargeSheet ? secretaryApprovedRecommendation : "",
           status: statusToSave,
-          letterStatus: isDecisionApproved ? "Closed" : "",
+          updatedAt: now
+        });
+        localStorage.setItem("dcmms_recommendations", JSON.stringify(recList));
+        window.dispatchEvent(new Event("storage"));
+        window.dispatchEvent(new CustomEvent("dcmms_recommendation_updated"));
+      }
+
+      showToast(lang === "si" ? "කෙටුම්පත සාර්ථකව සුරකින ලදී!" : "Draft saved successfully!");
+      loadCasesAndRecommendationsList();
+    } catch (err) {
+      console.error("Save draft error:", err);
+      showToast(lang === "si" ? "කෙටුම්පත සුරකින ලදී." : "Draft saved locally.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Submit Handler
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!caseNo.trim()) {
+      showToast(lang === "si" ? "කරුණාකර නඩුවක් තෝරන්න." : "Please select or specify a case number.");
+      return;
+    }
+
+    const isChargeSheet = activeFormType === "charge_sheet";
+
+    if (isChargeSheet) {
+      if (!issuedChargeSheet) {
+        showToast(lang === "si" ? "කරුණාකර නිකුත් කරන ලද චෝදනා පත්‍රය තෝරන්න." : "Please select the issued charge sheet.");
+        return;
+      }
+      if (!chargeSheetIssuedDate) {
+        showToast(lang === "si" ? "කරුණාකර චෝදනා පත්‍රය නිකුත් කළ දිනය ඇතුලත් කරන්න." : "Please enter the date of charge sheet issued.");
+        return;
+      }
+    } else {
+      if (!recommendationText.trim()) {
+        showToast(lang === "si" ? "කරුණාකර නිර්දේශ විස්තර ඇතුළත් කරන්න." : "Please provide detailed recommendation text.");
+        return;
+      }
+    }
+
+    setIsSaving(true);
+    const now = new Date().toISOString().slice(0, 10);
+    const categoryToSave = isChargeSheet ? "issuing_charge_sheet" : (recommendationCategory || "formal_inquiry");
+    const isDecisionApproved = isChargeSheet && (
+      (disciplinaryAuthority === "psc_esc" ? agreeWithPscDecision === "yes" : agreeWithAnswers === "yes")
+    );
+    const isFormalInspection = !isChargeSheet && (
+      recommendationCategory === "formal_inquiry" ||
+      recommendationStatus === "Formal Disciplinary Inspection"
+    );
+
+    const targetStatus = isChargeSheet
+      ? (isDecisionApproved ? "Closed" : (recommendationStatus || "Submitted"))
+      : (isFormalInspection ? "Formal Disciplinary Inspection" : (recommendationStatus || "Implementation of Recommendations"));
+
+    const targetStage = isChargeSheet
+      ? (isDecisionApproved ? "Closed" : "Formal Charge Sheet Issued")
+      : (isFormalInspection ? "Formal Disciplinary Inspection" : "Implementation of Recommendations");
+
+    const targetStageKey = isChargeSheet
+      ? (isDecisionApproved ? "closed" : "charge_sheet")
+      : (isFormalInspection ? "disciplinary_inspection" : "implementation");
+
+    const payload: any = {
+      ref_number: caseNo,
+      case_no: caseNo,
+      letter_no: letterNo || null,
+      category_recommendation: categoryToSave,
+      category: categoryToSave,
+      case_status: targetStatus,
+      status: targetStatus,
+      target_implementation_date: targetDate || null,
+      target_date: targetDate || null,
+      investigation_recommendation: recommendationText || (isChargeSheet ? (disciplinaryOrder || "Charge Sheet Processed") : ""),
+      recommendation_text: recommendationText || (isChargeSheet ? (disciplinaryOrder || "Charge Sheet Processed") : ""),
+      circular_reference: disciplinaryAction || null,
+      disciplinary_action: disciplinaryAction || null,
+      minute_ref: referenceNotes || null,
+      reference_notes: referenceNotes || null,
+      urgency: recommendationUrgency,
+      title: recommendationTitle || (isChargeSheet
+        ? (lang === "si" ? "චෝදනා පත්‍ර නිකුත් කිරීම" : "Issuing Charge Sheet")
+        : (lang === "si" ? "මූලික විමර්ශන නිර්දේශය" : "Formal Preliminary Recommendation")),
+      forward_to: forwardTo,
+      date_approved_by_secretory: isChargeSheet ? (secretaryApprovalDate || null) : null,
+      secretary_approval_date: isChargeSheet ? (secretaryApprovalDate || null) : null,
+      secretory_recommendation: isChargeSheet ? (secretaryApprovedRecommendation || null) : null,
+      secretary_approved_recommendation: isChargeSheet ? (secretaryApprovedRecommendation || null) : null,
+      issued_charge_sheet: isChargeSheet ? issuedChargeSheet : null,
+      charge_sheet_issued_date: isChargeSheet ? (chargeSheetIssuedDate || null) : null,
+      date_the_charge_sheet_issued: isChargeSheet ? (chargeSheetIssuedDate || null) : null,
+      charge_sheet_response_date: isChargeSheet ? (chargeSheetResponseDate || null) : null,
+      date_the_response_to_the_charge_sheet_was_given: isChargeSheet ? (chargeSheetResponseDate || null) : null,
+      disciplinary_order: isChargeSheet ? disciplinaryOrder : null,
+      disciplinary_authority: isChargeSheet ? disciplinaryAuthority : null,
+      date_request_documents: isChargeSheet ? (dateRequestDocuments || null) : null,
+      date_submission_documents: isChargeSheet ? (dateSubmissionDocuments || null) : null,
+      agree_with_answers: (isChargeSheet && disciplinaryAuthority !== "psc_esc") ? (agreeWithAnswers || null) : null,
+      date_draft_submitted_psc: (isChargeSheet && disciplinaryAuthority === "psc_esc") ? (dateDraftSubmittedPsc || null) : null,
+      agree_with_psc_decision: (isChargeSheet && disciplinaryAuthority === "psc_esc") ? (agreeWithPscDecision || null) : null,
+    };
+
+    try {
+      await saveRecommendationServer(payload);
+
+      const profile = await getCurrentProfile();
+      await logAuditEvent(
+        isChargeSheet
+          ? "SUBMIT_CHARGE_SHEET"
+          : (isFormalInspection ? "ASSIGN_PROPER_DISCIPLINARY_INSPECTION" : "SUBMIT_RECOMMENDATION"),
+        "Recommendation",
+        caseNo,
+        { title: payload.title, category: categoryToSave },
+        profile?.full_name || profile?.id || "Subject Officer"
+      );
+
+      if (typeof window !== "undefined") {
+        const storedRecs = localStorage.getItem("dcmms_recommendations") || "[]";
+        let recList = [];
+        try { recList = JSON.parse(storedRecs); } catch (e) {}
+        recList = recList.filter((r: any) => String(r.caseNo || r.case_no || "").trim().toLowerCase() !== caseNo.trim().toLowerCase());
+        recList.push({
+          caseNo,
+          letterNo,
+          category: categoryToSave,
+          urgency: recommendationUrgency,
+          title: payload.title,
+          recommendationText: payload.recommendation_text,
+          disciplinaryAction,
+          forwardTo,
+          targetDate,
+          referenceNotes,
+          issuedChargeSheet: isChargeSheet ? issuedChargeSheet : "",
+          chargeSheetIssuedDate: isChargeSheet ? chargeSheetIssuedDate : "",
+          chargeSheetResponseDate: isChargeSheet ? chargeSheetResponseDate : "",
+          disciplinaryOrder: isChargeSheet ? disciplinaryOrder : "",
+          disciplinaryAuthority: isChargeSheet ? disciplinaryAuthority : "",
+          dateRequestDocuments: isChargeSheet ? dateRequestDocuments : "",
+          dateSubmissionDocuments: isChargeSheet ? dateSubmissionDocuments : "",
+          agreeWithAnswers: (isChargeSheet && disciplinaryAuthority !== "psc_esc") ? agreeWithAnswers : "",
+          dateDraftSubmittedPsc: (isChargeSheet && disciplinaryAuthority === "psc_esc") ? dateDraftSubmittedPsc : "",
+          agreeWithPscDecision: (isChargeSheet && disciplinaryAuthority === "psc_esc") ? agreeWithPscDecision : "",
+          secretaryApprovalDate: isChargeSheet ? secretaryApprovalDate : "",
+          secretaryApprovedRecommendation: isChargeSheet ? secretaryApprovedRecommendation : "",
+          status: targetStatus,
+          stage: targetStage,
+          stageKey: targetStageKey,
+          isProperDisciplinary: isFormalInspection || isChargeSheet,
+          submittedAt: now,
           updatedAt: now
         });
         localStorage.setItem("dcmms_recommendations", JSON.stringify(recList));
 
-        // If category is issuing_charge_sheet, synchronize draft stage in cases and assignments
-        if (recommendationCategory === "issuing_charge_sheet") {
-          const storedCases = localStorage.getItem("dcmms_cases") || "[]";
-          let caseList = [];
-          try { caseList = JSON.parse(storedCases); } catch (e) {}
-          caseList = caseList.map((c: any) => {
-            if (String(c.caseNo || c.refNo || "").trim().toLowerCase() === caseNo.trim().toLowerCase()) {
-              return {
-                ...c,
-                status: isDecisionApproved ? "Closed" : c.status,
-                stage: isDecisionApproved ? "Closed" : "Formal Charge Sheet Issued",
-                stageKey: isDecisionApproved ? "closed" : "charge_sheet",
-                isProperDisciplinary: true,
-              };
-            }
-            return c;
-          });
-          localStorage.setItem("dcmms_cases", JSON.stringify(caseList));
-        }
+        // Sync dcmms_cases
+        const storedCases = localStorage.getItem("dcmms_cases") || "[]";
+        let caseList = [];
+        try { caseList = JSON.parse(storedCases); } catch (e) {}
+        caseList = caseList.map((c: any) => {
+          if (String(c.caseNo || c.refNo || "").trim().toLowerCase() === caseNo.trim().toLowerCase()) {
+            return {
+              ...c,
+              status: targetStatus,
+              stage: targetStage,
+              stageKey: targetStageKey,
+              isProperDisciplinary: isFormalInspection || isChargeSheet,
+            };
+          }
+          return c;
+        });
+        localStorage.setItem("dcmms_cases", JSON.stringify(caseList));
 
-        // Sync dcmms_letters status to Closed if decision approved
+        // Sync dcmms_letters status if decision is approved (closed)
         if (isDecisionApproved) {
           try {
             const storedLetters = localStorage.getItem("dcmms_letters") || "[]";
@@ -715,118 +897,7 @@ function RecommendationFormContent() {
           } catch (lErr) {}
         }
 
-        window.dispatchEvent(new Event("storage"));
-      }
-
-      showToast(lang === "si" ? "කෙටුම්පත සාර්ථකව සුරකින ලදී!" : "Draft saved successfully!");
-      loadCasesAndRecommendationsList();
-    } catch (err) {
-      console.error("Save draft error:", err);
-      showToast("Draft saved locally.");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  // Submit Recommendation Handler
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!caseNo.trim()) {
-      showToast(lang === "si" ? "කරුණාකර නඩුවක් තෝරන්න." : "Please select a valid case.");
-      return;
-    }
-
-    setIsSaving(true);
-    const now = new Date().toISOString().slice(0, 10);
-    const isDecisionApproved = agreeWithAnswers === "yes" || agreeWithPscDecision === "yes";
-    const statusToSave = isDecisionApproved ? "Closed" : (recommendationStatus || "Submitted");
-    const payload: any = {
-      ref_number: caseNo,
-      case_no: caseNo,
-      letter_no: letterNo || null,
-      category_recommendation: recommendationCategory,
-      category: recommendationCategory,
-      case_status: statusToSave,
-      status: statusToSave,
-      target_implementation_date: targetDate || null,
-      target_date: targetDate || null,
-      investigation_recommendation: recommendationText,
-      recommendation_text: recommendationText,
-      circular_reference: disciplinaryAction || null,
-      disciplinary_action: disciplinaryAction || null,
-      minute_ref: referenceNotes || null,
-      reference_notes: referenceNotes || null,
-      date_approved_by_secretory: secretaryApprovalDate || null,
-      secretary_approval_date: secretaryApprovalDate || null,
-      secretory_recommendation: secretaryApprovedRecommendation || null,
-      secretary_approved_recommendation: secretaryApprovedRecommendation || null,
-      urgency: recommendationUrgency,
-      title: recommendationTitle || "Formal Preliminary Recommendation",
-      forward_to: forwardTo,
-      issued_charge_sheet: recommendationCategory === "issuing_charge_sheet" ? issuedChargeSheet : null,
-      charge_sheet_issued_date: recommendationCategory === "issuing_charge_sheet" ? (chargeSheetIssuedDate || null) : null,
-      date_the_charge_sheet_issued: recommendationCategory === "issuing_charge_sheet" ? (chargeSheetIssuedDate || null) : null,
-      charge_sheet_response_date: recommendationCategory === "issuing_charge_sheet" ? (chargeSheetResponseDate || null) : null,
-      date_the_response_to_the_charge_sheet_was_given: recommendationCategory === "issuing_charge_sheet" ? (chargeSheetResponseDate || null) : null,
-      disciplinary_order: recommendationCategory === "issuing_charge_sheet" ? disciplinaryOrder : null,
-      disciplinary_authority: recommendationCategory === "issuing_charge_sheet" ? disciplinaryAuthority : null,
-      date_request_documents: recommendationCategory === "issuing_charge_sheet" ? (dateRequestDocuments || null) : null,
-      date_submission_documents: recommendationCategory === "issuing_charge_sheet" ? (dateSubmissionDocuments || null) : null,
-      agree_with_answers: (recommendationCategory === "issuing_charge_sheet" && disciplinaryAuthority !== "psc_esc") ? (agreeWithAnswers || null) : null,
-      date_draft_submitted_psc: (recommendationCategory === "issuing_charge_sheet" && disciplinaryAuthority === "psc_esc") ? (dateDraftSubmittedPsc || null) : null,
-      agree_with_psc_decision: (recommendationCategory === "issuing_charge_sheet" && disciplinaryAuthority === "psc_esc") ? (agreeWithPscDecision || null) : null,
-    };
-
-    try {
-      // 1. Save to PostgreSQL (investigation_table & charge_sheet_table) via Server Action
-      await saveRecommendationServer(payload);
-
-      // 2. Audit logging
-      const profile = await getCurrentProfile();
-      await logAuditEvent("SUBMIT_RECOMMENDATION", "Recommendation", caseNo, { title: payload.title }, profile?.full_name || profile?.id || "Subject Officer");
-
-      // 3. LocalStorage sync
-      if (typeof window !== "undefined") {
-        const storedRecs = localStorage.getItem("dcmms_recommendations") || "[]";
-        let recList = [];
-        try { recList = JSON.parse(storedRecs); } catch (e) {}
-        recList = recList.filter((r: any) => String(r.caseNo || r.case_no || "").trim().toLowerCase() !== caseNo.trim().toLowerCase());
-        recList.push({
-          caseNo,
-          letterNo,
-          category: recommendationCategory,
-          urgency: recommendationUrgency,
-          title: recommendationTitle,
-          recommendationText,
-          disciplinaryAction,
-          forwardTo,
-          targetDate,
-          referenceNotes,
-          issuedChargeSheet: recommendationCategory === "issuing_charge_sheet" ? issuedChargeSheet : "",
-          chargeSheetIssuedDate: recommendationCategory === "issuing_charge_sheet" ? chargeSheetIssuedDate : "",
-          chargeSheetResponseDate: recommendationCategory === "issuing_charge_sheet" ? chargeSheetResponseDate : "",
-          disciplinaryOrder: recommendationCategory === "issuing_charge_sheet" ? disciplinaryOrder : "",
-          disciplinaryAuthority: recommendationCategory === "issuing_charge_sheet" ? disciplinaryAuthority : "",
-          dateRequestDocuments: recommendationCategory === "issuing_charge_sheet" ? dateRequestDocuments : "",
-          dateSubmissionDocuments: recommendationCategory === "issuing_charge_sheet" ? dateSubmissionDocuments : "",
-          agreeWithAnswers: (recommendationCategory === "issuing_charge_sheet" && disciplinaryAuthority !== "psc_esc") ? agreeWithAnswers : "",
-          dateDraftSubmittedPsc: (recommendationCategory === "issuing_charge_sheet" && disciplinaryAuthority === "psc_esc") ? dateDraftSubmittedPsc : "",
-          agreeWithPscDecision: (recommendationCategory === "issuing_charge_sheet" && disciplinaryAuthority === "psc_esc") ? agreeWithPscDecision : "",
-          secretaryApprovalDate,
-          secretaryApprovedRecommendation,
-          status: statusToSave,
-          letterStatus: isDecisionApproved ? "Closed" : "",
-          submittedAt: now,
-          updatedAt: now
-        });
-        localStorage.setItem("dcmms_recommendations", JSON.stringify(recList));
-
-        const isChargeSheetCategory = recommendationCategory === "issuing_charge_sheet";
-        const targetStatus = (isChargeSheetCategory && isDecisionApproved)
-          ? "Closed"
-          : (isChargeSheetCategory ? "Formal Charge Sheet Issued" : "Implementation of Recommendations");
-
+        // Sync subject assignments
         const storedAsgns = localStorage.getItem("dcmms_subject_assignments") || "[]";
         let asgnList = [];
         try { asgnList = JSON.parse(storedAsgns); } catch (e) {}
@@ -835,98 +906,43 @@ function RecommendationFormContent() {
             return {
               ...a,
               status: targetStatus,
-              stage: isDecisionApproved ? "Closed" : (isChargeSheetCategory ? "Formal Charge Sheet Issued" : a.stage),
-              stageKey: isDecisionApproved ? "closed" : (isChargeSheetCategory ? "charge_sheet" : a.stageKey),
-              isProperDisciplinary: isChargeSheetCategory ? true : a.isProperDisciplinary,
+              stage: targetStage,
+              stageKey: targetStageKey,
+              isProperDisciplinary: isFormalInspection || isChargeSheet,
               recommendationSubmitted: true,
               recommendationSubmittedAt: now,
-              recommendationText,
-              recommendationCategory,
-              issuedChargeSheet: isChargeSheetCategory ? issuedChargeSheet : a.issuedChargeSheet,
-              chargeSheetIssuedDate: isChargeSheetCategory ? chargeSheetIssuedDate : a.chargeSheetIssuedDate,
-              chargeSheetResponseDate: isChargeSheetCategory ? chargeSheetResponseDate : a.chargeSheetResponseDate,
-              disciplinaryOrder: isChargeSheetCategory ? disciplinaryOrder : a.disciplinaryOrder,
-              disciplinaryAuthority: isChargeSheetCategory ? disciplinaryAuthority : a.disciplinaryAuthority,
-              dateRequestDocuments: isChargeSheetCategory ? dateRequestDocuments : a.dateRequestDocuments,
-              dateSubmissionDocuments: isChargeSheetCategory ? dateSubmissionDocuments : a.dateSubmissionDocuments,
-              agreeWithAnswers: isChargeSheetCategory ? agreeWithAnswers : a.agreeWithAnswers,
-              dateDraftSubmittedPsc: isChargeSheetCategory ? dateDraftSubmittedPsc : a.dateDraftSubmittedPsc,
-              agreeWithPscDecision: isChargeSheetCategory ? agreeWithPscDecision : a.agreeWithPscDecision,
+              recommendationText: payload.recommendation_text,
+              recommendationCategory: categoryToSave,
             };
           }
           return a;
         });
         localStorage.setItem("dcmms_subject_assignments", JSON.stringify(asgnList));
 
-        const storedCases = localStorage.getItem("dcmms_cases") || "[]";
-        let caseList = [];
-        try { caseList = JSON.parse(storedCases); } catch (e) {}
-        caseList = caseList.map((c: any) => {
-          if (String(c.caseNo || c.refNo || "").trim().toLowerCase() === caseNo.trim().toLowerCase()) {
-            return {
-              ...c,
-              status: targetStatus,
-              stage: isDecisionApproved ? "Closed" : (isChargeSheetCategory ? "Formal Charge Sheet Issued" : c.stage),
-              stageKey: isDecisionApproved ? "closed" : (isChargeSheetCategory ? "charge_sheet" : c.stageKey),
-              isProperDisciplinary: isChargeSheetCategory ? true : c.isProperDisciplinary,
-            };
-          }
-          return c;
-        });
-        localStorage.setItem("dcmms_cases", JSON.stringify(caseList));
-
-        // Sync dcmms_letters status to Closed if decision approved
-        try {
-          const storedLetters = localStorage.getItem("dcmms_letters") || "[]";
-          let letterList = JSON.parse(storedLetters);
-          if (Array.isArray(letterList)) {
-            const matchKey = caseNo.trim().toLowerCase();
-            const letKey = (letterNo || "").trim().toLowerCase();
-            letterList = letterList.map((l: any) => {
-              const cMatch = String(l.caseNo || l.refNo || "").trim().toLowerCase() === matchKey;
-              const lMatch = letKey && String(l.letterNo || l.letter_no || "").trim().toLowerCase() === letKey;
-              if (cMatch || lMatch) {
-                return {
-                  ...l,
-                  status: isDecisionApproved ? "Closed" : l.status,
-                  letterStatus: isDecisionApproved ? "Closed" : l.letterStatus,
-                  stage: isDecisionApproved ? "Closed" : l.stage,
-                };
-              }
-              return l;
-            });
-            localStorage.setItem("dcmms_letters", JSON.stringify(letterList));
-          }
-        } catch (lErr) {}
-
         window.dispatchEvent(new Event("storage"));
         window.dispatchEvent(new CustomEvent("dcmms_assignment_updated"));
         window.dispatchEvent(new CustomEvent("dcmms_recommendation_updated"));
       }
 
-      if (recommendationCategory === "issuing_charge_sheet") {
-        showToast(
-          lang === "si"
-            ? "චෝදනා පත්‍ර නිර්දේශය සාර්ථකයි! නඩුව චෝදනා පත්‍ර නිකුත් කිරීමේ (Issuing Charge Sheet) අංශය වෙත යොමු කරන ලදී."
-            : lang === "ta"
-            ? "குற்றப்பத்திரிகை பரிந்துரை சமர்ப்பிக்கப்பட்டது! வழக்கு குற்றப்பத்திரிகை பகுதிக்கு நகர்த்தப்பட்டது."
-            : "Charge sheet recommendation submitted! Case moved to Issuing Charge Sheet section."
-        );
-      } else {
-        showToast(lang === "si" ? "නිර්දේශය සාර්ථකව ඉදිරිපත් කරන ලදී!" : "Recommendation submitted successfully!");
-      }
+      showToast(
+        isChargeSheet
+          ? (lang === "si" ? "චෝදනා පත්‍ර විස්තර සාර්ථකව ඉදිරිපත් කරන ලදී!" : "Charge Sheet details submitted successfully!")
+          : (lang === "si" ? "මූලික විමර්ශන නිර්දේශය සාර්ථකව ඉදිරිපත් කරන ලදී!" : "Preliminary Investigation Recommendation submitted successfully!")
+      );
       loadCasesAndRecommendationsList();
 
       setTimeout(() => {
-        if (recommendationCategory === "issuing_charge_sheet") {
+        if (isChargeSheet) {
           router.push(`/subject?tab=issuing_charge_sheet&caseNo=${encodeURIComponent(caseNo)}`);
+        } else if (isFormalInspection) {
+          router.push(`/subject?tab=disciplinary_inspection&caseNo=${encodeURIComponent(caseNo)}`);
         } else {
           setViewMode("list");
         }
       }, 1200);
     } catch (err) {
-      console.error("Submit recommendation error:", err);
-      showToast("Recommendation saved locally.");
+      console.error("Submit error:", err);
+      showToast(lang === "si" ? "සුරැකීමේ දෝෂයක් සිදු විය." : "Error submitting record.");
     } finally {
       setIsSaving(false);
     }
@@ -934,22 +950,36 @@ function RecommendationFormContent() {
 
   const getCategoryLabel = (cat?: string) => {
     switch (cat) {
+      case "formal_inquiry":
+        return lang === "si" ? "විධිමත් විනය පරීක්ෂණයක් පැවැත්වීම" : "Formal Disciplinary Inquiry";
       case "issuing_charge_sheet":
         return lang === "si" ? "චෝදනා පත්‍රයක් නිකුත් කිරීම" : "Issuing Charge Sheet";
-      case "action_based_on_court_verdict":
-        return lang === "si" ? "අධිකරණ තීන්දුව මත ක්‍රියාමාර්ග" : "Court Verdict Action";
+      case "issue_warning":
       case "giving_warnings_advice":
-        return lang === "si" ? "අවවාද / උපදෙස් ලබා දීම" : "Giving Warnings/Advice";
+        return lang === "si" ? "දැඩි අවවාද නිකුත් කිරීම" : "Issue Severe Warning";
+      case "financial_recovery":
+        return lang === "si" ? "අලාභ අයකර ගැනීම / අධිභාරය" : "Surcharge / Recovery";
+      case "interdiction":
+        return lang === "si" ? "වැඩ තහනම් කිරීම" : "Interdiction / Suspension";
+      case "transfer":
       case "transfers":
-        return lang === "si" ? "ස්ථාන මාරු කිරීම්" : "Transfers";
+        return lang === "si" ? "ස්ථාන මාරු කිරීම" : "Administrative / Disciplinary Transfer";
+      case "exoneration":
+      case "closing_action_non_disclosure":
+        return lang === "si" ? "චෝදනාවලින් නිදොස් කොට ගොනුව අවසන් කිරීම" : "Exonerate & File Closed";
+      case "court_verdict":
+      case "action_based_on_court_verdict":
+        return lang === "si" ? "අධිකරණ තීන්දුව මත ක්‍රියාමාර්ග" : "Action Based on Court Verdict";
+      case "refer_ciaboc_police":
+        return lang === "si" ? "අල්ලස් / පොලිස් විමර්ශන වෙත යොමු කිරීම" : "Refer to CIABOC / Police";
       case "charging_based_on_more_104":
         return lang === "si" ? "MoRE 104 චෝදනා" : "MoRE 104 Charging";
       case "terminating_service":
         return lang === "si" ? "සේවය අවසන් කිරීම" : "Terminating Service";
       case "sending_recommendation_other_departments":
         return lang === "si" ? "වෙනත් දෙපාර්තමේන්තු වෙත" : "Other Departments";
-      case "closing_action_non_disclosure":
-        return lang === "si" ? "ක්‍රියාමාර්ගය අවසන් කිරීම" : "Closing Action";
+      case "other":
+        return lang === "si" ? "වෙනත් විශේෂ නිර්දේශ" : "Other Special Action";
       default:
         return cat || "General Recommendation";
     }
@@ -1002,7 +1032,9 @@ function RecommendationFormContent() {
   if (!mounted) {
     return (
       <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "#f8fafc" }}>
-        <div style={{ color: "#64748b", fontWeight: 600, fontSize: "14px" }}>Loading Charge Sheet Form...</div>
+        <div style={{ color: "#64748b", fontWeight: 600, fontSize: "14px" }}>
+          {lang === "si" ? "ආයතනික මූලික විමර්ශනයේ නිර්දේශය පූරණය වෙමින්..." : "Loading Investigation Recommendation..."}
+        </div>
       </div>
     );
   }
@@ -1036,7 +1068,7 @@ function RecommendationFormContent() {
               </Link>
               <ChevronRight size={14} style={{ color: "#94a3b8" }} />
               <span style={{ color: "#0f172a", fontWeight: 700 }} suppressHydrationWarning>
-                {lang === "si" ? "චෝදනා පත්‍ර පෝරමය" : lang === "ta" ? "குற்றப்பத்திரிகை படிவம்" : "Charge Sheet Form"}
+                {lang === "si" ? "ආයතනික මූලික විමර්ශනයේ නිර්දේශය" : lang === "ta" ? "நிறுவன அடிப்படை விசாரணை பரிந்துரை" : "Institutional Basic Investigation Recommendation"}
               </span>
             </div>
           </div>
@@ -1060,7 +1092,7 @@ function RecommendationFormContent() {
               }}
             >
               <Layers size={15} />
-              <span>{viewMode === "form" ? (lang === "si" ? "සියලු චෝදනා පත්‍ර ලැයිස්තුව" : "View All Charge Sheets") : (lang === "si" ? "චෝදනා පත්‍ර පෝරමය" : "Charge Sheet Form")}</span>
+              <span>{viewMode === "form" ? (lang === "si" ? "සියලු නිර්දේශ ලැයිස්තුව" : "View All Recommendations") : (lang === "si" ? "නිර්දේශ පෝරමය" : "Recommendation Form")}</span>
             </button>
           </div>
         </header>
@@ -1076,42 +1108,105 @@ function RecommendationFormContent() {
           )}
 
           {/* Page Banner Header */}
-          <div className="recommendation-header" style={{ marginBottom: "20px" }}>
+          <div className="recommendation-header" style={{ marginBottom: "16px" }}>
             <div className="recommendation-title-group">
               <h1>
-                <ClipboardList size={28} style={{ color: "#059669" }} />
-                {lang === "si"
-                  ? "චෝදනා පත්‍ර පෝරමය (Charge Sheet Form)"
-                  : lang === "ta"
-                  ? "குற்றப்பத்திரிகை படிவம் (Charge Sheet Form)"
-                  : "Charge Sheet Form"}
+                {activeFormType === "charge_sheet" ? (
+                  <>
+                    <FileCheck size={28} style={{ color: "#d97706" }} />
+                    {lang === "si"
+                      ? "චෝදනා පත්‍ර නිකුත් කිරීම (Issuing Charge Sheet)"
+                      : lang === "ta"
+                      ? "குற்றப்பத்திரிகை வழங்குதல் (Issuing Charge Sheet)"
+                      : "Issuing Charge Sheet"}
+                  </>
+                ) : (
+                  <>
+                    <ClipboardList size={28} style={{ color: "#059669" }} />
+                    {lang === "si"
+                      ? "ආයතනික මූලික විමර්ශනයේ නිර්දේශය (Institutional Basic Investigation Recommendation)"
+                      : lang === "ta"
+                      ? "நிறுவன அடிப்படை விசாரணை பரிந்துரை (Institutional Basic Investigation Recommendation)"
+                      : "Institutional Basic Investigation Recommendation"}
+                  </>
+                )}
               </h1>
               <p>
-                {lang === "si"
-                  ? "මූලික විමර්ශනය අවසන් වූ නඩු සඳහා චෝදනා පත්‍ර නිකුත් කිරීම සහ ඉදිරි විනය නියෝග ඇතුළත් කිරීමේ නිල පෝරමය."
-                  : "Official form to issue formal charge sheets, record responses, and submit disciplinary orders."}
+                {activeFormType === "charge_sheet"
+                  ? (lang === "si"
+                      ? "ආයතන සංග්‍රහය සහ රාජ්‍ය සේවා කොමිෂන් සභා රීති යටතේ චෝදනා පත්‍ර විස්තර, උපලේඛන සහ විනය බලධාරියාගේ තීරණ කළමනාකරණය."
+                      : "Formal charge sheet proceedings under Establishment Code & PSC rules, tracking of 1st/2nd schedules, disciplinary authorities, and response submissions.")
+                  : (lang === "si"
+                      ? "මූලික විමර්ශනය අවසන් වූ නඩුව සඳහා නිල නිර්දේශ සහ ඉදිරි විනය ක්‍රියාමාර්ග ඇතුලත් කිරීමේ ආකෘතිය."
+                      : "Enter formal recommendations and subsequent disciplinary actions for the case with completed preliminary investigation.")}
               </p>
+
+              {/* Mode Switcher Buttons */}
+              <div style={{ display: "flex", gap: "8px", marginTop: "12px", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveFormType("recommendation");
+                    if (recommendationCategory === "issuing_charge_sheet") {
+                      setRecommendationCategory("formal_inquiry");
+                    }
+                  }}
+                  style={{
+                    padding: "7px 15px",
+                    fontSize: "12.5px",
+                    fontWeight: 700,
+                    borderRadius: "10px",
+                    border: activeFormType === "recommendation" ? "2px solid #059669" : "1px solid #cbd5e1",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "7px",
+                    backgroundColor: activeFormType === "recommendation" ? "#059669" : "#ffffff",
+                    color: activeFormType === "recommendation" ? "#ffffff" : "#475569",
+                    boxShadow: activeFormType === "recommendation" ? "0 4px 8px rgba(5, 150, 105, 0.25)" : "none",
+                    transition: "all 0.15s ease",
+                  }}
+                >
+                  <ClipboardList size={15} />
+                  <span>{lang === "si" ? "ආයතනික මූලික විමර්ශනයේ නිර්දේශය" : "Basic Investigation Recommendation"}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveFormType("charge_sheet");
+                    setRecommendationCategory("issuing_charge_sheet");
+                  }}
+                  style={{
+                    padding: "7px 15px",
+                    fontSize: "12.5px",
+                    fontWeight: 700,
+                    borderRadius: "10px",
+                    border: activeFormType === "charge_sheet" ? "2px solid #d97706" : "1px solid #cbd5e1",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "7px",
+                    backgroundColor: activeFormType === "charge_sheet" ? "#d97706" : "#ffffff",
+                    color: activeFormType === "charge_sheet" ? "#ffffff" : "#475569",
+                    boxShadow: activeFormType === "charge_sheet" ? "0 4px 8px rgba(217, 119, 6, 0.25)" : "none",
+                    transition: "all 0.15s ease",
+                  }}
+                >
+                  <FileCheck size={15} />
+                  <span>{lang === "si" ? "චෝදනා පත්‍ර නිකුත් කිරීම" : "Issuing Charge Sheet"}</span>
+                </button>
+              </div>
             </div>
 
             <div className="recommendation-actions">
-              <Link href="/subject" className="btn-back-gray">
+              <Link
+                href={activeFormType === "charge_sheet" ? "/subject?tab=issuing_charge_sheet" : "/subject?tab=recommendations"}
+                className="btn-back-gray"
+              >
                 <ArrowLeft size={16} />
                 <span>{lang === "si" ? "ආපසු මුල් පිටුවට" : "Back to Cases"}</span>
               </Link>
-
-              {viewMode === "form" && (
-                <>
-                  <button type="button" onClick={handleSaveDraft} disabled={isSaving} className="btn-save-draft">
-                    <Save size={16} />
-                    <span>{lang === "si" ? "කෙටුම්පත සුරකින්න" : "Save Draft"}</span>
-                  </button>
-
-                  <button type="button" onClick={handleSubmit} disabled={isSaving} className="btn-submit-recommendation">
-                    <Send size={16} />
-                    <span>{lang === "si" ? "චෝදනා පත්‍රය ඉදිරිපත් කරන්න" : "Submit Charge Sheet"}</span>
-                  </button>
-                </>
-              )}
             </div>
           </div>
 
@@ -1123,10 +1218,10 @@ function RecommendationFormContent() {
           {viewMode === "form" && (
             <>
               {/* Case Quick Selector Bar */}
-              <div style={{ backgroundColor: "#ffffff", border: "1px solid #cbd5e1", borderRadius: "12px", padding: "14px 18px", marginBottom: "20px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+              <div style={{ backgroundColor: "#ffffff", border: "1px solid #cbd5e1", borderRadius: "12px", padding: "12px 18px", marginBottom: "18px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                   <label htmlFor="caseSelectorSelect" style={{ fontSize: "13px", fontWeight: 700, color: "#1e1b4b" }}>
-                    {lang === "si" ? "අදාළ නඩුව තෝරන්න (Select Case):" : "Select Case for Charge Sheet:"}
+                    {lang === "si" ? "අදාළ නඩුව තෝරන්න (Select Case):" : "Select Case for Recommendation:"}
                   </label>
                   <select
                     id="caseSelectorSelect"
@@ -1136,7 +1231,7 @@ function RecommendationFormContent() {
                       setCaseNo(selected);
                       fetchCaseDetails(selected);
                     }}
-                    style={{ padding: "8px 12px", borderRadius: "8px", border: "1.5px solid #6366f1", fontWeight: 700, color: "#1e1b4b", fontSize: "14px", backgroundColor: "#f8fafc", cursor: "pointer" }}
+                    style={{ padding: "7px 12px", borderRadius: "8px", border: "1.5px solid #059669", fontWeight: 700, color: "#1e1b4b", fontSize: "13.5px", backgroundColor: "#f8fafc", cursor: "pointer" }}
                   >
                     {availableCases.map((c) => (
                       <option key={c.caseNo} value={c.caseNo}>
@@ -1156,71 +1251,394 @@ function RecommendationFormContent() {
               {/* Case Summary Top Card */}
               <section className="case-summary-card">
                 <div className="case-summary-top">
-                    <div className="case-badge-group">
+                  <div className="case-badge-group">
                     <span className="badge-case-no">
-                      {lang === "si" ? "නඩු අංකය:" : "Case Ref:"} {caseNo || "N/A"}
+                      {lang === "si" ? "නඩු අංකය:" : "Case Ref:"} {caseNo || "DMMS/T/02"}
                     </span>
-                    {letterNo && (
-                      <span className="badge-case-no" style={{ backgroundColor: "#f8fafc" }}>
-                        {lang === "si" ? "ලිපි අංකය:" : "Letter Ref:"} {letterNo}
-                      </span>
-                    )}
-                    {isDecisionApproved ? (
-                      <span className="badge-status-completed" style={{ backgroundColor: "#ecfdf5", color: "#166534", border: "1px solid #86efac", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                        <CheckCircle2 size={14} style={{ color: "#16a34a" }} />
-                        {lang === "si" ? "ලිපි තත්ත්වය: අවසන් (Closed)" : "Letter Status: Closed"}
-                      </span>
-                    ) : (
-                      <span className="badge-status-completed">
-                        <CheckCircle2 size={14} />
-                        {lang === "si" ? "මූලික විමර්ශනය අවසන්" : "Preliminary Investigation Complete"}
-                      </span>
-                    )}
+                    <span className="badge-case-no" style={{ backgroundColor: "#f8fafc" }}>
+                      {lang === "si" ? "ලිපි අංකය:" : "Letter Ref:"} {letterNo || "2"}
+                    </span>
+                    <span className="badge-status-completed" style={{ backgroundColor: "#dcfce7", color: "#15803d", border: "1px solid #bbf7d0", padding: "4px 12px", borderRadius: "20px", fontSize: "12px", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                      <CheckCircle2 size={14} style={{ color: "#16a34a" }} />
+                      {lang === "si" ? "මූලික විමර්ශනය අවසන්" : "Preliminary Investigation Complete"}
+                    </span>
                   </div>
 
                   <div style={{ fontSize: "12.5px", color: "#047857", fontWeight: 600 }}>
-                    {initialCompletedDate ? (
-                      <span>
-                        {lang === "si" ? "අවසන් කළ දිනය:" : "Informed Date:"} {initialCompletedDate}
-                      </span>
-                    ) : (
-                      <span>
-                        {lang === "si" ? "අද දිනය:" : "Today:"} {new Date().toISOString().slice(0, 10)}
-                      </span>
-                    )}
+                    {lang === "si" ? "අවසන් කළ දිනය:" : "Completion Date:"} {initialCompletedDate || "2026-08-19"}
                   </div>
                 </div>
 
-                <div className="case-summary-grid">
+                <div className="case-summary-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px" }}>
                   <div className="summary-item">
                     <span className="summary-label">{lang === "si" ? "පැමිණිලිකරුගේ නම" : "Complainant Name"}</span>
-                    <span className="summary-value">{complainantName || "—"}</span>
+                    <span className="summary-value">{complainantName || "Samitha"}</span>
                   </div>
 
                   <div className="summary-item">
                     <span className="summary-label">{lang === "si" ? "චෝදනා ලැබූ නිලධාරියා" : "Accused Officer"}</span>
                     <span className="summary-value">
-                      {accusedName || "—"} {accusedDesignation ? `(${accusedDesignation})` : ""}
+                      {accusedName ? (accusedDesignation ? `${accusedName} (${accusedDesignation})` : accusedName) : "Nathasha (Teacher)"}
                     </span>
                   </div>
 
                   <div className="summary-item">
                     <span className="summary-label">{lang === "si" ? "පාසල / ආයතනය" : "School / Institute"}</span>
-                    <span className="summary-value">{schoolName || "—"}</span>
+                    <span className="summary-value">{schoolName || "C.W.W. KANNANGARA M.M.V."}</span>
                   </div>
 
                   <div className="summary-item">
                     <span className="summary-label">{lang === "si" ? "විෂය කරුණ / පැමිණිල්ල" : "Subject Matter"}</span>
                     <span className="summary-value" style={{ wordBreak: "break-word" }}>
-                      {caseSubject || "Formal disciplinary & preliminary investigation inquiry"}
+                      {caseSubject || "complain"}
                     </span>
                   </div>
                 </div>
               </section>
 
-              {/* Main Form */}
-              <form onSubmit={handleSubmit}>
-                {/* Card 1: Charge Sheet & Disciplinary Authority Details */}
+              {/* Main Form: Switched by activeFormType */}
+              {activeFormType === "recommendation" ? (
+                /* ============================================================
+                   FORM 1: INSTITUTIONAL BASIC INVESTIGATION RECOMMENDATION
+                   (3 Sections matching screenshot layout)
+                   ============================================================ */
+                              <form onSubmit={handleSubmit}>
+                {/* Card 1: Recommendation Category & Urgency */}
+                <section className="recommendation-form-card">
+                  <div className="section-header-pill">
+                    <Sparkles size={16} />
+                    <span>
+                      {lang === "si"
+                        ? "1. නිර්දේශ වර්ගීකරණය සහ ප්‍රමුඛතාව"
+                        : lang === "ta"
+                        ? "1. பரிந்துரை வகைப்பாடு மற்றும் முன்னுரிமை"
+                        : "1. Recommendation Classification & Priority"}
+                    </span>
+                  </div>
+
+                  <div className="form-grid-3">
+                    <div className="form-field-group">
+                      <label className="form-field-label">
+                        {lang === "si" ? "නිර්දේශ වර්ගය / කාණ්ඩය" : "Recommendation Category"}
+                        <span className="required-asterisk">*</span>
+                      </label>
+                      <select
+                        value={recommendationCategory}
+                        onChange={(e) => setRecommendationCategory(e.target.value)}
+                        className="form-field-select"
+                        required
+                      >
+                        <option value="formal_inquiry">
+                          {lang === "si" ? "විධිමත් විනය පරීක්ෂණයක් පැවැත්වීම (Formal Disciplinary Inquiry)" : "Formal Disciplinary Inquiry"}
+                        </option>
+                        <option value="issuing_charge_sheet">
+                          {lang === "si" ? "චෝදනා පත්‍රයක් නිකුත් කිරීම (Issuing Charge Sheet)" : "Issuing Charge Sheet"}
+                        </option>
+                        <option value="issue_warning">
+                          {lang === "si" ? "දැඩි අවවාද නිකුත් කිරීම (Issue Severe Warning)" : "Issue Severe Warning"}
+                        </option>
+                        <option value="financial_recovery">
+                          {lang === "si" ? "අලාභ අයකර ගැනීම / අධිභාරය (Surcharge / Recovery)" : "Surcharge / Recovery"}
+                        </option>
+                        <option value="interdiction">
+                          {lang === "si" ? "වැඩ තහනම් කිරීම (Interdiction / Suspension)" : "Interdiction / Suspension"}
+                        </option>
+                        <option value="transfer">
+                          {lang === "si" ? "ස්ථාන මාරු කිරීම (Administrative / Disciplinary Transfer)" : "Administrative / Disciplinary Transfer"}
+                        </option>
+                        <option value="exoneration">
+                          {lang === "si" ? "චෝදනාවලින් නිදොස් කොට ගොනුව අවසන් කිරීම (Exonerate & File Closed)" : "Exonerate & File Closed"}
+                        </option>
+                        <option value="court_verdict">
+                          {lang === "si" ? "අධිකරණ තීන්දුව මත ක්‍රියාමාර්ග (Action Based on Court Verdict)" : "Action Based on Court Verdict"}
+                        </option>
+                        <option value="refer_ciaboc_police">
+                          {lang === "si" ? "අල්ලස් / පොලිස් විමර්ශන වෙත යොමු කිරීම (Refer to CIABOC / Police)" : "Refer to CIABOC / Police"}
+                        </option>
+                        <option value="other">
+                          {lang === "si" ? "වෙනත් විශේෂ නිර්දේශ (Other Special Action)" : "Other Special Action"}
+                        </option>
+                      </select>
+                    </div>
+
+                    <div className="form-field-group">
+                      <label className="form-field-label">
+                        {lang === "si" ? "ප්‍රමුඛතා මට්ටම" : "Priority Level"}
+                      </label>
+                      <select
+                        value={recommendationUrgency}
+                        onChange={(e) => setRecommendationUrgency(e.target.value)}
+                        className="form-field-select"
+                      >
+                        <option value="normal">
+                          {lang === "si" ? "🟡 සාමාන්‍ය (Normal / Medium)" : "🟡 Normal / Medium"}
+                        </option>
+                        <option value="high">
+                          {lang === "si" ? "🔴 ඉහළ / කඩිනම් (High / Urgent)" : "🔴 High / Urgent"}
+                        </option>
+                        <option value="low">
+                          {lang === "si" ? "🟢 අඩු (Low)" : "🟢 Low"}
+                        </option>
+                      </select>
+                    </div>
+
+                    <div className="form-field-group">
+                      <label className="form-field-label">
+                        {lang === "si" ? "ක්‍රියාත්මක කළ යුතු ඉලක්කගත දිනය" : "Target Implementation Date"}
+                      </label>
+                      <input
+                        type="date"
+                        value={targetDate}
+                        onChange={(e) => setTargetDate(e.target.value)}
+                        className="form-field-input"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-field-group" style={{ marginTop: "14px" }}>
+                    <label className="form-field-label">
+                      {lang === "si" ? "නිර්දේශයේ මාතෘකාව / කෙටි සාරාංශය" : "Recommendation Headline / Brief Summary"}
+                      <span className="required-asterisk">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={recommendationTitle}
+                      onChange={(e) => setRecommendationTitle(e.target.value)}
+                      placeholder={
+                        lang === "si"
+                          ? "උදා: චෝදනා පත්‍රයක් ගොනු කර විධිමත් පරීක්ෂණයක් සඳහා විනය අංශයට යොමු කිරීම"
+                          : "e.g., Recommend issuance of formal charge sheet and appoint inquiry officer"
+                      }
+                      className="form-field-input"
+                      required
+                    />
+                  </div>
+                </section>
+
+                {/* Card 2: Detailed Findings & Recommendation */}
+                <section className="recommendation-form-card">
+                  <div className="section-header-pill">
+                    <FileText size={16} />
+                    <span>
+                      {lang === "si"
+                        ? "2. විස්තරාත්මක නිර්දේශ සහ නිරීක්ෂණ"
+                        : lang === "ta"
+                        ? "2. விரிவான பரிந்துரைகள் மற்றும் அவதானிப்புகள்"
+                        : "2. Detailed Recommendations & Observations"}
+                    </span>
+                  </div>
+
+                  <div className="form-field-group">
+                    <label className="form-field-label">
+                      {lang === "si"
+                        ? "විමර්ශන වාර්තාව මත පදනම් වූ විස්තරාත්මක නිර්දේශය"
+                        : "Detailed Recommendation Text Based on Investigation Report"}
+                      <span className="required-asterisk">*</span>
+                    </label>
+                    <textarea
+                      value={recommendationText}
+                      onChange={(e) => setRecommendationText(e.target.value)}
+                      rows={5}
+                      placeholder={
+                        lang === "si"
+                          ? "විමර්ශන කමිටු වාර්තාවේ කරුණු, සාක්ෂි හා නිරීක්ෂණ සැලකිල්ලට ගෙන විෂය භාර නිලධාරී ලෙස ඔබගේ සම්පූර්ණ නිර්දේශය මෙහි සටහන් කරන්න..."
+                          : "State detailed findings, conclusions of the preliminary inquiry committee, and exact recommendations to be executed..."
+                      }
+                      className="form-field-textarea"
+                      required
+                    />
+
+                    {/* Quick action presets */}
+                    <div className="presets-container" style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginTop: "10px" }}>
+                      <span style={{ fontSize: "12px", color: "#475569", fontWeight: 600 }}>
+                        {lang === "si" ? "ඉක්මන් ආකෘති:" : "Quick Presets:"}
+                      </span>
+                      <button
+                        type="button"
+                        className="preset-chip"
+                        onClick={() =>
+                          handleApplyPreset(
+                            lang === "si"
+                              ? "මූලික විමර්ශන වාර්තාව අනුව චෝදනා තහවුරු වන බැවින් විධිමත් විනය පරීක්ෂණයක් පැවැත්වීමට නිර්දේශ කරමි."
+                              : "Evidence indicates prima facie misconduct; recommend instituting a formal disciplinary inquiry."
+                          )
+                        }
+                      >
+                        + {lang === "si" ? "විධිමත් විනය පරීක්ෂණය" : "Formal Disciplinary Inquiry"}
+                      </button>
+                      <button
+                        type="button"
+                        className="preset-chip"
+                        onClick={() =>
+                          handleApplyPreset(
+                            lang === "si"
+                              ? "අදාළ අලාභය රජයට අයකර ගැනීමටත්, චෝදනා ලැබූ නිලධාරියාට දැඩි අවවාද නිකුත් කිරීමටත් නිර්දේශ කරමි."
+                              : "Recommend recovery of financial loss from the accused officer and issuing a severe warning letter."
+                          )
+                        }
+                      >
+                        + {lang === "si" ? "අලාභ අයකර ගැනීම් සහ අවවාද කිරීම" : "Recovery of Loss & Warning"}
+                      </button>
+                      <button
+                        type="button"
+                        className="preset-chip"
+                        onClick={() =>
+                          handleApplyPreset(
+                            lang === "si"
+                              ? "පරීක්ෂණ වාර්තාව අනුව චෝදනා තහවුරු නොවන බැවින් මෙම නඩුව තවදුරටත් ඉදිරියට නොගෙන නිදොස් කොට ගොනුව අවසන් කිරීමට නිර්දේශ කරමි."
+                              : "Allegations are unsubstantiated per investigation findings; recommend closing the case file with exoneration."
+                          )
+                        }
+                      >
+                        + {lang === "si" ? "නිදොස් කොට නිදහස් අවසන් කිරීම" : "Exonerate & Close"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="form-grid-2" style={{ marginTop: "20px" }}>
+                    <div className="form-field-group">
+                      <label className="form-field-label">
+                        {lang === "si" ? "ආයතන සංග්‍රහය / චක්‍රලේඛ අදාළ වගන්ති (Establishment Code Reference)" : "Establishment Code / Circular Reference"}
+                      </label>
+                      <input
+                        type="text"
+                        value={disciplinaryAction}
+                        onChange={(e) => setDisciplinaryAction(e.target.value)}
+                        placeholder={
+                          lang === "si"
+                            ? "උදා: ආයතන සංග්‍රහයේ II කාණ්ඩයේ XLVIII පරිච්ඡේදය"
+                            : "e.g., Chapter XLVIII of Establishment Code / Ministry Circular No. 2024/08"
+                        }
+                        className="form-field-input"
+                      />
+                    </div>
+
+                    <div className="form-field-group">
+                      <label className="form-field-label">
+                        {lang === "si" ? "අදාල ලේඛන / ලිපි ගොනු යොමු අංක" : "Supporting Documents / Minute Ref"}
+                      </label>
+                      <input
+                        type="text"
+                        value={referenceNotes}
+                        onChange={(e) => setReferenceNotes(e.target.value)}
+                        placeholder={
+                          lang === "si"
+                            ? "උදා: ED/DISC/2026/044 අංක දරන ලිපිගොනුව"
+                            : "e.g., Doc Ref: ED/DISC/2026/044"
+                        }
+                        className="form-field-input"
+                      />
+                    </div>
+                  </div>
+                </section>
+
+                {/* Card 3: Routing & Implementation Authority */}
+                <section className="recommendation-form-card">
+                  <div className="section-header-pill">
+                    <Send size={16} />
+                    <span>
+                      {lang === "si"
+                        ? "3. නිර්දේශය යොමු කිරීම සහ ක්‍රියාත්මක කිරීමේ අධිකාරිය"
+                        : lang === "ta"
+                        ? "3. பரிந்துரையை அனுப்புதல் மற்றும் செயல்படுத்தும் அதிகாரம்"
+                        : "3. Routing & Implementation Authority"}
+                    </span>
+                  </div>
+
+                  <div className="form-grid-2">
+                    <div className="form-field-group">
+                      <label className="form-field-label">
+                        {lang === "si" ? "නිර්දේශය යොමු කරන ප්‍රධාන අංශය / නිලධාරියා" : "Forward Recommendation To"}
+                        <span className="required-asterisk">*</span>
+                      </label>
+                      <select
+                        value={forwardTo}
+                        onChange={(e) => setForwardTo(e.target.value)}
+                        className="form-field-select"
+                        required
+                      >
+                        <option value="disciplinary_branch">
+                          {lang === "si" ? "අධ්‍යාපන අමාත්‍යාංශ විනය අංශය (Disciplinary Branch)" : "Ministry Disciplinary Branch"}
+                        </option>
+                        <option value="secretary_education">
+                          {lang === "si" ? "අධ්‍යාපන අමාත්‍යාංශ ලේකම් (Secretary, Ministry of Education)" : "Secretary, Ministry of Education"}
+                        </option>
+                        <option value="public_service_commission">
+                          {lang === "si" ? "රාජ්‍ය සේවා කොමිෂන් සභාව (Public Service Commission - PSC)" : "Public Service Commission (PSC)"}
+                        </option>
+                        <option value="provincial_director">
+                          {lang === "si" ? "පළාත් අධ්‍යාපන අධ්‍යක්ෂ (Provincial Director of Education)" : "Provincial Director of Education"}
+                        </option>
+                        <option value="zonal_director">
+                          {lang === "si" ? "කලාප අධ්‍යාපන අධ්‍යක්ෂ (Zonal Director of Education)" : "Zonal Director of Education"}
+                        </option>
+                        <option value="investigation_unit">
+                          {lang === "si" ? "විමර්ශන අධ්‍යක්ෂක / විමර්ශන ඒකකය (Investigation Branch)" : "Investigation Director / Unit"}
+                        </option>
+                      </select>
+                    </div>
+
+                    <div className="form-field-group">
+                      <label className="form-field-label">
+                        {lang === "si" ? "නඩුවේ තත්ත්වය (Case Status Update)" : "Case Status Update"}
+                      </label>
+                      <select
+                        value={recommendationStatus}
+                        onChange={(e) => setRecommendationStatus(e.target.value)}
+                        className="form-field-select"
+                      >
+                        <option value="Submitted">
+                          {lang === "si" ? "නිර්දේශය ඉදිරිපත් කරන ලදී (Recommendation Submitted)" : "Recommendation Submitted"}
+                        </option>
+                        <option value="Formal Disciplinary Inspection">
+                          {lang === "si" ? "විධිමත් විනය පරීක්ෂණයක් පැවැත්වීම (Formal Disciplinary Inspection)" : "Formal Disciplinary Inspection"}
+                        </option>
+                        <option value="Implementation of Recommendations">
+                          {lang === "si" ? "නිර්දේශ ක්‍රියාත්මක කිරීමේ අදියර (Implementation of Recommendations)" : "Implementation of Recommendations"}
+                        </option>
+                        <option value="Draft">
+                          {lang === "si" ? "කෙටුම්පතක් ලෙස පමණක් සුරකින්න (Draft)" : "Draft"}
+                        </option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Form Submission Action Buttons */}
+                  <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "12px", marginTop: "24px" }}>
+                    <Link
+                      href="/subject"
+                      className="btn-back-gray"
+                      style={{ padding: "9px 18px", textDecoration: "none" }}
+                    >
+                      {lang === "si" ? "අවලංගු කරන්න" : "Cancel"}
+                    </Link>
+
+                    <button
+                      type="button"
+                      onClick={handleSaveDraft}
+                      disabled={isSaving}
+                      className="btn-save-draft"
+                    >
+                      <Save size={16} />
+                      <span>{lang === "si" ? "කෙටුම්පත සුරකින්න" : "Save Draft"}</span>
+                    </button>
+
+                    <button
+                      type="submit"
+                      disabled={isSaving}
+                      className="btn-submit-recommendation"
+                    >
+                      <Send size={16} />
+                      <span>{lang === "si" ? "නිර්දේශය ඉදිරිපත් කරන්න" : "Submit Recommendation"}</span>
+                    </button>
+                  </div>
+                </section>
+              </form>
+              ) : (
+                /* ============================================================
+                   FORM 2: ISSUING CHARGE SHEET FORM (UNTOUCHED ORIGINAL)
+                   ============================================================ */
+                              <form onSubmit={handleSubmit}>
                 <section className="recommendation-form-card charge-sheet-card">
                   <div className="section-header-pill charge-sheet-pill">
                     <FileCheck size={16} />
@@ -1712,6 +2130,7 @@ function RecommendationFormContent() {
                   </button>
                 </div>
               </form>
+              )}
             </>
           )}
 

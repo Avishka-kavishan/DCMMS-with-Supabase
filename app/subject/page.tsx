@@ -1512,7 +1512,6 @@ function SubjectOfficerDashboardContent() {
   const notifDropdownRef = useRef<HTMLDivElement>(null);
 
   const [directlyAssignedLetters, setDirectlyAssignedLetters] = useState<any[]>([]);
-  const [isDirectLettersMinimized, setIsDirectLettersMinimized] = useState(false);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -3420,7 +3419,15 @@ function SubjectOfficerDashboardContent() {
       const cNoKey = cNo.toLowerCase();
       if (!cNoKey) return;
 
+      // If agreed with PSC/ESC decision (or answers) and closed with Secretary approval, it is concluded, NOT pending in Proper Disciplinary Inspection
+      const isPscAgreed = rec.agreeWithPscDecision === "yes" || rec.agree_with_psc_decision === "yes";
+      const isAnswersAgreed = rec.agreeWithAnswers === "yes" || rec.agree_with_answers === "yes";
+      if (isPscAgreed || (rec.status === "Closed" && (isPscAgreed || isAnswersAgreed))) {
+        return;
+      }
+
       const matchingCase = cases.find((c) => (c.caseNo || "").trim().toLowerCase() === cNoKey);
+      const isPscDisagreed = rec.agreeWithPscDecision === "no" || rec.agree_with_psc_decision === "no";
       const isChargeSheetCategory =
         rec.category === "issuing_charge_sheet" ||
         rec.actionType === "charge_sheet" ||
@@ -3430,6 +3437,7 @@ function SubjectOfficerDashboardContent() {
         !!rec.disciplinaryOrder ||
         (rec.disciplinaryAction && rec.disciplinaryAction.toLowerCase().includes("order"));
       const isProperDisciplinaryRec =
+        isPscDisagreed ||
         isChargeSheetCategory ||
         hasDisciplinaryOrder ||
         (rec.futureAction && (rec.futureAction.toLowerCase().includes("proper disciplinary") || rec.futureAction.toLowerCase().includes("charge sheet"))) ||
@@ -3438,12 +3446,12 @@ function SubjectOfficerDashboardContent() {
       if (isProperDisciplinaryRec) {
         const existing = inspectionMap.get(cNoKey) || {};
         
-        let determinedStage = "Disciplinary Inspection Active";
-        let determinedStageKey = "active";
+        let determinedStage = isPscDisagreed ? "Formal Disciplinary Inspection" : "Disciplinary Inspection Active";
+        let determinedStageKey = isPscDisagreed ? "disciplinary_inspection" : "active";
         if (hasDisciplinaryOrder) {
           determinedStage = "Disciplinary Order Concluded";
           determinedStageKey = "order_finalized";
-        } else if (isChargeSheetCategory) {
+        } else if (isChargeSheetCategory && !isPscDisagreed) {
           determinedStage = "Formal Charge Sheet Issued";
           determinedStageKey = "charge_sheet";
         }
@@ -3451,6 +3459,8 @@ function SubjectOfficerDashboardContent() {
         let determinedInterdiction = "In Progress";
         if (hasDisciplinaryOrder) {
           determinedInterdiction = "Order Enacted";
+        } else if (isPscDisagreed) {
+          determinedInterdiction = "PSC / ESC Directed Inspection";
         } else if (rec.issuedChargeSheet) {
           determinedInterdiction = `Charge Sheet: ${rec.issuedChargeSheet}`;
         } else if (isChargeSheetCategory) {
@@ -3481,33 +3491,36 @@ function SubjectOfficerDashboardContent() {
           stage: determinedStage,
           stageKey: determinedStageKey,
           disciplinaryCharge: determinedCharge,
-          inspectionAuthority: existing.inspectionAuthority || (rec.forwardTo === "disciplinary_branch" ? "Ministry Disciplinary Branch / PSC ESC" : "Disciplinary Inspection Board"),
+          inspectionAuthority: existing.inspectionAuthority || (isPscDisagreed ? "PSC / ESC Disciplinary Inspection Board" : (rec.forwardTo === "disciplinary_branch" ? "Ministry Disciplinary Branch / PSC ESC" : "Disciplinary Inspection Board")),
           pscRef: existing.pscRef || rec.letterNo || `PSC/DISC/${cNo}`,
           chargeDate: rec.chargeSheetIssuedDate || rec.letterDate || rec.submittedAt?.slice(0, 10) || existing.chargeDate || matchingCase?.assignedDate || "—",
           effectiveDate: rec.chargeSheetResponseDate || existing.effectiveDate || (rec.chargeSheetIssuedDate ? "14 Days Response Period" : "Pending Review"),
           interdictionStatus: determinedInterdiction,
-          disciplinaryAction: rec.disciplinaryOrder || rec.disciplinaryAction || existing.disciplinaryAction || "Disciplinary determination in progress",
-          notes: rec.referenceNotes || rec.recommendationText || existing.notes || matchingCase?.subject || "Case moved to Proper Disciplinary Inspection following Subject Officer recommendation.",
+          disciplinaryAction: rec.disciplinaryOrder || rec.disciplinaryAction || existing.disciplinaryAction || (isPscDisagreed ? "Assigned following PSC / ESC decision disagreement" : "Disciplinary determination in progress"),
+          notes: rec.referenceNotes || rec.recommendationText || existing.notes || matchingCase?.subject || (isPscDisagreed ? "Case assigned to Proper Disciplinary Inspection following disagreement with PSC/ESC decision." : "Case moved to Proper Disciplinary Inspection following Subject Officer recommendation."),
           issuedChargeSheet: rec.issuedChargeSheet || "",
           chargeSheetIssuedDate: rec.chargeSheetIssuedDate || "",
           chargeSheetResponseDate: rec.chargeSheetResponseDate || "",
           disciplinaryOrder: rec.disciplinaryOrder || "",
+          agreeWithPscDecision: rec.agreeWithPscDecision || rec.agree_with_psc_decision || "",
         });
       }
     });
 
-    // 2. Also ensure any cases in cases list with stageKey === 'charge_sheet' or 'order_finalized' or 'psc_review' or 'disciplinary_active' or isProperDisciplinary are captured
+    // 2. Also ensure any cases in cases list with stageKey === 'charge_sheet' or 'disciplinary_inspection' or 'order_finalized' or 'psc_review' or 'disciplinary_active' or isProperDisciplinary are captured
     cases.forEach((c) => {
       const cNoKey = (c.caseNo || "").trim().toLowerCase();
       if (!cNoKey || inspectionMap.has(cNoKey)) return;
 
       if (
         c.stageKey === "charge_sheet" ||
+        c.stageKey === "disciplinary_inspection" ||
         c.stageKey === "order_finalized" ||
         c.stageKey === "psc_review" ||
         c.stageKey === "disciplinary_active" ||
         (c as any).isProperDisciplinary ||
-        (c as any).hasChargeSheet
+        (c as any).hasChargeSheet ||
+        c.stage === "Formal Disciplinary Inspection"
       ) {
         inspectionMap.set(cNoKey, {
           id: c.id || `disc-${c.caseNo}`,
@@ -3517,8 +3530,8 @@ function SubjectOfficerDashboardContent() {
           accusedDesignation: (c as any).accusedDesignation || "Educational Officer",
           schoolName: (c as any).schoolName || "Government Educational Institute",
           priority: c.priority || "medium",
-          stage: c.stage || "Formal Charge Sheet Issued",
-          stageKey: c.stageKey || "charge_sheet",
+          stage: c.stage || "Formal Disciplinary Inspection",
+          stageKey: c.stageKey || "disciplinary_inspection",
           disciplinaryCharge: (c as any).disciplinaryCharge || "Establishment Code Charge Sheet",
           inspectionAuthority: "Disciplinary Inspection Board",
           pscRef: `PSC/REF/${c.caseNo}`,
@@ -4290,105 +4303,6 @@ function SubjectOfficerDashboardContent() {
             </div>
           )}
 
-          {/* Stats section */}
-          <section className="dashboard-stats-grid subject-stats-grid">
-            <div className="premium-stat-card total-cases-card">
-              <div className="premium-card-top">
-                <div className="premium-card-title-area">
-                  <svg className="premium-card-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  <span>{t("totalCases")}</span>
-                </div>
-                <span className="premium-card-percentage">{totalPct}</span>
-              </div>
-              <div className="premium-card-bottom">
-                <div className="premium-card-value-area">
-                  <span className="premium-card-value">{String(totalCasesCount).padStart(2, "0")}</span>
-                  <span className="premium-card-label">cases</span>
-                </div>
-                <div className="premium-card-sparkline">
-                  <svg viewBox="0 0 100 30" width="80" height="24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M 5,22 Q 25,10 45,20 T 75,8 T 95,15" strokeLinecap="round" />
-                    <circle cx="75" cy="8" r="3" fill="#ffffff" />
-                  </svg>
-                </div>
-              </div>
-            </div>
-
-            <div className="premium-stat-card inprogress-cases-card">
-              <div className="premium-card-top">
-                <div className="premium-card-title-area">
-                  <svg className="premium-card-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 8H18" />
-                  </svg>
-                  <span>{t("inProgressCases")}</span>
-                </div>
-                <span className="premium-card-percentage">{inProgressPct}</span>
-              </div>
-              <div className="premium-card-bottom">
-                <div className="premium-card-value-area">
-                  <span className="premium-card-value">{String(inProgressCasesCount).padStart(2, "0")}</span>
-                  <span className="premium-card-label">cases</span>
-                </div>
-                <div className="premium-card-sparkline">
-                  <svg viewBox="0 0 100 30" width="80" height="24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M 5,20 Q 25,25 45,12 T 75,5 T 95,15" strokeLinecap="round" />
-                    <circle cx="75" cy="5" r="3" fill="#ffffff" />
-                  </svg>
-                </div>
-              </div>
-            </div>
-
-            <div className="premium-stat-card pending-cases-card">
-              <div className="premium-card-top">
-                <div className="premium-card-title-area">
-                  <svg className="premium-card-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <span>{t("pendingCases")}</span>
-                </div>
-                <span className="premium-card-percentage">{pendingPct}</span>
-              </div>
-              <div className="premium-card-bottom">
-                <div className="premium-card-value-area">
-                  <span className="premium-card-value">{String(pendingCasesCount).padStart(2, "0")}</span>
-                  <span className="premium-card-label">cases</span>
-                </div>
-                <div className="premium-card-sparkline">
-                  <svg viewBox="0 0 100 30" width="80" height="24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M 5,15 Q 25,8 45,22 T 75,12 T 95,25" strokeLinecap="round" />
-                    <circle cx="75" cy="12" r="3" fill="#ffffff" />
-                  </svg>
-                </div>
-              </div>
-            </div>
-
-            <div className="premium-stat-card closed-cases-card">
-              <div className="premium-card-top">
-                <div className="premium-card-title-area">
-                  <svg className="premium-card-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <span>{t("closeCases")}</span>
-                </div>
-                <span className="premium-card-percentage">{closedPct}</span>
-              </div>
-              <div className="premium-card-bottom">
-                <div className="premium-card-value-area">
-                  <span className="premium-card-value">{String(closedCasesCount).padStart(2, "0")}</span>
-                  <span className="premium-card-label">cases</span>
-                </div>
-                <div className="premium-card-sparkline">
-                  <svg viewBox="0 0 100 30" width="80" height="24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M 5,25 Q 25,20 45,8 T 75,5 T 95,12" strokeLinecap="round" />
-                    <circle cx="75" cy="5" r="3" fill="#ffffff" />
-                  </svg>
-                </div>
-              </div>
-            </div>
-          </section>
-
           {/* ── Navigation Tab Bar ── */}
           <div className="navigation-tab-list" style={{ marginTop: "24px", marginBottom: "24px" }}>
             <button
@@ -4467,8 +4381,8 @@ function SubjectOfficerDashboardContent() {
             </button>
             <button
               type="button"
-              className="nav-tab-btn"
-              onClick={() => router.push("/subject/recommendation")}
+              className={`nav-tab-btn${activeTab === "recommendations" ? " active" : ""}`}
+              onClick={() => setActiveTab("recommendations")}
             >
               <Sparkles className="tab-icon" />
               <span>{lang === "si" ? "ආයතනික මූලික විමර්ශනයේ නිර්දේශය" : lang === "ta" ? "நிறுவன அடிப்படை விசாரணை பரிந்துரை" : "Institutional Basic Investigation Recommendation"}</span>
@@ -4488,7 +4402,7 @@ function SubjectOfficerDashboardContent() {
                 </span>
               ) : recommendations.length > 0 ? (
                 <span style={{
-                  backgroundColor: "#4f46e5",
+                  backgroundColor: activeTab === "recommendations" ? "#4f46e5" : "#94a3b8",
                   color: "#ffffff",
                   fontSize: "11px",
                   fontWeight: 700,
@@ -4551,6 +4465,105 @@ function SubjectOfficerDashboardContent() {
           {/* ==================== TAB 1: ASSIGNED CASES VIEW ==================== */}
           {activeTab === "cases" && (
             <>
+              {/* Stats section - Only displayed with assigned complaints/cases tab */}
+              <section className="dashboard-stats-grid subject-stats-grid">
+                <div className="premium-stat-card total-cases-card">
+                  <div className="premium-card-top">
+                    <div className="premium-card-title-area">
+                      <svg className="premium-card-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      <span>{t("totalCases")}</span>
+                    </div>
+                    <span className="premium-card-percentage">{totalPct}</span>
+                  </div>
+                  <div className="premium-card-bottom">
+                    <div className="premium-card-value-area">
+                      <span className="premium-card-value">{String(totalCasesCount).padStart(2, "0")}</span>
+                      <span className="premium-card-label">cases</span>
+                    </div>
+                    <div className="premium-card-sparkline">
+                      <svg viewBox="0 0 100 30" width="80" height="24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M 5,22 Q 25,10 45,20 T 75,8 T 95,15" strokeLinecap="round" />
+                        <circle cx="75" cy="8" r="3" fill="#ffffff" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="premium-stat-card inprogress-cases-card">
+                  <div className="premium-card-top">
+                    <div className="premium-card-title-area">
+                      <svg className="premium-card-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 8H18" />
+                      </svg>
+                      <span>{t("inProgressCases")}</span>
+                    </div>
+                    <span className="premium-card-percentage">{inProgressPct}</span>
+                  </div>
+                  <div className="premium-card-bottom">
+                    <div className="premium-card-value-area">
+                      <span className="premium-card-value">{String(inProgressCasesCount).padStart(2, "0")}</span>
+                      <span className="premium-card-label">cases</span>
+                    </div>
+                    <div className="premium-card-sparkline">
+                      <svg viewBox="0 0 100 30" width="80" height="24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M 5,20 Q 25,25 45,12 T 75,5 T 95,15" strokeLinecap="round" />
+                        <circle cx="75" cy="5" r="3" fill="#ffffff" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="premium-stat-card pending-cases-card">
+                  <div className="premium-card-top">
+                    <div className="premium-card-title-area">
+                      <svg className="premium-card-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span>{t("pendingCases")}</span>
+                    </div>
+                    <span className="premium-card-percentage">{pendingPct}</span>
+                  </div>
+                  <div className="premium-card-bottom">
+                    <div className="premium-card-value-area">
+                      <span className="premium-card-value">{String(pendingCasesCount).padStart(2, "0")}</span>
+                      <span className="premium-card-label">cases</span>
+                    </div>
+                    <div className="premium-card-sparkline">
+                      <svg viewBox="0 0 100 30" width="80" height="24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M 5,15 Q 25,8 45,22 T 75,12 T 95,25" strokeLinecap="round" />
+                        <circle cx="75" cy="12" r="3" fill="#ffffff" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="premium-stat-card closed-cases-card">
+                  <div className="premium-card-top">
+                    <div className="premium-card-title-area">
+                      <svg className="premium-card-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span>{t("closeCases")}</span>
+                    </div>
+                    <span className="premium-card-percentage">{closedPct}</span>
+                  </div>
+                  <div className="premium-card-bottom">
+                    <div className="premium-card-value-area">
+                      <span className="premium-card-value">{String(closedCasesCount).padStart(2, "0")}</span>
+                      <span className="premium-card-label">cases</span>
+                    </div>
+                    <div className="premium-card-sparkline">
+                      <svg viewBox="0 0 100 30" width="80" height="24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M 5,25 Q 25,20 45,8 T 75,5 T 95,12" strokeLinecap="round" />
+                        <circle cx="75" cy="5" r="3" fill="#ffffff" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
               {/* ==================== NOTIFICATIONS & INVESTIGATION DIRECTIVES SECTION (Facebook UI Style) ==================== */}
               <section style={{ marginBottom: "24px" }} id="directives-section-feed">
                 <div className="fb-notif-feed-container" style={{ padding: "20px 24px" }}>
@@ -5157,184 +5170,6 @@ function SubjectOfficerDashboardContent() {
                 </div>
               </section>
 
-              {/* ==================== DIRECTLY ASSIGNED LETTERS FROM DAILY MAIL ==================== */}
-              {directlyAssignedLetters && directlyAssignedLetters.length > 0 && (
-                <section style={{ marginBottom: "24px" }} id="direct-assigned-letters-section">
-                  <div style={{
-                    backgroundColor: "#ffffff",
-                    borderRadius: "16px",
-                    border: "1px solid #e2e8f0",
-                    padding: "20px 24px",
-                    boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05)"
-                  }}>
-                    {/* Header */}
-                    <div style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      borderBottom: isDirectLettersMinimized ? "none" : "1px solid #f1f5f9",
-                      paddingBottom: isDirectLettersMinimized ? "0" : "16px",
-                      marginBottom: isDirectLettersMinimized ? "0" : "16px",
-                      flexWrap: "wrap",
-                      gap: "12px"
-                    }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                        <div style={{
-                          width: "44px",
-                          height: "44px",
-                          borderRadius: "12px",
-                          backgroundColor: "#dbeafe",
-                          color: "#1d4ed8",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          boxShadow: "0 2px 4px rgba(29, 78, 216, 0.15)"
-                        }}>
-                          <MailCheck size={22} />
-                        </div>
-                        <div>
-                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                            <h3 style={{ margin: 0, fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>
-                              {lang === "si" ? "දෛනික තැපෑලෙන් පවරන ලද ලැබුණු ලිපි" : "Directly Assigned Letters from Daily Mail"}
-                            </h3>
-                            <span style={{
-                              padding: "2px 8px",
-                              borderRadius: "12px",
-                              backgroundColor: "#2563eb",
-                              color: "#ffffff",
-                              fontSize: "12px",
-                              fontWeight: 700
-                            }}>
-                              {directlyAssignedLetters.length}
-                            </span>
-                          </div>
-                          <p style={{ margin: "3px 0 0 0", fontSize: "13px", color: "#64748b" }}>
-                            {lang === "si"
-                              ? "ඔබ වෙත සෘජුවම ක්‍රියාමාර්ග ගැනීම සඳහා පවරා ඇති ලැබුණු ලිපි — විස්තර එක් කර නඩුව අරඹන්න."
-                              : "Letters assigned directly to you by the Daily Mail section. Click 'Add Details' to initiate investigation."}
-                          </p>
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => setIsDirectLettersMinimized(!isDirectLettersMinimized)}
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "6px",
-                          padding: "6px 14px",
-                          borderRadius: "8px",
-                          backgroundColor: "#f8fafc",
-                          border: "1px solid #cbd5e1",
-                          color: "#334155",
-                          fontSize: "12px",
-                          fontWeight: 600,
-                          cursor: "pointer"
-                        }}
-                      >
-                        {isDirectLettersMinimized ? (
-                          <>
-                            <ChevronDown size={16} />
-                            <span>{lang === "si" ? "විස්තර පෙන්වන්න" : "Expand"}</span>
-                          </>
-                        ) : (
-                          <>
-                            <ChevronUp size={16} />
-                            <span>{lang === "si" ? "හකුලන්න" : "Collapse"}</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-
-                    {/* Content Table */}
-                    {!isDirectLettersMinimized && (
-                      <div className="table-responsive-container">
-                        <table className="letters-data-table" style={{ width: "100%" }}>
-                          <thead>
-                            <tr>
-                              <th scope="col" style={{ width: "15%" }}>{t("letterNoLabel", "Letter No")}</th>
-                              <th scope="col" style={{ width: "15%" }}>{t("letterTypeLabel", "Letter Type")}</th>
-                              <th scope="col" style={{ width: "25%" }}>{t("sendByLabel", "Send By")}</th>
-                              <th scope="col" style={{ width: "12%" }}>{t("letterDateLabel", "Letter Date")}</th>
-                              <th scope="col" style={{ width: "12%" }}>{lang === "si" ? "ලැබුණු දිනය" : "Received Date"}</th>
-                              <th scope="col" style={{ width: "10%" }}>{t("status", "Status")}</th>
-                              <th scope="col" className="text-center" style={{ width: "11%" }}>{t("takeAction", "Action")}</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {directlyAssignedLetters.map((l: any, idx: number) => (
-                              <tr key={l.id || l.letterNo || idx} className="letter-table-row" style={{ backgroundColor: idx % 2 === 0 ? "#ffffff" : "#f8fafc" }}>
-                                <td className="font-semibold" style={{ fontFamily: "monospace", color: "#0f172a" }}>
-                                  {l.letterNo || l.refNo}
-                                </td>
-                                <td>
-                                  <span style={{
-                                    display: "inline-block",
-                                    padding: "3px 8px",
-                                    borderRadius: "6px",
-                                    backgroundColor: "#eff6ff",
-                                    color: "#1e40af",
-                                    fontSize: "12px",
-                                    fontWeight: 600,
-                                    border: "1px solid #bfdbfe"
-                                  }}>
-                                    {l.type}
-                                  </span>
-                                </td>
-                                <td style={{ color: "#334155", fontWeight: 500 }}>
-                                  {l.sender}
-                                </td>
-                                <td style={{ color: "#64748b", fontSize: "13px" }}>
-                                  {l.letterDate || "—"}
-                                </td>
-                                <td style={{ color: "#64748b", fontSize: "13px" }}>
-                                  {l.receivedDate || "—"}
-                                </td>
-                                <td>
-                                  <span style={{
-                                    display: "inline-block",
-                                    padding: "3px 8px",
-                                    borderRadius: "12px",
-                                    backgroundColor: "#dcfce7",
-                                    color: "#166534",
-                                    fontSize: "11px",
-                                    fontWeight: 700,
-                                    border: "1px solid #bbf7d0"
-                                  }}>
-                                    ● {lang === "si" ? "පවරා ඇත" : "Assigned"}
-                                  </span>
-                                </td>
-                                <td className="text-center">
-                                  <Link
-                                    href={`/subject/add-details?caseNo=${encodeURIComponent(l.letterNo || l.refNo)}&letterNo=${encodeURIComponent(l.letterNo || l.refNo)}&sender=${encodeURIComponent(l.sender || "")}&type=${encodeURIComponent(l.type || "")}`}
-                                    className="btn-add-details"
-                                    style={{
-                                      display: "inline-flex",
-                                      alignItems: "center",
-                                      gap: "5px",
-                                      padding: "6px 12px",
-                                      borderRadius: "6px",
-                                      backgroundColor: "#0e162f",
-                                      color: "#ffffff",
-                                      fontSize: "12px",
-                                      fontWeight: 600,
-                                      textDecoration: "none"
-                                    }}
-                                  >
-                                    <Plus size={14} />
-                                    <span>{lang === "si" ? "විස්තර එක් කරන්න" : "Add Details"}</span>
-                                  </Link>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                </section>
-              )}
 
           {/* ── Case Management Section ── */}
           <section className="letters-list-section">
@@ -6331,7 +6166,7 @@ function SubjectOfficerDashboardContent() {
                             <td className="text-center actions-cell">
                               <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
                                 <Link
-                                  href={`/subject/recommendation?caseNo=${encodeURIComponent(item.caseNo)}`}
+                                  href={`/subject/recommendation?caseNo=${encodeURIComponent(item.caseNo)}&category=issuing_charge_sheet`}
                                   className="add-details-link"
                                   style={{ padding: "4px 12px", fontSize: "11px", backgroundColor: "#d97706" }}
                                   title={lang === "si" ? "චෝදනා පත්‍ර විස්තර සංස්කරණය" : "Edit Charge Sheet Details"}
@@ -8569,7 +8404,7 @@ function SubjectOfficerDashboardContent() {
                 Close
               </button>
               <Link
-                href={`/subject/recommendation?caseNo=${encodeURIComponent(selectedChargeSheetModal.caseNo)}`}
+                href={`/subject/recommendation?caseNo=${encodeURIComponent(selectedChargeSheetModal.caseNo)}&category=issuing_charge_sheet`}
                 className="btn-create-rec"
                 style={{ padding: "8px 16px", fontSize: "13px", background: "linear-gradient(135deg, #d97706 0%, #b45309 100%)" }}
               >

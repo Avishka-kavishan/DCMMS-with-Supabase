@@ -334,6 +334,72 @@ CREATE INDEX IF NOT EXISTS idx_reply_letter_details_file_no ON reply_letter_deta
 CREATE INDEX IF NOT EXISTS idx_reply_letter_details_date ON reply_letter_details_table(date);
 
 -- =============================================================
+-- Formal Disciplinary Inspection Details Table
+-- =============================================================
+CREATE TABLE IF NOT EXISTS formal_disciplinary_inspection_table (
+    id BIGSERIAL PRIMARY KEY,
+    ref_number VARCHAR(100) NOT NULL UNIQUE REFERENCES subject_officer_form_table(ref_number) ON DELETE CASCADE ON UPDATE CASCADE,
+    
+    -- Section 2: Investigation Committee Details
+    -- 1. Officer conducting the investigation
+    inv_officer_name TEXT,
+    inv_officer_designation TEXT,
+    inv_officer_appointment_date DATE,
+    inv_officer_tel VARCHAR(50),
+    inv_officer_address TEXT,
+
+    -- 2. Officer conducting the complaint
+    complaint_officer_name TEXT,
+    complaint_officer_designation TEXT,
+    complaint_officer_appointment_date DATE,
+    complaint_officer_tel VARCHAR(50),
+    complaint_officer_address TEXT,
+
+    -- 3. Officer conducting the maintenance
+    maintenance_officer_name TEXT,
+    maintenance_officer_designation TEXT,
+    maintenance_officer_appointment_date DATE,
+    maintenance_officer_tel VARCHAR(50),
+    maintenance_officer_address TEXT,
+
+    -- Section 3: Disciplinary Investigation Proceedings (Steps 1 to 8)
+    -- Step 1: Date of submission of the disciplinary investigation report
+    date_submission_report DATE,
+    -- Step 2: Recommendation of the disciplinary investigation report
+    recommendation_report TEXT,
+    -- Step 3: Date of submission of the recommendation for approval
+    date_submission_rec_approval DATE,
+    -- Step 4: Date of approval & Recommendation approved (Guilty / Acquittal / Approved)
+    date_of_approval DATE,
+    recommendation_approved VARCHAR(50),
+    -- Step 5: Disciplinary order
+    disciplinary_order TEXT,
+    -- Step 6: Approval of the secretary of education (Received / Not received) & Details
+    approval_secretary_status VARCHAR(50),
+    approval_secretary_details TEXT,
+    -- Step 7: Implementation period of disciplinary order (Start & End dates)
+    order_start_date DATE,
+    order_end_date DATE,
+    -- Step 8: Other decisions
+    other_decisions TEXT,
+
+    -- Legacy & Compatibility columns
+    recommendation TEXT,
+    discipline_command TEXT,
+    granted_approval VARCHAR(100),
+    other_decision TEXT,
+
+    -- Audit Timestamps
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_formal_disc_inspection_ref_number ON formal_disciplinary_inspection_table(ref_number);
+CREATE INDEX IF NOT EXISTS idx_formal_disc_inspection_date_sub ON formal_disciplinary_inspection_table(date_submission_report);
+CREATE INDEX IF NOT EXISTS idx_formal_disc_inspection_rec_app ON formal_disciplinary_inspection_table(recommendation_approved);
+CREATE INDEX IF NOT EXISTS idx_formal_disc_inspection_sec_status ON formal_disciplinary_inspection_table(approval_secretary_status);
+
+-- =============================================================
 -- PART 6: SYSTEM AUDIT & DOCUMENTS MODULE
 -- =============================================================
 CREATE TABLE IF NOT EXISTS documents (

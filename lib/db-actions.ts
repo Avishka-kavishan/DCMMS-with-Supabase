@@ -7744,18 +7744,66 @@ export async function getAvailableConductInquiryCasesServer() {
 // -------------------------------------------------------------
 export interface FormalDisciplinaryInspectionPayload {
   caseNo: string;
+  // Legacy / fallback committee fields
   chairmanName?: string;
   chairmanId?: string;
   chairmanEmail?: string;
   members?: Array<{ name: string; email?: string; idNo?: string }>;
+
+  // Section 2: Investigation committee details (matching paper sketch)
+  // 1. Officer conducting the investigation
+  invOfficerName?: string;
+  invOfficerDesignation?: string;
+  invOfficerAppointmentDate?: string | null;
+  invOfficerTel?: string;
+  invOfficerAddress?: string;
+
+  // 2. Officer conducting the complaint
+  complaintOfficerName?: string;
+  complaintOfficerDesignation?: string;
+  complaintOfficerAppointmentDate?: string | null;
+  complaintOfficerTel?: string;
+  complaintOfficerAddress?: string;
+
+  // 3. Officer conducting the maintenance
+  maintenanceOfficerName?: string;
+  maintenanceOfficerDesignation?: string;
+  maintenanceOfficerAppointmentDate?: string | null;
+  maintenanceOfficerTel?: string;
+  maintenanceOfficerAddress?: string;
+
+  // Section 3: Appointment letter date & Report due date
   appointmentLetterDate?: string | null;
   reportDueDate?: string | null;
+  // Section 4: Extension of days
   extensionTerm?: string;
   extensionStartDate?: string | null;
   extensionEndDate?: string | null;
+
+  // Additional Disciplinary Inspection Proceedings (matching latest paper sketch)
+  // 1. Date of submission of the disciplinary investigation report
+  dateSubmissionReport?: string | null;
+  // 2. Recommendation of the disciplinary investigation report
+  recommendationReport?: string;
+  // 3. Date of submission of the recommendation for approval
+  dateSubmissionRecApproval?: string | null;
+  // 4. Date of approval & Recommendation approved (Guilty / Acquittal)
+  dateOfApproval?: string | null;
+  recommendationApproved?: "Guilty" | "Acquittal" | string;
+  // 5. Disciplinary order
+  disciplinaryOrder?: string;
+  // 6. Approval of the secretary of education (Received / not received + details)
+  approvalSecretaryStatus?: "Received" | "not received" | string;
+  approvalSecretaryDetails?: string;
+  // 7. Implementation of the disciplinary order (starting date, ending date)
+  orderStartDate?: string | null;
+  orderEndDate?: string | null;
+  // 8. Other decisions
+  otherDecisions?: string;
+
+  // Legacy fallbacks
   recommendation?: string;
   disciplineCommand?: string;
-  dateOfApproval?: string | null;
   grantedApproval?: string;
   otherDecision?: string;
   updatedBy?: string;
@@ -7771,7 +7819,7 @@ export async function saveFormalDisciplinaryInspectionServer(payload: FormalDisc
     const resolved = await resolveSubjectFileDetails(caseNo);
     const matchedRef = resolved.refNumber || caseNo;
 
-    // 1. Ensure formal_disciplinary_inspection_table exists in PostgreSQL
+    // 1. Ensure formal_disciplinary_inspection_table exists in PostgreSQL and has all required columns
     try {
       await prisma.$executeRawUnsafe(`
         CREATE TABLE IF NOT EXISTS public.formal_disciplinary_inspection_table (
@@ -7790,19 +7838,70 @@ export async function saveFormalDisciplinaryInspectionServer(payload: FormalDisc
       await prisma.$executeRawUnsafe(`ALTER TABLE public.formal_disciplinary_inspection_table ADD COLUMN IF NOT EXISTS date_of_approval DATE;`);
       await prisma.$executeRawUnsafe(`ALTER TABLE public.formal_disciplinary_inspection_table ADD COLUMN IF NOT EXISTS granted_approval VARCHAR(100);`);
       await prisma.$executeRawUnsafe(`ALTER TABLE public.formal_disciplinary_inspection_table ADD COLUMN IF NOT EXISTS other_decision TEXT;`);
+
+      // 1. Officer conducting the investigation columns
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.formal_disciplinary_inspection_table ADD COLUMN IF NOT EXISTS inv_officer_name TEXT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.formal_disciplinary_inspection_table ADD COLUMN IF NOT EXISTS inv_officer_designation TEXT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.formal_disciplinary_inspection_table ADD COLUMN IF NOT EXISTS inv_officer_appointment_date DATE;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.formal_disciplinary_inspection_table ADD COLUMN IF NOT EXISTS inv_officer_tel VARCHAR(50);`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.formal_disciplinary_inspection_table ADD COLUMN IF NOT EXISTS inv_officer_address TEXT;`);
+
+      // 2. Officer conducting the complaint columns
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.formal_disciplinary_inspection_table ADD COLUMN IF NOT EXISTS complaint_officer_name TEXT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.formal_disciplinary_inspection_table ADD COLUMN IF NOT EXISTS complaint_officer_designation TEXT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.formal_disciplinary_inspection_table ADD COLUMN IF NOT EXISTS complaint_officer_appointment_date DATE;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.formal_disciplinary_inspection_table ADD COLUMN IF NOT EXISTS complaint_officer_tel VARCHAR(50);`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.formal_disciplinary_inspection_table ADD COLUMN IF NOT EXISTS complaint_officer_address TEXT;`);
+
+      // 3. Officer conducting the maintenance columns
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.formal_disciplinary_inspection_table ADD COLUMN IF NOT EXISTS maintenance_officer_name TEXT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.formal_disciplinary_inspection_table ADD COLUMN IF NOT EXISTS maintenance_officer_designation TEXT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.formal_disciplinary_inspection_table ADD COLUMN IF NOT EXISTS maintenance_officer_appointment_date DATE;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.formal_disciplinary_inspection_table ADD COLUMN IF NOT EXISTS maintenance_officer_tel VARCHAR(50);`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.formal_disciplinary_inspection_table ADD COLUMN IF NOT EXISTS maintenance_officer_address TEXT;`);
+
+      // 4. Detailed Proceedings columns matching latest sketch
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.formal_disciplinary_inspection_table ADD COLUMN IF NOT EXISTS date_submission_report DATE;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.formal_disciplinary_inspection_table ADD COLUMN IF NOT EXISTS recommendation_report TEXT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.formal_disciplinary_inspection_table ADD COLUMN IF NOT EXISTS date_submission_rec_approval DATE;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.formal_disciplinary_inspection_table ADD COLUMN IF NOT EXISTS recommendation_approved VARCHAR(50);`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.formal_disciplinary_inspection_table ADD COLUMN IF NOT EXISTS disciplinary_order TEXT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.formal_disciplinary_inspection_table ADD COLUMN IF NOT EXISTS approval_secretary_status VARCHAR(50);`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.formal_disciplinary_inspection_table ADD COLUMN IF NOT EXISTS approval_secretary_details TEXT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.formal_disciplinary_inspection_table ADD COLUMN IF NOT EXISTS order_start_date DATE;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.formal_disciplinary_inspection_table ADD COLUMN IF NOT EXISTS order_end_date DATE;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.formal_disciplinary_inspection_table ADD COLUMN IF NOT EXISTS other_decisions TEXT;`);
     } catch (e) {}
 
-    // 2. Save Committee Chairman to chairment_by_case
-    if (payload.chairmanName !== undefined) {
+    // 2. Save Committee Chairman to chairment_by_case (Support both invOfficerName and chairmanName)
+    const effectiveChairman = payload.invOfficerName || payload.chairmanName;
+    if (effectiveChairman !== undefined) {
       await saveChairmanByCaseServer(caseNo, {
-        fullName: payload.chairmanName || "",
-        email: payload.chairmanEmail || payload.chairmanId || "",
-        position: "Chairman",
+        fullName: effectiveChairman || "",
+        email: payload.invOfficerTel || payload.chairmanEmail || payload.chairmanId || "",
+        position: payload.invOfficerDesignation || "Officer conducting the investigation",
       });
     }
 
     // 3. Save Committee Members to members_by_case
-    if (Array.isArray(payload.members)) {
+    const syncMembers: Array<{ fullName: string; email: string; position: string }> = [];
+    if (payload.complaintOfficerName) {
+      syncMembers.push({
+        fullName: payload.complaintOfficerName,
+        email: payload.complaintOfficerTel || "",
+        position: payload.complaintOfficerDesignation || "Officer conducting the complaint",
+      });
+    }
+    if (payload.maintenanceOfficerName) {
+      syncMembers.push({
+        fullName: payload.maintenanceOfficerName,
+        email: payload.maintenanceOfficerTel || "",
+        position: payload.maintenanceOfficerDesignation || "Officer conducting the maintenance",
+      });
+    }
+    if (syncMembers.length > 0) {
+      await saveMembersByCaseServer(caseNo, syncMembers);
+    } else if (Array.isArray(payload.members)) {
       const formattedMembers = payload.members.map((m) => ({
         fullName: m.name || "",
         email: m.email || m.idNo || "",
@@ -7833,9 +7932,46 @@ export async function saveFormalDisciplinaryInspectionServer(payload: FormalDisc
 
     // 6. Upsert into formal_disciplinary_inspection_table
     const approvalDate = payload.dateOfApproval ? new Date(payload.dateOfApproval) : null;
+    const invAppDate = payload.invOfficerAppointmentDate ? new Date(payload.invOfficerAppointmentDate) : null;
+    const complaintAppDate = payload.complaintOfficerAppointmentDate ? new Date(payload.complaintOfficerAppointmentDate) : null;
+    const maintAppDate = payload.maintenanceOfficerAppointmentDate ? new Date(payload.maintenanceOfficerAppointmentDate) : null;
+    const subReportDate = payload.dateSubmissionReport ? new Date(payload.dateSubmissionReport) : null;
+    const subRecAppDate = payload.dateSubmissionRecApproval ? new Date(payload.dateSubmissionRecApproval) : null;
+    const ordStartDate = payload.orderStartDate ? new Date(payload.orderStartDate) : null;
+    const ordEndDate = payload.orderEndDate ? new Date(payload.orderEndDate) : null;
+
+    const effRecommendation = payload.recommendationReport || payload.recommendation || null;
+    const effDisciplineCommand = payload.disciplinaryOrder || payload.disciplineCommand || null;
+    const effOtherDecision = payload.otherDecisions || payload.otherDecision || null;
+
     await prisma.$executeRaw`
       INSERT INTO public.formal_disciplinary_inspection_table (
         ref_number,
+        inv_officer_name,
+        inv_officer_designation,
+        inv_officer_appointment_date,
+        inv_officer_tel,
+        inv_officer_address,
+        complaint_officer_name,
+        complaint_officer_designation,
+        complaint_officer_appointment_date,
+        complaint_officer_tel,
+        complaint_officer_address,
+        maintenance_officer_name,
+        maintenance_officer_designation,
+        maintenance_officer_appointment_date,
+        maintenance_officer_tel,
+        maintenance_officer_address,
+        date_submission_report,
+        recommendation_report,
+        date_submission_rec_approval,
+        recommendation_approved,
+        disciplinary_order,
+        approval_secretary_status,
+        approval_secretary_details,
+        order_start_date,
+        order_end_date,
+        other_decisions,
         recommendation,
         discipline_command,
         date_of_approval,
@@ -7844,14 +7980,64 @@ export async function saveFormalDisciplinaryInspectionServer(payload: FormalDisc
         updated_at
       ) VALUES (
         ${matchedRef},
-        ${payload.recommendation || null},
-        ${payload.disciplineCommand || null},
+        ${payload.invOfficerName || null},
+        ${payload.invOfficerDesignation || null},
+        ${invAppDate},
+        ${payload.invOfficerTel || null},
+        ${payload.invOfficerAddress || null},
+        ${payload.complaintOfficerName || null},
+        ${payload.complaintOfficerDesignation || null},
+        ${complaintAppDate},
+        ${payload.complaintOfficerTel || null},
+        ${payload.complaintOfficerAddress || null},
+        ${payload.maintenanceOfficerName || null},
+        ${payload.maintenanceOfficerDesignation || null},
+        ${maintAppDate},
+        ${payload.maintenanceOfficerTel || null},
+        ${payload.maintenanceOfficerAddress || null},
+        ${subReportDate},
+        ${payload.recommendationReport || null},
+        ${subRecAppDate},
+        ${payload.recommendationApproved || null},
+        ${payload.disciplinaryOrder || null},
+        ${payload.approvalSecretaryStatus || null},
+        ${payload.approvalSecretaryDetails || null},
+        ${ordStartDate},
+        ${ordEndDate},
+        ${payload.otherDecisions || null},
+        ${effRecommendation},
+        ${effDisciplineCommand},
         ${approvalDate},
         ${payload.grantedApproval || null},
-        ${payload.otherDecision || null},
+        ${effOtherDecision},
         NOW()
       )
       ON CONFLICT (ref_number) DO UPDATE SET
+        inv_officer_name = EXCLUDED.inv_officer_name,
+        inv_officer_designation = EXCLUDED.inv_officer_designation,
+        inv_officer_appointment_date = EXCLUDED.inv_officer_appointment_date,
+        inv_officer_tel = EXCLUDED.inv_officer_tel,
+        inv_officer_address = EXCLUDED.inv_officer_address,
+        complaint_officer_name = EXCLUDED.complaint_officer_name,
+        complaint_officer_designation = EXCLUDED.complaint_officer_designation,
+        complaint_officer_appointment_date = EXCLUDED.complaint_officer_appointment_date,
+        complaint_officer_tel = EXCLUDED.complaint_officer_tel,
+        complaint_officer_address = EXCLUDED.complaint_officer_address,
+        maintenance_officer_name = EXCLUDED.maintenance_officer_name,
+        maintenance_officer_designation = EXCLUDED.maintenance_officer_designation,
+        maintenance_officer_appointment_date = EXCLUDED.maintenance_officer_appointment_date,
+        maintenance_officer_tel = EXCLUDED.maintenance_officer_tel,
+        maintenance_officer_address = EXCLUDED.maintenance_officer_address,
+        date_submission_report = EXCLUDED.date_submission_report,
+        recommendation_report = EXCLUDED.recommendation_report,
+        date_submission_rec_approval = EXCLUDED.date_submission_rec_approval,
+        recommendation_approved = EXCLUDED.recommendation_approved,
+        disciplinary_order = EXCLUDED.disciplinary_order,
+        approval_secretary_status = EXCLUDED.approval_secretary_status,
+        approval_secretary_details = EXCLUDED.approval_secretary_details,
+        order_start_date = EXCLUDED.order_start_date,
+        order_end_date = EXCLUDED.order_end_date,
+        other_decisions = EXCLUDED.other_decisions,
         recommendation = EXCLUDED.recommendation,
         discipline_command = EXCLUDED.discipline_command,
         date_of_approval = EXCLUDED.date_of_approval,
@@ -7862,19 +8048,19 @@ export async function saveFormalDisciplinaryInspectionServer(payload: FormalDisc
 
     // 7. Sync with investigation_table & charge_sheet_table
     try {
-      if (payload.recommendation || payload.disciplineCommand || payload.grantedApproval) {
+      if (effRecommendation || effDisciplineCommand || payload.grantedApproval || payload.recommendationApproved) {
         await saveRecommendationServer({
           case_no: caseNo,
           category: "issuing_charge_sheet",
           urgency: "high",
           title: "Formal Disciplinary Inspection",
-          recommendation_text: payload.recommendation || "",
-          disciplinary_action: payload.disciplineCommand || "Formal Disciplinary Inspection",
-          disciplinary_order: payload.disciplineCommand || null,
+          recommendation_text: effRecommendation || "",
+          disciplinary_action: effDisciplineCommand || "Formal Disciplinary Inspection",
+          disciplinary_order: effDisciplineCommand || null,
           secretary_approval_date: payload.dateOfApproval || null,
-          secretary_approved_recommendation: payload.grantedApproval === "Rejection" ? payload.otherDecision : payload.grantedApproval,
+          secretary_approved_recommendation: payload.grantedApproval === "Rejection" ? effOtherDecision : (payload.recommendationApproved || payload.grantedApproval),
           status: payload.grantedApproval === "Rejection" ? "Rejected" : payload.grantedApproval === "Getting approval" ? "Approved" : "In Progress",
-          reference_notes: payload.otherDecision || null,
+          reference_notes: effOtherDecision || null,
         });
       }
     } catch (e) {}
@@ -7907,7 +8093,7 @@ export async function getFormalDisciplinaryInspectionServer(caseRef: string) {
     const resolved = await resolveSubjectFileDetails(clean);
     const matchedRef = resolved.refNumber || clean;
 
-    // 1. Fetch Chairman
+    // 1. Fetch Chairman (Fallback)
     let chairman = { name: "", fullName: "", email: "", idNo: "" };
     try {
       const chairRows: any[] = await prisma.$queryRaw`
@@ -7926,7 +8112,7 @@ export async function getFormalDisciplinaryInspectionServer(caseRef: string) {
       }
     } catch (e) {}
 
-    // 2. Fetch Members
+    // 2. Fetch Members (Fallback)
     let members: Array<{ name: string; email: string; idNo: string }> = [];
     try {
       const memberRows: any[] = await prisma.$queryRaw`
@@ -7989,6 +8175,37 @@ export async function getFormalDisciplinaryInspectionServer(caseRef: string) {
     let grantedApproval = "Getting approval";
     let otherDecision = "";
 
+    // Investigation committee details (matching paper sketch)
+    let invOfficerName = "";
+    let invOfficerDesignation = "";
+    let invOfficerAppointmentDate = "";
+    let invOfficerTel = "";
+    let invOfficerAddress = "";
+
+    let complaintOfficerName = "";
+    let complaintOfficerDesignation = "";
+    let complaintOfficerAppointmentDate = "";
+    let complaintOfficerTel = "";
+    let complaintOfficerAddress = "";
+
+    let maintenanceOfficerName = "";
+    let maintenanceOfficerDesignation = "";
+    let maintenanceOfficerAppointmentDate = "";
+    let maintenanceOfficerTel = "";
+    let maintenanceOfficerAddress = "";
+
+    // Detailed Proceedings fields matching latest sketch
+    let dateSubmissionReport = "";
+    let recommendationReport = "";
+    let dateSubmissionRecApproval = "";
+    let recommendationApproved = "";
+    let disciplinaryOrder = "";
+    let approvalSecretaryStatus = "";
+    let approvalSecretaryDetails = "";
+    let orderStartDate = "";
+    let orderEndDate = "";
+    let otherDecisions = "";
+
     try {
       const formalRows: any[] = await prisma.$queryRaw`
         SELECT * FROM formal_disciplinary_inspection_table
@@ -8005,8 +8222,69 @@ export async function getFormalDisciplinaryInspectionServer(caseRef: string) {
         }
         grantedApproval = fr.granted_approval || "Getting approval";
         otherDecision = fr.other_decision || "";
+
+        // Officer conducting the investigation
+        invOfficerName = fr.inv_officer_name || "";
+        invOfficerDesignation = fr.inv_officer_designation || "";
+        if (fr.inv_officer_appointment_date) {
+          invOfficerAppointmentDate = new Date(fr.inv_officer_appointment_date).toISOString().split("T")[0];
+        }
+        invOfficerTel = fr.inv_officer_tel || "";
+        invOfficerAddress = fr.inv_officer_address || "";
+
+        // Officer conducting the complaint
+        complaintOfficerName = fr.complaint_officer_name || "";
+        complaintOfficerDesignation = fr.complaint_officer_designation || "";
+        if (fr.complaint_officer_appointment_date) {
+          complaintOfficerAppointmentDate = new Date(fr.complaint_officer_appointment_date).toISOString().split("T")[0];
+        }
+        complaintOfficerTel = fr.complaint_officer_tel || "";
+        complaintOfficerAddress = fr.complaint_officer_address || "";
+
+        // Officer conducting the maintenance
+        maintenanceOfficerName = fr.maintenance_officer_name || "";
+        maintenanceOfficerDesignation = fr.maintenance_officer_designation || "";
+        if (fr.maintenance_officer_appointment_date) {
+          maintenanceOfficerAppointmentDate = new Date(fr.maintenance_officer_appointment_date).toISOString().split("T")[0];
+        }
+        maintenanceOfficerTel = fr.maintenance_officer_tel || "";
+        maintenanceOfficerAddress = fr.maintenance_officer_address || "";
+
+        // Detailed Proceedings matching latest sketch
+        if (fr.date_submission_report) {
+          dateSubmissionReport = new Date(fr.date_submission_report).toISOString().split("T")[0];
+        }
+        recommendationReport = fr.recommendation_report || fr.recommendation || "";
+        if (fr.date_submission_rec_approval) {
+          dateSubmissionRecApproval = new Date(fr.date_submission_rec_approval).toISOString().split("T")[0];
+        }
+        recommendationApproved = fr.recommendation_approved || "";
+        disciplinaryOrder = fr.disciplinary_order || fr.discipline_command || "";
+        approvalSecretaryStatus = fr.approval_secretary_status || (fr.granted_approval === "Rejection" ? "not received" : fr.granted_approval ? "Received" : "");
+        approvalSecretaryDetails = fr.approval_secretary_details || "";
+        if (fr.order_start_date) {
+          orderStartDate = new Date(fr.order_start_date).toISOString().split("T")[0];
+        }
+        if (fr.order_end_date) {
+          orderEndDate = new Date(fr.order_end_date).toISOString().split("T")[0];
+        }
+        otherDecisions = fr.other_decisions || fr.other_decision || "";
       }
     } catch (e) {}
+
+    // Fallback: If new committee fields empty, check if chairman / members exist
+    if (!invOfficerName && chairman.name) {
+      invOfficerName = chairman.name;
+      invOfficerTel = chairman.email;
+    }
+    if (!complaintOfficerName && members.length > 0 && members[0]?.name) {
+      complaintOfficerName = members[0].name;
+      complaintOfficerTel = members[0].email;
+    }
+    if (!maintenanceOfficerName && members.length > 1 && members[1]?.name) {
+      maintenanceOfficerName = members[1].name;
+      maintenanceOfficerTel = members[1].email;
+    }
 
     // Fallback to investigation_table / charge_sheet_table if empty
     if (!recommendation || !disciplineCommand) {
@@ -8020,11 +8298,14 @@ export async function getFormalDisciplinaryInspectionServer(caseRef: string) {
         if (invRows && invRows.length > 0) {
           const ir = invRows[0];
           if (!recommendation) recommendation = ir.investigation_recommendation || "";
+          if (!recommendationReport) recommendationReport = recommendation;
           if (!disciplineCommand) disciplineCommand = ir.circular_reference || "";
+          if (!disciplinaryOrder) disciplinaryOrder = disciplineCommand;
           if (!dateOfApproval && ir.date_approved_by_secretory) {
             dateOfApproval = new Date(ir.date_approved_by_secretory).toISOString().split("T")[0];
           }
           if (!otherDecision) otherDecision = ir.secretory_recommendation || "";
+          if (!otherDecisions) otherDecisions = otherDecision;
         }
       } catch (e) {}
     }
@@ -8036,11 +8317,38 @@ export async function getFormalDisciplinaryInspectionServer(caseRef: string) {
         refNumber: matchedRef,
         chairman,
         members,
+        // 3 Investigation Committee Officers matching paper sketch
+        invOfficerName,
+        invOfficerDesignation,
+        invOfficerAppointmentDate,
+        invOfficerTel,
+        invOfficerAddress,
+        complaintOfficerName,
+        complaintOfficerDesignation,
+        complaintOfficerAppointmentDate,
+        complaintOfficerTel,
+        complaintOfficerAddress,
+        maintenanceOfficerName,
+        maintenanceOfficerDesignation,
+        maintenanceOfficerAppointmentDate,
+        maintenanceOfficerTel,
+        maintenanceOfficerAddress,
         appointmentLetterDate,
         reportDueDate,
         extensionTerm,
         extensionStartDate,
         extensionEndDate,
+        // Proceedings matching latest sketch
+        dateSubmissionReport,
+        recommendationReport,
+        dateSubmissionRecApproval,
+        recommendationApproved,
+        disciplinaryOrder,
+        approvalSecretaryStatus,
+        approvalSecretaryDetails,
+        orderStartDate,
+        orderEndDate,
+        otherDecisions,
         recommendation,
         disciplineCommand,
         dateOfApproval,

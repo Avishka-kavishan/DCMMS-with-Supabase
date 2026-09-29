@@ -81,3 +81,57 @@ CREATE TABLE IF NOT EXISTS accused_officer_subject_officer_form_table (
     subject_officer_form_id BIGINT NOT NULL REFERENCES subject_officer_form_table(id) ON DELETE CASCADE,
     PRIMARY KEY (accused_officer_id, subject_officer_form_id)
 );
+
+-- 8. Formal Disciplinary Inspection Details Table
+CREATE TABLE IF NOT EXISTS formal_disciplinary_inspection_table (
+    id BIGSERIAL PRIMARY KEY,
+    ref_number VARCHAR(100) NOT NULL UNIQUE REFERENCES subject_officer_form_table(ref_number) ON DELETE CASCADE ON UPDATE CASCADE,
+    
+    -- Section 2: Investigation Committee Details
+    inv_officer_name TEXT,
+    inv_officer_designation TEXT,
+    inv_officer_appointment_date DATE,
+    inv_officer_tel VARCHAR(50),
+    inv_officer_address TEXT,
+
+    complaint_officer_name TEXT,
+    complaint_officer_designation TEXT,
+    complaint_officer_appointment_date DATE,
+    complaint_officer_tel VARCHAR(50),
+    complaint_officer_address TEXT,
+
+    maintenance_officer_name TEXT,
+    maintenance_officer_designation TEXT,
+    maintenance_officer_appointment_date DATE,
+    maintenance_officer_tel VARCHAR(50),
+    maintenance_officer_address TEXT,
+
+    -- Section 3: Disciplinary Investigation Proceedings (Steps 1 to 8)
+    date_submission_report DATE,
+    recommendation_report TEXT,
+    date_submission_rec_approval DATE,
+    date_of_approval DATE,
+    recommendation_approved VARCHAR(50),
+    disciplinary_order TEXT,
+    approval_secretary_status VARCHAR(50),
+    approval_secretary_details TEXT,
+    order_start_date DATE,
+    order_end_date DATE,
+    other_decisions TEXT,
+
+    -- Legacy & Compatibility columns
+    recommendation TEXT,
+    discipline_command TEXT,
+    granted_approval VARCHAR(100),
+    other_decision TEXT,
+
+    -- Audit Timestamps
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_formal_disc_inspection_ref_number ON formal_disciplinary_inspection_table(ref_number);
+CREATE INDEX IF NOT EXISTS idx_formal_disc_inspection_date_sub ON formal_disciplinary_inspection_table(date_submission_report);
+CREATE INDEX IF NOT EXISTS idx_formal_disc_inspection_rec_app ON formal_disciplinary_inspection_table(recommendation_approved);
+CREATE INDEX IF NOT EXISTS idx_formal_disc_inspection_sec_status ON formal_disciplinary_inspection_table(approval_secretary_status);
+
