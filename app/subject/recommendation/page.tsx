@@ -260,10 +260,13 @@ function RecommendationFormContent() {
           dateDraftSubmittedPsc: r.dateDraftSubmittedPsc ? String(r.dateDraftSubmittedPsc).slice(0, 10) : "",
           agreeWithPscDecision: r.agreeWithPscDecision || r.agree_with_psc_decision || "",
           secretaryApprovalDate: r.secretaryApprovalDate ? String(r.secretaryApprovalDate).slice(0, 10) : "",
-          secretaryApprovedRecommendation: r.secretaryApprovedRecommendation || r.secretary_approved_recommendation,
           status: r.status || "Submitted",
           submittedAt: r.submittedAt || r.submitted_at,
           updatedAt: r.updatedAt || r.updated_at,
+          accusedName: r.accusedName || r.accused_officer_name || "",
+          accusedDesignation: r.accusedDesignation || r.accused_designation || r.position || "",
+          schoolName: r.schoolName || r.school_name || r.accused_school_name || "",
+          subject: r.subject || r.mailSubject || "",
         }));
       }
     } catch (err) {

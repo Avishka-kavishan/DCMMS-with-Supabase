@@ -254,6 +254,24 @@ function CaseDetailsForm() {
 
   const isUserEditingReportStateRef = useRef(false);
 
+  const isFinalizeAccordingToSecretary = (val?: string | null): boolean => {
+    if (!val) return false;
+    const lower = String(val).toLowerCase().trim();
+    return (
+      lower === "finalize the file according to the additional secretary's instruction" ||
+      lower === "actionfinalizefileaccordingtosecretary" ||
+      lower.includes("finalize the file") ||
+      lower.includes("additional secretary's instruction") ||
+      lower.includes("additional secretary") ||
+      lower.includes("අතිරේක ලේකම්ගේ උපදෙස්") ||
+      lower.includes("අතිරේක ලේකම්") ||
+      lower.includes("ගොනුව අවසන්") ||
+      lower.includes("අවසන් කිරීම") ||
+      lower.includes("கூடுதல் செயலாளர்") ||
+      lower.includes("இறுதி செய்தல்")
+    );
+  };
+
   const normalizeReportState = (val: string | null | undefined): string => {
     if (!val) return "";
     const trimmed = String(val).trim();
@@ -290,7 +308,14 @@ function CaseDetailsForm() {
     if (
       lower.includes("finalize the file according to the additional secretary's instruction") ||
       lower.includes("actionfinalizefileaccordingtosecretary") ||
-      lower.includes("අතිරේක ලේකම්ගේ උපදෙස්")
+      lower.includes("finalize the file") ||
+      lower.includes("additional secretary") ||
+      lower.includes("අතිරේක ලේකම්ගේ උපදෙස්") ||
+      lower.includes("අතිරේක ලේකම්") ||
+      lower.includes("ගොනුව අවසන්") ||
+      lower.includes("අවසන් කිරීම") ||
+      lower.includes("கூடுதல் செயலாளர்") ||
+      lower.includes("இறுதி செய்தல்")
     ) {
       return "Finalize the file according to the additional secretary's instruction";
     }
@@ -1162,6 +1187,7 @@ function CaseDetailsForm() {
   };
 
   const saveCaseData = async (status: string, isDraftMode = false) => {
+    const isFinalizeFile = isFinalizeAccordingToSecretary(reportState) || status === "Closed";
     const actionId = `action-${refNo}-${Date.now()}`;
     const serializedStepTaken = `[EduSecApproval:${eduSecretaryApproval}${eduSecretaryApproval === "yes" && approvalDate ? `|Date:${approvalDate}` : ""}]`;
     const computedFutureAction = isPreliminaryInvestigation
@@ -1293,7 +1319,7 @@ function CaseDetailsForm() {
           id: actionId,
           case_no: refNo,
           received_date: receivedDate || null,
-          report_state: status,
+          report_state: isFinalizeFile ? "Closed" : status,
           special_notes: specialNotes || null,
           subject_officer_name: subjectOfficer || null,
           step_taken: serializedStepTaken || null,
@@ -1322,6 +1348,8 @@ function CaseDetailsForm() {
 
         const finalCaseStatus = isPreliminaryInvestigation
           ? computedFutureAction
+          : isFinalizeFile
+          ? "Closed"
           : (isInspectionOrInquiry ? "Conducting an Inquiry" : (status || "In Progress"));
 
         const isInstitutionalBasic =
@@ -1368,7 +1396,9 @@ function CaseDetailsForm() {
             subject_officer_name: subjectOfficer || "Subject Officer",
             assigned_officers: isInstitutionalBasic ? invAdminDisplayName : undefined,
             status: finalCaseStatus,
-            progress_details: isInstitutionalBasic ? `Assigned to Investigation Administrator for Institutional Basic Investigation` : undefined,
+            progress_details: isFinalizeFile
+              ? "File finalized according to additional secretary's instruction (Closed)"
+              : (isInstitutionalBasic ? `Assigned to Investigation Administrator for Institutional Basic Investigation` : undefined),
             updated_at: new Date().toISOString(),
           }, { onConflict: "case_no" });
         } catch (asgnErr) {}
@@ -1495,6 +1525,8 @@ function CaseDetailsForm() {
 
       const localStatus = isPreliminaryInvestigation
         ? computedFutureAction
+        : isFinalizeFile
+        ? "Closed"
         : (isInspectionOrInquiry ? "Conducting an Inquiry" : (status || "In Progress"));
 
       // Save actions to a list
@@ -1556,10 +1588,10 @@ function CaseDetailsForm() {
           return {
             ...c,
             status: localStatus,
-            stage: isInspectionOrInquiry ? "Conducting an Inquiry" : c.stage,
-            stageKey: isInspectionOrInquiry ? "inquiry" : c.stageKey,
+            stage: isFinalizeFile ? "Closed" : (isInspectionOrInquiry ? "Conducting an Inquiry" : c.stage),
+            stageKey: isFinalizeFile ? "closed" : (isInspectionOrInquiry ? "inquiry" : c.stageKey),
             upcomingAction: computedFutureAction,
-            isOld: complaintAge === "old",
+            isOld: isFinalizeFile ? true : (complaintAge === "old"),
             assignedOfficer: isInstitutionalBasic ? invAdminDisplayName : c.assignedOfficer,
             officerName: isInstitutionalBasic ? invAdminDisplayName : c.officerName,
           };
@@ -1574,13 +1606,13 @@ function CaseDetailsForm() {
           refNo: refNo,
           subject: complaintMatter || `Assigned Case (${refNo})`,
           status: localStatus,
-          stage: isInspectionOrInquiry ? "Conducting an Inquiry" : "In Progress",
-          stageKey: isInspectionOrInquiry ? "inquiry" : "in_progress",
+          stage: isFinalizeFile ? "Closed" : (isInspectionOrInquiry ? "Conducting an Inquiry" : "In Progress"),
+          stageKey: isFinalizeFile ? "closed" : (isInspectionOrInquiry ? "inquiry" : "in_progress"),
           upcomingAction: computedFutureAction,
           priority: priority || "medium",
           assignedDate: receivedDate || new Date().toISOString().split("T")[0],
           receivedDate: receivedDate || new Date().toISOString().split("T")[0],
-          isOld: complaintAge === "old",
+          isOld: isFinalizeFile ? true : (complaintAge === "old"),
           assignedOfficer: isInstitutionalBasic ? invAdminDisplayName : (subjectOfficer || "Subject Officer"),
           officerName: isInstitutionalBasic ? invAdminDisplayName : (subjectOfficer || "Subject Officer"),
         });
@@ -1602,7 +1634,7 @@ function CaseDetailsForm() {
                 instituteName: schoolName,
                 subject: complaintMatter || l.subject,
                 regionProvince: classification === "anonymous" ? "Anonymous" : "Nominal",
-                isProcessedAnswer: isAnswerLetter || isInspectionOrInquiry,
+                isProcessedAnswer: isAnswerLetter || isInspectionOrInquiry || isFinalizeFile,
                 upcomingAction: computedFutureAction,
                 status: localStatus,
                 action_officer: isInstitutionalBasic ? invAdminDisplayName : l.action_officer,
@@ -1619,43 +1651,47 @@ function CaseDetailsForm() {
       }
 
       // Update subject assignments in localStorage
-      if (isInstitutionalBasic) {
-        try {
-          const storedAsgns = localStorage.getItem("dcmms_subject_assignments") || "[]";
-          let asgnList = JSON.parse(storedAsgns);
-          if (!Array.isArray(asgnList)) asgnList = [];
-          let asgnFound = false;
-          asgnList = asgnList.map((a: any) => {
-            if ((a.case_no || a.caseNo) === refNo) {
-              asgnFound = true;
-              return {
-                ...a,
-                status: localStatus,
-                assigned_officers: invAdminDisplayName,
-                assignedOfficers: invAdminDisplayName,
-                progress_details: `Assigned to Investigation Administrator for Institutional Basic Investigation`,
-                updated_at: new Date().toISOString(),
-              };
-            }
-            return a;
-          });
-          if (!asgnFound) {
-            asgnList.push({
-              id: `asgn-${refNo}`,
-              case_no: refNo,
-              caseNo: refNo,
-              subject_officer_name: subjectOfficer,
-              assigned_officers: invAdminDisplayName,
+      try {
+        const storedAsgns = localStorage.getItem("dcmms_subject_assignments") || "[]";
+        let asgnList = JSON.parse(storedAsgns);
+        if (!Array.isArray(asgnList)) asgnList = [];
+        let asgnFound = false;
+        asgnList = asgnList.map((a: any) => {
+          if ((a.case_no || a.caseNo) === refNo) {
+            asgnFound = true;
+            return {
+              ...a,
               status: localStatus,
-              assigned_date: receivedDate || new Date().toISOString().split("T")[0],
-              progress_details: `Assigned to Investigation Administrator for Institutional Basic Investigation`,
-              created_at: new Date().toISOString(),
+              assigned_officers: isInstitutionalBasic ? invAdminDisplayName : a.assigned_officers,
+              assignedOfficers: isInstitutionalBasic ? invAdminDisplayName : a.assignedOfficers,
+              progress_details: isFinalizeFile
+                ? "File finalized according to additional secretary's instruction (Closed)"
+                : (isInstitutionalBasic ? `Assigned to Investigation Administrator for Institutional Basic Investigation` : a.progress_details),
               updated_at: new Date().toISOString(),
-            });
+            };
           }
-          localStorage.setItem("dcmms_subject_assignments", JSON.stringify(asgnList));
-        } catch (e) {}
+          return a;
+        });
+        if (!asgnFound && (isInstitutionalBasic || isFinalizeFile)) {
+          asgnList.push({
+            id: `asgn-${refNo}`,
+            case_no: refNo,
+            caseNo: refNo,
+            subject_officer_name: subjectOfficer,
+            assigned_officers: isInstitutionalBasic ? invAdminDisplayName : (subjectOfficer || "Subject Officer"),
+            status: localStatus,
+            assigned_date: receivedDate || new Date().toISOString().split("T")[0],
+            progress_details: isFinalizeFile
+              ? "File finalized according to additional secretary's instruction (Closed)"
+              : `Assigned to Investigation Administrator for Institutional Basic Investigation`,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+        }
+        localStorage.setItem("dcmms_subject_assignments", JSON.stringify(asgnList));
+      } catch (e) {}
 
+      if (isInstitutionalBasic) {
         try {
           const notifKey = "dcmms_notifications";
           const storedNotifs = localStorage.getItem(notifKey) || "[]";
@@ -1687,7 +1723,7 @@ function CaseDetailsForm() {
             if ((sm.caseNo || sm.case_no || sm.refNo) === refNo) {
               return {
                 ...sm,
-                isProcessedAnswer: isAnswerLetter || isInspectionOrInquiry,
+                isProcessedAnswer: isAnswerLetter || isInspectionOrInquiry || isFinalizeFile,
                 upcomingAction: computedFutureAction,
                 status: localStatus,
               };
@@ -1713,6 +1749,8 @@ function CaseDetailsForm() {
       return;
     }
 
+    const isFinalizeFile = isFinalizeAccordingToSecretary(reportState);
+
     const isConductInspectionOrInquiry =
       reportState === "Conduct an inspection" ||
       reportState === "statusInquiry" ||
@@ -1732,9 +1770,11 @@ function CaseDetailsForm() {
           : "Institutional Basic Investigation")
       : (reportState || "");
 
-    const finalStatus = isPreliminaryInvestigation
-      ? computedAction
-      : (isConductInspectionOrInquiry ? "Conducting an Inquiry" : (reportState || "In Progress"));
+    const finalStatus = isFinalizeFile
+      ? "Closed"
+      : (isPreliminaryInvestigation
+          ? computedAction
+          : (isConductInspectionOrInquiry ? "Conducting an Inquiry" : (reportState || "In Progress")));
 
     await saveCaseData(finalStatus, false);
     if (typeof window !== "undefined") {
@@ -1771,6 +1811,15 @@ function CaseDetailsForm() {
           : "Case details updated successfully! The case has been moved to the Conducting an inquiry tab."
       );
       router.push(`/subject?tab=conducting_inquiry&caseNo=${encodeURIComponent(refNo)}`);
+    } else if (isFinalizeFile) {
+      alert(
+        lang === "si"
+          ? "නඩුවේ විස්තර සාර්ථකව සුරකින ලදී! අතිරේක ලේකම්ගේ උපදෙස් පරිදි ලිපිය අවසන් කරන ලදී (Closed)."
+          : lang === "ta"
+          ? "வழக்கு விவரங்கள் வெற்றிகரமாக சேமிக்கப்பட்டன! கூடுதல் செயலாளரின் அறிவுறுத்தலின்படி கடிதம் முடிக்கப்பட்டது (Closed)."
+          : "Case details saved successfully! The letter has been closed according to the additional secretary's instruction."
+      );
+      router.push("/subject");
     } else {
       alert("Case details updated successfully!");
       router.push("/subject");

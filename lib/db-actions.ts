@@ -1329,6 +1329,19 @@ export async function getSubjectOfficerDashboardCasesServer(targetOfficerName?: 
     const mappedCases: any[] = [];
     const fetchedCaseNos = new Set<string>();
 
+    const finalizedCaseNos = replyLettersRaw
+      .filter((r: any) => {
+        const act = String(r.upcoming_action || "").toLowerCase();
+        return (
+          act.includes("finalize") ||
+          act.includes("additional secretary") ||
+          act.includes("අතිරේක ලේකම්") ||
+          act.includes("අවසන් කිරීම") ||
+          act.includes("ගොනුව අවසන්")
+        );
+      })
+      .map((r: any) => String(r.ref_number || r.file_no || "").trim().toLowerCase());
+
     // Build mapped cases (Complaint cases for Tab 1)
     subjectCasesRaw.forEach((item: any) => {
       const isAnsStatus = String(item.status || "").toLowerCase().includes("answer");
@@ -1342,6 +1355,8 @@ export async function getSubjectOfficerDashboardCasesServer(targetOfficerName?: 
         const rawItemPri = item.priority && item.priority.toLowerCase() !== "normal" ? item.priority : "";
         const rawMetaPri = meta.priority && meta.priority.toLowerCase() !== "normal" ? meta.priority : "";
         const resolvedPriority = (rawMetaPri || rawItemPri || item.priority || meta.priority || "medium").toLowerCase();
+
+        const isClosed = item.status === "Closed" || finalizedCaseNos.includes(item.case_no.toLowerCase());
 
         mappedCases.push({
           id: item.id || `case-${item.case_no}`,
@@ -1358,9 +1373,9 @@ export async function getSubjectOfficerDashboardCasesServer(targetOfficerName?: 
           createdAt: item.created_at ? new Date(item.created_at).toISOString() : refToCreatedAt.get(item.case_no),
           subject: resolvedSubject,
           priority: resolvedPriority,
-          status: item.status || "In Progress",
+          status: isClosed ? "Closed" : (item.status || "In Progress"),
           upcomingAction: refToUpcomingAction.get(item.case_no.toLowerCase()) || "",
-          isOld: casesWithDetails.has(item.case_no) || item.status === "Closed" || item.status === "Pending",
+          isOld: casesWithDetails.has(item.case_no) || isClosed || item.status === "Pending",
         });
       }
     });
@@ -1372,6 +1387,8 @@ export async function getSubjectOfficerDashboardCasesServer(targetOfficerName?: 
         const rawMetaSub = meta.subject && meta.subject !== "N/A" && meta.subject !== "—" ? meta.subject : "";
         const resolvedSubject = rawMetaSub || `Assigned Case (${refNo})`;
         const resolvedPriority = (meta.priority || "medium").toLowerCase();
+
+        const isClosed = finalizedCaseNos.includes(String(refNo).toLowerCase());
 
         mappedCases.push({
           id: `case-${refNo}`,
@@ -1388,9 +1405,9 @@ export async function getSubjectOfficerDashboardCasesServer(targetOfficerName?: 
           createdAt: refToCreatedAt.get(refNo) || new Date().toISOString(),
           subject: resolvedSubject,
           priority: resolvedPriority,
-          status: "In Progress",
+          status: isClosed ? "Closed" : "In Progress",
           upcomingAction: refToUpcomingAction.get(String(refNo).toLowerCase()) || "",
-          isOld: casesWithDetails.has(refNo),
+          isOld: casesWithDetails.has(refNo) || isClosed,
         });
       }
     });
@@ -1429,26 +1446,29 @@ export async function getSubjectOfficerDashboardCasesServer(targetOfficerName?: 
       const cNo = String(a.case_no || "").trim();
       const cNoLower = cNo.toLowerCase();
       const inInquiry = inquiryCaseNos.includes(cNoLower);
+      const isClosed = asgnStatus === "closed" || finalizedCaseNos.includes(cNoLower);
 
       const isAnsAssignment = asgnStatus.includes("answer") || asgnStatus.includes("reply") || asgnStatus.includes("පිළිතුරු");
 
       if ((isAnsAssignment || inInquiry) && cNo && isOfficerMatched(asgnOfficer)) {
-        const itemKey = `asgn-answer-${cNo}`;
+        const itemKey = cNoLower;
         if (!seenAnswerIds.has(itemKey)) {
           seenAnswerIds.add(itemKey);
           // Try to enrich with letter data
           const letterData = refToLetterData.get(cNoLower) || {};
+          const rawSub = letterData.subject && letterData.subject !== "N/A" && letterData.subject !== "—" ? letterData.subject : "";
+          const resolvedSub = rawSub || a.progress_details || (letterData.subject_category ? `Answer Letter (${letterData.subject_category})` : `Answer Letter (${cNo})`);
           answerLettersList.push({
             id: a.id || `asgn-${cNo}`,
             caseNo: cNo,
-            letterTitle: letterData.subject || a.progress_details || `Answer Letter (${cNo})`,
-            subject: letterData.subject || `Answer Letter (${cNo})`,
+            letterTitle: resolvedSub,
+            subject: resolvedSub,
             senderName: letterData.sender || "Sender",
             receivedDate: letterData.received_date || (a.assigned_date ? new Date(a.assigned_date).toISOString().split("T")[0] : ""),
             mailDate: letterData.letter_date || letterData.received_date || (a.assigned_date ? new Date(a.assigned_date).toISOString().split("T")[0] : ""),
             letterDate: letterData.letter_date || letterData.received_date || (a.assigned_date ? new Date(a.assigned_date).toISOString().split("T")[0] : ""),
             officerName: asgnOfficer || activeNameClean,
-            status: "Assigned Answer Letter",
+            status: isClosed ? "Closed" : "Assigned Answer Letter",
             isAnswerLetter: true,
             nature: letterData.nature_of_letter || letterData.region_province || "Answer Letter",
           });
@@ -1462,25 +1482,28 @@ export async function getSubjectOfficerDashboardCasesServer(targetOfficerName?: 
       const scOfficer = sc.officer_name || "";
       const cNo = String(sc.case_no || "").trim();
       const cNoLower = cNo.toLowerCase();
+      const isClosed = scStatus === "closed" || finalizedCaseNos.includes(cNoLower);
 
       const isAnsCase = scStatus.includes("answer") || scStatus.includes("reply");
 
       if (isAnsCase && cNo && isOfficerMatched(scOfficer)) {
-        const itemKey = `subj-answer-${cNo}`;
+        const itemKey = cNoLower;
         if (!seenAnswerIds.has(itemKey)) {
           seenAnswerIds.add(itemKey);
           const letterData = refToLetterData.get(cNoLower) || {};
+          const rawSub = letterData.subject && letterData.subject !== "N/A" && letterData.subject !== "—" ? letterData.subject : "";
+          const resolvedSub = rawSub || (sc.subject && sc.subject !== "N/A" && sc.subject !== "—" ? sc.subject : "") || (letterData.subject_category ? `Answer Letter (${letterData.subject_category})` : `Answer Letter (${cNo})`);
           answerLettersList.push({
             id: sc.id || `case-${cNo}`,
             caseNo: cNo,
-            letterTitle: letterData.subject || sc.subject || `Answer Letter (${cNo})`,
-            subject: letterData.subject || sc.subject || `Answer Letter (${cNo})`,
+            letterTitle: resolvedSub,
+            subject: resolvedSub,
             senderName: letterData.sender || "Sender",
             receivedDate: letterData.received_date || (sc.received_date ? new Date(sc.received_date).toISOString().split("T")[0] : ""),
             mailDate: letterData.letter_date || letterData.received_date || (sc.letter_date ? new Date(sc.letter_date).toISOString().split("T")[0] : ""),
             letterDate: letterData.letter_date || letterData.received_date || (sc.letter_date ? new Date(sc.letter_date).toISOString().split("T")[0] : ""),
             officerName: scOfficer || activeNameClean,
-            status: "Assigned Answer Letter",
+            status: isClosed ? "Closed" : "Assigned Answer Letter",
             isAnswerLetter: true,
             nature: letterData.nature_of_letter || letterData.region_province || "Answer Letter",
           });
@@ -1493,22 +1516,25 @@ export async function getSubjectOfficerDashboardCasesServer(targetOfficerName?: 
       const isAns = checkIsAnswerLetter(l);
       const cleanRef = String(l.ref_no || l.letter_no || "").trim().toLowerCase();
       const inInquiry = inquiryCaseNos.includes(cleanRef);
+      const isClosed = String(l.status || "").toLowerCase() === "closed" || finalizedCaseNos.includes(cleanRef);
 
       if ((isAns || inInquiry) && isLetterAssignedToOfficer(l)) {
-        const itemKey = `mail-${l.ref_no || l.letter_no}-${l.id}`;
+        const itemKey = cleanRef;
         if (!seenAnswerIds.has(itemKey)) {
           seenAnswerIds.add(itemKey);
+          const rawSub = l.subject && l.subject !== "N/A" && l.subject !== "—" ? l.subject : "";
+          const resolvedSub = rawSub || (l.subject_category ? `Answer Letter (${l.subject_category})` : `Answer Letter (${l.ref_no || l.letter_no})`);
           answerLettersList.push({
             id: l.id,
             caseNo: l.ref_no || l.letter_no || l.id,
-            letterTitle: l.subject || "Answer Letter",
-            subject: l.subject || "Answer Letter",
+            letterTitle: resolvedSub,
+            subject: resolvedSub,
             senderName: l.sender || "Sender",
             receivedDate: l.received_date,
             mailDate: l.letter_date || l.received_date,
             letterDate: l.letter_date || l.received_date,
             officerName: l.action_officer || l.forwarded_to || l.officer_name || activeNameClean,
-            status: "Assigned Answer Letter",
+            status: isClosed ? "Closed" : "Assigned Answer Letter",
             isAnswerLetter: true,
             nature: l.nature_of_letter || l.region_province || "Answer Letter",
           });
@@ -1521,22 +1547,24 @@ export async function getSubjectOfficerDashboardCasesServer(targetOfficerName?: 
       const sOfficer = m.mail_officer_name || "";
       const cleanRef = String(m.case_no || "").trim().toLowerCase();
       const inInquiry = inquiryCaseNos.includes(cleanRef);
+      const isClosed = String(m.status || "").toLowerCase() === "closed" || finalizedCaseNos.includes(cleanRef);
 
       if ((isAns || inInquiry) && (isOfficerMatched(sOfficer) || (cleanRef && assignedCaseNosSet.has(cleanRef)))) {
-        const itemKey = `submail-${m.case_no}-${m.id}`;
+        const itemKey = cleanRef;
         if (!seenAnswerIds.has(itemKey)) {
           seenAnswerIds.add(itemKey);
+          const resolvedSub = m.letter_title || `Subsequent Answer Letter (${m.case_no})`;
           answerLettersList.push({
             id: m.id,
             caseNo: m.case_no,
-            letterTitle: m.letter_title || "Subsequent Answer Letter",
-            subject: m.letter_title || "Subsequent Answer Letter",
+            letterTitle: resolvedSub,
+            subject: resolvedSub,
             senderName: m.sender_name || "Sender",
             receivedDate: m.received_date ? new Date(m.received_date).toISOString().split("T")[0] : "",
             mailDate: m.mail_date ? new Date(m.mail_date).toISOString().split("T")[0] : "",
             letterDate: m.mail_date ? new Date(m.mail_date).toISOString().split("T")[0] : "",
             officerName: sOfficer || activeNameClean,
-            status: "Assigned Answer Letter",
+            status: isClosed ? "Closed" : "Assigned Answer Letter",
             isAnswerLetter: true,
             nature: "Answer Letter",
           });
@@ -7677,8 +7705,14 @@ export async function getRecommendationsListServer() {
           r.status,
           r.submitted_at as "submittedAt",
           r.created_at as "createdAt",
-          r.updated_at as "updatedAt"
+          r.updated_at as "updatedAt",
+          ao.accused_officer_name as "accusedName",
+          ao.position as "accusedDesignation",
+          sch.accused_school_name as "schoolName"
         FROM public.dcmms_recommendations r
+        LEFT JOIN subject_officer_form_table sof ON (LOWER(TRIM(r.case_no)) = LOWER(TRIM(sof.ref_number)) OR LOWER(TRIM(r.case_no)) = LOWER(TRIM(sof.subject_file_no)))
+        LEFT JOIN accused_officer_table ao ON sof.accused_officer_id = ao.id
+        LEFT JOIN accused_school_table sch ON ao.accused_school_id = sch.id
         ORDER BY r.updated_at DESC;
       `;
 
@@ -7691,6 +7725,9 @@ export async function getRecommendationsListServer() {
             if (item.urgency) existing.urgency = item.urgency;
             if (item.title) existing.title = item.title;
             if (item.forwardTo) existing.forwardTo = item.forwardTo;
+            if (item.accusedName && !existing.accusedName) existing.accusedName = item.accusedName;
+            if (item.accusedDesignation && !existing.accusedDesignation) existing.accusedDesignation = item.accusedDesignation;
+            if (item.schoolName && !existing.schoolName) existing.schoolName = item.schoolName;
             if (item.issuedChargeSheet && !existing.issuedChargeSheet) existing.issuedChargeSheet = item.issuedChargeSheet;
             if (item.chargeSheetIssuedDate && !existing.chargeSheetIssuedDate) existing.chargeSheetIssuedDate = new Date(item.chargeSheetIssuedDate).toISOString().slice(0, 10);
             if (item.chargeSheetResponseDate && !existing.chargeSheetResponseDate) existing.chargeSheetResponseDate = new Date(item.chargeSheetResponseDate).toISOString().slice(0, 10);
@@ -7730,6 +7767,9 @@ export async function getRecommendationsListServer() {
               submittedAt: item.submittedAt ? new Date(item.submittedAt).toISOString() : "",
               createdAt: item.createdAt ? new Date(item.createdAt).toISOString() : "",
               updatedAt: item.updatedAt ? new Date(item.updatedAt).toISOString() : "",
+              accusedName: item.accusedName || "",
+              accusedDesignation: item.accusedDesignation || "",
+              schoolName: item.schoolName || "",
             });
           }
         }
@@ -7909,7 +7949,7 @@ async function ensureReplyLetterDetailsTable() {
 
     try {
       await prisma.$executeRawUnsafe(`
-        CREATE INDEX IF NOT EXISTS idx_reply_letter_details_ref_number ON public.reply_letter_details_table(ref_number);
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_reply_letter_details_ref_number ON public.reply_letter_details_table(ref_number);
       `);
       await prisma.$executeRawUnsafe(`
         CREATE INDEX IF NOT EXISTS idx_reply_letter_details_file_no ON public.reply_letter_details_table(file_no);
@@ -7988,6 +8028,43 @@ export async function saveReplyLetterDetailsServer(data: {
           NOW()
         );
       `;
+    }
+
+    const isFinalize = upcomingAction && (
+      upcomingAction.toLowerCase().includes("finalize the file") ||
+      upcomingAction.toLowerCase().includes("additional secretary") ||
+      upcomingAction.includes("අතිරේක ලේකම්") ||
+      upcomingAction.includes("අවසන් කිරීම") ||
+      upcomingAction.includes("ගොනුව අවසන්") ||
+      upcomingAction.includes("கூடுதல் செயலாளர்") ||
+      upcomingAction.includes("இறுதி செய்தல்")
+    );
+
+    if (isFinalize) {
+      try {
+        await prisma.$executeRawUnsafe(
+          `UPDATE public.dcmms_subject SET status = 'Closed', updated_at = CURRENT_TIMESTAMP WHERE LOWER(case_no) = LOWER($1);`,
+          cleanRef
+        );
+      } catch (e) {}
+      try {
+        await prisma.$executeRawUnsafe(
+          `UPDATE public.dcmms_daily_mail SET status = 'Closed', updated_at = CURRENT_TIMESTAMP WHERE LOWER(serial_no) = LOWER($1) OR LOWER(letter_no) = LOWER($1) OR LOWER(ref_no) = LOWER($1);`,
+          cleanRef
+        );
+      } catch (e) {}
+      try {
+        await prisma.$executeRawUnsafe(
+          `UPDATE public.daily_mail_letter_table SET updated_at = CURRENT_TIMESTAMP WHERE LOWER(ref_number) = LOWER($1) OR LOWER(letter_number) = LOWER($1);`,
+          cleanRef
+        );
+      } catch (e) {}
+      try {
+        await prisma.$executeRawUnsafe(
+          `UPDATE public.dcmms_subject_assignments SET status = 'Closed', updated_at = CURRENT_TIMESTAMP WHERE LOWER(case_no) = LOWER($1);`,
+          cleanRef
+        );
+      } catch (e) {}
     }
 
     return serializeForServerAction({ success: true, ref_number: cleanRef });
@@ -8181,6 +8258,33 @@ export async function getConductInquiryCaseDetailsServer(caseNo: string) {
       } catch (e) {}
     }
 
+    // 7. Upcoming Action from reply_letter_details_table or dcmms_subject
+    let upcomingAction = futureAction || "";
+    try {
+      const replyDetails = await prisma.$queryRaw<any[]>`
+        SELECT upcoming_action FROM public.reply_letter_details_table
+        WHERE LOWER(ref_number) = LOWER(${cleanNo})
+           OR LOWER(file_no) = LOWER(${cleanNo})
+        LIMIT 1;
+      `;
+      if (replyDetails && replyDetails.length > 0 && replyDetails[0].upcoming_action) {
+        upcomingAction = replyDetails[0].upcoming_action;
+      }
+    } catch (e) {}
+
+    if (!upcomingAction) {
+      try {
+        const subjRows = await prisma.$queryRaw<any[]>`
+          SELECT upcoming_action FROM public.dcmms_subject
+          WHERE LOWER(case_no) = LOWER(${cleanNo})
+          LIMIT 1;
+        `;
+        if (subjRows && subjRows.length > 0 && subjRows[0].upcoming_action) {
+          upcomingAction = subjRows[0].upcoming_action;
+        }
+      } catch (e) {}
+    }
+
     return serializeForServerAction({
       success: true,
       data: {
@@ -8203,6 +8307,7 @@ export async function getConductInquiryCaseDetailsServer(caseNo: string) {
         extensionStartDate,
         extensionEndDate,
         recommendation: futureAction ? `Observation: ${futureAction}` : "",
+        upcomingAction: upcomingAction || "",
       }
     });
   } catch (error: any) {

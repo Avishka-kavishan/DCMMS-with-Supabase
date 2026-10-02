@@ -221,22 +221,81 @@ CREATE POLICY "dcmms_sessions_update"
   USING (true);
 
 -- ─────────────────────────────────────────────────────────────
+-- FIX 9: Create reply_letter_details_table
+--   Stores details from the Answer Letter action form:
+--   - ref_number: Reference / Case Number
+--   - file_name: File Category ('discipline' / 'mail')
+--   - file_no: File Number (e.g. 2026/10/2/1)
+--   - upcoming_action: Next Action (ගනු ලබන ඉදිරි ක්‍රියාමාර්ග)
+--   - date: Action Submission Date
+--   - description: Notes / Case Details (විස්තරය)
+-- ─────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.reply_letter_details_table (
+  id              BIGSERIAL PRIMARY KEY,
+  ref_number      VARCHAR(100) NOT NULL,
+  file_name       VARCHAR(255),
+  file_no         VARCHAR(100),
+  upcoming_action TEXT,
+  date            DATE,
+  description     TEXT,
+  created_at      TIMESTAMPTZ DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Ensure unique constraint on ref_number for upserts { onConflict: 'ref_number' }
+CREATE UNIQUE INDEX IF NOT EXISTS uq_reply_letter_details_ref_number 
+  ON public.reply_letter_details_table(ref_number);
+
+CREATE INDEX IF NOT EXISTS idx_reply_letter_details_file_no 
+  ON public.reply_letter_details_table(file_no);
+
+CREATE INDEX IF NOT EXISTS idx_reply_letter_details_date 
+  ON public.reply_letter_details_table(date);
+
+-- Enable RLS
+ALTER TABLE public.reply_letter_details_table ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "reply_letter_details_select" ON public.reply_letter_details_table;
+DROP POLICY IF EXISTS "reply_letter_details_insert" ON public.reply_letter_details_table;
+DROP POLICY IF EXISTS "reply_letter_details_update" ON public.reply_letter_details_table;
+DROP POLICY IF EXISTS "reply_letter_details_delete" ON public.reply_letter_details_table;
+
+CREATE POLICY "reply_letter_details_select"
+  ON public.reply_letter_details_table FOR SELECT
+  USING (true);
+
+CREATE POLICY "reply_letter_details_insert"
+  ON public.reply_letter_details_table FOR INSERT
+  WITH CHECK (true);
+
+CREATE POLICY "reply_letter_details_update"
+  ON public.reply_letter_details_table FOR UPDATE
+  USING (true);
+
+CREATE POLICY "reply_letter_details_delete"
+  ON public.reply_letter_details_table FOR DELETE
+  USING (true);
+
+-- ─────────────────────────────────────────────────────────────
 -- Grant API access to all tables and reload PostgREST schema
 -- ─────────────────────────────────────────────────────────────
 GRANT USAGE ON SCHEMA public TO anon, authenticated;
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.dcmms_audit_logs          TO anon, authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.dcmms_sessions             TO anon, authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.dcmms_subject_assignments  TO anon, authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.dcmms_investigation        TO anon, authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.dcmms_investigation_officers TO anon, authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.dcmms_subject_details      TO anon, authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.dcmms_subsequent_mails     TO anon, authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.dcmms_subject              TO anon, authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.dcmms_daily_mail           TO anon, authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.dcmms_profiles             TO anon, authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.dcmms_calendar             TO anon, authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.dcmms_institutes           TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.dcmms_audit_logs             TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.dcmms_sessions                TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.dcmms_subject_assignments     TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.dcmms_investigation           TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.dcmms_investigation_officers    TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.dcmms_subject_details         TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.dcmms_subsequent_mails        TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.dcmms_subject                 TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.dcmms_daily_mail              TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.dcmms_profiles                TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.dcmms_calendar                TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.dcmms_institutes              TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.reply_letter_details_table    TO anon, authenticated;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public                        TO anon, authenticated;
 
 -- Notify PostgREST to reload its schema cache
 NOTIFY pgrst, 'reload schema';
+

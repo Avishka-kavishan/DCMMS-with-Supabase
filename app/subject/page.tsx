@@ -26,10 +26,11 @@ import {
   getCommitteeOfficersWithSchoolsServer,
   getSubjectOfficerDashboardCasesServer,
   saveSubjectOfficerAssignmentServer,
-  getDirectlyAssignedLettersServer
+  getDirectlyAssignedLettersServer,
+  saveReplyLetterDetailsServer
 } from "@/lib/db-actions";
 
-import { CheckCircle, XCircle, FileText, Send, Clock, X, AlertCircle, ShieldCheck, Calendar as CalendarIcon, ChevronDown, ChevronUp, Bell, Eye, MoreHorizontal, Filter, Check, MailCheck, ClipboardList, Plus, Sparkles, ExternalLink, User, Building, ArrowRight, ShieldAlert, FileCheck, Layers, UserCheck, Scale } from "lucide-react";
+import { CheckCircle, XCircle, FileText, Send, Clock, X, AlertCircle, ShieldCheck, Calendar as CalendarIcon, ChevronDown, ChevronUp, Bell, Eye, MoreHorizontal, Filter, Check, MailCheck, ClipboardList, Plus, Sparkles, Compass, ExternalLink, User, Building, ArrowRight, ShieldAlert, FileCheck, Layers, UserCheck, Scale } from "lucide-react";
 
 interface Case {
   id: string;
@@ -622,9 +623,13 @@ function collectAnswerLetters(
     const cleanCase = String(targetCaseNo || "").trim().toLowerCase();
     if (!cleanCase) return false;
     if (inquirySet.has(cleanCase)) return true;
-    if (itemObj?.isProcessedAnswer === true || itemObj?.isProcessedAnswer === "true") return true;
+    if (itemObj?.isProcessedAnswer === true || itemObj?.isProcessedAnswer === "true") return false;
     const upAction = String(itemObj?.upcoming_action || itemObj?.upcomingAction || itemObj?.future_action || itemObj?.report_state || "").toLowerCase();
-    if (upAction.includes("inspection") || upAction.includes("inquiry") || upAction.includes("පරීක්ෂණ")) return true;
+    if (
+      upAction.includes("inspection") ||
+      upAction.includes("inquiry") ||
+      upAction.includes("පරීක්ෂණ")
+    ) return true;
     return false;
   };
 
@@ -1086,7 +1091,16 @@ function SubjectOfficerDashboardContent() {
             const fallbackInquiryCaseNos = fallbackReplyLetters
               .filter((r: any) => {
                 const act = String(r.upcoming_action || "").toLowerCase();
-                return act.includes("inspection") || act.includes("inquiry") || act.includes("පරීක්ෂණ");
+                return (
+                  act.includes("inspection") ||
+                  act.includes("inquiry") ||
+                  act.includes("පරීක්ෂණ") ||
+                  act.includes("finalize") ||
+                  act.includes("additional secretary") ||
+                  act.includes("අතිරේක ලේකම්") ||
+                  act.includes("අවසන් කිරීම") ||
+                  act.includes("ගොනුව අවසන්")
+                );
               })
               .map((r: any) => String(r.ref_number || r.file_no || "").trim().toLowerCase());
 
@@ -1139,6 +1153,10 @@ function SubjectOfficerDashboardContent() {
             submittedAt: r.submittedAt || r.createdAt || "",
             updatedAt: r.updatedAt || r.createdAt || "",
             createdAt: r.createdAt || "",
+            accusedName: r.accusedName || r.accused_officer_name || "",
+            accusedDesignation: r.accusedDesignation || r.accused_designation || r.position || "",
+            schoolName: r.schoolName || r.school_name || r.accused_school_name || "",
+            subject: r.subject || r.mailSubject || "",
           }));
         }
       } catch (err) {
@@ -1176,9 +1194,23 @@ function SubjectOfficerDashboardContent() {
                   submittedAt: lr.submittedAt || lr.submitted_at || lr.updatedAt || "",
                   updatedAt: lr.updatedAt || lr.updated_at || "",
                   createdAt: lr.createdAt || lr.created_at || "",
+                  accusedName: lr.accusedName || lr.accused_name || "",
+                  accusedDesignation: lr.accusedDesignation || lr.accused_designation || "",
+                  schoolName: lr.schoolName || lr.school_name || "",
+                  subject: lr.subject || "",
                 };
                 if (existingIdx >= 0) {
-                  recList[existingIdx] = { ...recList[existingIdx], ...item };
+                  const existing = recList[existingIdx];
+                  recList[existingIdx] = {
+                    ...existing,
+                    ...item,
+                    accusedName: item.accusedName || existing.accusedName || "",
+                    accusedDesignation: item.accusedDesignation || existing.accusedDesignation || "",
+                    schoolName: item.schoolName || existing.schoolName || "",
+                    subject: item.subject || existing.subject || "",
+                    recommendationText: item.recommendationText || existing.recommendationText || "",
+                    disciplinaryAction: item.disciplinaryAction || existing.disciplinaryAction || "",
+                  };
                 } else {
                   recList.push(item);
                 }
@@ -1488,6 +1520,7 @@ function SubjectOfficerDashboardContent() {
     extensionStartDate: string;
     extensionEndDate: string;
     recommendation: string;
+    upcomingAction: string;
     originalItem?: any;
   }>({
     caseNo: "",
@@ -1508,6 +1541,7 @@ function SubjectOfficerDashboardContent() {
     extensionStartDate: "",
     extensionEndDate: "",
     recommendation: "",
+    upcomingAction: "",
   });
 
   // Registered Committee Officers for Chairman & Members Autocomplete / Auto-fill
@@ -3132,6 +3166,7 @@ function SubjectOfficerDashboardContent() {
           extensionStartDate: "",
           extensionEndDate: "",
           recommendation: "",
+          upcomingAction: "",
           originalItem: null,
         });
         setConductInquiryModalOpen(true);
@@ -3188,6 +3223,7 @@ function SubjectOfficerDashboardContent() {
     const extStart = formatToInputDate(asgn?.extensionStartDate || asgn?.extension_start_date);
     const extEnd = formatToInputDate(asgn?.extensionEndDate || asgn?.extension_end_date);
     const recText = asgn?.recommendation || asgn?.recommendationText || asgn?.notes || item.notes || "";
+    const upAction = asgn?.upcomingAction || asgn?.upcoming_action || item.upcomingAction || item.upcoming_action || item.future_action || item.report_state || "";
 
     setConductInquiryForm({
       caseNo: item.caseNo || "",
@@ -3208,6 +3244,7 @@ function SubjectOfficerDashboardContent() {
       extensionStartDate: extStart,
       extensionEndDate: extEnd,
       recommendation: recText,
+      upcomingAction: upAction,
       originalItem: item,
     });
     setConductInquiryModalOpen(true);
@@ -3369,6 +3406,7 @@ function SubjectOfficerDashboardContent() {
       const extStart = conductInquiryForm.extensionStartDate || null;
       const extEnd = conductInquiryForm.extensionEndDate || null;
       const recommendationText = conductInquiryForm.recommendation || "";
+      const upcomingAct = conductInquiryForm.upcomingAction || "";
 
       // 1. Update localStorage: dcmms_subject_assignments
       if (typeof window !== "undefined") {
@@ -3398,8 +3436,10 @@ function SubjectOfficerDashboardContent() {
             extension_end_date: extEnd,
             recommendation: recommendationText,
             recommendationText: recommendationText,
+            upcomingAction: upcomingAct,
+            upcoming_action: upcomingAct,
             notes: recommendationText || (idx >= 0 ? list[idx].notes : ""),
-            status: "Conducting an Inquiry",
+            status: upcomingAct.toLowerCase().includes("finalize") || upcomingAct.includes("අතිරේක ලේකම්") ? "Closed" : "Conducting an Inquiry",
             updatedAt: new Date().toISOString(),
           };
 
@@ -3420,8 +3460,17 @@ function SubjectOfficerDashboardContent() {
             casesList[cIdx].appointmentDate = apptDate;
             casesList[cIdx].reportDueDate = dueDate;
             casesList[cIdx].targetDate = dueDate;
-            casesList[cIdx].status = "Conducting an Inquiry";
-            casesList[cIdx].stage = "Conducting an Inquiry";
+            if (upcomingAct) {
+              casesList[cIdx].upcomingAction = upcomingAct;
+              casesList[cIdx].upcoming_action = upcomingAct;
+            }
+            if (upcomingAct.toLowerCase().includes("finalize") || upcomingAct.includes("අතිරේක ලේකම්")) {
+              casesList[cIdx].status = "Closed";
+              casesList[cIdx].stage = "Closed";
+            } else {
+              casesList[cIdx].status = "Conducting an Inquiry";
+              casesList[cIdx].stage = "Conducting an Inquiry";
+            }
             if (recommendationText) {
               casesList[cIdx].recommendation = recommendationText;
             }
@@ -3461,6 +3510,14 @@ function SubjectOfficerDashboardContent() {
             position: "Member",
           }))
         );
+      } catch (e) {}
+
+      try {
+        await saveReplyLetterDetailsServer({
+          ref_number: caseNo,
+          upcoming_action: upcomingAct || null,
+          description: recommendationText || null,
+        });
       } catch (e) {}
 
       try {
@@ -6086,17 +6143,19 @@ function SubjectOfficerDashboardContent() {
                                 display: "inline-flex",
                                 alignItems: "center",
                                 gap: "6px",
-                                backgroundColor: "#dcfce7",
-                                color: "#15803d",
+                                backgroundColor: item.status === "Closed" ? "#f1f5f9" : "#dcfce7",
+                                color: item.status === "Closed" ? "#475569" : "#15803d",
                                 padding: "4px 10px",
                                 borderRadius: "12px",
                                 fontSize: "12px",
                                 fontWeight: 700,
-                                border: "1px solid #bbf7d0"
+                                border: item.status === "Closed" ? "1px solid #cbd5e1" : "1px solid #bbf7d0"
                               }}
                             >
                               <CheckCircle size={13} />
-                              {lang === "si" ? "පිළිතුරු ලිපිය" : "Answer Letter"}
+                              {item.status === "Closed"
+                                ? (lang === "si" ? "අවසන් කරන ලදි" : "Finalized / Closed")
+                                : (lang === "si" ? "පිළිතුරු ලිපිය" : "Answer Letter")}
                             </span>
                           </td>
                           <td className="text-center actions-cell">
@@ -6104,7 +6163,9 @@ function SubjectOfficerDashboardContent() {
                               href={`/subject/add-details?caseNo=${item.caseNo}&isAnswerLetter=true`}
                               className="add-details-link"
                             >
-                              {t("addDetails", "Add Details / View Case")}
+                              {item.status === "Closed"
+                                ? (lang === "si" ? "විස්තර බලන්න" : "View Details")
+                                : t("addDetails", "Add Details / View Case")}
                             </Link>
                           </td>
                         </tr>
@@ -8405,18 +8466,26 @@ function SubjectOfficerDashboardContent() {
                             </div>
                           </td>
                           <td>
-                            <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-                              <span style={{ fontWeight: 600, color: "#1e293b", display: "flex", alignItems: "center", gap: "4px" }}>
-                                <User size={13} style={{ color: "#64748b" }} />
-                                {item.accusedName || item.officerName || "—"}
-                              </span>
-                              {(item.schoolName || item.accusedDesignation) && (
-                                <span style={{ fontSize: "11px", color: "#64748b", display: "flex", alignItems: "center", gap: "4px" }}>
-                                  <Building size={11} style={{ color: "#94a3b8" }} />
-                                  {[item.accusedDesignation, item.schoolName].filter(Boolean).join(" • ")}
-                                </span>
-                              )}
-                            </div>
+                            {(() => {
+                              const matchedCase = cases.find((c: any) => (c.caseNo || "").trim().toLowerCase() === (item.caseNo || "").trim().toLowerCase());
+                              const accusedName = item.accusedName || item.officerName || matchedCase?.accusedName || (matchedCase as any)?.officerName || "—";
+                              const school = item.schoolName || matchedCase?.schoolName || (matchedCase as any)?.instituteName;
+                              const designation = item.accusedDesignation || matchedCase?.accusedDesignation || (matchedCase as any)?.designation;
+                              return (
+                                <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                                  <span style={{ fontWeight: 600, color: "#1e293b", display: "flex", alignItems: "center", gap: "4px" }}>
+                                    <User size={13} style={{ color: "#64748b" }} />
+                                    {accusedName}
+                                  </span>
+                                  {(school || designation) && (
+                                    <span style={{ fontSize: "11px", color: "#64748b", display: "flex", alignItems: "center", gap: "4px" }}>
+                                      <Building size={11} style={{ color: "#94a3b8" }} />
+                                      {[designation, school].filter(Boolean).join(" • ")}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </td>
                           <td>
                             <div style={{ display: "flex", flexDirection: "column", gap: "4px", maxWidth: "260px" }}>
@@ -9084,6 +9153,54 @@ function SubjectOfficerDashboardContent() {
                 </div>
               </div>
 
+              {/* SECTION 6: Upcoming actions to be taken */}
+              <div className="conduct-inquiry-card">
+                <div className="conduct-inquiry-card-header">
+                  <div className="conduct-inquiry-card-title">
+                    <Compass size={16} style={{ color: "#0284c7" }} />
+                    <span>{t("upcomingActions", "Upcoming actions to be taken")}</span>
+                  </div>
+                </div>
+
+                <div className="conduct-inquiry-input-group">
+                  <label htmlFor="modalUpcomingActionsSelect" className="conduct-inquiry-label" style={{ fontWeight: 700, fontSize: "13px", color: "#1e293b", marginBottom: "4px" }}>
+                    <span>{t("upcomingActions", "Upcoming actions to be taken")} :</span> <span style={{ color: "#ef4444", fontWeight: 700 }}>*</span>
+                  </label>
+                  <select
+                    id="modalUpcomingActionsSelect"
+                    className="conduct-inquiry-select"
+                    value={conductInquiryForm.upcomingAction}
+                    onChange={(e) =>
+                      setConductInquiryForm((prev) => ({ ...prev, upcomingAction: e.target.value }))
+                    }
+                    required
+                  >
+                    <option value="">
+                      {lang === "si" ? "ක්‍රියාමාර්ගයක් තෝරන්න..." : lang === "ta" ? "நடவடிக்கையைத் தேர்ந்தெடுக்கவும்..." : "Select upcoming action..."}
+                    </option>
+                    <option value="Initial investigation">
+                      {t("actionInitialInvestigation", "Initial investigation")}
+                    </option>
+                    <option value="Conduct an inspection">
+                      {t("actionConductInspection", "Conduct an inspection")}
+                    </option>
+                    <option value="Finalize the file according to the additional secretary's instruction">
+                      {t("actionFinalizeFileAccordingToSecretary", "Finalize the file according to the additional secretary's instruction")}
+                    </option>
+                    {conductInquiryForm.upcomingAction && ![
+                      "",
+                      "Initial investigation",
+                      "Conduct an inspection",
+                      "Finalize the file according to the additional secretary's instruction"
+                    ].includes(conductInquiryForm.upcomingAction) && (
+                      <option value={conductInquiryForm.upcomingAction}>
+                        {t(conductInquiryForm.upcomingAction, conductInquiryForm.upcomingAction)}
+                      </option>
+                    )}
+                  </select>
+                </div>
+              </div>
+
             </div>
 
             {/* Modal Footer */}
@@ -9106,12 +9223,12 @@ function SubjectOfficerDashboardContent() {
                 {savingInquiryForm ? (
                   <>
                     <Clock size={16} className="animate-spin" />
-                    <span>{lang === "si" ? "සුරකිමින් පවතී..." : "Saving Details..."}</span>
+                    <span>{lang === "si" ? "ඉදිරිපත් කරමින් පවතී..." : lang === "ta" ? "சமர்ப்பிக்கப்படுகிறது..." : "Submitting..."}</span>
                   </>
                 ) : (
                   <>
-                    <CheckCircle size={16} />
-                    <span>{t("saveInquiryDetails", "Save Inquiry Details")}</span>
+                    <Send size={16} />
+                    <span>{t("submitInquiryDetails", "Submit")}</span>
                   </>
                 )}
               </button>

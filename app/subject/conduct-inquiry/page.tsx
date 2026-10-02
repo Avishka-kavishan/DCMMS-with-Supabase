@@ -25,6 +25,7 @@ import {
   saveMembersByCaseServer,
   getMembersByCaseServer,
   getCommitteeOfficersWithSchoolsServer,
+  saveReplyLetterDetailsServer,
 } from "@/lib/db-actions";
 import {
   ArrowLeft,
@@ -33,6 +34,7 @@ import {
   Calendar as CalendarIcon,
   Clock,
   Sparkles,
+  Compass,
   FileText,
   User,
   Building,
@@ -162,6 +164,7 @@ function ConductInquiryContent() {
     extensionStartDate: string;
     extensionEndDate: string;
     recommendation: string;
+    upcomingAction: string;
   }>({
     caseNo: "",
     accusedName: "—",
@@ -180,6 +183,7 @@ function ConductInquiryContent() {
     extensionStartDate: "",
     extensionEndDate: "",
     recommendation: "",
+    upcomingAction: "",
   });
 
   const [saving, setSaving] = useState(false);
@@ -429,6 +433,7 @@ function ConductInquiryContent() {
       extensionStartDate: formatToInputDate(asgn?.extensionStartDate || asgn?.extension_start_date),
       extensionEndDate: formatToInputDate(asgn?.extensionEndDate || asgn?.extension_end_date),
       recommendation: asgn?.recommendation || asgn?.recommendationText || asgn?.notes || "",
+      upcomingAction: asgn?.upcomingAction || asgn?.upcoming_action || foundCase?.upcomingAction || foundCase?.upcoming_action || "",
     });
 
     // Asynchronously fetch rich auto-fill details from PostgreSQL and Supabase
@@ -455,6 +460,7 @@ function ConductInquiryContent() {
           extensionStartDate: formatToInputDate(d.extensionStartDate) || prev.extensionStartDate,
           extensionEndDate: formatToInputDate(d.extensionEndDate) || prev.extensionEndDate,
           recommendation: d.recommendation || prev.recommendation,
+          upcomingAction: d.upcomingAction || prev.upcomingAction || "",
         }));
 
         // Supabase Fallback for members if server returned empty
@@ -577,6 +583,7 @@ function ConductInquiryContent() {
       const extStart = formState.extensionStartDate || null;
       const extEnd = formState.extensionEndDate || null;
       const recommendationText = formState.recommendation || "";
+      const upcomingAct = formState.upcomingAction || "";
 
       // 1. LocalStorage update
       if (typeof window !== "undefined") {
@@ -606,8 +613,10 @@ function ConductInquiryContent() {
             extension_end_date: extEnd,
             recommendation: recommendationText,
             recommendationText: recommendationText,
+            upcomingAction: upcomingAct,
+            upcoming_action: upcomingAct,
             notes: recommendationText || (idx >= 0 ? list[idx].notes : ""),
-            status: "Conducting an Inquiry",
+            status: upcomingAct.toLowerCase().includes("finalize") || upcomingAct.includes("අතිරේක ලේකම්") ? "Closed" : "Conducting an Inquiry",
             updatedAt: new Date().toISOString(),
           };
 
@@ -627,8 +636,17 @@ function ConductInquiryContent() {
             casesList[cIdx].appointmentDate = apptDate;
             casesList[cIdx].reportDueDate = dueDate;
             casesList[cIdx].targetDate = dueDate;
-            casesList[cIdx].status = "Conducting an Inquiry";
-            casesList[cIdx].stage = "Conducting an Inquiry";
+            if (upcomingAct) {
+              casesList[cIdx].upcomingAction = upcomingAct;
+              casesList[cIdx].upcoming_action = upcomingAct;
+            }
+            if (upcomingAct.toLowerCase().includes("finalize") || upcomingAct.includes("අතිරේක ලේකම්")) {
+              casesList[cIdx].status = "Closed";
+              casesList[cIdx].stage = "Closed";
+            } else {
+              casesList[cIdx].status = "Conducting an Inquiry";
+              casesList[cIdx].stage = "Conducting an Inquiry";
+            }
             if (recommendationText) {
               casesList[cIdx].recommendation = recommendationText;
             }
@@ -668,6 +686,14 @@ function ConductInquiryContent() {
             position: "Member",
           }))
         );
+      } catch (e) {}
+
+      try {
+        await saveReplyLetterDetailsServer({
+          ref_number: caseNo,
+          upcoming_action: upcomingAct || null,
+          description: recommendationText || null,
+        });
       } catch (e) {}
 
       try {
@@ -819,8 +845,9 @@ function ConductInquiryContent() {
             extension_start_date: extStart,
             extension_end_date: extEnd,
             recommendation: recommendationText,
+            upcoming_action: upcomingAct,
             notes: recommendationText,
-            status: "Conducting an Inquiry",
+            status: upcomingAct.toLowerCase().includes("finalize") || upcomingAct.includes("අතිරේක ලේකම්") ? "Closed" : "Conducting an Inquiry",
             updated_at: new Date().toISOString(),
           });
         } catch (e) {}
@@ -1059,12 +1086,12 @@ function ConductInquiryContent() {
                   {saving ? (
                     <>
                       <Clock size={16} className="animate-spin" />
-                      <span>{lang === "si" ? "සුරකිමින් පවතී..." : "Saving Details..."}</span>
+                      <span>{lang === "si" ? "ඉදිරිපත් කරමින් පවතී..." : lang === "ta" ? "சமர்ப்பிக்கப்படுகிறது..." : "Submitting..."}</span>
                     </>
                   ) : (
                     <>
-                      <Save size={16} />
-                      <span>{t("saveInquiryDetails", "Save Inquiry Details")}</span>
+                      <Send size={16} />
+                      <span>{t("submitInquiryDetails", "Submit")}</span>
                     </>
                   )}
                 </button>
@@ -1411,6 +1438,54 @@ function ConductInquiryContent() {
                 </div>
               </div>
 
+              {/* SECTION 6: Upcoming actions to be taken */}
+              <div className="conduct-inquiry-section-card">
+                <div className="conduct-inquiry-section-header">
+                  <div className="conduct-inquiry-section-title">
+                    <Compass size={18} style={{ color: "#0284c7" }} />
+                    <span>{t("upcomingActions", "Upcoming actions to be taken")}</span>
+                  </div>
+                </div>
+
+                <div className="ci-input-group">
+                  <label htmlFor="upcomingActionsSelect" className="ci-label" style={{ fontWeight: 700, fontSize: "14px", color: "#1e293b", marginBottom: "4px" }}>
+                    <span>{t("upcomingActions", "Upcoming actions to be taken")} :</span> <span style={{ color: "#ef4444", fontWeight: 700 }}>*</span>
+                  </label>
+                  <select
+                    id="upcomingActionsSelect"
+                    className="ci-select"
+                    value={formState.upcomingAction}
+                    onChange={(e) =>
+                      setFormState((prev) => ({ ...prev, upcomingAction: e.target.value }))
+                    }
+                    required
+                  >
+                    <option value="">
+                      {lang === "si" ? "ක්‍රියාමාර්ගයක් තෝරන්න..." : lang === "ta" ? "நடவடிக்கையைத் தேர்ந்தெடுக்கவும்..." : "Select upcoming action..."}
+                    </option>
+                    <option value="Initial investigation">
+                      {t("actionInitialInvestigation", "Initial investigation")}
+                    </option>
+                    <option value="Conduct an inspection">
+                      {t("actionConductInspection", "Conduct an inspection")}
+                    </option>
+                    <option value="Finalize the file according to the additional secretary's instruction">
+                      {t("actionFinalizeFileAccordingToSecretary", "Finalize the file according to the additional secretary's instruction")}
+                    </option>
+                    {formState.upcomingAction && ![
+                      "",
+                      "Initial investigation",
+                      "Conduct an inspection",
+                      "Finalize the file according to the additional secretary's instruction"
+                    ].includes(formState.upcomingAction) && (
+                      <option value={formState.upcomingAction}>
+                        {t(formState.upcomingAction, formState.upcomingAction)}
+                      </option>
+                    )}
+                  </select>
+                </div>
+              </div>
+
               {/* Bottom Floating Action Bar */}
               <div className="conduct-inquiry-bottom-bar">
                 <Link href="/subject?tab=conducting_inquiry" className="btn-back-inquiries">
@@ -1427,12 +1502,12 @@ function ConductInquiryContent() {
                   {saving ? (
                     <>
                       <Clock size={16} className="animate-spin" />
-                      <span>{lang === "si" ? "සුරකිමින් පවතී..." : "Saving Details..."}</span>
+                      <span>{lang === "si" ? "ඉදිරිපත් කරමින් පවතී..." : lang === "ta" ? "சமர்ப்பிக்கப்படுகிறது..." : "Submitting..."}</span>
                     </>
                   ) : (
                     <>
-                      <Save size={16} />
-                      <span>{t("saveInquiryDetails", "Save Inquiry Details")}</span>
+                      <Send size={16} />
+                      <span>{t("submitInquiryDetails", "Submit")}</span>
                     </>
                   )}
                 </button>
