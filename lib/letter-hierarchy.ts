@@ -252,6 +252,8 @@ export function isLetterForChiefClerk(item: any, officerProfile?: any): boolean 
   const addressedTo = String(raw.addressed_to || raw.addressedTo || "").toLowerCase().trim();
   const createdByName = String(raw.created_by_name || raw.createdByName || "").toLowerCase().trim();
 
+  const status = String(item.status || raw.status || "").toLowerCase().trim();
+
   const myName = String(officerProfile?.full_name || "").toLowerCase().trim();
   const myEmpNo = String(officerProfile?.employee_no || "").toLowerCase().trim();
 
@@ -274,6 +276,36 @@ export function isLetterForChiefClerk(item: any, officerProfile?: any): boolean 
       field === "chief_clerk"
     );
   };
+
+  // Branch separation check:
+  // If viewing Discipline Chief Clerk, exclude letters routed exclusively to Investigation Branch Chief Clerk
+  const myRole = String(officerProfile?.role || "").toLowerCase().trim();
+  const isDisciplineBranch = myRole.includes("discipline") || myRole === "chief_clerk" || myRole.includes("විනය");
+  const isInvestigationBranch = myRole.includes("investigation");
+
+  if (isDisciplineBranch) {
+    const isExclusivelyInvestigation =
+      (forwardedTo.includes("investigation") || addressedRole.includes("investigation")) &&
+      !forwardedTo.includes("discipline") &&
+      !addressedRole.includes("discipline") &&
+      !forwardReason.includes("discipline") &&
+      !forwardReason.includes("disciplinary") &&
+      !forwardReason.includes("විනය") &&
+      !forwardReason.includes("chief clerk") &&
+      !forwardReason.includes("ශාඛා ප්‍රධානී");
+    if (isExclusivelyInvestigation && !isNameMatch(assignedTo) && !isNameMatch(forwardedTo)) {
+      return false;
+    }
+  } else if (isInvestigationBranch) {
+    const isExclusivelyDiscipline =
+      (forwardedTo.includes("discipline") || addressedRole.includes("discipline") || forwardReason.includes("discipline") || forwardReason.includes("disciplinary") || forwardReason.includes("විනය")) &&
+      !forwardedTo.includes("investigation") &&
+      !addressedRole.includes("investigation") &&
+      !forwardReason.includes("investigation");
+    if (isExclusivelyDiscipline && !isNameMatch(assignedTo) && !isNameMatch(forwardedTo)) {
+      return false;
+    }
+  }
 
   // 1. Matched directly by logged-in Chief Clerk's name or employee no
   if (isNameMatch(assignedTo) || isNameMatch(forwardedTo) || isNameMatch(addressedTo)) {
@@ -304,6 +336,31 @@ export function isLetterForChiefClerk(item: any, officerProfile?: any): boolean 
   // 4. Letters created by Chief Clerk
   if (isNameMatch(createdByName) || isChiefKeyword(createdByName)) {
     return true;
+  }
+
+  // 5. Letters assigned to Subject Officers under the Discipline Branch
+  // (Chief Clerk oversees all Discipline Branch subject officers)
+  if (isDisciplineBranch) {
+    const isDisciplineSubjectOfficer =
+      addressedRole.includes("subject") ||
+      assignedTo.includes("subject") ||
+      forwardedTo.includes("subject") ||
+      assignedTo.includes("upul") ||
+      forwardedTo.includes("upul") ||
+      status.includes("subject") ||
+      status.includes("answer");
+
+    const hasDisciplineContext =
+      forwardReason.includes("discipline") ||
+      forwardReason.includes("disciplinary") ||
+      forwardReason.includes("විනය") ||
+      forwardReason.includes("senior assistant") ||
+      forwardReason.includes("additional secretary") ||
+      Boolean(raw.date_letter_handover_discipline || item.letter_date || item.received_date);
+
+    if (isDisciplineSubjectOfficer && hasDisciplineContext) {
+      return true;
+    }
   }
 
   return false;

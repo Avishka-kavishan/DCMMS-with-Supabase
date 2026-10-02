@@ -29,11 +29,17 @@ import {
   getDirectlyAssignedLettersServer
 } from "@/lib/db-actions";
 
-import { CheckCircle, XCircle, FileText, Send, Clock, X, AlertCircle, ShieldCheck, Calendar as CalendarIcon, ChevronDown, ChevronUp, Bell, Eye, MoreHorizontal, Filter, Check, MailCheck, ClipboardList, Plus, Sparkles, ExternalLink, User, Building, ArrowRight, ShieldAlert, FileCheck, Layers, UserCheck } from "lucide-react";
+import { CheckCircle, XCircle, FileText, Send, Clock, X, AlertCircle, ShieldCheck, Calendar as CalendarIcon, ChevronDown, ChevronUp, Bell, Eye, MoreHorizontal, Filter, Check, MailCheck, ClipboardList, Plus, Sparkles, ExternalLink, User, Building, ArrowRight, ShieldAlert, FileCheck, Layers, UserCheck, Scale } from "lucide-react";
 
 interface Case {
   id: string;
   caseNo: string;
+  letterNo?: string;
+  sender?: string;
+  instituteName?: string;
+  letterType?: string;
+  classification?: string;
+  directives?: string;
   assignedDate: string;
   receivedDate: string;
   letterDate?: string;
@@ -80,15 +86,15 @@ function parseCommitteeDetails(asgn: any) {
 
   if (asgn?.chairman) {
     if (typeof asgn.chairman === "object" && asgn.chairman !== null) {
-      chairmanName = asgn.chairman.fullName || asgn.chairman.name || asgn.chairman.officer_name || "";
-      chairmanEmail = asgn.chairman.email || asgn.chairman.nicNo || asgn.chairman.nic || asgn.chairman.nic_no || "";
+      chairmanName = asgn.chairman.fullName || asgn.chairman.name || asgn.chairman.full_name || asgn.chairman.officer_name || "";
+      chairmanEmail = asgn.chairman.email || asgn.chairman.nicNo || asgn.chairman.nic || asgn.chairman.nic_no || asgn.chairman.employeeNo || "";
       chairmanNic = chairmanEmail;
     } else if (typeof asgn.chairman === "string") {
       if (asgn.chairman.startsWith("{")) {
         try {
           const parsed = JSON.parse(asgn.chairman);
-          chairmanName = parsed.fullName || parsed.name || parsed.officer_name || "";
-          chairmanEmail = parsed.email || parsed.nicNo || parsed.nic || parsed.nic_no || "";
+          chairmanName = parsed.fullName || parsed.name || parsed.full_name || parsed.officer_name || "";
+          chairmanEmail = parsed.email || parsed.nicNo || parsed.nic || parsed.nic_no || parsed.employeeNo || "";
           chairmanNic = chairmanEmail;
         } catch (e) {
           chairmanName = asgn.chairman;
@@ -103,32 +109,32 @@ function parseCommitteeDetails(asgn: any) {
     if (Array.isArray(asgn.members)) {
       memberList = asgn.members.map((m: any) => {
         if (typeof m === "object" && m !== null) {
-          return m.fullName || m.name || m.officer_name || "";
+          return m.fullName || m.name || m.full_name || m.officer_name || "";
         }
         return String(m || "");
-      }).filter(Boolean);
+      }).filter((x: any) => x && x !== "undefined" && x !== "null");
       memberDetailsList = asgn.members.map((m: any) => {
         if (typeof m === "object" && m !== null) {
           return {
-            name: m.fullName || m.name || m.officer_name || "",
+            name: m.fullName || m.name || m.full_name || m.officer_name || "",
             email: m.email || m.idNo || m.nic || m.nicNo || "",
             idNo: m.idNo || m.nic || m.email || "",
           };
         }
         return { name: String(m || ""), email: "", idNo: "" };
-      }).filter((m: any) => m.name.trim() !== "");
+      }).filter((m: any) => m.name.trim() !== "" && m.name !== "undefined");
     } else if (typeof asgn.members === "string") {
       try {
         const parsed = JSON.parse(asgn.members);
         if (Array.isArray(parsed)) {
-          memberList = parsed.map((m: any) => (typeof m === "object" ? m.fullName || m.name || m.officer_name : String(m))).filter(Boolean);
-          memberDetailsList = parsed.map((m: any) => (typeof m === "object" ? { name: m.fullName || m.name || m.officer_name || "", email: m.email || m.idNo || m.nic || "", idNo: m.idNo || m.nic || m.email || "" } : { name: String(m), email: "", idNo: "" })).filter((m: any) => m.name.trim() !== "");
+          memberList = parsed.map((m: any) => (typeof m === "object" ? m.fullName || m.name || m.full_name || m.officer_name : String(m))).filter((x: any) => x && x !== "undefined" && x !== "null");
+          memberDetailsList = parsed.map((m: any) => (typeof m === "object" ? { name: m.fullName || m.name || m.full_name || m.officer_name || "", email: m.email || m.idNo || m.nic || "", idNo: m.idNo || m.nic || m.email || "" } : { name: String(m), email: "", idNo: "" })).filter((m: any) => m.name.trim() !== "" && m.name !== "undefined");
         } else {
-          memberList = asgn.members.split(",").map((s: string) => s.trim()).filter(Boolean);
+          memberList = asgn.members.split(",").map((s: string) => s.trim()).filter((x: any) => x && x !== "undefined" && x !== "null");
           memberDetailsList = memberList.map((s) => ({ name: s, email: "", idNo: "" }));
         }
       } catch (e) {
-        memberList = asgn.members.split(",").map((s: string) => s.trim()).filter(Boolean);
+        memberList = asgn.members.split(",").map((s: string) => s.trim()).filter((x: any) => x && x !== "undefined" && x !== "null");
         memberDetailsList = memberList.map((s) => ({ name: s, email: "", idNo: "" }));
       }
     }
@@ -139,10 +145,10 @@ function parseCommitteeDetails(asgn: any) {
   if (!chairmanName && rawText) {
     if (rawText.includes("Chairman:")) {
       const match = rawText.match(/Chairman:\s*([^|]+)/i);
-      if (match && match[1]) chairmanName = match[1].trim();
+      if (match && match[1] && match[1].trim() !== "undefined") chairmanName = match[1].trim();
     } else if (rawText.includes("(Chairman)")) {
       const match = rawText.match(/([^(,]+)\s*\(Chairman\)/i);
-      if (match && match[1]) chairmanName = match[1].trim();
+      if (match && match[1] && match[1].trim() !== "undefined") chairmanName = match[1].trim();
     }
   }
 
@@ -150,18 +156,21 @@ function parseCommitteeDetails(asgn: any) {
     if (rawText.includes("Members:")) {
       const match = rawText.match(/Members:\s*([^|]+)/i);
       if (match && match[1]) {
-        memberList = match[1].split(",").map((s) => s.trim()).filter(Boolean);
+        memberList = match[1].split(",").map((s) => s.trim()).filter((x) => x && x !== "undefined" && x !== "null");
       }
     } else if (rawText.includes("(Member)") || rawText.includes("(Members)")) {
       const matches = rawText.matchAll(/([^(,]+)\s*\(Members?\)/gi);
       for (const m of matches) {
-        if (m[1] && m[1].trim()) memberList.push(m[1].trim());
+        if (m[1] && m[1].trim() && m[1].trim() !== "undefined") memberList.push(m[1].trim());
       }
     }
   }
 
+  if (chairmanName === "undefined" || chairmanName === "null") chairmanName = "";
+  memberList = memberList.filter((m) => m && m !== "undefined" && m !== "null");
+
   const isPlaceholder = !rawText || rawText.includes("—") || rawText.includes("not yet assigned") || rawText.includes("යවා නොමැත");
-  const hasDetails = !!(chairmanName || memberList.length > 0 || (!isPlaceholder && rawText));
+  const hasDetails = !!(chairmanName || memberList.length > 0 || (!isPlaceholder && rawText && !rawText.includes("undefined")));
 
   return {
     chairmanName,
@@ -248,33 +257,49 @@ function buildSeparateNotifications(assignments: any[], currentLang: string = "e
   const notifs: SeparateNotification[] = [];
   const adminName = currentLang === "si" ? "විමර්ශන පරිපාලක (Admin)" : currentLang === "ta" ? "விசாரணை நிர்வாகி" : "Investigation Admin";
 
+  // Build a quick lookup map: caseNo (lowercase) => assignment for committee enrichment
+  const assignmentByCaseNo = new Map<string, any>();
+  assignments.forEach((a) => {
+    const k = String(a.caseNo || a.case_no || "").trim().toLowerCase();
+    if (k && !assignmentByCaseNo.has(k)) assignmentByCaseNo.set(k, a);
+  });
+
   // 0. Directly Assigned Daily Mail Letters
   if (Array.isArray(directLetters)) {
     directLetters.forEach((letter) => {
       const letterId = String(letter.id || letter.letterNo || letter.refNo || "");
       const letterNo = String(letter.letterNo || letter.refNo || "");
+      // Enrich with matching assignment data so committee + date fields are available
+      const matchingAsgn = assignmentByCaseNo.get(letterNo.trim().toLowerCase()) || {};
+      const enrichedAsgn = { ...letter, ...matchingAsgn, caseNo: letterNo };
+      const letterCommittee = parseCommitteeDetails(enrichedAsgn);
+      const isDatesSubmitted = !!(enrichedAsgn.datesSubmittedBySubject || (enrichedAsgn.appointmentDate && enrichedAsgn.reportDueDate));
       notifs.push({
         id: `notif-dm-letter-${letterId}`,
         caseId: letterNo,
         caseNo: letterNo,
         stepNumber: 1,
         stepType: "step1_officers",
-        asgn: { ...letter, caseNo: letterNo },
+        asgn: enrichedAsgn,
         adminName: currentLang === "si" ? "දෛනික තැපැල් අංශය" : "Daily Mail Section",
         headline: currentLang === "si"
           ? `දෛනික තැපෑලෙන් නව ලිපියක් පවරා ඇත: ${letterNo}`
           : currentLang === "ta"
           ? `புதிய கடிதம் ஒதுக்கப்பட்டது: ${letterNo}`
           : `New Letter Assigned from Daily Mail: ${letterNo}`,
-        actionSnippet: currentLang === "si"
-          ? `එවූ පාර්ශවය: ${letter.sender || "N/A"} | වර්ගය: ${letter.type || "Complaint"} | දිනය: ${letter.letterDate || "—"}. විස්තර ඇතුළත් කිරීමට මෙහි ක්ලික් කරන්න.`
-          : `From: ${letter.sender || "N/A"} | Type: ${letter.type || "Complaint"} | Date: ${letter.letterDate || "—"}. Click to add case details.`,
+        actionSnippet: letterCommittee.chairmanName
+          ? (currentLang === "si"
+              ? `👑 සභාපති: ${letterCommittee.chairmanName} | 👥 සාමාජිකයින්: ${letterCommittee.memberList.length} දෙනෙක්. සිට: ${letter.sender || "N/A"} | දිනය: ${letter.letterDate || "—"}.`
+              : `👑 Chairman: ${letterCommittee.chairmanName} | 👥 Members: ${letterCommittee.memberList.length}. From: ${letter.sender || "N/A"} | Date: ${letter.letterDate || "—"}.`)
+          : (currentLang === "si"
+              ? `එවූ පාර්ශවය: ${letter.sender || "N/A"} | වර්ගය: ${letter.type || "Complaint"} | දිනය: ${letter.letterDate || "—"}. විස්තර ඇතුළත් කිරීමට මෙහි ක්ලික් කරන්න.`
+              : `From: ${letter.sender || "N/A"} | Type: ${letter.type || "Complaint"} | Date: ${letter.letterDate || "—"}. Click to add case details.`),
         badgeColor: "badge-blue",
         statusPill: currentLang === "si" ? "📬 නව ලිපියක් (New Letter)" : "📬 New Letter Assigned",
         iconType: "file",
-        isUrgent: true,
-        isActionRequired: true,
-        isCompleted: false,
+        isUrgent: !isDatesSubmitted,
+        isActionRequired: !isDatesSubmitted,
+        isCompleted: isDatesSubmitted,
         timeAgo: formatRelativeTime(letter.createdAt || letter.receivedDate || new Date().toISOString(), currentLang),
         rawDate: letter.createdAt || letter.receivedDate || ""
       });
@@ -414,31 +439,41 @@ function buildSeparateNotifications(assignments: any[], currentLang: string = "e
       rawDate: asgn.datesSubmittedAt || asgn.assignedDate || asgn.createdAt || ""
     });
 
-    // 4. Step 1: Assigned Investigation Officers / Committee
+    // 4. Step 1: Assigned Investigation Officers / Committee (From Investigation Admin)
     const committee = parseCommitteeDetails(asgn);
-    notifs.push({
-      id: `notif-step1-${caseId}`,
-      caseId,
-      caseNo,
-      stepNumber: 1,
-      stepType: "step1_officers",
-      asgn,
-      adminName,
-      headline: currentLang === "si"
-        ? `${adminName} විසින් විමර්ශන නිලධාරීන් පත් කරන ලදී`
-        : `${adminName} assigned investigation committee & officers`,
-      actionSnippet: committee.chairmanName
-        ? (currentLang === "si" ? `සභාපති: ${committee.chairmanName} | සාමාජිකයින්: ${committee.memberList.length} දෙනෙක්` : `Chairman: ${committee.chairmanName} | Members: ${committee.memberList.length}`)
-        : (currentLang === "si" ? "විමර්ශන කමිටු විස්තර ලැබී ඇත." : "Investigation Committee assigned by Admin."),
-      badgeColor: "badge-purple",
-      statusPill: currentLang === "si" ? "✓ Step 1 — නිලධාරීන් පත් කළා" : "✓ Step 1 — Officers Assigned",
-      iconType: "file",
-      isUrgent: false,
-      isActionRequired: false,
-      isCompleted: true,
-      timeAgo: formatRelativeTime(asgn.assignedDate || asgn.createdAt, currentLang),
-      rawDate: asgn.assignedDate || asgn.createdAt || ""
-    });
+    const isCommSent = !!(
+      asgn.committeeSent ||
+      asgn.committee_sent ||
+      (typeof asgn.status === "string" && asgn.status.toLowerCase().includes("committee details sent")) ||
+      (committee.hasDetails && (committee.chairmanName || committee.memberList.length > 0))
+    );
+
+    if (isCommSent) {
+      const datesNeeded = !asgn.datesSubmittedBySubject && !asgn.appointmentDate && !asgn.appointment_date;
+      notifs.push({
+        id: `notif-step1-${caseId}`,
+        caseId,
+        caseNo,
+        stepNumber: 1,
+        stepType: "step1_officers",
+        asgn,
+        adminName,
+        headline: currentLang === "si"
+          ? `${adminName} විසින් විමර්ශන කමිටු පත්වීම් තොරතුරු ඔබ වෙත එවා ඇත (${caseNo})`
+          : `${adminName} sent Investigation Committee Assignment details (${caseNo})`,
+        actionSnippet: committee.chairmanName
+          ? (currentLang === "si" ? `👑 සභාපති: ${committee.chairmanName} | 👥 සාමාජිකයින්: ${committee.memberList.length} දෙනෙක්. විස්තර බැලීමට මෙහි ක්ලික් කරන්න.` : `👑 Chairman: ${committee.chairmanName} | 👥 Members: ${committee.memberList.length}. Click to view details.`)
+          : (currentLang === "si" ? "විමර්ශන කමිටු විස්තර ලැබී ඇත. විස්තර බැලීමට මෙහි ක්ලික් කරන්න." : "Investigation Committee assigned by Admin. Click to view details."),
+        badgeColor: "badge-blue",
+        statusPill: currentLang === "si" ? "📬 නව කමිටු පත්වීමක් (New Committee)" : "📬 New Committee Assigned",
+        iconType: "file",
+        isUrgent: datesNeeded,
+        isActionRequired: datesNeeded,
+        isCompleted: !datesNeeded,
+        timeAgo: formatRelativeTime(asgn.committeeSentAt || asgn.committee_sent_at || asgn.assignedDate || asgn.createdAt, currentLang),
+        rawDate: asgn.committeeSentAt || asgn.committee_sent_at || asgn.assignedDate || asgn.createdAt || ""
+      });
+    }
   });
 
   return notifs;
@@ -540,6 +575,37 @@ function getNotifMeta(asgn: any, currentLang: string = "en") {
 }
 
 
+function isItemAnswerLetter(item: any): boolean {
+  if (!item) return false;
+  if (
+    item.is_answer_letter === true ||
+    item.is_answer_letter === "true" ||
+    item.isAnswerLetter === true ||
+    item.isAnswerLetter === "true" ||
+    String(item.is_answer_letter || "") === "true" ||
+    String(item.isAnswerLetter || "") === "true"
+  ) {
+    return true;
+  }
+  const text = (
+    String(item.nature_of_letter || "") + " " +
+    String(item.region_province || "") + " " +
+    String(item.regionProvince || "") + " " +
+    String(item.letterType || "") + " " +
+    String(item.letter_type || "") + " " +
+    String(item.type || "") + " " +
+    String(item.status || "") + " " +
+    String(item.subject || "") + " " +
+    String(item.letter_title || "")
+  ).toLowerCase();
+  return (
+    text.includes("answer") ||
+    text.includes("reply") ||
+    text.includes("පිළිතුරු") ||
+    text.includes("பதில்")
+  );
+}
+
 function collectAnswerLetters(
   lettersData: any[],
   subsequentData: any[],
@@ -562,12 +628,37 @@ function collectAnswerLetters(
     return false;
   };
 
+  const getOfficerCandidates = (item: any) => {
+    return [
+      item.action_officer,
+      item.actionOfficer,
+      item.forwarded_to,
+      item.forwardedTo,
+      item.addressed_to,
+      item.addressedTo,
+      item.mail_officer_name,
+      item.mailOfficerName,
+      item.officer_name,
+      item.officerName,
+    ].filter(Boolean);
+  };
+
+  const matchOfficerOrCase = (item: any, targetCaseNo: string) => {
+    const candidates = getOfficerCandidates(item);
+    for (const c of candidates) {
+      if (isOfficerMatchedFn(c)) return true;
+    }
+    if (targetCaseNo && assignedRefNosClean.includes(String(targetCaseNo).trim().toLowerCase())) {
+      return true;
+    }
+    return false;
+  };
+
   if (Array.isArray(subsequentData)) {
     subsequentData.forEach((m: any) => {
-      const isAnswer = m.is_answer_letter === true || m.is_answer_letter === "true" || String(m.is_answer_letter || "") === "true";
-      const mailOfficer = m.mail_officer_name || m.officer_name || "";
+      const isAnswer = isItemAnswerLetter(m);
       const targetCaseNo = m.case_no || m.ref_no || "";
-      const isMatch = isOfficerMatchedFn(mailOfficer) || (targetCaseNo && assignedRefNosClean.includes(String(targetCaseNo).trim().toLowerCase()));
+      const isMatch = matchOfficerOrCase(m, targetCaseNo);
       if (isAnswer && isMatch && !isCaseAlreadyMovedToInquiry(targetCaseNo, m)) {
         list.push({
           id: m.id || `sub-${targetCaseNo}-${m.received_date || m.created_at}`,
@@ -577,7 +668,7 @@ function collectAnswerLetters(
           letterType: m.letter_type || "Subsequent Answer Letter",
           letterDate: m.mail_date || m.letter_date || m.received_date,
           receivedDate: m.received_date || m.created_at,
-          officerName: mailOfficer || "Subject Officer",
+          officerName: m.mail_officer_name || m.officer_name || "Subject Officer",
           isAnswerLetter: true,
         });
       }
@@ -586,10 +677,9 @@ function collectAnswerLetters(
 
   if (Array.isArray(lettersData)) {
     lettersData.forEach((l: any) => {
-      const isAnswer = l.is_answer_letter === true || l.is_answer_letter === "true" || String(l.is_answer_letter || "") === "true";
-      const mailOfficer = l.officer_name || "";
-      const targetCaseNo = l.ref_no || l.case_no || "";
-      const isMatch = isOfficerMatchedFn(mailOfficer) || (targetCaseNo && assignedRefNosClean.includes(String(targetCaseNo).trim().toLowerCase()));
+      const isAnswer = isItemAnswerLetter(l);
+      const targetCaseNo = l.ref_no || l.case_no || l.letter_no || "";
+      const isMatch = matchOfficerOrCase(l, targetCaseNo);
       if (isAnswer && isMatch && !isCaseAlreadyMovedToInquiry(targetCaseNo, l)) {
         list.push({
           id: l.id || `daily-${targetCaseNo}`,
@@ -599,7 +689,7 @@ function collectAnswerLetters(
           letterType: "Daily Mail Answer Letter",
           letterDate: l.letter_date || l.received_date,
           receivedDate: l.received_date || l.created_at,
-          officerName: mailOfficer || "Subject Officer",
+          officerName: l.action_officer || l.forwarded_to || l.officer_name || "Subject Officer",
           isAnswerLetter: true,
         });
       }
@@ -611,10 +701,9 @@ function collectAnswerLetters(
       const localSub = JSON.parse(localStorage.getItem("dcmms_subsequent_mails") || "[]");
       if (Array.isArray(localSub)) {
         localSub.forEach((sm: any) => {
-          const isAnswer = sm.isAnswerLetter === "true" || sm.isAnswerLetter === true || String(sm.isAnswerLetter || "") === "true";
-          const mailOfficer = sm.mailOfficerName || sm.officerName || "";
+          const isAnswer = isItemAnswerLetter(sm);
           const targetCaseNo = sm.caseNo || sm.case_no || sm.refNo || "";
-          const isMatch = isOfficerMatchedFn(mailOfficer) || (targetCaseNo && assignedRefNosClean.includes(String(targetCaseNo).trim().toLowerCase()));
+          const isMatch = matchOfficerOrCase(sm, targetCaseNo);
           if (isAnswer && isMatch && !isCaseAlreadyMovedToInquiry(targetCaseNo, sm)) {
             list.push({
               id: sm.id || `local-sub-${targetCaseNo}-${sm.receivedDate || sm.createdAt}`,
@@ -624,7 +713,7 @@ function collectAnswerLetters(
               letterType: sm.letterType || "Subsequent Answer Letter",
               letterDate: sm.letterDate || sm.mailDate || sm.receivedDate,
               receivedDate: sm.receivedDate || sm.createdAt,
-              officerName: mailOfficer || "Subject Officer",
+              officerName: sm.mailOfficerName || sm.officerName || "Subject Officer",
               isAnswerLetter: true,
             });
           }
@@ -634,10 +723,9 @@ function collectAnswerLetters(
       const localNewMailCase = JSON.parse(localStorage.getItem("dcmms_new_mail_current_case") || "[]");
       if (Array.isArray(localNewMailCase)) {
         localNewMailCase.forEach((sm: any) => {
-          const isAnswer = sm.isAnswerLetter === "true" || sm.isAnswerLetter === true || String(sm.isAnswerLetter || "") === "true";
-          const mailOfficer = sm.mailOfficerName || sm.officerName || "";
+          const isAnswer = isItemAnswerLetter(sm);
           const targetCaseNo = sm.caseNo || sm.case_no || sm.refNo || "";
-          const isMatch = isOfficerMatchedFn(mailOfficer) || (targetCaseNo && assignedRefNosClean.includes(String(targetCaseNo).trim().toLowerCase()));
+          const isMatch = matchOfficerOrCase(sm, targetCaseNo);
           if (isAnswer && isMatch && !isCaseAlreadyMovedToInquiry(targetCaseNo, sm)) {
             list.push({
               id: sm.id || `local-case-mail-${targetCaseNo}-${sm.receivedDate || sm.createdAt}`,
@@ -647,7 +735,7 @@ function collectAnswerLetters(
               letterType: sm.letterType || "Subsequent Answer Letter",
               letterDate: sm.letterDate || sm.mailDate || sm.receivedDate,
               receivedDate: sm.receivedDate || sm.createdAt,
-              officerName: mailOfficer || "Subject Officer",
+              officerName: sm.mailOfficerName || sm.officerName || "Subject Officer",
               isAnswerLetter: true,
             });
           }
@@ -936,6 +1024,7 @@ function SubjectOfficerDashboardContent() {
             finalRefNos.forEach((refNo) => {
               if (!existingCaseNos.has(refNo)) {
                 const matchingLetter = lettersList.find((l: any) => l.refNo === refNo);
+                if (matchingLetter && isItemAnswerLetter(matchingLetter)) return;
                 filtered.push({
                   id: `case-${refNo}`,
                   caseNo: refNo,
@@ -949,6 +1038,8 @@ function SubjectOfficerDashboardContent() {
                 });
               }
             });
+
+            filtered = filtered.filter((c: any) => !isItemAnswerLetter(c));
 
 
 
@@ -1334,7 +1425,7 @@ function SubjectOfficerDashboardContent() {
   }, [profile, t]);
 
   // Tab navigation state
-  const [activeTab, setActiveTab] = useState<"cases" | "answer_letters" | "recommendations" | "conducting_inquiry" | "issuing_charge_sheet" | "disciplinary_inspection" | "provincial_investigation">("cases");
+  const [activeTab, setActiveTab] = useState<"cases" | "answer_letters" | "recommendations" | "conducting_inquiry" | "issuing_charge_sheet" | "disciplinary_inspection" | "provincial_investigation" | "appeals">("cases");
   const [assignedAnswerLetters, setAssignedAnswerLetters] = useState<any[]>([]);
   const [replyLettersList, setReplyLettersList] = useState<any[]>([]);
   const [concernedOfficersMap, setConcernedOfficersMap] = useState<Record<string, any>>({});
@@ -1343,7 +1434,7 @@ function SubjectOfficerDashboardContent() {
   // Sync tab and search from URL search parameters if provided
   useEffect(() => {
     if (tabParam) {
-      if (["cases", "answer_letters", "recommendations", "conducting_inquiry", "issuing_charge_sheet", "disciplinary_inspection", "provincial_investigation"].includes(tabParam)) {
+      if (["cases", "answer_letters", "recommendations", "conducting_inquiry", "issuing_charge_sheet", "disciplinary_inspection", "provincial_investigation", "appeals"].includes(tabParam)) {
         setActiveTab(tabParam as any);
       }
     }
@@ -1358,6 +1449,9 @@ function SubjectOfficerDashboardContent() {
     }
     if (caseNoParam && tabParam === "provincial_investigation") {
       setProvincialSearchQuery(caseNoParam);
+    }
+    if (caseNoParam && tabParam === "appeals") {
+      setAppealSearchQuery(caseNoParam);
     }
   }, [tabParam, caseNoParam]);
 
@@ -1477,6 +1571,116 @@ function SubjectOfficerDashboardContent() {
   const [chargeSheetAuthorityFilter, setChargeSheetAuthorityFilter] = useState("all");
   const [chargeSheetPriorityFilter, setChargeSheetPriorityFilter] = useState<"all" | "high" | "medium" | "low">("all");
   const [selectedChargeSheetModal, setSelectedChargeSheetModal] = useState<any | null>(null);
+
+  // Appeals state
+  const [appealsData, setAppealsData] = useState<any[]>([]);
+  const [appealSearchQuery, setAppealSearchQuery] = useState("");
+  const [appealStageFilter, setAppealStageFilter] = useState("all");
+  const [appealAuthorityFilter, setAppealAuthorityFilter] = useState("all");
+  const [appealPriorityFilter, setAppealPriorityFilter] = useState<"all" | "high" | "medium" | "low">("all");
+  const [selectedAppealModal, setSelectedAppealModal] = useState<any | null>(null);
+  const [newAppealModalOpen, setNewAppealModalOpen] = useState(false);
+  const [savingAppealForm, setSavingAppealForm] = useState(false);
+  const [newAppealForm, setNewAppealForm] = useState<{
+    caseNo: string;
+    appealRef: string;
+    appellantName: string;
+    appellantDesignation: string;
+    schoolName: string;
+    appealAuthority: string;
+    appealGround: string;
+    originalOrder: string;
+    submissionDate: string;
+    observationsDueDate: string;
+    priority: "high" | "medium" | "low";
+    stageKey: string;
+    officerObservations: string;
+  }>({
+    caseNo: "",
+    appealRef: "",
+    appellantName: "",
+    appellantDesignation: "",
+    schoolName: "",
+    appealAuthority: "psc",
+    appealGround: "",
+    originalOrder: "",
+    submissionDate: new Date().toISOString().split("T")[0],
+    observationsDueDate: "",
+    priority: "medium",
+    stageKey: "pending_review",
+    officerObservations: "",
+  });
+
+  // Load Appeals from localStorage / seed defaults
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("dcmms_appeals");
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setAppealsData(parsed);
+            return;
+          }
+        } catch (e) {}
+      }
+      const defaultAppeals = [
+        {
+          id: "appeal-001",
+          caseNo: "ED/DISC/2025/112",
+          appealRef: "PSC/APP/2026/04",
+          appellantName: "කේ. ඩබ්ලිව්. පෙරේරා (K. W. Perera)",
+          appellantDesignation: "විදුහල්පති (Principal I)",
+          schoolName: "ධර්මරාජ විද්‍යාලය, මහනුවර",
+          appealAuthority: "psc",
+          appealGround: "වැඩ තහනම් කිරීමේ නියෝගයට එරෙහිව අභියාචනය (Appeal Against Interdiction Order)",
+          originalOrder: "අන්තර්වාර වැඩ තහනම් නියෝගය (Interdiction under Est. Code)",
+          submissionDate: "2026-01-18",
+          observationsDueDate: "2026-02-15",
+          priority: "high",
+          stageKey: "pending_review",
+          stage: "සමාලෝචනය වෙමින් පවතී",
+          officerObservations: "ආයතන සංග්‍රහයේ 48 වන පරිච්ඡේදය ප්‍රකාරව නිරීක්ෂණ සටහන සකස් කරමින් පවතී.",
+        },
+        {
+          id: "appeal-002",
+          caseNo: "ED/DISC/2025/089",
+          appealRef: "ESC/APP/2025/19",
+          appellantName: "එම්. ඒ. රත්නායක (M. A. Rathnayake)",
+          appellantDesignation: "ගුරු සේවය (SLTS I)",
+          schoolName: "රාජකීය විද්‍යාලය, කොළඹ",
+          appealAuthority: "esc",
+          appealGround: "අලාභ අයකර ගැනීමේ අධිභාර නියෝගය ලිහිල් කිරීම (Requesting Surcharge Revision)",
+          originalOrder: "රු. 145,000 ක අලාභ අධිභාරය",
+          submissionDate: "2025-12-05",
+          observationsDueDate: "2026-01-10",
+          priority: "medium",
+          stageKey: "observations_submitted",
+          stage: "නිරීක්ෂණ වාර්තාව ඉදිරිපත් කර ඇත",
+          officerObservations: "අමාත්‍යාංශ නිරීක්ෂණ වාර්තාව අධ්‍යාපන සේවා කමිටුව වෙත යොමු කරන ලදී.",
+        },
+        {
+          id: "appeal-003",
+          caseNo: "ED/DISC/2024/204",
+          appealRef: "AAT/APL/2025/33",
+          appellantName: "ඩී. එස්. බණ්ඩාර (D. S. Bandara)",
+          appellantDesignation: "නියෝජ්‍ය විදුහල්පති (Deputy Principal)",
+          schoolName: "මලියදේව විද්‍යාලය, කුරුණෑගල",
+          appealAuthority: "aat",
+          appealGround: "ශ්‍රේණිය පහත හෙළීමේ විනය නියෝගය සංශෝධනය (Appeal Against Reduction in Rank)",
+          originalOrder: "ශ්‍රේණිය පහත හෙළීම සහ වැටුප් වර්ධක අත්හිටුවීම",
+          submissionDate: "2025-10-22",
+          observationsDueDate: "2025-11-30",
+          priority: "low",
+          stageKey: "relief_granted",
+          stage: "සහන සලසා ඇත / නියෝගය සංශෝධිතයි",
+          officerObservations: "පරිපාලන අභියාචනා විනිශ්චය අධිකාරියේ තීරණය අනුව වැටුප් වර්ධක යළි ලබා දෙන ලදී.",
+        }
+      ];
+      setAppealsData(defaultAppeals);
+      localStorage.setItem("dcmms_appeals", JSON.stringify(defaultAppeals));
+    }
+  }, []);
 
   // Investigation Recommendations state
   const [recommendations, setRecommendations] = useState<any[]>([]);
@@ -2657,9 +2861,16 @@ function SubjectOfficerDashboardContent() {
 
   // Filter cases list in real-time
   const filteredCases = cases.filter((item) => {
-    const matchesSearch =
-      item.caseNo.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (item.subject || "").toLowerCase().includes(searchQuery.toLowerCase());
+    const q = searchQuery.toLowerCase().trim();
+    const matchesSearch = !q ||
+      item.caseNo.toLowerCase().includes(q) ||
+      (item.letterNo || "").toLowerCase().includes(q) ||
+      (item.sender || "").toLowerCase().includes(q) ||
+      (item.instituteName || "").toLowerCase().includes(q) ||
+      (item.letterType || "").toLowerCase().includes(q) ||
+      (item.classification || "").toLowerCase().includes(q) ||
+      (item.directives || "").toLowerCase().includes(q) ||
+      (item.subject || "").toLowerCase().includes(q);
 
     const matchesPriority = priorityFilter === "all" || item.priority === priorityFilter;
 
@@ -2739,18 +2950,26 @@ function SubjectOfficerDashboardContent() {
         (replyItem && replyItem.upcoming_action && (
           String(replyItem.upcoming_action).toLowerCase().includes("inspection") ||
           String(replyItem.upcoming_action).toLowerCase().includes("inquiry") ||
+          String(replyItem.upcoming_action).toLowerCase().includes("investigation") ||
           String(replyItem.upcoming_action).includes("පරීක්ෂණ") ||
+          String(replyItem.upcoming_action).includes("පරීක්ශන") ||
           String(replyItem.upcoming_action).includes("විමර්ශන") ||
           String(replyItem.upcoming_action).includes("ஆய்வு")
         )) ||
         c.status === "Conducting an Inquiry" ||
         c.status === "Conduct an inspection" ||
+        c.status === "Institutional Basic Investigation" ||
+        c.status === "Provincial Basic Investigation" ||
+        c.status === "Preliminary Investigation" ||
+        c.status === "Conducting preliminary investigations" ||
         c.stage === "Conducting an Inquiry" ||
         c.stageKey === "inquiry" ||
         (c.upcomingAction && (
           String(c.upcomingAction).toLowerCase().includes("inspection") ||
           String(c.upcomingAction).toLowerCase().includes("inquiry") ||
+          String(c.upcomingAction).toLowerCase().includes("investigation") ||
           String(c.upcomingAction).includes("පරීක්ෂණ") ||
+          String(c.upcomingAction).includes("පරීක්ශන") ||
           String(c.upcomingAction).includes("විමර්ශන") ||
           String(c.upcomingAction).includes("ஆய்வு")
         ));
@@ -2764,13 +2983,13 @@ function SubjectOfficerDashboardContent() {
           ? "Inquiry Hearing Scheduled"
           : (asgn?.initialInvestigationComplete || asgn?.initial_investigation_complete)
           ? "Report Submission Pending"
-          : "Conducting an Inquiry";
+          : (c.status === "Institutional Basic Investigation" ? "Institutional Basic Investigation" : c.status === "Provincial Basic Investigation" ? "Provincial Basic Investigation" : "Conducting an Inquiry");
 
         const stageKey = stage === "Inquiry Hearing Scheduled"
           ? "scheduled"
           : stage === "Report Submission Pending"
           ? "report_pending"
-          : "inquiry";
+          : (c.status === "Institutional Basic Investigation" ? "institutional_investigation" : "inquiry");
 
         const proceedings =
           replyItem?.description ||
@@ -2828,7 +3047,9 @@ function SubjectOfficerDashboardContent() {
       const isInspectionAction = r.upcoming_action && (
         String(r.upcoming_action).toLowerCase().includes("inspection") ||
         String(r.upcoming_action).toLowerCase().includes("inquiry") ||
+        String(r.upcoming_action).toLowerCase().includes("investigation") ||
         String(r.upcoming_action).includes("පරීක්ෂණ") ||
+        String(r.upcoming_action).includes("පරීක්ශන") ||
         String(r.upcoming_action).includes("විමර්ශන") ||
         String(r.upcoming_action).includes("ஆய்வு")
       );
@@ -3845,6 +4066,216 @@ function SubjectOfficerDashboardContent() {
     });
   }, [provincialInvestigationCases, provincialSearchQuery, provincialStageFilter, provincialPriorityFilter]);
 
+  // ── Appeals Case List ──
+  const appealsCases = useMemo(() => {
+    const map = new Map<string, any>();
+
+    // 1. Process custom/saved appeals
+    appealsData.forEach((a) => {
+      const key = (a.appealRef || a.caseNo || a.id || "").trim().toLowerCase();
+      if (key) {
+        map.set(key, { ...a });
+      }
+    });
+
+    // 2. Scan cases and assignedAnswerLetters for appeal letters / matters
+    cases.forEach((c) => {
+      const isAppeal =
+        (c as any).type?.toLowerCase?.() === "appeal" ||
+        (c as any).nature?.toLowerCase?.() === "appeal" ||
+        c.subject?.toLowerCase?.().includes("appeal") ||
+        c.subject?.includes("අභියාචන");
+      if (isAppeal) {
+        const key = (c.caseNo || "").trim().toLowerCase();
+        if (key && !map.has(key)) {
+          map.set(key, {
+            id: c.id || `app-${c.caseNo}`,
+            caseNo: c.caseNo,
+            appealRef: `PSC/APP/${c.caseNo}`,
+            appellantName: (c as any).accusedName || (c as any).sender || "Appellant Officer",
+            appellantDesignation: (c as any).accusedDesignation || "Educational Officer",
+            schoolName: (c as any).schoolName || "Government Educational Institute",
+            appealAuthority: "psc",
+            appealGround: c.subject,
+            originalOrder: "Disciplinary Action / Interdiction Order",
+            submissionDate: c.assignedDate || c.receivedDate || new Date().toISOString().split("T")[0],
+            observationsDueDate: "14 Days from Receipt",
+            priority: c.priority || "medium",
+            stageKey: "pending_review",
+            stage: lang === "si" ? "සමාලෝචනය වෙමින් පවතී" : "Pending Review / Notice",
+            officerObservations: "Awaiting Subject Officer observations report.",
+          });
+        }
+      }
+    });
+
+    assignedAnswerLetters.forEach((l) => {
+      const isAppeal =
+        l.letterTitle?.toLowerCase?.().includes("appeal") ||
+        l.letterTitle?.includes("අභියාචන") ||
+        l.status?.toLowerCase?.().includes("appeal");
+      if (isAppeal) {
+        const key = (l.caseNo || l.id || "").trim().toLowerCase();
+        if (key && !map.has(key)) {
+          map.set(key, {
+            id: l.id || `app-${l.caseNo}`,
+            caseNo: l.caseNo,
+            appealRef: `APP/LT/${l.caseNo}`,
+            appellantName: l.senderName || "Appellant Officer",
+            appellantDesignation: "Officer",
+            schoolName: "Institute",
+            appealAuthority: "ministry",
+            appealGround: l.letterTitle,
+            originalOrder: "Letter Appeal",
+            submissionDate: l.mailDate || l.receivedDate || new Date().toISOString().split("T")[0],
+            observationsDueDate: "Pending Submission",
+            priority: "medium",
+            stageKey: "pending_review",
+            stage: lang === "si" ? "සමාලෝචනය වෙමින් පවතී" : "Pending Review / Notice",
+            officerObservations: "Answer letter regarding appeal received.",
+          });
+        }
+      }
+    });
+
+    return Array.from(map.values());
+  }, [appealsData, cases, assignedAnswerLetters, lang]);
+
+  // Filtered appeals cases
+  const filteredAppealsCases = useMemo(() => {
+    return appealsCases.filter((item) => {
+      const q = appealSearchQuery.trim().toLowerCase();
+      const matchesSearch =
+        !q ||
+        (item.caseNo && item.caseNo.toLowerCase().includes(q)) ||
+        (item.appealRef && item.appealRef.toLowerCase().includes(q)) ||
+        (item.appellantName && item.appellantName.toLowerCase().includes(q)) ||
+        (item.schoolName && item.schoolName.toLowerCase().includes(q)) ||
+        (item.appealGround && item.appealGround.toLowerCase().includes(q)) ||
+        (item.officerObservations && item.officerObservations.toLowerCase().includes(q));
+
+      const matchesStage =
+        appealStageFilter === "all" ||
+        item.stageKey === appealStageFilter;
+
+      const matchesAuthority =
+        appealAuthorityFilter === "all" ||
+        item.appealAuthority?.toLowerCase() === appealAuthorityFilter.toLowerCase();
+
+      const matchesPriority =
+        appealPriorityFilter === "all" ||
+        item.priority === appealPriorityFilter;
+
+      return matchesSearch && matchesStage && matchesAuthority && matchesPriority;
+    });
+  }, [appealsCases, appealSearchQuery, appealStageFilter, appealAuthorityFilter, appealPriorityFilter]);
+
+  const handleSaveNewAppeal = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!newAppealForm.caseNo.trim() || !newAppealForm.appellantName.trim()) {
+      showToast(lang === "si" ? "කරුණාකර නඩු අංකය සහ අභියාචකගේ නම ඇතුළත් කරන්න." : "Please fill in Case No and Appellant Name.");
+      return;
+    }
+    setSavingAppealForm(true);
+    try {
+      const appealId = `appeal-${Date.now()}`;
+      const newRecord = {
+        id: appealId,
+        caseNo: newAppealForm.caseNo.trim(),
+        appealRef: newAppealForm.appealRef.trim() || `APP/${newAppealForm.caseNo.trim()}`,
+        appellantName: newAppealForm.appellantName.trim(),
+        appellantDesignation: newAppealForm.appellantDesignation.trim() || "Educational Officer",
+        schoolName: newAppealForm.schoolName.trim() || "Government Institute",
+        appealAuthority: newAppealForm.appealAuthority || "psc",
+        appealGround: newAppealForm.appealGround.trim() || "Appeal against disciplinary decision",
+        originalOrder: newAppealForm.originalOrder.trim() || "Disciplinary Order",
+        submissionDate: newAppealForm.submissionDate || new Date().toISOString().split("T")[0],
+        observationsDueDate: newAppealForm.observationsDueDate || "14 Days from Submission",
+        priority: newAppealForm.priority || "medium",
+        stageKey: newAppealForm.stageKey || "pending_review",
+        stage: newAppealForm.stageKey === "forwarded_to_psc"
+          ? (lang === "si" ? "රා.සේ.කො. / අ.සේ.ක. වෙත යොමු කර ඇත" : "Forwarded to PSC / ESC")
+          : newAppealForm.stageKey === "observations_submitted"
+          ? (lang === "si" ? "නිරීක්ෂණ වාර්තාව ඉදිරිපත් කර ඇත" : "Observations Submitted")
+          : newAppealForm.stageKey === "relief_granted"
+          ? (lang === "si" ? "සහන සලසා ඇත / නියෝගය සංශෝධිතයි" : "Relief Granted")
+          : newAppealForm.stageKey === "appeal_dismissed"
+          ? (lang === "si" ? "අභියාචනය ප්‍රතික්ෂේප කර නියෝගය තහවුරු විය" : "Appeal Dismissed")
+          : (lang === "si" ? "සමාලෝචනය වෙමින් පවතී" : "Pending Review / Notice"),
+        officerObservations: newAppealForm.officerObservations.trim() || "Appeal registered in system.",
+      };
+
+      const updated = [newRecord, ...appealsData];
+      setAppealsData(updated);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("dcmms_appeals", JSON.stringify(updated));
+        window.dispatchEvent(new Event("dcmms_appeals_updated"));
+      }
+
+      showToast(lang === "si" ? "අභියාචනය සාර්ථකව ලියාපදිංචි කරන ලදී!" : "Appeal registered successfully!");
+      setNewAppealModalOpen(false);
+      setNewAppealForm({
+        caseNo: "",
+        appealRef: "",
+        appellantName: "",
+        appellantDesignation: "",
+        schoolName: "",
+        appealAuthority: "psc",
+        appealGround: "",
+        originalOrder: "",
+        submissionDate: new Date().toISOString().split("T")[0],
+        observationsDueDate: "",
+        priority: "medium",
+        stageKey: "pending_review",
+        officerObservations: "",
+      });
+    } catch (err: any) {
+      showToast("Error saving appeal: " + (err?.message || "Unknown error"));
+    } finally {
+      setSavingAppealForm(false);
+    }
+  };
+
+  const handleUpdateAppealStage = (appealId: string, stageKey: string, observations?: string) => {
+    const stageName =
+      stageKey === "forwarded_to_psc"
+        ? (lang === "si" ? "රා.සේ.කො. / අ.සේ.ක. වෙත යොමු කර ඇත" : "Forwarded to PSC / ESC")
+        : stageKey === "observations_submitted"
+        ? (lang === "si" ? "නිරීක්ෂණ වාර්තාව ඉදිරිපත් කර ඇත" : "Observations Submitted")
+        : stageKey === "relief_granted"
+        ? (lang === "si" ? "සහන සලසා ඇත / නියෝගය සංශෝධිතයි" : "Relief Granted")
+        : stageKey === "appeal_dismissed"
+        ? (lang === "si" ? "අභියාචනය ප්‍රතික්ෂේප කර නියෝගය තහවුරු විය" : "Appeal Dismissed")
+        : (lang === "si" ? "සමාලෝචනය වෙමින් පවතී" : "Pending Review / Notice");
+
+    const updated = appealsCases.map((a) => {
+      if (a.id === appealId || a.caseNo === appealId) {
+        return {
+          ...a,
+          stageKey,
+          stage: stageName,
+          officerObservations: observations !== undefined ? observations : a.officerObservations,
+        };
+      }
+      return a;
+    });
+
+    setAppealsData(updated);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("dcmms_appeals", JSON.stringify(updated));
+      window.dispatchEvent(new Event("dcmms_appeals_updated"));
+    }
+    if (selectedAppealModal && (selectedAppealModal.id === appealId || selectedAppealModal.caseNo === appealId)) {
+      setSelectedAppealModal({
+        ...selectedAppealModal,
+        stageKey,
+        stage: stageName,
+        officerObservations: observations !== undefined ? observations : selectedAppealModal.officerObservations,
+      });
+    }
+    showToast(lang === "si" ? "අභියාචනා තත්ත්වය යාවත්කාලීන කරන ලදී!" : "Appeal status updated successfully!");
+  };
+
   // Filter investigation recommendations list in real-time
   const filteredRecommendations = recommendations.filter((item) => {
     const q = recSearchQuery.trim().toLowerCase();
@@ -4304,7 +4735,7 @@ function SubjectOfficerDashboardContent() {
           )}
 
           {/* ── Navigation Tab Bar ── */}
-          <div className="navigation-tab-list" style={{ marginTop: "24px", marginBottom: "24px" }}>
+          <div className="navigation-tab-list" style={{ marginTop: "24px", marginBottom: "24px", flexWrap: "wrap" }}>
             <button
               type="button"
               className={`nav-tab-btn${activeTab === "cases" ? " active" : ""}`}
@@ -4457,6 +4888,29 @@ function SubjectOfficerDashboardContent() {
                   transition: "all 0.2s ease"
                 }}>
                   {disciplinaryInspectionCases.length}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              className={`nav-tab-btn${activeTab === "appeals" ? " active" : ""}`}
+              onClick={() => setActiveTab("appeals")}
+              title={lang === "si" ? "අභියාචනා (Appeals)" : "Appeals"}
+            >
+              <Scale className="tab-icon" />
+              <span>{lang === "si" ? "අභියාචනා" : lang === "ta" ? "மேல்முறையீடுகள்" : "Appeals"}</span>
+              {appealsCases.length > 0 && (
+                <span style={{
+                  backgroundColor: activeTab === "appeals" ? "#8b5cf6" : "#94a3b8",
+                  color: "#ffffff",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  padding: "2px 8px",
+                  borderRadius: "12px",
+                  marginLeft: "4px",
+                  transition: "all 0.2s ease"
+                }}>
+                  {appealsCases.length}
                 </span>
               )}
             </button>
@@ -4820,68 +5274,168 @@ function SubjectOfficerDashboardContent() {
                                   <div style={{ marginTop: "16px", paddingTop: "16px", borderTop: "1px solid #f0f2f5" }}>
                                     
                                     {/* ── STEP 1 ONLY ── */}
-                                    {notif.stepType === "step1_officers" && (
+                                    {notif.stepType === "step1_officers" && (() => {
+                                      const committee = parseCommitteeDetails(asgn);
+                                      const step1ApptId = `step1-app-date-${notif.id}`;
+                                      const step1DueId = `step1-due-date-${notif.id}`;
+                                      return (
                                       <div>
+                                        {/* ── Committee Card ── */}
                                         <div style={{ fontSize: "13px", fontWeight: 700, color: "#1e1b4b", marginBottom: "8px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                                           <span>{lang === "si" ? "1. පත් කළ විමර්ශන නිලධාරීන් (Admin විසින් යවන ලදී)" : "Step 1: Assigned Investigation Officers (Received from Admin)"}</span>
                                           <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "20px", backgroundColor: "#dbeafe", color: "#1d4ed8" }}>✓ Received</span>
                                         </div>
-                                        <div style={{ backgroundColor: "#f0f4ff", borderRadius: "10px", border: "1px solid #c7d2fe", padding: "12px 16px" }}>
-                                          <div style={{ fontSize: "12px", color: "#3730a3", fontWeight: 600, marginBottom: "4px" }}>
+                                        <div style={{ backgroundColor: "#f0f4ff", borderRadius: "10px", border: "1px solid #c7d2fe", padding: "12px 16px", marginBottom: "14px" }}>
+                                          <div style={{ fontSize: "12px", color: "#3730a3", fontWeight: 600, marginBottom: "6px" }}>
                                             {lang === "si" ? "📋 නිලධාරීන් / කමිටුව:" : "📋 Investigation Committee:"}
                                           </div>
                                           <div style={{ fontSize: "13px", fontWeight: 700, color: "#1e1b4b" }}>
-                                            {(() => {
-                                              const committee = parseCommitteeDetails(asgn);
-                                              if (!committee.hasDetails) {
-                                                return (
-                                                  <span style={{ color: "#64748b", fontWeight: 500, fontStyle: "italic" }}>
-                                                    {lang === "si" ? "— (නිලධාරීන් යවා නොමැත)" : "— (Officers not yet assigned)"}
-                                                  </span>
-                                                );
-                                              }
-
-                                              return (
-                                                <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "4px" }}>
-                                                  {committee.chairmanName && (
-                                                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-                                                      <span style={{ fontSize: "11px", backgroundColor: "#fef3c7", color: "#92400e", border: "1px solid #fde68a", padding: "3px 10px", borderRadius: "12px", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                                                        👑 {lang === "si" ? "සභාපති" : "CHAIRMAN"}
-                                                      </span>
-                                                      <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "14px" }}>
-                                                        {committee.chairmanName}
-                                                      </span>
-                                                      {committee.chairmanNic && (
-                                                        <span style={{ fontSize: "11px", color: "#64748b", fontWeight: 500 }}>(NIC: {committee.chairmanNic})</span>
-                                                      )}
-                                                    </div>
-                                                  )}
-
-                                                  {committee.memberList.length > 0 && (
-                                                    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px", marginTop: "2px" }}>
-                                                      <span style={{ fontSize: "11px", backgroundColor: "#e0e7ff", color: "#3730a3", border: "1px solid #c7d2fe", padding: "3px 10px", borderRadius: "12px", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                                                        👥 {lang === "si" ? `සාමාජිකයින් (${committee.memberList.length})` : `MEMBERS (${committee.memberList.length})`}
-                                                      </span>
-                                                      {committee.memberList.map((mName, idx) => (
-                                                        <span key={idx} style={{ fontSize: "12px", backgroundColor: "#ffffff", border: "1px solid #cbd5e1", padding: "3px 10px", borderRadius: "6px", color: "#334155", fontWeight: 600 }}>
-                                                          {mName}
-                                                        </span>
-                                                      ))}
-                                                    </div>
-                                                  )}
-
-                                                  {!committee.chairmanName && committee.memberList.length === 0 && committee.rawText && (
-                                                    <span style={{ fontWeight: 700, color: "#0f172a" }}>
-                                                      {committee.rawText}
+                                            {!committee.hasDetails ? (
+                                              <span style={{ color: "#64748b", fontWeight: 500, fontStyle: "italic" }}>
+                                                {lang === "si" ? "— (නිලධාරීන් යවා නොමැත)" : "— (Officers not yet assigned)"}
+                                              </span>
+                                            ) : (
+                                              <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "4px" }}>
+                                                {committee.chairmanName && (
+                                                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                                                    <span style={{ fontSize: "11px", backgroundColor: "#fef3c7", color: "#92400e", border: "1px solid #fde68a", padding: "3px 10px", borderRadius: "12px", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                                      👑 {lang === "si" ? "සභාපති" : "CHAIRMAN"}
                                                     </span>
-                                                  )}
-                                                </div>
-                                              );
-                                            })()}
+                                                    <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "14px" }}>
+                                                      {committee.chairmanName}
+                                                    </span>
+                                                    {committee.chairmanNic && (
+                                                      <span style={{ fontSize: "11px", color: "#64748b", fontWeight: 500 }}>(NIC: {committee.chairmanNic})</span>
+                                                    )}
+                                                  </div>
+                                                )}
+                                                {committee.memberList.length > 0 && (
+                                                  <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px", marginTop: "2px" }}>
+                                                    <span style={{ fontSize: "11px", backgroundColor: "#e0e7ff", color: "#3730a3", border: "1px solid #c7d2fe", padding: "3px 10px", borderRadius: "12px", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                                      👥 {lang === "si" ? `සාමාජිකයින් (${committee.memberList.length})` : `MEMBERS (${committee.memberList.length})`}
+                                                    </span>
+                                                    {committee.memberList.map((mName, idx) => (
+                                                      <span key={idx} style={{ fontSize: "12px", backgroundColor: "#ffffff", border: "1px solid #cbd5e1", padding: "3px 10px", borderRadius: "6px", color: "#334155", fontWeight: 600 }}>
+                                                        {mName}
+                                                      </span>
+                                                    ))}
+                                                  </div>
+                                                )}
+                                                {!committee.chairmanName && committee.memberList.length === 0 && committee.rawText && (
+                                                  <span style={{ fontWeight: 700, color: "#0f172a" }}>{committee.rawText}</span>
+                                                )}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+
+                                        {/* ── Inline Appointment & Due Date Entry Form ── */}
+                                        <div style={{ fontSize: "13px", fontWeight: 700, color: asgn.datesSubmittedBySubject ? "#0369a1" : "#1e293b", marginBottom: "8px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                          <span>{lang === "si" ? "📅 පත්වීම් ලිපිය දිනය සහ වාර්තා දිනය ඇතුළත් කරන්න" : "📅 Enter Appointment Letter Date & Report Due Date"}</span>
+                                          {asgn.datesSubmittedBySubject ? (
+                                            <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "20px", backgroundColor: "#dbeafe", color: "#1d4ed8" }}>✓ Sent</span>
+                                          ) : (
+                                            <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "20px", backgroundColor: "#fef3c7", color: "#b45309" }}>{lang === "si" ? "⚡ ඔබේ ක්‍රියාව අවශ්‍යයි" : "⚡ Action Required"}</span>
+                                          )}
+                                        </div>
+                                        <div style={{ backgroundColor: asgn.datesSubmittedBySubject ? "#f0f9ff" : "#f8fafc", borderRadius: "10px", border: `1px solid ${asgn.datesSubmittedBySubject ? "#bae6fd" : "#e2e8f0"}`, padding: "14px 16px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                                          {asgn.datesSubmittedBySubject && (
+                                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "4px" }}>
+                                              <div style={{ backgroundColor: "#ffffff", padding: "10px", borderRadius: "8px", border: "1px solid #bae6fd" }}>
+                                                <div style={{ fontSize: "11px", color: "#64748b", fontWeight: 600 }}>📅 {lang === "si" ? "පත්වීම් ලිපිය දිනය" : "Appointment Letter Date"}</div>
+                                                <div style={{ fontSize: "15px", fontWeight: 700, color: "#0369a1", marginTop: "2px" }}>{asgn.appointmentDate}</div>
+                                              </div>
+                                              <div style={{ backgroundColor: "#ffffff", padding: "10px", borderRadius: "8px", border: "1px solid #fecaca" }}>
+                                                <div style={{ fontSize: "11px", color: "#64748b", fontWeight: 600 }}>⏳ {lang === "si" ? "වාර්තාව ලැබිය යුතු දිනය" : "Report Due Date"}</div>
+                                                <div style={{ fontSize: "15px", fontWeight: 700, color: "#dc2626", marginTop: "2px" }}>{asgn.reportDueDate}</div>
+                                              </div>
+                                            </div>
+                                          )}
+                                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                                            <div>
+                                              <label style={{ fontSize: "11px", fontWeight: 700, color: "#0369a1", display: "block", marginBottom: "4px" }}>
+                                                📅 {lang === "si" ? "පත්වීම් ලිපිය දිනය:" : "Appointment Letter Date:"}
+                                              </label>
+                                              <input
+                                                type="date"
+                                                id={step1ApptId}
+                                                defaultValue={formatToInputDate(asgn.appointmentDate)}
+                                                onChange={(e) => {
+                                                  const val = e.target.value;
+                                                  const caseKey = asgn.caseNo || asgn.id;
+                                                  setAssignments((prev) =>
+                                                    prev.map((item) =>
+                                                      (item.id === asgn.id || item.caseNo === asgn.caseNo)
+                                                        ? { ...item, appointmentDate: val, appointment_date: val }
+                                                        : item
+                                                    )
+                                                  );
+                                                }}
+                                                style={{ width: "100%", padding: "8px 10px", borderRadius: "8px", border: "1px solid #bae6fd", fontSize: "13px", backgroundColor: "#ffffff" }}
+                                              />
+                                            </div>
+                                            <div>
+                                              <label style={{ fontSize: "11px", fontWeight: 700, color: "#dc2626", display: "block", marginBottom: "4px" }}>
+                                                ⏳ {lang === "si" ? "වාර්තාව ලැබිය යුතු දිනය:" : "Report Must Be Received By:"}
+                                              </label>
+                                              <input
+                                                type="date"
+                                                id={step1DueId}
+                                                defaultValue={formatToInputDate(asgn.reportDueDate)}
+                                                onChange={(e) => {
+                                                  const val = e.target.value;
+                                                  setAssignments((prev) =>
+                                                    prev.map((item) =>
+                                                      (item.id === asgn.id || item.caseNo === asgn.caseNo)
+                                                        ? { ...item, reportDueDate: val, report_due_date: val }
+                                                        : item
+                                                    )
+                                                  );
+                                                }}
+                                                style={{ width: "100%", padding: "8px 10px", borderRadius: "8px", border: "1px solid #fecaca", fontSize: "13px", backgroundColor: "#ffffff" }}
+                                              />
+                                            </div>
+                                          </div>
+                                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", marginTop: "4px", flexWrap: "wrap" }}>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                const appEl = document.getElementById(step1ApptId) as HTMLInputElement;
+                                                const dueEl = document.getElementById(step1DueId) as HTMLInputElement;
+                                                handleStep2SubmitDates(asgn, appEl?.value || "", dueEl?.value || "");
+                                              }}
+                                              className="fb-primary-btn"
+                                              style={{ padding: "7px 16px", fontSize: "12px" }}
+                                            >
+                                              <Send size={14} />
+                                              {asgn.datesSubmittedBySubject
+                                                ? (lang === "si" ? "දිනයන් යාවත්කාලීන කරන්න" : "Update & Re-send Dates")
+                                                : (lang === "si" ? "දිනයන් Admin වෙත යවන්න" : "Send Dates to Investigation Admin")}
+                                            </button>
+                                            <Link
+                                              href={`/subject/add-details?caseNo=${encodeURIComponent(asgn.caseNo || notif.caseNo)}`}
+                                              style={{
+                                                display: "inline-flex",
+                                                alignItems: "center",
+                                                gap: "5px",
+                                                padding: "6px 12px",
+                                                fontSize: "11px",
+                                                fontWeight: 600,
+                                                backgroundColor: "#f1f5f9",
+                                                color: "#475569",
+                                                borderRadius: "6px",
+                                                textDecoration: "none",
+                                                border: "1px solid #cbd5e1"
+                                              }}
+                                            >
+                                              <ExternalLink size={12} />
+                                              <span>{lang === "si" ? "සම්පූර්ණ විස්තර" : "Full Case Details"}</span>
+                                            </Link>
                                           </div>
                                         </div>
                                       </div>
-                                    )}
+                                      );
+                                    })()}
 
                                     {/* ── STEP 2 ONLY ── */}
                                     {notif.stepType === "step2_dates" && (
@@ -5226,15 +5780,15 @@ function SubjectOfficerDashboardContent() {
               <table className="letters-data-table">
                 <thead>
                   <tr>
-                    <th scope="col">{t("caseNo")}</th>
-                    <th scope="col">{lang === "si" ? "විමර්ශන කමිටුව" : "Investigation Committee"}</th>
-                    <th scope="col">{t("letterDate")}</th>
+                    <th scope="col">{lang === "si" ? "ලිපි / නඩු අංකය" : lang === "ta" ? "கடிதம் / வழக்கு எண்" : "Letter & Case No"}</th>
+                    <th scope="col">{lang === "si" ? "යවන්නා / ආයතනය" : lang === "ta" ? "அனுப்புநர் / நிறுவனம்" : "Sender & Institute"}</th>
                     <th scope="col">{t("subjectText")}</th>
+                    <th scope="col">{lang === "si" ? "ලිපි / ලැබුණු දිනය" : lang === "ta" ? "கடிதம் / பெறப்பட்ட தேதி" : "Letter & Received Dates"}</th>
+                    <th scope="col">{lang === "si" ? "විමර්ශන කමිටුව" : lang === "ta" ? "விசாரணைக் குழு" : "Investigation Committee"}</th>
                     <th scope="col">{t("priority")}</th>
                     <th scope="col">{t("status")}</th>
-                    <th scope="col">{t("caseAge", "Case Age")}</th>
-                    <th scope="col">Reminder</th>
-                    <th scope="col" className="text-center">{t("addDetails")}</th>
+                    <th scope="col">{lang === "si" ? "කාලසීමාව / මතක් කිරීම" : lang === "ta" ? "வயது / நினைவூட்டல்" : "Age / Reminder"}</th>
+                    <th scope="col" className="text-center">{t("actions", "Actions")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -5246,7 +5800,77 @@ function SubjectOfficerDashboardContent() {
 
                       return (
                         <tr key={item.id ? (item.id + "-" + idx) : ("case-" + (item.caseNo || idx) + "-" + idx)} className="letter-table-row">
-                          <td className="font-semibold">{item.caseNo}</td>
+                          {/* 1. Case & Letter Number + Letter Type */}
+                          <td>
+                            <div className="font-semibold" style={{ color: "#1e1b4b", fontSize: "13.5px" }}>
+                              {item.caseNo}
+                            </div>
+                            {item.letterNo && item.letterNo !== item.caseNo && (
+                              <div style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>
+                                {lang === "si" ? "ලිපි අංකය" : "Letter No"}: <span style={{ fontWeight: 600, color: "#334155" }}>{item.letterNo}</span>
+                              </div>
+                            )}
+                            <div style={{ marginTop: "4px" }}>
+                              <span style={{
+                                fontSize: "10.5px",
+                                fontWeight: 700,
+                                padding: "2px 7px",
+                                borderRadius: "10px",
+                                backgroundColor: item.letterType?.toLowerCase().includes("answer") ? "#e0e7ff" : "#f1f5f9",
+                                color: item.letterType?.toLowerCase().includes("answer") ? "#3730a3" : "#475569",
+                                border: "1px solid #e2e8f0",
+                                display: "inline-block"
+                              }}>
+                                {item.letterType || "Complaint"}
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* 2. Sender Details & Institute / School */}
+                          <td>
+                            <div style={{ fontWeight: 600, color: "#1e293b", fontSize: "13px" }}>
+                              {item.sender && item.sender !== "—" ? item.sender : "—"}
+                            </div>
+                            {item.instituteName && item.instituteName !== "—" && (
+                              <div style={{ fontSize: "11.5px", color: "#64748b", marginTop: "3px", display: "flex", alignItems: "center", gap: "4px" }}>
+                                <Building size={12} style={{ flexShrink: 0, color: "#94a3b8" }} />
+                                <span>{item.instituteName}</span>
+                              </div>
+                            )}
+                          </td>
+
+                          {/* 3. Subject & Classification & Directives */}
+                          <td className="subject-cell" style={{ maxWidth: "260px" }}>
+                            <div style={{ fontWeight: 500, color: "#0f172a", lineHeight: 1.45, fontSize: "13px" }}>
+                              {item.subject}
+                            </div>
+                            {item.classification && item.classification !== "—" && (
+                              <span style={{ fontSize: "10.5px", fontWeight: 600, color: "#0369a1", backgroundColor: "#e0f2fe", border: "1px solid #bae6fd", padding: "1px 6px", borderRadius: "4px", display: "inline-block", marginTop: "4px" }}>
+                                {item.classification}
+                              </span>
+                            )}
+                            {item.directives && item.directives.trim() && (
+                              <div style={{ fontSize: "11px", color: "#92400e", backgroundColor: "#fef3c7", border: "1px solid #fde68a", padding: "3px 6px", borderRadius: "4px", marginTop: "4px", display: "flex", alignItems: "flex-start", gap: "4px", lineHeight: 1.3 }}>
+                                <span style={{ flexShrink: 0 }}>📌</span>
+                                <span style={{ fontStyle: "italic" }}>{item.directives}</span>
+                              </div>
+                            )}
+                          </td>
+
+                          {/* 4. Letter Date & Received Date */}
+                          <td>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "3px", minWidth: "110px" }}>
+                              <div style={{ fontSize: "12.5px", fontWeight: 600, color: "#1e293b", display: "flex", alignItems: "center", gap: "4px" }}>
+                                <CalendarIcon size={12} style={{ color: "#64748b" }} />
+                                <span>{item.letterDate || item.receivedDate || item.assignedDate || "—"}</span>
+                              </div>
+                              <div style={{ fontSize: "11px", color: "#64748b" }}>
+                                {lang === "si" ? "ලැබුණේ:" : lang === "ta" ? "பெறப்பட்டது:" : "Recv:"} {item.receivedDate || item.letterDate || item.assignedDate || "—"}
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* 5. Investigation Committee */}
                           <td>
                             {(() => {
                               if (!matchingAsgn) return <span style={{ fontSize: "11px", color: "#94a3b8" }}>— (Pending)</span>;
@@ -5281,14 +5905,16 @@ function SubjectOfficerDashboardContent() {
                               return <span style={{ fontSize: "11px", color: "#94a3b8" }}>— (Pending)</span>;
                             })()}
                           </td>
-                          <td>{item.letterDate || item.receivedDate || item.assignedDate}</td>
-                          <td className="subject-cell">{item.subject}</td>
+
+                          {/* 6. Priority */}
                           <td>
                             <span className={`priority-text-container priority-text-${item.priority}`}>
                               <span className={`priority-dot dot-${item.priority}`} aria-hidden="true"></span>
                               {item.priority === "high" ? t("priorityHigh") : item.priority === "medium" ? t("priorityMedium") : t("priorityLow")}
                             </span>
                           </td>
+
+                          {/* 7. Status */}
                           <td>
                             {item.status === "assigned answer letter" || item.status === "Assigned Answer Letter" ? (
                               <span className="badge-badge badge-status-closed" style={{ backgroundColor: "#e0e7ff", color: "#3730a3", border: "1px solid #c7d2fe", fontWeight: 700, padding: "4px 10px", borderRadius: "12px", fontSize: "11px" }}>
@@ -5301,40 +5927,79 @@ function SubjectOfficerDashboardContent() {
                             ) : item.status === "In Progress" ? t("statusInProgress") :
                               item.status === "Closed" ? t("statusClosed") : t("statusPending")}
                           </td>
-                          <td>
-                            {item.isOld ? t("oldCase", "Old Case") : t("newCase", "New Case")}
-                          </td>
-                          <td>
-                            {(() => {
-                              const rem = calculateReminder(item.letterDate || item.receivedDate || item.assignedDate, item.priority, item.status);
-                              let colorClass = "reminder-text-gray";
-                              let dotClass = "dot-gray";
-                              if (rem.color === "red") {
-                                colorClass = "reminder-text-red";
-                                dotClass = "dot-red";
-                              } else if (rem.color === "orange") {
-                                colorClass = "reminder-text-orange";
-                                dotClass = "dot-orange";
-                              } else if (rem.color === "green") {
-                                colorClass = "reminder-text-green";
-                                dotClass = "dot-green";
-                              }
 
-                              return (
-                                <span className={`reminder-text-container ${colorClass}`}>
-                                  <span className={`reminder-dot ${dotClass}`} aria-hidden="true"></span>
-                                  {rem.text}
-                                </span>
-                              );
-                            })()}
+                          {/* 8. Case Age & Reminder */}
+                          <td>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                              <span style={{
+                                fontSize: "11px",
+                                fontWeight: 700,
+                                padding: "2px 8px",
+                                borderRadius: "10px",
+                                backgroundColor: item.isOld ? "#f1f5f9" : "#ecfdf5",
+                                color: item.isOld ? "#475569" : "#047857",
+                                border: item.isOld ? "1px solid #cbd5e1" : "1px solid #a7f3d0",
+                                display: "inline-block",
+                                width: "fit-content"
+                              }}>
+                                {item.isOld ? t("oldCase", "Old Case") : t("newCase", "New Case")}
+                              </span>
+                              {(() => {
+                                const rem = calculateReminder(item.letterDate || item.receivedDate || item.assignedDate, item.priority, item.status);
+                                let colorClass = "reminder-text-gray";
+                                let dotClass = "dot-gray";
+                                if (rem.color === "red") {
+                                  colorClass = "reminder-text-red";
+                                  dotClass = "dot-red";
+                                } else if (rem.color === "orange") {
+                                  colorClass = "reminder-text-orange";
+                                  dotClass = "dot-orange";
+                                } else if (rem.color === "green") {
+                                  colorClass = "reminder-text-green";
+                                  dotClass = "dot-green";
+                                }
+
+                                return (
+                                  <span className={`reminder-text-container ${colorClass}`} style={{ fontSize: "11px" }}>
+                                    <span className={`reminder-dot ${dotClass}`} aria-hidden="true"></span>
+                                    {rem.text}
+                                  </span>
+                                );
+                              })()}
+                            </div>
                           </td>
+
+                          {/* 9. Actions */}
                           <td className="text-center actions-cell">
-                            <Link
-                              href={`/subject/add-details?caseNo=${item.caseNo}${item.status === "assigned answer letter" || item.status === "Assigned Answer Letter" ? "&isAnswerLetter=true" : ""}`}
-                              className="add-details-link"
-                            >
-                              {t("addDetails")}
-                            </Link>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "6px", alignItems: "center" }}>
+                              <Link
+                                href={`/subject/add-details?caseNo=${encodeURIComponent(item.caseNo)}${item.status === "assigned answer letter" || item.status === "Assigned Answer Letter" ? "&isAnswerLetter=true" : ""}`}
+                                className="add-details-link"
+                              >
+                                {t("addDetails")}
+                              </Link>
+                              <Link
+                                href={`/admin/view-letter?id=${encodeURIComponent(item.letterNo || item.caseNo)}`}
+                                style={{
+                                  fontSize: "11px",
+                                  fontWeight: 600,
+                                  color: "#4f46e5",
+                                  textDecoration: "none",
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "3px",
+                                  padding: "3px 8px",
+                                  borderRadius: "4px",
+                                  backgroundColor: "#eef2ff",
+                                  border: "1px solid #e0e7ff",
+                                  transition: "all 0.15s ease",
+                                }}
+                                title={lang === "si" ? "ලිපි විස්තර සහ යොමු කිරීම් බලන්න" : "View Official Letter Details"}
+                              >
+                                <Eye size={11} />
+                                <span>{lang === "si" ? "ලිපිය බලන්න" : lang === "ta" ? "கடிதம் பார்க்க" : "View Letter"}</span>
+                              </Link>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -6563,6 +7228,417 @@ function SubjectOfficerDashboardContent() {
             </section>
           )}
 
+          {/* ==================== TAB: APPEALS ==================== */}
+          {activeTab === "appeals" && (
+            <section style={{ marginBottom: "30px" }}>
+              {/* Header Row with Action */}
+              <div className="section-header-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "12px" }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "20px", fontWeight: 800, color: "#1e1b4b", display: "flex", alignItems: "center", gap: "10px" }}>
+                    <Scale style={{ color: "#8b5cf6", width: "26px", height: "26px" }} />
+                    <span>{lang === "si" ? "අභියාචනා (Appeals)" : lang === "ta" ? "மேல்முறையீடுகள் (Appeals)" : "Appeals Management"}</span>
+                  </h3>
+                  <p style={{ margin: "4px 0 0 0", fontSize: "13px", color: "#64748b" }}>
+                    {t("appealsDesc", "Appeals lodged against disciplinary orders, interdictions, surcharge penalties, and Public Service Commission (PSC/ESC) determinations.")}
+                  </p>
+                </div>
+
+                <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewAppealForm({
+                        caseNo: "",
+                        appealRef: "",
+                        appellantName: "",
+                        appellantDesignation: "",
+                        schoolName: "",
+                        appealAuthority: "psc",
+                        appealGround: "",
+                        originalOrder: "",
+                        submissionDate: new Date().toISOString().split("T")[0],
+                        observationsDueDate: "",
+                        priority: "medium",
+                        stageKey: "pending_review",
+                        officerObservations: "",
+                      });
+                      setNewAppealModalOpen(true);
+                    }}
+                    className="btn-create-rec"
+                    style={{ background: "linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)", cursor: "pointer", border: "none" }}
+                  >
+                    <Plus size={16} />
+                    <span>{t("registerNewAppeal", "Register New Appeal")}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Appeals KPI Cards */}
+              <div className="inquiry-kpi-grid">
+                <div className="inquiry-kpi-card inquiry-card-violet">
+                  <div className="premium-card-top">
+                    <div className="premium-card-title-area">
+                      <Scale className="premium-card-icon" />
+                      <span>{t("totalAppealsCount", "Total Appeals")}</span>
+                    </div>
+                  </div>
+                  <div className="premium-card-bottom">
+                    <div className="premium-card-value-area">
+                      <span className="premium-card-value">{String(appealsCases.length).padStart(2, "0")}</span>
+                      <span className="premium-card-label">{lang === "si" ? "අභියාචනා" : "appeals"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="inquiry-kpi-card inquiry-card-rose">
+                  <div className="premium-card-top">
+                    <div className="premium-card-title-area">
+                      <AlertCircle className="premium-card-icon" />
+                      <span>{t("appealsPendingPsc", "PSC / ESC Review Pending")}</span>
+                    </div>
+                  </div>
+                  <div className="premium-card-bottom">
+                    <div className="premium-card-value-area">
+                      <span className="premium-card-value">
+                        {String(appealsCases.filter((c: any) => c.stageKey === "forwarded_to_psc" || c.appealAuthority === "psc" || c.appealAuthority === "esc").length).padStart(2, "0")}
+                      </span>
+                      <span className="premium-card-label">{lang === "si" ? "රා.සේ.කො." : "PSC/ESC"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="inquiry-kpi-card inquiry-card-amber">
+                  <div className="premium-card-top">
+                    <div className="premium-card-title-area">
+                      <Clock className="premium-card-icon" />
+                      <span>{t("appealsObservationsDue", "Observations / Reports Due")}</span>
+                    </div>
+                  </div>
+                  <div className="premium-card-bottom">
+                    <div className="premium-card-value-area">
+                      <span className="premium-card-value">
+                        {String(appealsCases.filter((c: any) => c.stageKey === "pending_review").length).padStart(2, "0")}
+                      </span>
+                      <span className="premium-card-label">{lang === "si" ? "අපේක්ෂිත" : "pending"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="inquiry-kpi-card inquiry-card-emerald">
+                  <div className="premium-card-top">
+                    <div className="premium-card-title-area">
+                      <CheckCircle className="premium-card-icon" />
+                      <span>{t("appealsConcluded", "Determinations Concluded")}</span>
+                    </div>
+                  </div>
+                  <div className="premium-card-bottom">
+                    <div className="premium-card-value-area">
+                      <span className="premium-card-value">
+                        {String(appealsCases.filter((c: any) => c.stageKey === "relief_granted" || c.stageKey === "appeal_dismissed").length).padStart(2, "0")}
+                      </span>
+                      <span className="premium-card-label">{lang === "si" ? "තීරණ" : "concluded"}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Filter and Search Bar */}
+              <div className="letters-list-header" style={{ marginBottom: "16px", backgroundColor: "#ffffff", padding: "12px 18px", borderRadius: "12px", border: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: 700, color: "#1e1b4b", fontSize: "14px" }}>
+                  <Filter size={16} style={{ color: "#8b5cf6" }} />
+                  <span>{t("filterAppeals", "Filter Appeals")}</span>
+                </div>
+
+                <div className="letters-filters-group" style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", margin: 0 }}>
+                  {/* Search Bar */}
+                  <div className="search-box" style={{ width: "240px" }}>
+                    <svg className="search-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    <input
+                      type="text"
+                      value={appealSearchQuery}
+                      onChange={(e) => setAppealSearchQuery(e.target.value)}
+                      placeholder={t("searchAppealsPlaceholder", "Search appeals (Case No, Appeal Ref, Appellant)...")}
+                      className="search-input"
+                    />
+                  </div>
+
+                  {/* Stage Filter */}
+                  <div className="filter-dropdown-wrapper">
+                    <select
+                      value={appealStageFilter}
+                      onChange={(e) => setAppealStageFilter(e.target.value)}
+                      className="filter-priority-select"
+                      style={{ maxWidth: "210px" }}
+                    >
+                      <option value="all">{t("appealStageAll", "All Appeal Stages")}</option>
+                      <option value="pending_review">{t("appealStagePendingReview", "Pending Review / Notice")}</option>
+                      <option value="forwarded_to_psc">{t("appealStageForwardedPsc", "Forwarded to PSC / ESC")}</option>
+                      <option value="observations_submitted">{t("appealStageObservationsSubmitted", "Observations Submitted")}</option>
+                      <option value="relief_granted">{t("appealStageReliefGranted", "Relief Granted / Order Modified")}</option>
+                      <option value="appeal_dismissed">{t("appealStageDismissed", "Appeal Dismissed / Order Upheld")}</option>
+                    </select>
+                  </div>
+
+                  {/* Authority Filter */}
+                  <div className="filter-dropdown-wrapper">
+                    <select
+                      value={appealAuthorityFilter}
+                      onChange={(e) => setAppealAuthorityFilter(e.target.value)}
+                      className="filter-priority-select"
+                      style={{ maxWidth: "200px" }}
+                    >
+                      <option value="all">{t("appealAuthorityAll", "All Appeal Authorities")}</option>
+                      <option value="psc">{t("appealAuthorityPsc", "Public Service Commission (PSC)")}</option>
+                      <option value="esc">{t("appealAuthorityEsc", "Education Service Committee (ESC)")}</option>
+                      <option value="ministry">{t("appealAuthorityMinistry", "Ministry Secretary")}</option>
+                      <option value="aat">{t("appealAuthorityAat", "Administrative Appeals Tribunal (AAT)")}</option>
+                      <option value="court">{t("appealAuthorityCourt", "Court of Appeal / Supreme Court")}</option>
+                    </select>
+                  </div>
+
+                  {/* Priority Filter */}
+                  <div className="filter-dropdown-wrapper">
+                    <select
+                      value={appealPriorityFilter}
+                      onChange={(e: any) => setAppealPriorityFilter(e.target.value)}
+                      className="filter-priority-select"
+                    >
+                      <option value="all">{t("priorityAll", "All Priorities")}</option>
+                      <option value="high">🔴 {t("priorityHigh", "High Priority")}</option>
+                      <option value="medium">🟡 {t("priorityMedium", "Medium Priority")}</option>
+                      <option value="low">🟢 {t("priorityLow", "Low Priority")}</option>
+                    </select>
+                  </div>
+
+                  {(appealSearchQuery || appealStageFilter !== "all" || appealAuthorityFilter !== "all" || appealPriorityFilter !== "all") && (
+                    <a
+                      href="#"
+                      className="view-all-reset-link"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setAppealSearchQuery("");
+                        setAppealStageFilter("all");
+                        setAppealAuthorityFilter("all");
+                        setAppealPriorityFilter("all");
+                      }}
+                    >
+                      {t("viewAll")} <span className="arrow-span">→</span>
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              {/* Appeals Data Table */}
+              <div className="table-responsive-container">
+                <table className="letters-data-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">{lang === "si" ? "නඩු / අභියාචනා අංකය" : "Case No / Appeal Ref"}</th>
+                      <th scope="col">{lang === "si" ? "අභියාචක නිලධාරී සහ ආයතනය" : "Appellant Officer & Institution"}</th>
+                      <th scope="col">{lang === "si" ? "අභියාචනා බලධාරියා සහ මුල් නියෝගය" : "Appeal Forum & Authority"}</th>
+                      <th scope="col">{lang === "si" ? "අභියාචනා හේතුව සහ විෂය" : "Grounds of Appeal & Subject"}</th>
+                      <th scope="col">{lang === "si" ? "වත්මන් තත්ත්වය" : "Appeal Stage / Status"}</th>
+                      <th scope="col">{lang === "si" ? "දිනයන්" : "Submission & Due Dates"}</th>
+                      <th scope="col">{t("priority", "Priority")}</th>
+                      <th scope="col" className="text-center">{t("actions", "Actions")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredAppealsCases.length > 0 ? (
+                      filteredAppealsCases.map((item, idx) => {
+                        return (
+                          <tr key={item.id ? `${item.id}-${idx}` : `app-${item.caseNo}-${idx}`} className="letter-table-row">
+                            {/* Case No & Appeal Ref */}
+                            <td className="font-semibold" style={{ color: "#1e1b4b" }}>
+                              <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+                                <span style={{ fontWeight: 800, color: "#6d28d9", fontSize: "14px" }}>{item.caseNo}</span>
+                                {item.appealRef && (
+                                  <span style={{ fontSize: "11px", color: "#7c3aed", fontWeight: 700, backgroundColor: "#ede9fe", padding: "1px 6px", borderRadius: "8px", width: "fit-content" }}>
+                                    ⚖️ {item.appealRef}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Appellant Officer & Institution */}
+                            <td>
+                              <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+                                <span style={{ fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: "5px", fontSize: "13px" }}>
+                                  <User size={13} style={{ color: "#8b5cf6" }} />
+                                  {item.appellantName || "—"}
+                                </span>
+                                {(item.appellantDesignation || item.schoolName) && (
+                                  <span style={{ fontSize: "11px", color: "#64748b", display: "flex", alignItems: "center", gap: "4px" }}>
+                                    <Building size={11} style={{ color: "#94a3b8" }} />
+                                    {[item.appellantDesignation, item.schoolName].filter(Boolean).join(" • ")}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Appeal Authority & Original Order */}
+                            <td>
+                              <div style={{ fontSize: "12px", color: "#334155", fontWeight: 600, display: "flex", flexDirection: "column", gap: "3px" }}>
+                                <span style={{ fontWeight: 700, color: "#6d28d9" }}>
+                                  🏛️ {item.appealAuthority === "psc"
+                                    ? (lang === "si" ? "රාජ්‍ය සේවා කොමිෂන් සභාව (PSC)" : "Public Service Commission")
+                                    : item.appealAuthority === "esc"
+                                    ? (lang === "si" ? "අධ්‍යාපන සේවා කමිටුව (ESC)" : "Education Service Committee")
+                                    : item.appealAuthority === "aat"
+                                    ? (lang === "si" ? "පරිපාලන අභියාචනා විනිශ්චය (AAT)" : "Admin Appeals Tribunal")
+                                    : item.appealAuthority === "court"
+                                    ? (lang === "si" ? "අධිකරණය (Court)" : "Court of Appeal")
+                                    : (lang === "si" ? "අමාත්‍යාංශ ලේකම්" : "Ministry Secretary")}
+                                </span>
+                                {item.originalOrder && (
+                                  <span style={{ fontSize: "11px", color: "#475569", backgroundColor: "#f8fafc", padding: "1px 6px", borderRadius: "6px", border: "1px solid #e2e8f0", width: "fit-content" }}>
+                                    📋 {item.originalOrder}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Grounds of Appeal */}
+                            <td className="subject-cell" style={{ maxWidth: "260px" }}>
+                              <div style={{ fontSize: "13px", color: "#1e293b", lineHeight: "1.4", fontWeight: 600 }}>
+                                {item.appealGround || item.subject}
+                              </div>
+                              {item.officerObservations && (
+                                <div style={{ fontSize: "11px", color: "#64748b", marginTop: "3px", backgroundColor: "#faf5ff", padding: "3px 6px", borderRadius: "4px", border: "1px solid #f3e8ff" }}>
+                                  📝 {item.officerObservations}
+                                </div>
+                              )}
+                            </td>
+
+                            {/* Appeal Stage / Status */}
+                            <td>
+                              {item.stageKey === "relief_granted" ? (
+                                <span className="inquiry-stage-pill inquiry-stage-order">
+                                  <CheckCircle size={12} />
+                                  {lang === "si" ? "සහන සලසා ඇත" : "Relief Granted"}
+                                </span>
+                              ) : item.stageKey === "observations_submitted" ? (
+                                <span className="inquiry-stage-pill inquiry-stage-prelim">
+                                  <FileText size={12} />
+                                  {lang === "si" ? "නිරීක්ෂණ ඉදිරිපත් කර ඇත" : "Observations Submitted"}
+                                </span>
+                              ) : item.stageKey === "forwarded_to_psc" ? (
+                                <span className="inquiry-stage-pill inquiry-stage-psc">
+                                  <AlertCircle size={12} />
+                                  {lang === "si" ? "රා.සේ.කො. වෙත යොමු කර ඇත" : "Forwarded to PSC"}
+                                </span>
+                              ) : item.stageKey === "appeal_dismissed" ? (
+                                <span className="inquiry-stage-pill inquiry-stage-charge">
+                                  <ShieldAlert size={12} />
+                                  {lang === "si" ? "අභියාචනය ප්‍රතික්ෂේප විය" : "Appeal Dismissed"}
+                                </span>
+                              ) : (
+                                <span className="inquiry-stage-pill inquiry-stage-scheduled">
+                                  <Clock size={12} />
+                                  {lang === "si" ? "සමාලෝචනය වෙමින් පවතී" : "Pending Review"}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Submission & Due Dates */}
+                            <td>
+                              <div style={{ display: "flex", flexDirection: "column", gap: "2px", fontSize: "12px", color: "#475569" }}>
+                                {item.submissionDate && (
+                                  <span style={{ fontWeight: 600, color: "#1e1b4b" }}>
+                                    📅 {lang === "si" ? "ඉදිරිපත් කළේ" : "Lodged"}: {item.submissionDate}
+                                  </span>
+                                )}
+                                {item.observationsDueDate && (
+                                  <span style={{ fontSize: "11px", color: "#b45309" }}>
+                                    ⏳ {lang === "si" ? "නියමිත" : "Due"}: {item.observationsDueDate}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Priority */}
+                            <td>
+                              <span className={`priority-text-container priority-text-${item.priority}`}>
+                                <span className={`priority-dot dot-${item.priority}`} aria-hidden="true"></span>
+                                {item.priority === "high" ? t("priorityHigh", "High") : item.priority === "medium" ? t("priorityMedium", "Medium") : t("priorityLow", "Low")}
+                              </span>
+                            </td>
+
+                            {/* Actions */}
+                            <td className="text-center actions-cell">
+                              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedAppealModal(item)}
+                                  className="btn-quick-view"
+                                  title="Open Appeals Dossier"
+                                  style={{ backgroundColor: "#ede9fe", color: "#6d28d9", border: "1px solid #ddd6fe", cursor: "pointer" }}
+                                >
+                                  <Eye size={13} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const params = new URLSearchParams({
+                                      caseNo: item.caseNo || "",
+                                      appealRef: item.appealRef || "",
+                                      appellantName: item.appellantName || "",
+                                      appellantDesignation: item.appellantDesignation || "",
+                                      schoolName: item.schoolName || "",
+                                      appealGround: item.appealGround || "",
+                                      originalOrder: item.originalOrder || "",
+                                      submissionDate: item.submissionDate || "",
+                                      appealAuthority: item.appealAuthority || "",
+                                      officerName: item.officerObservations ? "" : "",
+                                    });
+                                    window.location.href = `/subject/appeal-details?${params.toString()}`;
+                                  }}
+                                  className="add-details-link"
+                                  style={{ padding: "4px 10px", fontSize: "11px", backgroundColor: "#7c3aed", border: "none", cursor: "pointer" }}
+                                  title="Add Details"
+                                >
+                                  {lang === "si" ? "විස්තර එකතු කරන්න" : "Add Details"}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={8} className="text-center py-5 text-muted" style={{ padding: "40px 20px" }}>
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
+                            <Scale size={44} style={{ color: "#cbd5e1" }} />
+                            <span style={{ fontSize: "15px", fontWeight: 600, color: "#64748b" }}>
+                              {t("noAppealsFound", "No appeals found matching your search criteria.")}
+                            </span>
+                            {(appealSearchQuery || appealStageFilter !== "all" || appealAuthorityFilter !== "all" || appealPriorityFilter !== "all") && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setAppealSearchQuery("");
+                                  setAppealStageFilter("all");
+                                  setAppealAuthorityFilter("all");
+                                  setAppealPriorityFilter("all");
+                                }}
+                                className="btn-create-rec"
+                                style={{ marginTop: "4px", backgroundColor: "#f1f5f9", color: "#334155", border: "1px solid #cbd5e1" }}
+                              >
+                                {t("viewAll", "Reset Filters")}
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
           {/* ==================== TAB: PROVINCIAL BASIC INVESTIGATION ==================== */}
           {activeTab === "provincial_investigation" && (
             <section style={{ marginBottom: "30px" }}>
@@ -7092,98 +8168,121 @@ function SubjectOfficerDashboardContent() {
                     </div>
                   </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "14px" }}>
-                    {completedInvestigationCases.map((c) => {
-                      const rec = recommendations.find((r) => (r.caseNo || "").trim().toLowerCase() === (c.caseNo || "").trim().toLowerCase());
-                      const isSubmitted = rec && (rec.status === "Submitted" || rec.status === "Approved");
-                      const isDraft = rec && rec.status === "Draft";
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+                      <thead>
+                        <tr style={{ backgroundColor: "#f1f5f9" }}>
+                          <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 700, color: "#475569", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.05em", borderBottom: "1px solid #e2e8f0", whiteSpace: "nowrap" }}>
+                            {lang === "si" ? "නඩු අංකය" : "Case No"}
+                          </th>
+                          <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 700, color: "#475569", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.05em", borderBottom: "1px solid #e2e8f0" }}>
+                            {lang === "si" ? "විෂය" : "Subject"}
+                          </th>
+                          <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 700, color: "#475569", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.05em", borderBottom: "1px solid #e2e8f0", whiteSpace: "nowrap" }}>
+                            {lang === "si" ? "දිනය" : "Date"}
+                          </th>
+                          <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 700, color: "#475569", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.05em", borderBottom: "1px solid #e2e8f0", whiteSpace: "nowrap" }}>
+                            {lang === "si" ? "තත්ත්වය" : "Status"}
+                          </th>
+                          <th style={{ padding: "10px 14px", textAlign: "right", fontWeight: 700, color: "#475569", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.05em", borderBottom: "1px solid #e2e8f0", whiteSpace: "nowrap" }}>
+                            {lang === "si" ? "ක්‍රියාමාර්ගය" : "Action"}
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {completedInvestigationCases.map((c, idx) => {
+                          const rec = recommendations.find((r) => (r.caseNo || "").trim().toLowerCase() === (c.caseNo || "").trim().toLowerCase());
+                          const isSubmitted = rec && (rec.status === "Submitted" || rec.status === "Approved");
+                          const isDraft = rec && rec.status === "Draft";
 
-                      return (
-                        <div
-                          key={`completed-inv-${c.caseNo}`}
-                          style={{
-                            backgroundColor: isSubmitted ? "#f8fafc" : "#ffffff",
-                            borderRadius: "14px",
-                            border: isSubmitted ? "1px solid #cbd5e1" : "1px solid #818cf8",
-                            padding: "16px",
-                            display: "flex",
-                            flexDirection: "column",
-                            justifyContent: "space-between",
-                            gap: "12px",
-                            boxShadow: isSubmitted ? "none" : "0 4px 6px -1px rgba(79, 70, 229, 0.08)"
-                          }}
-                        >
-                          <div>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
-                              <div>
-                                <span style={{ fontWeight: 800, color: "#1e1b4b", fontSize: "15px" }}>{c.caseNo}</span>
-                                <div style={{ fontSize: "11px", color: "#16a34a", fontWeight: 700, display: "flex", alignItems: "center", gap: "4px", marginTop: "2px" }}>
-                                  <CheckCircle size={12} />
+                          return (
+                            <tr
+                              key={`completed-inv-${c.caseNo}`}
+                              style={{
+                                backgroundColor: idx % 2 === 0 ? "#ffffff" : "#f8fafc",
+                                borderBottom: "1px solid #f1f5f9",
+                                transition: "background-color 0.15s ease"
+                              }}
+                              onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#eef2ff")}
+                              onMouseLeave={e => (e.currentTarget.style.backgroundColor = idx % 2 === 0 ? "#ffffff" : "#f8fafc")}
+                            >
+                              {/* Case No */}
+                              <td style={{ padding: "12px 14px", whiteSpace: "nowrap" }}>
+                                <span style={{ fontWeight: 800, color: "#1e1b4b", fontSize: "13px" }}>{c.caseNo}</span>
+                                <div style={{ fontSize: "11px", color: "#16a34a", fontWeight: 600, display: "flex", alignItems: "center", gap: "3px", marginTop: "2px" }}>
+                                  <CheckCircle size={11} />
                                   <span>{lang === "si" ? "මූලික විමර්ශනය අවසන්" : "Initial Investigation Complete"}</span>
                                 </div>
-                              </div>
+                              </td>
 
-                              {isSubmitted ? (
-                                <span style={{ fontSize: "11px", fontWeight: 700, color: "#15803d", backgroundColor: "#dcfce7", padding: "3px 10px", borderRadius: "12px", border: "1px solid #bbf7d0" }}>
-                                  ✓ {lang === "si" ? "නිර්දේශය යොමු කළා" : "Submitted"}
-                                </span>
-                              ) : isDraft ? (
-                                <span style={{ fontSize: "11px", fontWeight: 700, color: "#854d0e", backgroundColor: "#fef9c3", padding: "3px 10px", borderRadius: "12px", border: "1px solid #fef08a" }}>
-                                  📝 {lang === "si" ? "කෙටුම්පත" : "Draft Saved"}
-                                </span>
-                              ) : (
-                                <span style={{ fontSize: "11px", fontWeight: 700, color: "#b91c1c", backgroundColor: "#fee2e2", padding: "3px 10px", borderRadius: "12px", border: "1px solid #fecaca" }}>
-                                  ⚡ {lang === "si" ? "නිර්දේශය අපේක්ෂිතයි" : "Action Required"}
-                                </span>
-                              )}
-                            </div>
+                              {/* Subject */}
+                              <td style={{ padding: "12px 14px", color: "#334155", fontWeight: 500 }}>
+                                {c.subject || (lang === "si" ? "විධිමත් මූලික විමර්ශනය අවසන්" : "Formal Preliminary Investigation Completed")}
+                              </td>
 
-                            <p style={{ margin: "6px 0 0 0", fontSize: "13px", color: "#334155", lineHeight: 1.4, fontWeight: 500 }}>
-                              {c.subject || "Formal Preliminary Investigation Completed"}
-                            </p>
-                          </div>
+                              {/* Date */}
+                              <td style={{ padding: "12px 14px", color: "#64748b", whiteSpace: "nowrap", fontSize: "12px" }}>
+                                {c.letterDate || c.assignedDate || "—"}
+                              </td>
 
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: "10px", borderTop: "1px solid #f1f5f9" }}>
-                            <span style={{ fontSize: "11px", color: "#64748b" }}>
-                              {c.letterDate || c.assignedDate}
-                            </span>
-                            <Link
-                              href={`/subject/recommendation?caseNo=${c.caseNo}`}
-                              style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "6px",
-                                fontSize: "12px",
-                                fontWeight: 700,
-                                color: isSubmitted ? "#4f46e5" : "#ffffff",
-                                backgroundColor: isSubmitted ? "#e0e7ff" : "#4f46e5",
-                                padding: "6px 14px",
-                                borderRadius: "8px",
-                                textDecoration: "none",
-                                transition: "all 0.15s ease"
-                              }}
-                            >
-                              {isSubmitted ? (
-                                <>
-                                  <span>View Recommendation</span>
-                                  <ArrowRight size={12} />
-                                </>
-                              ) : isDraft ? (
-                                <>
-                                  <span>Edit Draft</span>
-                                  <ArrowRight size={12} />
-                                </>
-                              ) : (
-                                <>
-                                  <Plus size={13} />
-                                  <span>{t("addRecommendationForCase", "+ Add Recommendation")}</span>
-                                </>
-                              )}
-                            </Link>
-                          </div>
-                        </div>
-                      );
-                    })}
+                              {/* Status badge */}
+                              <td style={{ padding: "12px 14px", whiteSpace: "nowrap" }}>
+                                {isSubmitted ? (
+                                  <span style={{ fontSize: "11px", fontWeight: 700, color: "#15803d", backgroundColor: "#dcfce7", padding: "3px 10px", borderRadius: "12px", border: "1px solid #bbf7d0" }}>
+                                    ✓ {lang === "si" ? "නිර්දේශය යොමු කළා" : "Submitted"}
+                                  </span>
+                                ) : isDraft ? (
+                                  <span style={{ fontSize: "11px", fontWeight: 700, color: "#854d0e", backgroundColor: "#fef9c3", padding: "3px 10px", borderRadius: "12px", border: "1px solid #fef08a" }}>
+                                    📝 {lang === "si" ? "කෙටුම්පත" : "Draft Saved"}
+                                  </span>
+                                ) : (
+                                  <span style={{ fontSize: "11px", fontWeight: 700, color: "#b91c1c", backgroundColor: "#fee2e2", padding: "3px 10px", borderRadius: "12px", border: "1px solid #fecaca" }}>
+                                    ⚡ {lang === "si" ? "නිර්දේශය අපේක්ෂිතයි" : "Action Required"}
+                                  </span>
+                                )}
+                              </td>
+
+                              {/* Action button */}
+                              <td style={{ padding: "12px 14px", textAlign: "right", whiteSpace: "nowrap" }}>
+                                <Link
+                                  href={`/subject/recommendation?caseNo=${c.caseNo}`}
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: "6px",
+                                    fontSize: "12px",
+                                    fontWeight: 700,
+                                    color: isSubmitted ? "#4f46e5" : "#ffffff",
+                                    backgroundColor: isSubmitted ? "#e0e7ff" : "#4f46e5",
+                                    padding: "6px 14px",
+                                    borderRadius: "8px",
+                                    textDecoration: "none",
+                                    transition: "all 0.15s ease"
+                                  }}
+                                >
+                                  {isSubmitted ? (
+                                    <>
+                                      <span>{lang === "si" ? "නිර්දේශය බලන්න" : "View Recommendation"}</span>
+                                      <ArrowRight size={12} />
+                                    </>
+                                  ) : isDraft ? (
+                                    <>
+                                      <span>{lang === "si" ? "කෙටුම්පත සංස්කරණය" : "Edit Draft"}</span>
+                                      <ArrowRight size={12} />
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Plus size={13} />
+                                      <span>{t("addRecommendationForCase", "+ Add Recommendation")}</span>
+                                    </>
+                                  )}
+                                </Link>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               )}
@@ -8842,6 +9941,435 @@ function SubjectOfficerDashboardContent() {
                 <span>Open Full Form</span>
               </Link>
             </footer>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== QUICK APPEALS DOSSIER MODAL ==================== */}
+      {selectedAppealModal && (
+        <div className="inquiry-dossier-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="appeal-dossier-title">
+          <div className="inquiry-dossier-modal-content" style={{ maxWidth: "780px" }}>
+            
+            {/* Modal Header */}
+            <div className="inquiry-dossier-header" style={{ background: "linear-gradient(135deg, #5b21b6 0%, #7c3aed 100%)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div style={{ width: "42px", height: "42px", borderRadius: "12px", backgroundColor: "rgba(255,255,255,0.18)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Scale size={22} style={{ color: "#ffffff" }} />
+                </div>
+                <div>
+                  <h3 id="appeal-dossier-title" style={{ margin: 0, fontSize: "18px", fontWeight: 800, letterSpacing: "-0.2px", color: "#ffffff" }}>
+                    {t("appealDossierTitle", "Appeals Dossier")}
+                  </h3>
+                  <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.9)", marginTop: "2px" }}>
+                    Case Ref: <strong>{selectedAppealModal.caseNo}</strong> • Appeal Ref: <strong>{selectedAppealModal.appealRef || "—"}</strong> • Status: {selectedAppealModal.stage}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedAppealModal(null)}
+                className="inquiry-dossier-close-btn"
+                aria-label="Close Dossier"
+                style={{ color: "#ffffff" }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="inquiry-dossier-body">
+              
+              {/* Appellant Profile Card */}
+              <div className="inquiry-dossier-section">
+                <div className="inquiry-dossier-section-title">
+                  <User size={14} style={{ color: "#7c3aed" }} />
+                  <span>Appellant Officer & Institution (අභියාචක නිලධාරී සහ ආයතනය)</span>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px", fontSize: "13px" }}>
+                  <div>
+                    <span style={{ color: "#64748b", fontSize: "11px", fontWeight: 600, display: "block" }}>Full Name:</span>
+                    <strong style={{ color: "#1e293b" }}>{selectedAppealModal.appellantName || "—"}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: "#64748b", fontSize: "11px", fontWeight: 600, display: "block" }}>Designation / Post:</span>
+                    <span style={{ color: "#334155", fontWeight: 600 }}>{selectedAppealModal.appellantDesignation || "—"}</span>
+                  </div>
+                  <div>
+                    <span style={{ color: "#64748b", fontSize: "11px", fontWeight: 600, display: "block" }}>Educational Institute:</span>
+                    <span style={{ color: "#334155", fontWeight: 600 }}>{selectedAppealModal.schoolName || "—"}</span>
+                  </div>
+                  <div>
+                    <span style={{ color: "#64748b", fontSize: "11px", fontWeight: 600, display: "block" }}>Priority Rating:</span>
+                    <span style={{ textTransform: "capitalize", fontWeight: 700, color: selectedAppealModal.priority === "high" ? "#dc2626" : selectedAppealModal.priority === "medium" ? "#d97706" : "#16a34a" }}>
+                      {selectedAppealModal.priority} Priority
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Appeal Authority & Original Order */}
+              <div className="inquiry-dossier-section" style={{ backgroundColor: "#faf5ff", borderColor: "#e9d5ff" }}>
+                <div className="inquiry-dossier-section-title" style={{ color: "#6b21a8" }}>
+                  <Scale size={14} style={{ color: "#7c3aed" }} />
+                  <span>Appeal Forum & Disciplinary Order Under Appeal (අභියාචනා බලධාරියා සහ අදාළ නියෝගය)</span>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "12px", fontSize: "13px" }}>
+                  <div>
+                    <span style={{ color: "#6b21a8", fontSize: "11px", fontWeight: 700, display: "block" }}>Appeal Authority / Commission:</span>
+                    <strong style={{ color: "#581c87", fontSize: "13.5px" }}>
+                      {selectedAppealModal.appealAuthority === "psc"
+                        ? "Public Service Commission (PSC)"
+                        : selectedAppealModal.appealAuthority === "esc"
+                        ? "Education Service Committee (ESC)"
+                        : selectedAppealModal.appealAuthority === "aat"
+                        ? "Administrative Appeals Tribunal (AAT)"
+                        : selectedAppealModal.appealAuthority === "court"
+                        ? "Court of Appeal"
+                        : "Secretary of Education"}
+                    </strong>
+                  </div>
+                  <div>
+                    <span style={{ color: "#6b21a8", fontSize: "11px", fontWeight: 700, display: "block" }}>Original Order Being Appealed:</span>
+                    <span style={{ color: "#1e293b", fontWeight: 600 }}>{selectedAppealModal.originalOrder || "Disciplinary Order"}</span>
+                  </div>
+                  <div>
+                    <span style={{ color: "#6b21a8", fontSize: "11px", fontWeight: 700, display: "block" }}>Date Appeal Lodged:</span>
+                    <span style={{ color: "#1e293b", fontWeight: 600 }}>{selectedAppealModal.submissionDate || "—"}</span>
+                  </div>
+                  <div>
+                    <span style={{ color: "#6b21a8", fontSize: "11px", fontWeight: 700, display: "block" }}>Observations Due:</span>
+                    <span style={{ color: "#b45309", fontWeight: 700 }}>{selectedAppealModal.observationsDueDate || "—"}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Grounds of Appeal */}
+              <div className="inquiry-dossier-section">
+                <div className="inquiry-dossier-section-title">
+                  <FileText size={14} style={{ color: "#7c3aed" }} />
+                  <span>Grounds of Appeal & Submissions (අභියාචනා හේතු සහ ඉල්ලීම්)</span>
+                </div>
+                <div style={{ fontSize: "13.5px", color: "#1e293b", lineHeight: "1.5" }}>
+                  {selectedAppealModal.appealGround || selectedAppealModal.subject}
+                </div>
+              </div>
+
+              {/* Subject Officer Observations & Remarks */}
+              <div className="inquiry-dossier-section" style={{ backgroundColor: "#f8fafc", borderColor: "#e2e8f0" }}>
+                <div className="inquiry-dossier-section-title">
+                  <Clock size={14} style={{ color: "#475569" }} />
+                  <span>Subject Officer Observations & Procedural Status (විෂයභාර නිලධාරී නිරීක්ෂණ)</span>
+                </div>
+                <div style={{ fontSize: "13px", color: "#334155", lineHeight: "1.5" }}>
+                  {selectedAppealModal.officerObservations || "No observation notes entered yet."}
+                </div>
+
+                {/* Quick Stage Update inside Dossier */}
+                <div style={{ marginTop: "14px", paddingTop: "12px", borderTop: "1px dashed #cbd5e1" }}>
+                  <span style={{ fontSize: "12px", fontWeight: 700, color: "#475569", display: "block", marginBottom: "8px" }}>
+                    {lang === "si" ? "වත්මන් අදියර යාවත්කාලීන කිරීම:" : "Update Appeal Stage:"}
+                  </span>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateAppealStage(selectedAppealModal.id, "observations_submitted")}
+                      style={{ padding: "5px 12px", fontSize: "12px", fontWeight: 600, borderRadius: "6px", backgroundColor: "#e0f2fe", color: "#0369a1", border: "1px solid #bae6fd", cursor: "pointer" }}
+                    >
+                      ✓ {lang === "si" ? "නිරීක්ෂණ ඉදිරිපත් කර ඇත" : "Observations Submitted"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateAppealStage(selectedAppealModal.id, "forwarded_to_psc")}
+                      style={{ padding: "5px 12px", fontSize: "12px", fontWeight: 600, borderRadius: "6px", backgroundColor: "#fdf4ff", color: "#86198f", border: "1px solid #f5d0fe", cursor: "pointer" }}
+                    >
+                      🏛️ {lang === "si" ? "රා.සේ.කො. වෙත යොමු කර ඇත" : "Forwarded to PSC"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateAppealStage(selectedAppealModal.id, "relief_granted")}
+                      style={{ padding: "5px 12px", fontSize: "12px", fontWeight: 600, borderRadius: "6px", backgroundColor: "#d1fae5", color: "#065f46", border: "1px solid #a7f3d0", cursor: "pointer" }}
+                    >
+                      ⚖️ {lang === "si" ? "සහන සලසා ඇත" : "Relief Granted"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateAppealStage(selectedAppealModal.id, "appeal_dismissed")}
+                      style={{ padding: "5px 12px", fontSize: "12px", fontWeight: 600, borderRadius: "6px", backgroundColor: "#fee2e2", color: "#991b1b", border: "1px solid #fecaca", cursor: "pointer" }}
+                    >
+                      ❌ {lang === "si" ? "අභියාචනය ප්‍රතික්ෂේප විය" : "Appeal Dismissed"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Modal Footer */}
+            <footer style={{ padding: "14px 24px", borderTop: "1px solid #e2e8f0", backgroundColor: "#f8fafc", display: "flex", justifyContent: "flex-end", gap: "10px", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={() => setSelectedAppealModal(null)}
+                style={{ padding: "8px 18px", borderRadius: "8px", backgroundColor: "#ffffff", border: "1px solid #cbd5e1", color: "#475569", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}
+              >
+                Close
+              </button>
+            </footer>
+
+          </div>
+        </div>
+      )}
+
+      {/* ==================== REGISTER NEW APPEAL MODAL ==================== */}
+      {newAppealModalOpen && (
+        <div className="inquiry-dossier-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="new-appeal-title">
+          <div className="inquiry-dossier-modal-content" style={{ maxWidth: "720px" }}>
+            
+            {/* Modal Header */}
+            <div className="inquiry-dossier-header" style={{ background: "linear-gradient(135deg, #5b21b6 0%, #7c3aed 100%)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div style={{ width: "42px", height: "42px", borderRadius: "12px", backgroundColor: "rgba(255,255,255,0.18)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Plus size={22} style={{ color: "#ffffff" }} />
+                </div>
+                <div>
+                  <h3 id="new-appeal-title" style={{ margin: 0, fontSize: "18px", fontWeight: 800, letterSpacing: "-0.2px", color: "#ffffff" }}>
+                    {lang === "si" ? "නව අභියාචනයක් ලියාපදිංචි කිරීම" : "Register New Appeal"}
+                  </h3>
+                  <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.9)", marginTop: "2px" }}>
+                    {lang === "si" ? "විනය නියෝග හෝ වැඩ තහනම් කිරීම් සඳහා වන අභියාචනා ලේඛනගත කරන්න" : "Record formal appeal against disciplinary action or interdiction"}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setNewAppealModalOpen(false)}
+                className="inquiry-dossier-close-btn"
+                aria-label="Close"
+                style={{ color: "#ffffff" }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleSaveNewAppeal}>
+              <div className="inquiry-dossier-body" style={{ maxHeight: "65vh", overflowY: "auto", display: "flex", flexDirection: "column", gap: "16px" }}>
+                
+                {/* Row 1: Case No & Appeal Ref */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#334155", marginBottom: "4px" }}>
+                      {lang === "si" ? "නඩු අංකය (Case No)" : "Case No"} <span style={{ color: "#dc2626" }}>*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={newAppealForm.caseNo}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setNewAppealForm((prev) => ({
+                          ...prev,
+                          caseNo: val,
+                          appealRef: prev.appealRef || (val ? `PSC/APP/${val}` : "")
+                        }));
+                      }}
+                      placeholder="e.g. ED/DISC/2026/01"
+                      className="search-input"
+                      style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1" }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#334155", marginBottom: "4px" }}>
+                      {lang === "si" ? "අභියාචනා යොමු අංකය (Appeal Ref)" : "Appeal Ref No"}
+                    </label>
+                    <input
+                      type="text"
+                      value={newAppealForm.appealRef}
+                      onChange={(e) => setNewAppealForm({ ...newAppealForm, appealRef: e.target.value })}
+                      placeholder="e.g. PSC/APP/2026/01"
+                      className="search-input"
+                      style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1" }}
+                    />
+                  </div>
+                </div>
+
+                {/* Row 2: Appellant Name & Designation */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#334155", marginBottom: "4px" }}>
+                      {lang === "si" ? "අභියාචකගේ නම (Appellant Name)" : "Appellant Name"} <span style={{ color: "#dc2626" }}>*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={newAppealForm.appellantName}
+                      onChange={(e) => setNewAppealForm({ ...newAppealForm, appellantName: e.target.value })}
+                      placeholder="e.g. ඒ. බී. පෙරේරා (A. B. Perera)"
+                      className="search-input"
+                      style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1" }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#334155", marginBottom: "4px" }}>
+                      {lang === "si" ? "තනතුර (Designation)" : "Designation"}
+                    </label>
+                    <input
+                      type="text"
+                      value={newAppealForm.appellantDesignation}
+                      onChange={(e) => setNewAppealForm({ ...newAppealForm, appellantDesignation: e.target.value })}
+                      placeholder="e.g. විදුහල්පති / ගුරු සේවය"
+                      className="search-input"
+                      style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1" }}
+                    />
+                  </div>
+                </div>
+
+                {/* Row 3: Institution & Appeal Authority */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#334155", marginBottom: "4px" }}>
+                      {lang === "si" ? "පාසල / ආයතනය (School / Institute)" : "School / Institute"}
+                    </label>
+                    <input
+                      type="text"
+                      value={newAppealForm.schoolName}
+                      onChange={(e) => setNewAppealForm({ ...newAppealForm, schoolName: e.target.value })}
+                      placeholder="e.g. ආනන්ද විද්‍යාලය, කොළඹ"
+                      className="search-input"
+                      style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1" }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#334155", marginBottom: "4px" }}>
+                      {lang === "si" ? "අභියාචනා බලධාරියා (Appeal Authority)" : "Appeal Authority"}
+                    </label>
+                    <select
+                      value={newAppealForm.appealAuthority}
+                      onChange={(e) => setNewAppealForm({ ...newAppealForm, appealAuthority: e.target.value })}
+                      style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", backgroundColor: "#ffffff" }}
+                    >
+                      <option value="psc">{lang === "si" ? "රාජ්‍ය සේවා කොමිෂන් සභාව (PSC)" : "Public Service Commission (PSC)"}</option>
+                      <option value="esc">{lang === "si" ? "අධ්‍යාපන සේවා කමිටුව (ESC)" : "Education Service Committee (ESC)"}</option>
+                      <option value="ministry">{lang === "si" ? "අධ්‍යාපන අමාත්‍යාංශ ලේකම්" : "Ministry Secretary"}</option>
+                      <option value="aat">{lang === "si" ? "පරිපාලන අභියාචනා විනිශ්චය අධිකාරිය (AAT)" : "Administrative Appeals Tribunal (AAT)"}</option>
+                      <option value="court">{lang === "si" ? "අධිකරණය (Court)" : "Court of Appeal"}</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Row 4: Original Order & Priority */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#334155", marginBottom: "4px" }}>
+                      {lang === "si" ? "අභියාචනයට අදාළ මුල් නියෝගය (Original Order)" : "Original Order Being Appealed"}
+                    </label>
+                    <input
+                      type="text"
+                      value={newAppealForm.originalOrder}
+                      onChange={(e) => setNewAppealForm({ ...newAppealForm, originalOrder: e.target.value })}
+                      placeholder="e.g. අන්තර්වාර වැඩ තහනම් නියෝගය / වැටුප් වර්ධක අත්හිටුවීම"
+                      className="search-input"
+                      style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1" }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#334155", marginBottom: "4px" }}>
+                      {t("priority", "Priority")}
+                    </label>
+                    <select
+                      value={newAppealForm.priority}
+                      onChange={(e: any) => setNewAppealForm({ ...newAppealForm, priority: e.target.value })}
+                      style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", backgroundColor: "#ffffff" }}
+                    >
+                      <option value="high">🔴 {t("priorityHigh", "High Priority")}</option>
+                      <option value="medium">🟡 {t("priorityMedium", "Medium Priority")}</option>
+                      <option value="low">🟢 {t("priorityLow", "Low Priority")}</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Row 5: Dates */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#334155", marginBottom: "4px" }}>
+                      {lang === "si" ? "අභියාචනය ලැබුණු දිනය" : "Date Appeal Received"}
+                    </label>
+                    <input
+                      type="date"
+                      value={newAppealForm.submissionDate}
+                      onChange={(e) => setNewAppealForm({ ...newAppealForm, submissionDate: e.target.value })}
+                      style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1" }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#334155", marginBottom: "4px" }}>
+                      {lang === "si" ? "නිරීක්ෂණ නියමිත දිනය" : "Observations Due Date"}
+                    </label>
+                    <input
+                      type="date"
+                      value={newAppealForm.observationsDueDate}
+                      onChange={(e) => setNewAppealForm({ ...newAppealForm, observationsDueDate: e.target.value })}
+                      style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1" }}
+                    />
+                  </div>
+                </div>
+
+                {/* Grounds of Appeal */}
+                <div>
+                  <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#334155", marginBottom: "4px" }}>
+                    {lang === "si" ? "අභියාචනා කරුණු සහ ඉල්ලීම් (Grounds of Appeal)" : "Grounds of Appeal"}
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={newAppealForm.appealGround}
+                    onChange={(e) => setNewAppealForm({ ...newAppealForm, appealGround: e.target.value })}
+                    placeholder="අභියාචක ඉදිරිපත් කළ ප්‍රධාන කරුණු සහ ඉල්ලීම..."
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", resize: "vertical" }}
+                  />
+                </div>
+
+                {/* Officer Observations */}
+                <div>
+                  <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#334155", marginBottom: "4px" }}>
+                    {lang === "si" ? "විෂයභාර නිලධාරී නිරීක්ෂණ / සටහන් (Officer Observations)" : "Officer Observations & Notes"}
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={newAppealForm.officerObservations}
+                    onChange={(e) => setNewAppealForm({ ...newAppealForm, officerObservations: e.target.value })}
+                    placeholder="අමාත්‍යාංශ නිරීක්ෂණ හෝ ක්‍රියාමාර්ග පිළිබඳ සටහන්..."
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", resize: "vertical" }}
+                  />
+                </div>
+
+              </div>
+
+              {/* Modal Footer */}
+              <footer style={{ padding: "14px 24px", borderTop: "1px solid #e2e8f0", backgroundColor: "#f8fafc", display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+                <button
+                  type="button"
+                  onClick={() => setNewAppealModalOpen(false)}
+                  style={{ padding: "8px 18px", borderRadius: "8px", backgroundColor: "#ffffff", border: "1px solid #cbd5e1", color: "#475569", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingAppealForm}
+                  style={{ padding: "8px 20px", borderRadius: "8px", background: "linear-gradient(135deg, #5b21b6 0%, #7c3aed 100%)", color: "#ffffff", fontWeight: 700, fontSize: "13px", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}
+                >
+                  <CheckCircle size={15} />
+                  <span>{savingAppealForm ? "Saving..." : (lang === "si" ? "අභියාචනය සුරකින්න" : "Save Appeal")}</span>
+                </button>
+              </footer>
+            </form>
+
           </div>
         </div>
       )}

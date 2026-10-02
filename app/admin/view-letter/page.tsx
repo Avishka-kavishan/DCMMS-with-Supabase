@@ -273,7 +273,12 @@ function ViewLetterInner() {
   const forwardedTo  = letter?.forwarded_to || letter?.forwardedTo || "—";
   const forwardReason = letter?.forward_reason || letter?.forwardReason || "—";
   const status       = letter?.status || "assigned";
-  const isAnswerLetter = letter?.is_answer_letter === true || String(letter?.is_answer_letter) === "true";
+  const isAnswerLetter = letter?.is_answer_letter === true || 
+    String(letter?.is_answer_letter) === "true" ||
+    letter?.letter_type?.toLowerCase().includes("answer") ||
+    letter?.letterType?.toLowerCase().includes("answer") ||
+    letter?.region_province?.toLowerCase().includes("answer") ||
+    letter?.regionProvince?.toLowerCase().includes("answer");
   const documentUrl  = letter?.document_url || letter?.documentUrl || "";
   const documentName = letter?.document_name || letter?.documentName || "";
   const addSecName   = letter?.add_sec_name || letter?.addSecName || "";
@@ -298,18 +303,63 @@ function ViewLetterInner() {
     (currentUser?.full_name || "").toLowerCase().includes("nihal") ||
     (currentUser?.email || "").toLowerCase().includes("sec-test-004");
 
+  const handleOpenForwardModal = () => {
+    if (!forwardReasonInput && editAddSecInstructions) {
+      setForwardReasonInput(editAddSecInstructions);
+    }
+    setIsForwardModalOpen(true);
+  };
+
   const handleForwardLetterSubmit = async () => {
     if (!letter || isSubmittingForward) return;
     setIsSubmittingForward(true);
     try {
+      const instructions = editAddSecInstructions.trim();
+      const reason = forwardReasonInput.trim() || instructions || `Forwarded by Additional Secretary to ${forwardRecipientName} for review and necessary action`;
+
+      // 1. Persist any modifications / directives entered by Additional Secretary
+      try {
+        await updateLetterRecordServer({
+          letterId: letter.id,
+          originalLetterNo: letter.letter_no || letter.letterNo || letter.letter_number || "",
+          originalRefNo: letter.serial_no || letter.ref_no || letter.refNo || letter.ref_number || "",
+          letterNo: editLetterNo || letterNo || "",
+          refNo: editRefNo || refNo || "",
+          senderName: editSenderName || senderName || "",
+          subject: editSubject || subject || "",
+          letterType: editLetterType || letterType || "Complaint",
+          subjectCategory: editSubjectCategory || subjectCategory || "",
+          instituteName: editInstituteName || instituteName || "",
+          regionProvince: editRegionProvince || regionProvince || "",
+          priority: editPriority || "medium",
+          letterDate: editLetterDate || "",
+          receivedDate: editReceivedDate || "",
+          actionOfficer: forwardRecipientName,
+          addressedTo: forwardRecipientName,
+          addressedRole: forwardRecipientRole,
+          forwardedTo: `${forwardRecipientName} (${forwardRecipientRole.replace(/_/g, " ")})`,
+          forwardReason: reason,
+          addSecInstructions: instructions,
+          addSecNotes: editAddSecNotes.trim(),
+          addSecForwardMethod: `Forwarded to ${forwardRecipientName}`,
+          editedByName: currentUser?.full_name || "Additional Secretary",
+          editedByRole: currentUser?.role || "additional_secretary",
+        });
+      } catch (saveErr) {
+        console.warn("Letter update before forward warning:", saveErr);
+      }
+
+      // 2. Forward letter
       const res = await forwardLetterFromAdditionalSecretaryServer({
         letterId: letter.id,
         letterNo: letterNo !== "—" ? letterNo : (letter.letterNo || letter.refNo || "Letter"),
         refNo: refNo !== "—" ? refNo : (letter.refNo || letter.serial_no || ""),
         forwardToRole: forwardRecipientRole,
         forwardToOfficerName: forwardRecipientName,
-        forwardReason: forwardReasonInput.trim(),
+        forwardReason: reason,
         senderName: currentUser?.full_name ? `${currentUser.full_name} (Additional Secretary)` : "Additional Secretary",
+        senderRole: "additional_secretary",
+        addSecInstructions: instructions,
       });
 
       if (res && res.success) {
@@ -317,13 +367,16 @@ function ViewLetterInner() {
           ...prev,
           forwarded_to: `${forwardRecipientName} (${forwardRecipientRole.replace(/_/g, " ")})`,
           forwardedTo: `${forwardRecipientName} (${forwardRecipientRole.replace(/_/g, " ")})`,
-          forward_reason: forwardReasonInput.trim() || `Forwarded to ${forwardRecipientName}`,
-          forwardReason: forwardReasonInput.trim() || `Forwarded to ${forwardRecipientName}`,
+          forward_reason: reason,
+          forwardReason: reason,
           action_officer: forwardRecipientName,
           actionOfficer: forwardRecipientName,
           addressed_to: forwardRecipientName,
           addressedTo: forwardRecipientName,
           status: "forwarded",
+          priority: editPriority || prev?.priority,
+          add_sec_instructions: instructions,
+          addSecInstructions: instructions,
         }));
         setForwardNotification(
           lang === "si"
@@ -333,6 +386,12 @@ function ViewLetterInner() {
         setIsForwardModalOpen(false);
         setForwardReasonInput("");
         setTimeout(() => setForwardNotification(null), 5000);
+
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("dcmms_data_updated"));
+          window.dispatchEvent(new CustomEvent("dcmms_assignment_updated"));
+          window.dispatchEvent(new CustomEvent("dcmms_notifications_updated"));
+        }
       } else {
         alert("Failed to forward letter: " + (res?.error || "Unknown error"));
       }
@@ -451,6 +510,23 @@ function ViewLetterInner() {
       const chiefName = currentUser?.full_name || "Chief Clerk";
       const chiefRole = currentUser?.role || "chief_clerk";
       const targetCaseNo = letterNo !== "—" ? letterNo : (letter.letterNo || letter.refNo || "Letter");
+      const isAns = Boolean(
+        isAnswerLetter ||
+        letter.is_answer_letter ||
+        letter.isAnswerLetter ||
+        String(letter.letter_type || "").toLowerCase().includes("answer") ||
+        String(letter.letterType || "").toLowerCase().includes("answer") ||
+        String(letter.region_province || "").toLowerCase().includes("answer") ||
+        String(letter.regionProvince || "").toLowerCase().includes("answer") ||
+        String(letter.nature_of_letter || "").toLowerCase().includes("answer") ||
+        String(letter.nature_of_letter || "").includes("පිළිතුරු") ||
+        String(letter.region_province || "").includes("පිළිතුරු") ||
+        String(letter.regionProvince || "").includes("පිළිතුරු") ||
+        String(editRegionProvince || "").toLowerCase().includes("answer") ||
+        String(editRegionProvince || "").includes("පිළිතුරු") ||
+        String(editLetterType || "").toLowerCase().includes("answer") ||
+        String(editLetterType || "").includes("පිළිතුරු")
+      );
 
       const res = await assignLetterToSubjectOfficerServer({
         letterId: letter.id,
@@ -463,6 +539,7 @@ function ViewLetterInner() {
         instructions: assignmentInstructions.trim(),
         chiefClerkName: chiefName,
         chiefClerkRole: chiefRole,
+        isAnswerLetter: isAns,
       });
 
       if (res && res.success) {
@@ -599,7 +676,9 @@ function ViewLetterInner() {
         addSecForwardMethod: editAddSecForwardMethod.trim() || letter.add_sec_forward_method || letter.addSecForwardMethod || "",
         documentUrl: editDocumentUrl.trim() || letter.document_url || letter.documentUrl || "",
         documentName: editDocumentName.trim() || letter.document_name || letter.documentName || "",
-        isAnswerLetter: Boolean(letter.is_answer_letter),
+        isAnswerLetter: Boolean(letter.is_answer_letter) || 
+          editLetterType.toLowerCase().includes("answer") || 
+          editRegionProvince.toLowerCase().includes("answer"),
         editedByName: currentUser?.full_name || "Additional Secretary",
         editedByRole: currentUser?.role || "additional_secretary",
       });
@@ -710,8 +789,8 @@ function ViewLetterInner() {
             borderTopColor: "#4f46e5", borderRadius: "50%",
             animation: "vl-spin 0.8s linear infinite", margin: "0 auto 14px",
           }} />
-          <p style={{ color: "#64748b", fontWeight: 600, fontSize: "14px", margin: 0 }}>
-            {lang === "si" ? "ලිපි විස්තර ලබා ගනිමින්..." : "Loading letter details..."}
+          <p suppressHydrationWarning style={{ color: "#64748b", fontWeight: 600, fontSize: "14px", margin: 0 }}>
+            {mounted && lang === "si" ? "ලිපි විස්තර ලබා ගනිමින්..." : mounted && lang === "ta" ? "கடித விவரங்கள் ஏற்றப்படுகின்றன..." : "Loading letter details..."}
           </p>
         </div>
         <style>{`@keyframes vl-spin { to { transform: rotate(360deg); } }`}</style>
@@ -781,7 +860,7 @@ function ViewLetterInner() {
           {isAddSecUser && (
             <button
               type="button"
-              onClick={() => setIsForwardModalOpen(true)}
+              onClick={handleOpenForwardModal}
               style={{
                 display: "inline-flex", alignItems: "center", gap: "7px",
                 padding: "8px 16px", borderRadius: "8px",
@@ -1263,6 +1342,7 @@ function ViewLetterInner() {
                   <option value="Complaint">{lang === "si" ? "පැමිණිල්ල (Complaint)" : "Complaint"}</option>
                   <option value="Inquiry">{lang === "si" ? "විමර්ශන ලිපිය (Inquiry)" : "Inquiry"}</option>
                   <option value="Appeal">{lang === "si" ? "අභියාචනා (Appeal)" : "Appeal"}</option>
+                  <option value="Answer Letter">{lang === "si" ? "පිළිතුරු ලිපි (Answer Letters)" : "Answer Letters"}</option>
                   <option value="Post">{lang === "si" ? "තැපැල් (Post)" : "Post"}</option>
                   <option value="Hand">{lang === "si" ? "අතින් ගෙනැවිත් භාරදීම (Hand)" : "Hand"}</option>
                   <option value="Email">{lang === "si" ? "විද්‍යුත් තැපෑල (Email)" : "Email"}</option>
@@ -1345,6 +1425,10 @@ function ViewLetterInner() {
                   <option value="Appeal">{lang === "si" ? "අභියාචනා (Appeal)" : "Appeal"}</option>
                   <option value="Request">{lang === "si" ? "ඉල්ලීම් (Request)" : "Request"}</option>
                   <option value="Notification">{lang === "si" ? "දැනුම්දීම් (Notification)" : "Notification"}</option>
+                  <option value="Answer Letter">{lang === "si" ? "පිළිතුරු ලිපි (Answer Letters)" : "Answer Letters"}</option>
+                  {editRegionProvince === "Answer Letters" && (
+                    <option value="Answer Letters">{lang === "si" ? "පිළිතුරු ලිපි (Answer Letters)" : "Answer Letters"}</option>
+                  )}
                   <option value="Other">{lang === "si" ? "වෙනත් (Other)" : "Other"}</option>
                 </select>
               </div>
@@ -1730,7 +1814,7 @@ function ViewLetterInner() {
 
               <button
                 type="button"
-                onClick={() => setIsForwardModalOpen(true)}
+                onClick={handleOpenForwardModal}
                 style={{
                   display: "inline-flex", alignItems: "center", gap: "6px",
                   padding: "10px 18px", borderRadius: "8px",
@@ -2111,6 +2195,25 @@ function ViewLetterInner() {
                   <p style={{ margin: "2px 0 0", fontSize: "12.5px", color: "#1e293b", fontWeight: 500 }}>
                     {subject}
                   </p>
+                </div>
+              )}
+              {isAnswerLetter && (
+                <div style={{ marginTop: "8px", paddingTop: "6px", borderTop: "1px dashed #cbd5e1", display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "5px",
+                    backgroundColor: "#ecfdf5",
+                    color: "#047857",
+                    border: "1px solid #a7f3d0",
+                    padding: "3px 8px",
+                    borderRadius: "6px",
+                    fontSize: "11.5px",
+                    fontWeight: 700
+                  }}>
+                    <CheckCircle2 size={13} />
+                    {lang === "si" ? "පිළිතුරු ලිපියකි (පැවරූ පසු විෂය නිලධාරී 'පවරන ලද පිළිතුරු ලිපි' ටැබ් එකට යොමු වේ)" : "Answer Letter (Will route to officer's Assigned Answers letters tab)"}
+                  </span>
                 </div>
               )}
             </div>

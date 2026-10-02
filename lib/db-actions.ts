@@ -276,6 +276,8 @@ export async function saveDailyMailRecordServer(mailData: any) {
       `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS forward_reason TEXT`,
       `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS created_by_name VARCHAR(255)`,
       `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS created_by_role VARCHAR(255)`,
+      `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS is_answer_letter BOOLEAN DEFAULT FALSE`,
+      `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS region_province VARCHAR(255)`,
       `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS document_url TEXT`,
       `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS document_name VARCHAR(255)`,
       `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS addressed_to VARCHAR(255)`,
@@ -283,13 +285,29 @@ export async function saveDailyMailRecordServer(mailData: any) {
       `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS forwarded_to VARCHAR(255)`,
       `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS forward_reason TEXT`,
       `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS created_by_name VARCHAR(255)`,
-      `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS created_by_role VARCHAR(255)`
+      `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS created_by_role VARCHAR(255)`,
+      `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS region_province VARCHAR(255)`
     ];
     for (const sql of ddlMigrationStmts) {
       try {
         await prisma.$executeRawUnsafe(sql);
       } catch (e) {}
     }
+
+    const rawNature = (
+      String(mailData.type || "") + " " +
+      String(mailData.letterType || "") + " " +
+      String(mailData.regionProvince || "") + " " +
+      String(mailData.region_province || "") + " " +
+      String(mailData.subject || "")
+    ).toLowerCase();
+    const isAnswer =
+      mailData.is_answer_letter === true ||
+      mailData.is_answer_letter === "true" ||
+      rawNature.includes("answer") ||
+      rawNature.includes("reply") ||
+      rawNature.includes("පිළිතුරු") ||
+      rawNature.includes("பதில்");
 
     const res = await saveDailyMailToNewTableServer({
       id: mailData.id,
@@ -303,8 +321,8 @@ export async function saveDailyMailRecordServer(mailData: any) {
       sender_party: mailData.sender || mailData.senderName,
       senders_party: mailData.sender || mailData.senderName,
       sender: mailData.sender || mailData.senderName,
-      nature_of_letter: mailData.type || mailData.letterType || mailData.regionProvince || "Complaint",
-      type: mailData.type || mailData.letterType || mailData.regionProvince || "Complaint",
+      nature_of_letter: mailData.type || mailData.letterType || mailData.regionProvince || (isAnswer ? "Answer Letter" : "Complaint"),
+      type: mailData.type || mailData.letterType || mailData.regionProvince || (isAnswer ? "Answer Letter" : "Complaint"),
       subject_category: mailData.classification || mailData.subjectCategory,
       classification: mailData.classification || mailData.subjectCategory,
       subject_of_letter: mailData.subject || "N/A",
@@ -318,10 +336,10 @@ export async function saveDailyMailRecordServer(mailData: any) {
       action_officer: mailData.action_officer || mailData.officer_name || mailData.officerName,
       officer_name: mailData.action_officer || mailData.officer_name || mailData.officerName,
       priority: mailData.priority || "Normal",
-      status: mailData.status || "Pending",
-      is_answer_letter: mailData.is_answer_letter === true || mailData.is_answer_letter === "true",
+      status: isAnswer ? "Assigned Answer Letter" : (mailData.status || "Pending"),
+      is_answer_letter: isAnswer,
       institute_name: mailData.institute_name || mailData.instituteName,
-      region_province: mailData.region_province || mailData.regionProvince,
+      region_province: mailData.region_province || mailData.regionProvince || (isAnswer ? "Answer Letter" : null),
       document_url: docUrl,
       document_name: docName,
       addressed_to: mailData.addressed_to || mailData.addressedTo,
@@ -378,6 +396,7 @@ export async function saveDailyMailToNewTableServer(data: {
   is_answer_letter?: boolean | string;
   institute_name?: string | null;
   region_province?: string | null;
+  regionProvince?: string | null;
   document_url?: string | null;
   document_name?: string | null;
   addressed_to?: string | null;
@@ -428,7 +447,25 @@ export async function saveDailyMailToNewTableServer(data: {
     const dateReceived = formatDateForSql(rawDateReceived);
     const dateHandover = formatDateForSql(rawDateHandover);
     const assignedOfficer = (data.action_officer || data.officer_name || data.subject_officer_name || "").trim();
-    const isAnswer = data.is_answer_letter === true || data.is_answer_letter === "true" || String(data.status).toLowerCase().includes("answer");
+    
+    const rawNature = (
+      String(data.nature_of_letter || "") + " " +
+      String(data.type || "") + " " +
+      String(data.region_province || "") + " " +
+      String(data.regionProvince || "") + " " +
+      String(data.subject_of_letter || "") + " " +
+      String(data.subject || "") + " " +
+      String(data.status || "")
+    ).toLowerCase();
+
+    const isAnswer =
+      data.is_answer_letter === true ||
+      data.is_answer_letter === "true" ||
+      rawNature.includes("answer") ||
+      rawNature.includes("reply") ||
+      rawNature.includes("පිළිතුරු") ||
+      rawNature.includes("பதில்");
+    const regProvince = data.region_province || data.regionProvince || (isAnswer ? "Answer Letter" : null);
 
     // Ensure database tables exist in PostgreSQL
     const ddlStatements = [
@@ -450,6 +487,8 @@ export async function saveDailyMailToNewTableServer(data: {
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       )`,
       `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS action_officer VARCHAR(255)`,
+      `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS is_answer_letter BOOLEAN DEFAULT FALSE`,
+      `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS region_province VARCHAR(255)`,
       `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS document_url TEXT`,
       `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS document_name VARCHAR(255)`,
       `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS addressed_to VARCHAR(255)`,
@@ -734,6 +773,8 @@ export async function saveDailyMailToNewTableServer(data: {
               forward_reason = $16,
               created_by_name = COALESCE($17, daily_mail_letter_table.created_by_name),
               created_by_role = COALESCE($18, daily_mail_letter_table.created_by_role),
+              is_answer_letter = $19,
+              region_province = $20,
               updated_at = CURRENT_TIMESTAMP
             WHERE ref_number = $2 OR letter_number = $1`,
             letterNumber,
@@ -753,7 +794,9 @@ export async function saveDailyMailToNewTableServer(data: {
             forwardedTo || null,
             forwardReason || null,
             createdByName,
-            createdByRole
+            createdByRole,
+            isAnswer,
+            regProvince
           );
         } else {
           await prisma.$executeRawUnsafe(
@@ -776,6 +819,8 @@ export async function saveDailyMailToNewTableServer(data: {
               forward_reason,
               created_by_name,
               created_by_role,
+              is_answer_letter,
+              region_province,
               created_at,
               updated_at
             ) VALUES (
@@ -783,7 +828,7 @@ export async function saveDailyMailToNewTableServer(data: {
               $8::date, $9::date,
               $10, $11, $12,
               $13, $14, $15, $16,
-              $17, $18,
+              $17, $18, $19, $20,
               CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             )`,
             letterNumber,
@@ -803,7 +848,9 @@ export async function saveDailyMailToNewTableServer(data: {
             forwardedTo || null,
             forwardReason || null,
             createdByName,
-            createdByRole
+            createdByRole,
+            isAnswer,
+            regProvince
           );
         }
       }
@@ -820,14 +867,14 @@ export async function saveDailyMailToNewTableServer(data: {
           subject, received_date, submitted_date, priority, action_officer,
           status, is_answer_letter, document_url, document_name,
           addressed_to, addressed_role, forwarded_to, forward_reason,
-          created_by_name, created_by_role,
+          created_by_name, created_by_role, region_province,
           created_at, updated_at
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7,
           $8, $9::date, $10::date, $11, $12,
           $13, $14, $15, $16,
           $17, $18, $19, $20,
-          $21, $22,
+          $21, $22, $23,
           CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
         )
         ON CONFLICT (id) DO UPDATE SET
@@ -852,6 +899,7 @@ export async function saveDailyMailToNewTableServer(data: {
           forward_reason = EXCLUDED.forward_reason,
           created_by_name = COALESCE(EXCLUDED.created_by_name, dcmms_daily_mail.created_by_name),
           created_by_role = COALESCE(EXCLUDED.created_by_role, dcmms_daily_mail.created_by_role),
+          region_province = EXCLUDED.region_province,
           updated_at = CURRENT_TIMESTAMP;`,
         dcmmsId,
         refNumber || letterNumber,
@@ -865,7 +913,7 @@ export async function saveDailyMailToNewTableServer(data: {
         dateHandover,
         validPriority,
         finalActionOfficer || null,
-        isAnswer ? "assigned answer letter" : (finalActionOfficer ? "assigned" : "registered"),
+        isAnswer ? "Assigned Answer Letter" : (finalActionOfficer ? "assigned" : "registered"),
         isAnswer,
         documentUrl,
         documentName,
@@ -874,7 +922,8 @@ export async function saveDailyMailToNewTableServer(data: {
         forwardedTo || null,
         forwardReason || null,
         createdByName,
-        createdByRole
+        createdByRole,
+        regProvince
       );
     } catch (dErr) {
       console.warn("Insert into dcmms_daily_mail warning:", dErr);
@@ -1009,14 +1058,22 @@ export async function getSubjectOfficerDashboardCasesServer(targetOfficerName?: 
           subject_of_letter as subject,
           mode_of_receipt as method,
           nature_of_letter as type,
+          nature_of_letter,
+          region_province,
           subject_category as classification,
           senders_party as sender,
           action_officer as officer_name,
+          action_officer,
+          forwarded_to,
+          addressed_to,
+          is_answer_letter,
           date_received_by_add_secretary as received_date,
           date_letter_handover_discipline as letter_date,
+          institute_name,
+          add_sec_instructions,
           created_at,
           updated_at,
-          'normal' as priority
+          priority
         FROM public.daily_mail_letter_table
         ORDER BY created_at DESC;
       `;
@@ -1035,11 +1092,19 @@ export async function getSubjectOfficerDashboardCasesServer(targetOfficerName?: 
           classification,
           sender,
           action_officer as officer_name,
+          action_officer,
+          forwarded_to,
+          addressed_to,
           received_date,
           submitted_date as letter_date,
+          institute_name,
+          add_sec_instructions,
           created_at,
           updated_at,
-          priority
+          priority,
+          status,
+          is_answer_letter,
+          region_province
         FROM public.dcmms_daily_mail
         ORDER BY created_at DESC;
       `;
@@ -1055,6 +1120,8 @@ export async function getSubjectOfficerDashboardCasesServer(targetOfficerName?: 
         seenRefNos.add(ref);
         deduplicatedLetters.push({
           ...l,
+          institute_name: l.institute_name || "",
+          add_sec_instructions: l.add_sec_instructions || "",
           received_date: l.received_date ? new Date(l.received_date).toISOString().split("T")[0] : "",
           letter_date: l.letter_date ? new Date(l.letter_date).toISOString().split("T")[0] : "",
           created_at: l.created_at ? new Date(l.created_at).toISOString() : new Date().toISOString(),
@@ -1110,18 +1177,104 @@ export async function getSubjectOfficerDashboardCasesServer(targetOfficerName?: 
       `;
     } catch (e) {}
 
+    const assignedCaseNosSet = new Set<string>();
+    assignmentsRaw.forEach((a: any) => {
+      const asgnOfficer = a.subject_officer_name || a.assigned_officers || "";
+      if (a.case_no && isOfficerMatched(asgnOfficer)) {
+        assignedCaseNosSet.add(String(a.case_no).trim().toLowerCase());
+      }
+    });
+    subjectCasesRaw.forEach((sc: any) => {
+      const sOfficer = sc.officer_name || sc.subject_officer_name || "";
+      if (sc.case_no && (isOfficerMatched(sc.officer_name) || isOfficerMatched(sc.subject_officer_name) || isOfficerMatched(sOfficer))) {
+        assignedCaseNosSet.add(String(sc.case_no).trim().toLowerCase());
+      }
+    });
+
+    const isLetterAssignedToOfficer = (l: any) => {
+      const candidates = [
+        l.officer_name,
+        l.action_officer,
+        l.forwarded_to,
+        l.addressed_to
+      ];
+      for (const c of candidates) {
+        if (c && isOfficerMatched(c)) return true;
+      }
+      const cleanRef = String(l.ref_no || l.letter_no || "").trim().toLowerCase();
+      if (cleanRef && assignedCaseNosSet.has(cleanRef)) return true;
+      return false;
+    };
+
+    const checkIsAnswerLetter = (l: any) => {
+      if (!l) return false;
+      if (l.is_answer_letter === true || String(l.is_answer_letter) === "true") return true;
+      const combined = (
+        String(l.nature_of_letter || "") + " " +
+        String(l.region_province || "") + " " +
+        String(l.type || "") + " " +
+        String(l.status || "") + " " +
+        String(l.subject || "")
+      ).toLowerCase();
+      return (
+        combined.includes("answer") ||
+        combined.includes("reply") ||
+        combined.includes("පිළිතුරු") ||
+        combined.includes("பதில்")
+      );
+    };
+
     const casesWithDetails = new Set(detailsRaw.map((d: any) => d.case_no));
     const refToReceivedDate = new Map<string, string>();
     const refToLetterDate = new Map<string, string>();
     const refToCreatedAt = new Map<string, string>();
-    const refToMailMeta = new Map<string, { subject?: string; priority?: string; sender?: string }>();
+    const refToMailMeta = new Map<string, {
+      letterNo?: string;
+      sender?: string;
+      instituteName?: string;
+      letterType?: string;
+      classification?: string;
+      subject?: string;
+      priority?: string;
+      addSecInstructions?: string;
+      letterDate?: string;
+      receivedDate?: string;
+    }>();
+
+    const registerMailMeta = (key: string, l: any) => {
+      if (!key) return;
+      const cleanKey = String(key).trim();
+      const meta = {
+        letterNo: l.letter_no || l.letter_number || l.ref_no || cleanKey,
+        sender: l.sender || l.senders_party || "",
+        instituteName: l.institute_name && l.institute_name !== "—" ? l.institute_name : "",
+        letterType: l.type || l.nature_of_letter || "Complaint",
+        classification: l.classification || l.subject_category || "",
+        subject: l.subject || l.subject_of_letter || "",
+        priority: l.priority || "medium",
+        addSecInstructions: l.add_sec_instructions || "",
+        letterDate: l.letter_date || "",
+        receivedDate: l.received_date || "",
+      };
+      refToMailMeta.set(cleanKey, meta);
+      refToMailMeta.set(cleanKey.toLowerCase(), meta);
+    };
+
+    // Pre-populate refToMailMeta with all known deduplicated letters
+    deduplicatedLetters.forEach((l) => {
+      if (l.ref_no) registerMailMeta(l.ref_no, l);
+      if (l.letter_no) registerMailMeta(l.letter_no, l);
+    });
 
     deduplicatedLetters.forEach((l) => {
-      if (l.ref_no && isOfficerMatched(l.officer_name)) {
-        refToReceivedDate.set(l.ref_no, l.received_date || new Date().toISOString().split("T")[0]);
-        if (l.letter_date) refToLetterDate.set(l.ref_no, l.letter_date);
-        if (l.created_at) refToCreatedAt.set(l.ref_no, l.created_at);
-        refToMailMeta.set(l.ref_no, { subject: l.subject, priority: l.priority, sender: l.sender });
+      const isAns = checkIsAnswerLetter(l);
+      if (l.ref_no && isLetterAssignedToOfficer(l)) {
+        // If it is NOT an answer letter, populate refToReceivedDate so it appears in mappedCases (Tab 1 Complaints)
+        if (!isAns) {
+          refToReceivedDate.set(l.ref_no, l.received_date || new Date().toISOString().split("T")[0]);
+          if (l.letter_date) refToLetterDate.set(l.ref_no, l.letter_date);
+          if (l.created_at) refToCreatedAt.set(l.ref_no, l.created_at);
+        }
       }
     });
 
@@ -1136,7 +1289,8 @@ export async function getSubjectOfficerDashboardCasesServer(targetOfficerName?: 
 
     subjectCasesRaw.forEach((sc: any) => {
       const sOfficer = sc.officer_name || "";
-      if (sc.case_no && isOfficerMatched(sOfficer)) {
+      const isAnsStatus = String(sc.status || "").toLowerCase().includes("answer");
+      if (sc.case_no && isOfficerMatched(sOfficer) && !isAnsStatus) {
         if (!refToReceivedDate.has(sc.case_no)) {
           refToReceivedDate.set(sc.case_no, sc.assigned_date ? new Date(sc.assigned_date).toISOString().split("T")[0] : new Date().toISOString().split("T")[0]);
         }
@@ -1144,43 +1298,68 @@ export async function getSubjectOfficerDashboardCasesServer(targetOfficerName?: 
     });
 
     subsequentRaw.forEach((m: any) => {
-      if (m.case_no && isOfficerMatched(m.mail_officer_name)) {
+      const isAns = checkIsAnswerLetter(m);
+      if (m.case_no && !isAns && isOfficerMatched(m.mail_officer_name)) {
         if (!refToReceivedDate.has(m.case_no)) {
           refToReceivedDate.set(m.case_no, m.received_date ? new Date(m.received_date).toISOString().split("T")[0] : new Date().toISOString().split("T")[0]);
         }
       }
     });
 
-    // Fallback: If no letters specifically matched this officer, include all unassigned/intake letters
+    // Fallback: If no letters specifically matched this officer, include all non-answer unassigned/intake letters
     if (refToReceivedDate.size === 0) {
       deduplicatedLetters.forEach((l) => {
-        if (l.ref_no) {
+        if (l.ref_no && !checkIsAnswerLetter(l)) {
           refToReceivedDate.set(l.ref_no, l.received_date || new Date().toISOString().split("T")[0]);
           if (l.letter_date) refToLetterDate.set(l.ref_no, l.letter_date);
           if (l.created_at) refToCreatedAt.set(l.ref_no, l.created_at);
-          refToMailMeta.set(l.ref_no, { subject: l.subject, priority: l.priority, sender: l.sender });
         }
       });
     }
+
+    const refToUpcomingAction = new Map<string, string>();
+    replyLettersRaw.forEach((r: any) => {
+      const k = String(r.ref_number || r.file_no || "").trim().toLowerCase();
+      if (k && r.upcoming_action) {
+        refToUpcomingAction.set(k, r.upcoming_action);
+      }
+    });
 
     const assignedRefNos = Array.from(refToReceivedDate.keys());
     const mappedCases: any[] = [];
     const fetchedCaseNos = new Set<string>();
 
-    // Build mapped cases
+    // Build mapped cases (Complaint cases for Tab 1)
     subjectCasesRaw.forEach((item: any) => {
-      if (refToReceivedDate.has(item.case_no)) {
+      const isAnsStatus = String(item.status || "").toLowerCase().includes("answer");
+      if (refToReceivedDate.has(item.case_no) && !isAnsStatus) {
         fetchedCaseNos.add(item.case_no);
+        const meta = refToMailMeta.get(item.case_no) || refToMailMeta.get(String(item.case_no).toLowerCase()) || {};
+        const rawItemSub = item.subject && item.subject !== "N/A" && item.subject !== "—" ? item.subject : "";
+        const rawMetaSub = meta.subject && meta.subject !== "N/A" && meta.subject !== "—" ? meta.subject : "";
+        const resolvedSubject = rawMetaSub || rawItemSub || `Case ${item.case_no}`;
+
+        const rawItemPri = item.priority && item.priority.toLowerCase() !== "normal" ? item.priority : "";
+        const rawMetaPri = meta.priority && meta.priority.toLowerCase() !== "normal" ? meta.priority : "";
+        const resolvedPriority = (rawMetaPri || rawItemPri || item.priority || meta.priority || "medium").toLowerCase();
+
         mappedCases.push({
           id: item.id || `case-${item.case_no}`,
           caseNo: item.case_no,
+          letterNo: meta.letterNo || item.letter_no || item.case_no,
+          sender: meta.sender || item.sender || item.senders_party || "",
+          instituteName: meta.instituteName || item.institute_name || "",
+          letterType: meta.letterType || item.type || item.nature_of_letter || "Complaint",
+          classification: meta.classification || item.classification || item.subject_category || "",
+          directives: meta.addSecInstructions || item.add_sec_instructions || "",
           assignedDate: item.assigned_date ? new Date(item.assigned_date).toISOString().split("T")[0] : (refToReceivedDate.get(item.case_no) || ""),
-          receivedDate: refToReceivedDate.get(item.case_no) || (item.assigned_date ? new Date(item.assigned_date).toISOString().split("T")[0] : ""),
-          letterDate: refToLetterDate.get(item.case_no) || (item.letter_date ? new Date(item.letter_date).toISOString().split("T")[0] : refToReceivedDate.get(item.case_no) || ""),
+          receivedDate: refToReceivedDate.get(item.case_no) || meta.receivedDate || (item.assigned_date ? new Date(item.assigned_date).toISOString().split("T")[0] : ""),
+          letterDate: refToLetterDate.get(item.case_no) || meta.letterDate || (item.letter_date ? new Date(item.letter_date).toISOString().split("T")[0] : refToReceivedDate.get(item.case_no) || ""),
           createdAt: item.created_at ? new Date(item.created_at).toISOString() : refToCreatedAt.get(item.case_no),
-          subject: item.subject || refToMailMeta.get(item.case_no)?.subject || `Case ${item.case_no}`,
-          priority: item.priority || refToMailMeta.get(item.case_no)?.priority || "medium",
+          subject: resolvedSubject,
+          priority: resolvedPriority,
           status: item.status || "In Progress",
+          upcomingAction: refToUpcomingAction.get(item.case_no.toLowerCase()) || "",
           isOld: casesWithDetails.has(item.case_no) || item.status === "Closed" || item.status === "Pending",
         });
       }
@@ -1189,17 +1368,28 @@ export async function getSubjectOfficerDashboardCasesServer(targetOfficerName?: 
     // Fallback for assigned ref_nos that don't have a separate row in dcmms_subject
     assignedRefNos.forEach((refNo) => {
       if (!fetchedCaseNos.has(refNo)) {
-        const meta = refToMailMeta.get(refNo) || {};
+        const meta = refToMailMeta.get(refNo) || refToMailMeta.get(String(refNo).toLowerCase()) || {};
+        const rawMetaSub = meta.subject && meta.subject !== "N/A" && meta.subject !== "—" ? meta.subject : "";
+        const resolvedSubject = rawMetaSub || `Assigned Case (${refNo})`;
+        const resolvedPriority = (meta.priority || "medium").toLowerCase();
+
         mappedCases.push({
           id: `case-${refNo}`,
           caseNo: refNo,
+          letterNo: meta.letterNo || refNo,
+          sender: meta.sender || "",
+          instituteName: meta.instituteName || "",
+          letterType: meta.letterType || "Complaint",
+          classification: meta.classification || "",
+          directives: meta.addSecInstructions || "",
           assignedDate: refToReceivedDate.get(refNo) || new Date().toISOString().split("T")[0],
-          receivedDate: refToReceivedDate.get(refNo) || new Date().toISOString().split("T")[0],
-          letterDate: refToLetterDate.get(refNo) || refToReceivedDate.get(refNo) || new Date().toISOString().split("T")[0],
+          receivedDate: refToReceivedDate.get(refNo) || meta.receivedDate || new Date().toISOString().split("T")[0],
+          letterDate: refToLetterDate.get(refNo) || meta.letterDate || refToReceivedDate.get(refNo) || new Date().toISOString().split("T")[0],
           createdAt: refToCreatedAt.get(refNo) || new Date().toISOString(),
-          subject: meta.subject || `Assigned Case (${refNo})`,
-          priority: meta.priority || "medium",
+          subject: resolvedSubject,
+          priority: resolvedPriority,
           status: "In Progress",
+          upcomingAction: refToUpcomingAction.get(String(refNo).toLowerCase()) || "",
           isOld: casesWithDetails.has(refNo),
         });
       }
@@ -1214,48 +1404,125 @@ export async function getSubjectOfficerDashboardCasesServer(targetOfficerName?: 
       return dateB - dateA;
     });
 
-    // Build answer letters list
+    // Build answer letters list (Assigned Answer Letters / Reply Tab 2)
     const inquiryCaseNos = replyLettersRaw
       .filter((r: any) => {
         const act = String(r.upcoming_action || "").toLowerCase();
-        return act.includes("inspection") || act.includes("inquiry") || act.includes("පරීක්ෂණ");
+        return act.includes("inspection") || act.includes("inquiry") || act.includes("පරීක්ෂණ") || act.includes("පරීක්ශන");
       })
       .map((r: any) => String(r.ref_number || r.file_no || "").trim().toLowerCase());
 
     const seenAnswerIds = new Set<string>();
     const answerLettersList: any[] = [];
 
+    // Build a fast lookup: case_no => letter data from deduplicatedLetters
+    const refToLetterData = new Map<string, any>();
+    deduplicatedLetters.forEach((l) => {
+      const key = String(l.ref_no || l.letter_no || "").trim().toLowerCase();
+      if (key && !refToLetterData.has(key)) refToLetterData.set(key, l);
+    });
+
+    // Primary: scan dcmms_subject_assignments for rows with answer-letter status assigned to this officer
+    assignmentsRaw.forEach((a: any) => {
+      const asgnStatus = String(a.status || "").toLowerCase();
+      const asgnOfficer = a.subject_officer_name || a.assigned_officers || "";
+      const cNo = String(a.case_no || "").trim();
+      const cNoLower = cNo.toLowerCase();
+      const inInquiry = inquiryCaseNos.includes(cNoLower);
+
+      const isAnsAssignment = asgnStatus.includes("answer") || asgnStatus.includes("reply") || asgnStatus.includes("පිළිතුරු");
+
+      if ((isAnsAssignment || inInquiry) && cNo && isOfficerMatched(asgnOfficer)) {
+        const itemKey = `asgn-answer-${cNo}`;
+        if (!seenAnswerIds.has(itemKey)) {
+          seenAnswerIds.add(itemKey);
+          // Try to enrich with letter data
+          const letterData = refToLetterData.get(cNoLower) || {};
+          answerLettersList.push({
+            id: a.id || `asgn-${cNo}`,
+            caseNo: cNo,
+            letterTitle: letterData.subject || a.progress_details || `Answer Letter (${cNo})`,
+            subject: letterData.subject || `Answer Letter (${cNo})`,
+            senderName: letterData.sender || "Sender",
+            receivedDate: letterData.received_date || (a.assigned_date ? new Date(a.assigned_date).toISOString().split("T")[0] : ""),
+            mailDate: letterData.letter_date || letterData.received_date || (a.assigned_date ? new Date(a.assigned_date).toISOString().split("T")[0] : ""),
+            letterDate: letterData.letter_date || letterData.received_date || (a.assigned_date ? new Date(a.assigned_date).toISOString().split("T")[0] : ""),
+            officerName: asgnOfficer || activeNameClean,
+            status: "Assigned Answer Letter",
+            isAnswerLetter: true,
+            nature: letterData.nature_of_letter || letterData.region_province || "Answer Letter",
+          });
+        }
+      }
+    });
+
+    // Also scan dcmms_subject rows with status = 'Assigned Answer Letter'
+    subjectCasesRaw.forEach((sc: any) => {
+      const scStatus = String(sc.status || "").toLowerCase();
+      const scOfficer = sc.officer_name || "";
+      const cNo = String(sc.case_no || "").trim();
+      const cNoLower = cNo.toLowerCase();
+
+      const isAnsCase = scStatus.includes("answer") || scStatus.includes("reply");
+
+      if (isAnsCase && cNo && isOfficerMatched(scOfficer)) {
+        const itemKey = `subj-answer-${cNo}`;
+        if (!seenAnswerIds.has(itemKey)) {
+          seenAnswerIds.add(itemKey);
+          const letterData = refToLetterData.get(cNoLower) || {};
+          answerLettersList.push({
+            id: sc.id || `case-${cNo}`,
+            caseNo: cNo,
+            letterTitle: letterData.subject || sc.subject || `Answer Letter (${cNo})`,
+            subject: letterData.subject || sc.subject || `Answer Letter (${cNo})`,
+            senderName: letterData.sender || "Sender",
+            receivedDate: letterData.received_date || (sc.received_date ? new Date(sc.received_date).toISOString().split("T")[0] : ""),
+            mailDate: letterData.letter_date || letterData.received_date || (sc.letter_date ? new Date(sc.letter_date).toISOString().split("T")[0] : ""),
+            letterDate: letterData.letter_date || letterData.received_date || (sc.letter_date ? new Date(sc.letter_date).toISOString().split("T")[0] : ""),
+            officerName: scOfficer || activeNameClean,
+            status: "Assigned Answer Letter",
+            isAnswerLetter: true,
+            nature: letterData.nature_of_letter || letterData.region_province || "Answer Letter",
+          });
+        }
+      }
+    });
+
+    // Secondary: scan deduplicatedLetters for answer letters assigned to this officer
     deduplicatedLetters.forEach((l: any) => {
-      const sOfficer = l.officer_name || "";
-      const isAns = l.is_answer_letter === true || String(l.status).toLowerCase().includes("answer");
-      const cleanRef = String(l.ref_no || "").trim().toLowerCase();
+      const isAns = checkIsAnswerLetter(l);
+      const cleanRef = String(l.ref_no || l.letter_no || "").trim().toLowerCase();
       const inInquiry = inquiryCaseNos.includes(cleanRef);
 
-      if ((isAns || inInquiry) && isOfficerMatched(sOfficer)) {
-        const itemKey = `mail-${l.ref_no}-${l.id}`;
+      if ((isAns || inInquiry) && isLetterAssignedToOfficer(l)) {
+        const itemKey = `mail-${l.ref_no || l.letter_no}-${l.id}`;
         if (!seenAnswerIds.has(itemKey)) {
           seenAnswerIds.add(itemKey);
           answerLettersList.push({
             id: l.id,
-            caseNo: l.ref_no,
+            caseNo: l.ref_no || l.letter_no || l.id,
             letterTitle: l.subject || "Answer Letter",
+            subject: l.subject || "Answer Letter",
             senderName: l.sender || "Sender",
             receivedDate: l.received_date,
-            mailDate: l.letter_date,
-            officerName: sOfficer,
+            mailDate: l.letter_date || l.received_date,
+            letterDate: l.letter_date || l.received_date,
+            officerName: l.action_officer || l.forwarded_to || l.officer_name || activeNameClean,
             status: "Assigned Answer Letter",
+            isAnswerLetter: true,
+            nature: l.nature_of_letter || l.region_province || "Answer Letter",
           });
         }
       }
     });
 
     subsequentRaw.forEach((m: any) => {
+      const isAns = checkIsAnswerLetter(m);
       const sOfficer = m.mail_officer_name || "";
-      const isAns = m.is_answer_letter === true;
       const cleanRef = String(m.case_no || "").trim().toLowerCase();
       const inInquiry = inquiryCaseNos.includes(cleanRef);
 
-      if ((isAns || inInquiry) && isOfficerMatched(sOfficer)) {
+      if ((isAns || inInquiry) && (isOfficerMatched(sOfficer) || (cleanRef && assignedCaseNosSet.has(cleanRef)))) {
         const itemKey = `submail-${m.case_no}-${m.id}`;
         if (!seenAnswerIds.has(itemKey)) {
           seenAnswerIds.add(itemKey);
@@ -1263,13 +1530,56 @@ export async function getSubjectOfficerDashboardCasesServer(targetOfficerName?: 
             id: m.id,
             caseNo: m.case_no,
             letterTitle: m.letter_title || "Subsequent Answer Letter",
+            subject: m.letter_title || "Subsequent Answer Letter",
             senderName: m.sender_name || "Sender",
             receivedDate: m.received_date ? new Date(m.received_date).toISOString().split("T")[0] : "",
             mailDate: m.mail_date ? new Date(m.mail_date).toISOString().split("T")[0] : "",
-            officerName: sOfficer,
+            letterDate: m.mail_date ? new Date(m.mail_date).toISOString().split("T")[0] : "",
+            officerName: sOfficer || activeNameClean,
             status: "Assigned Answer Letter",
+            isAnswerLetter: true,
+            nature: "Answer Letter",
           });
         }
+      }
+    });
+
+    let allChairmenRaw: any[] = [];
+    try {
+      allChairmenRaw = await prisma.$queryRaw`SELECT * FROM public.chairment_by_case ORDER BY updated_at DESC;`;
+    } catch (e) {}
+
+    let allMembersRaw: any[] = [];
+    try {
+      allMembersRaw = await prisma.$queryRaw`SELECT * FROM public.members_by_case ORDER BY updated_at DESC;`;
+    } catch (e) {}
+
+    const chairmenByCase = new Map<string, any>();
+    allChairmenRaw.forEach((c: any) => {
+      const k = String(c.ref_number || "").trim().toLowerCase();
+      if (k && !chairmenByCase.has(k)) {
+        chairmenByCase.set(k, {
+          fullName: c.full_name,
+          name: c.full_name,
+          position: c.position || "Chairman",
+          email: c.email || "",
+          nicNo: c.nic_no || c.nic || "",
+        });
+      }
+    });
+
+    const membersByCase = new Map<string, any[]>();
+    allMembersRaw.forEach((m: any) => {
+      const k = String(m.ref_number || "").trim().toLowerCase();
+      if (k) {
+        if (!membersByCase.has(k)) membersByCase.set(k, []);
+        membersByCase.get(k)!.push({
+          fullName: m.full_name,
+          name: m.full_name,
+          position: m.position || "Member",
+          email: m.email || "",
+          nicNo: m.nic_no || m.nic || "",
+        });
       }
     });
 
@@ -1285,19 +1595,33 @@ export async function getSubjectOfficerDashboardCasesServer(targetOfficerName?: 
         if (typeof a.chairman === "string" && (a.chairman.startsWith("{") || a.chairman.startsWith("["))) {
           try { parsedChairman = JSON.parse(a.chairman); } catch (e) {}
         }
+        if (!parsedChairman && chairmenByCase.has(cleanKey)) {
+          parsedChairman = chairmenByCase.get(cleanKey);
+        }
 
         let parsedMembers = a.members;
         if (typeof a.members === "string" && (a.members.startsWith("[") || a.members.startsWith("{"))) {
           try { parsedMembers = JSON.parse(a.members); } catch (e) {}
         }
+        if ((!parsedMembers || (Array.isArray(parsedMembers) && parsedMembers.length === 0)) && membersByCase.has(cleanKey)) {
+          parsedMembers = membersByCase.get(cleanKey);
+        }
 
         let officersText = a.assigned_officers || a.assignedOfficers || "";
-        if (!officersText && (parsedChairman || parsedMembers)) {
-          const cName = parsedChairman?.fullName || parsedChairman?.name || (typeof parsedChairman === "string" ? parsedChairman : "");
-          const cPart = cName ? `Chairman: ${cName}` : "";
-          const mPart = Array.isArray(parsedMembers) && parsedMembers.length > 0 ? `Members: ${parsedMembers.map((m: any) => m.fullName || m.name || m).join(", ")}` : "";
+        if ((!officersText || officersText.includes("undefined")) && (parsedChairman || parsedMembers)) {
+          const cName = parsedChairman?.fullName || parsedChairman?.name || parsedChairman?.full_name || (typeof parsedChairman === "string" ? parsedChairman : "");
+          const cPart = (cName && cName !== "undefined") ? `Chairman: ${cName}` : "";
+          const mPart = Array.isArray(parsedMembers) && parsedMembers.length > 0
+            ? `Members: ${parsedMembers.map((m: any) => m.fullName || m.name || m.full_name || m).filter((x: any) => x && x !== "undefined").join(", ")}`
+            : "";
           officersText = [cPart, mPart].filter(Boolean).join(" | ");
         }
+
+        const isCommSent = !!(
+          a.committee_sent ||
+          (typeof a.status === "string" && a.status.toLowerCase().includes("committee details sent")) ||
+          (parsedChairman && parsedMembers && parsedMembers.length > 0 && typeof a.status === "string" && a.status.toLowerCase().includes("committee"))
+        );
 
         mappedAssignments.push({
           id: a.id || `asgn-${cNo}`,
@@ -1312,6 +1636,10 @@ export async function getSubjectOfficerDashboardCasesServer(targetOfficerName?: 
           assigned_date: a.assigned_date ? new Date(a.assigned_date).toISOString().split("T")[0] : "",
           chairman: parsedChairman,
           members: parsedMembers,
+          committeeSent: isCommSent,
+          committee_sent: isCommSent,
+          committeeSentAt: a.committee_sent_at ? new Date(a.committee_sent_at).toISOString().split("T")[0] : null,
+          committee_sent_at: a.committee_sent_at ? new Date(a.committee_sent_at).toISOString() : null,
           appointmentDate: a.appointment_date ? new Date(a.appointment_date).toISOString().split("T")[0] : (a.appointment_letter_date ? new Date(a.appointment_letter_date).toISOString().split("T")[0] : ""),
           appointment_date: a.appointment_date ? new Date(a.appointment_date).toISOString().split("T")[0] : (a.appointment_letter_date ? new Date(a.appointment_letter_date).toISOString().split("T")[0] : ""),
           reportDueDate: a.report_due_date ? new Date(a.report_due_date).toISOString().split("T")[0] : "",
@@ -1396,6 +1724,10 @@ export async function saveSubjectOfficerAssignmentServer(payload: {
   assignedDate?: string;
   chairman?: any;
   members?: any;
+  committee_sent?: boolean;
+  committeeSent?: boolean;
+  committee_sent_at?: string;
+  committeeSentAt?: string;
   appointment_date?: string;
   appointmentDate?: string;
   report_due_date?: string;
@@ -1471,6 +1803,13 @@ export async function saveSubjectOfficerAssignmentServer(payload: {
     const initCompletedAt = payload.initial_investigation_completed_at || payload.initialInvestigationCompletedAt || null;
     const datesSubmitted = payload.dates_submitted_by_subject !== undefined ? payload.dates_submitted_by_subject : (payload.datesSubmittedBySubject !== undefined ? payload.datesSubmittedBySubject : (apptDate && reportDueDate ? true : null));
 
+    const isCommSent = payload.committee_sent !== undefined 
+      ? !!payload.committee_sent 
+      : (payload.committeeSent !== undefined 
+        ? !!payload.committeeSent 
+        : (cleanStatus?.toLowerCase().includes("committee details sent") ? true : null));
+    const commSentAt = payload.committee_sent_at || payload.committeeSentAt || (isCommSent ? new Date().toISOString() : null);
+
     const chairmanStr = payload.chairman ? (typeof payload.chairman === "object" ? JSON.stringify(payload.chairman) : String(payload.chairman)) : null;
     const membersStr = payload.members ? (typeof payload.members === "object" ? JSON.stringify(payload.members) : String(payload.members)) : null;
 
@@ -1512,6 +1851,8 @@ export async function saveSubjectOfficerAssignmentServer(payload: {
           investigation_status VARCHAR(100),
           investigation_notes TEXT,
           progress_details TEXT,
+          committee_sent BOOLEAN DEFAULT FALSE,
+          committee_sent_at TIMESTAMP WITH TIME ZONE,
           created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
@@ -1538,7 +1879,9 @@ export async function saveSubjectOfficerAssignmentServer(payload: {
         ALTER TABLE public.dcmms_subject_assignments ADD COLUMN IF NOT EXISTS investigation_file_no VARCHAR(255);
         ALTER TABLE public.dcmms_subject_assignments ADD COLUMN IF NOT EXISTS investigation_status VARCHAR(100);
         ALTER TABLE public.dcmms_subject_assignments ADD COLUMN IF NOT EXISTS investigation_notes TEXT;
-        ALTER TABLE public.dcmms_subject_assignments ADD COLUMN IF NOT EXISTS progress_details TEXT;`
+        ALTER TABLE public.dcmms_subject_assignments ADD COLUMN IF NOT EXISTS progress_details TEXT;
+        ALTER TABLE public.dcmms_subject_assignments ADD COLUMN IF NOT EXISTS committee_sent BOOLEAN DEFAULT FALSE;
+        ALTER TABLE public.dcmms_subject_assignments ADD COLUMN IF NOT EXISTS committee_sent_at TIMESTAMP WITH TIME ZONE;`
       );
     } catch (e) {}
 
@@ -1552,6 +1895,7 @@ export async function saveSubjectOfficerAssignmentServer(payload: {
         extension_requested_by_admin, extension_approval_status, extension_decision_date,
         dates_submitted_by_subject, report_submit_date, report_content,
         investigation_file_no, investigation_status, investigation_notes, progress_details,
+        committee_sent, committee_sent_at,
         created_at, updated_at
       ) VALUES (
         $1, $2, $3, $4, $5, $6::date,
@@ -1561,6 +1905,7 @@ export async function saveSubjectOfficerAssignmentServer(payload: {
         COALESCE($17, FALSE), $18, $19::date,
         COALESCE($20, TRUE), $21::date, $22,
         $23, $24, $25, $26,
+        COALESCE($27, FALSE), $28::timestamptz,
         CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
       )
       ON CONFLICT (case_no) DO UPDATE SET
@@ -1588,6 +1933,8 @@ export async function saveSubjectOfficerAssignmentServer(payload: {
         investigation_status = COALESCE(EXCLUDED.investigation_status, dcmms_subject_assignments.investigation_status),
         investigation_notes = COALESCE(EXCLUDED.investigation_notes, dcmms_subject_assignments.investigation_notes),
         progress_details = COALESCE(EXCLUDED.progress_details, dcmms_subject_assignments.progress_details),
+        committee_sent = COALESCE(EXCLUDED.committee_sent, dcmms_subject_assignments.committee_sent),
+        committee_sent_at = COALESCE(EXCLUDED.committee_sent_at, dcmms_subject_assignments.committee_sent_at),
         updated_at = CURRENT_TIMESTAMP;`,
       `asgn-${cleanCaseNo}`,
       cleanCaseNo,
@@ -1614,7 +1961,9 @@ export async function saveSubjectOfficerAssignmentServer(payload: {
       payload.investigation_file_no || payload.investigationFileNo || null,
       payload.investigation_status || payload.investigationStatus || null,
       payload.investigation_notes || payload.investigationNotes || null,
-      payload.progress_details || payload.progressDetails || null
+      payload.progress_details || payload.progressDetails || null,
+      isCommSent !== null ? isCommSent : false,
+      commSentAt ? new Date(commSentAt).toISOString() : null
     );
 
     // 2. Update dcmms_subject
@@ -1664,6 +2013,154 @@ export async function saveSubjectOfficerAssignmentServer(payload: {
   } catch (error: any) {
     console.error("Error saving subject officer assignment:", error);
     return serializeForServerAction({ success: false, error: error?.message || "Failed to save assignment" });
+  }
+}
+
+/**
+ * Get Subject Officer Case Assignment by Case No from PostgreSQL
+ */
+export async function getSubjectOfficerAssignmentByCaseServer(caseNo: string) {
+  try {
+    if (!caseNo || !caseNo.trim()) {
+      return serializeForServerAction({ success: false, error: "Case number is required", data: null });
+    }
+    const cleanCaseNo = String(caseNo).trim();
+    const rows: any[] = await prisma.$queryRaw`
+      SELECT * FROM public.dcmms_subject_assignments
+      WHERE LOWER(TRIM(case_no)) = LOWER(TRIM(${cleanCaseNo}))
+      LIMIT 1;
+    `;
+
+    let chairman: any = null;
+    let members: any[] = [];
+
+    // Fallback or enrich from chairment_by_case
+    try {
+      const chairRows: any[] = await prisma.$queryRaw`
+        SELECT * FROM public.chairment_by_case
+        WHERE LOWER(TRIM(ref_number)) = LOWER(TRIM(${cleanCaseNo}))
+        ORDER BY updated_at DESC LIMIT 1;
+      `;
+      if (chairRows && chairRows.length > 0) {
+        chairman = {
+          fullName: chairRows[0].full_name,
+          name: chairRows[0].full_name,
+          position: chairRows[0].position || "Chairman",
+          email: chairRows[0].email || "",
+          nicNo: chairRows[0].nic_no || chairRows[0].nic || "",
+        };
+      }
+    } catch (e) {}
+
+    // Fallback or enrich from members_by_case
+    try {
+      const memberRows: any[] = await prisma.$queryRaw`
+        SELECT * FROM public.members_by_case
+        WHERE LOWER(TRIM(ref_number)) = LOWER(TRIM(${cleanCaseNo}))
+        ORDER BY updated_at DESC;
+      `;
+      if (memberRows && memberRows.length > 0) {
+        members = memberRows.map((m: any) => ({
+          fullName: m.full_name,
+          name: m.full_name,
+          position: m.position || "Member",
+          email: m.email || "",
+          nicNo: m.nic_no || m.nic || "",
+        }));
+      }
+    } catch (e) {}
+
+    if (rows && rows.length > 0) {
+      const a = rows[0];
+      let parsedChairman = a.chairman;
+      if (typeof a.chairman === "string" && (a.chairman.startsWith("{") || a.chairman.startsWith("["))) {
+        try { parsedChairman = JSON.parse(a.chairman); } catch (e) {}
+      }
+      if (!parsedChairman && chairman) parsedChairman = chairman;
+
+      let parsedMembers = a.members;
+      if (typeof a.members === "string" && (a.members.startsWith("[") || a.members.startsWith("{"))) {
+        try { parsedMembers = JSON.parse(a.members); } catch (e) {}
+      }
+      if ((!parsedMembers || (Array.isArray(parsedMembers) && parsedMembers.length === 0)) && members.length > 0) {
+        parsedMembers = members;
+      }
+
+      let officersText = a.assigned_officers || a.assignedOfficers || "";
+      if ((!officersText || officersText.includes("undefined")) && (parsedChairman || parsedMembers)) {
+        const cName = parsedChairman?.fullName || parsedChairman?.name || parsedChairman?.full_name || (typeof parsedChairman === "string" ? parsedChairman : "");
+        const cPart = (cName && cName !== "undefined") ? `Chairman: ${cName}` : "";
+        const mPart = Array.isArray(parsedMembers) && parsedMembers.length > 0
+          ? `Members: ${parsedMembers.map((m: any) => m.fullName || m.name || m.full_name || m).filter((x: any) => x && x !== "undefined").join(", ")}`
+          : "";
+        officersText = [cPart, mPart].filter(Boolean).join(" | ");
+      }
+
+      const isCommSent = !!(
+        a.committee_sent ||
+        (typeof a.status === "string" && a.status.toLowerCase().includes("committee details sent"))
+      );
+
+      return serializeForServerAction({
+        success: true,
+        data: {
+          id: a.id || `asgn-${cleanCaseNo}`,
+          caseNo: cleanCaseNo,
+          case_no: cleanCaseNo,
+          subjectOfficerName: a.subject_officer_name || a.subjectOfficerName || "Subject Officer",
+          subject_officer_name: a.subject_officer_name || a.subjectOfficerName || "Subject Officer",
+          assignedOfficers: officersText,
+          assigned_officers: officersText,
+          status: a.status || "In Progress",
+          assignedDate: a.assigned_date ? new Date(a.assigned_date).toISOString().split("T")[0] : "",
+          assigned_date: a.assigned_date ? new Date(a.assigned_date).toISOString().split("T")[0] : "",
+          chairman: parsedChairman,
+          members: parsedMembers,
+          committeeSent: isCommSent,
+          committee_sent: isCommSent,
+          committeeSentAt: a.committee_sent_at ? new Date(a.committee_sent_at).toISOString().split("T")[0] : null,
+          appointmentDate: a.appointment_date ? new Date(a.appointment_date).toISOString().split("T")[0] : (a.appointment_letter_date ? new Date(a.appointment_letter_date).toISOString().split("T")[0] : ""),
+          appointment_date: a.appointment_date ? new Date(a.appointment_date).toISOString().split("T")[0] : (a.appointment_letter_date ? new Date(a.appointment_letter_date).toISOString().split("T")[0] : ""),
+          reportDueDate: a.report_due_date ? new Date(a.report_due_date).toISOString().split("T")[0] : "",
+          report_due_date: a.report_due_date ? new Date(a.report_due_date).toISOString().split("T")[0] : "",
+          extensionTerm: a.extension_term || "None",
+          extensionStartDate: a.extension_start_date ? new Date(a.extension_start_date).toISOString().split("T")[0] : "",
+          extensionEndDate: a.extension_end_date ? new Date(a.extension_end_date).toISOString().split("T")[0] : "",
+          extensionRequestedByAdmin: a.extension_requested_by_admin !== undefined ? !!a.extension_requested_by_admin : false,
+          datesSubmittedBySubject: !!(a.dates_submitted_by_subject || (a.appointment_date && a.report_due_date)),
+        }
+      });
+    }
+
+    if (chairman || members.length > 0) {
+      const cName = chairman?.fullName || chairman?.name || "";
+      const cPart = cName ? `Chairman: ${cName}` : "";
+      const mPart = members.length > 0 ? `Members: ${members.map((m: any) => m.fullName || m.name).join(", ")}` : "";
+      const officersText = [cPart, mPart].filter(Boolean).join(" | ");
+
+      return serializeForServerAction({
+        success: true,
+        data: {
+          id: `asgn-${cleanCaseNo}`,
+          caseNo: cleanCaseNo,
+          case_no: cleanCaseNo,
+          subjectOfficerName: "Subject Officer",
+          assignedOfficers: officersText,
+          assigned_officers: officersText,
+          status: "Committee Details Sent to Subject Officer",
+          assignedDate: new Date().toISOString().split("T")[0],
+          chairman: chairman,
+          members: members,
+          committeeSent: true,
+          committee_sent: true,
+        }
+      });
+    }
+
+    return serializeForServerAction({ success: false, data: null });
+  } catch (error: any) {
+    console.error("Error in getSubjectOfficerAssignmentByCaseServer:", error);
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to fetch assignment", data: null });
   }
 }
 
@@ -3159,21 +3656,38 @@ export async function saveAccusedOfficerServer(officerData: any) {
 
       if (existingForms && existingForms.length > 0) {
         formId = existingForms[0].id;
-        await prisma.$queryRaw`
-          UPDATE subject_officer_form_table
-          SET accused_officer_id = ${primaryOfficerId ? primaryOfficerId : null}::uuid,
-              daily_mail_letter_id = ${dailyMailId ? Number(dailyMailId) : null},
-              subject_file_no = ${subject_file_no || null},
-              file_name = ${fileNameVal},
-              future_action = ${future_action || null},
-              description = ${descVal},
-              date_prepared_and_submitted_for_signature = ${prepDateVal},
-              classification_of_complaint_letter = ${classification_of_complaint_letter || null},
-              name_of_the_presenting_the_complain = ${name_of_the_presenting_the_complain || null},
-              address_of_the_person_presenting_the_complaint = ${address_of_the_person_presenting_the_complaint || null},
-              updated_at = NOW()
-          WHERE ref_number = ${refTrimmed};
-        `;
+        if (primaryOfficerId) {
+          await prisma.$queryRaw`
+            UPDATE subject_officer_form_table
+            SET accused_officer_id = ${primaryOfficerId}::uuid,
+                daily_mail_letter_id = COALESCE(${dailyMailId ? Number(dailyMailId) : null}, daily_mail_letter_id),
+                subject_file_no = COALESCE(${subject_file_no || null}, subject_file_no),
+                file_name = COALESCE(${fileNameVal}, file_name),
+                future_action = COALESCE(${future_action || null}, future_action),
+                description = COALESCE(${descVal}, description),
+                date_prepared_and_submitted_for_signature = COALESCE(${prepDateVal}, date_prepared_and_submitted_for_signature),
+                classification_of_complaint_letter = COALESCE(${classification_of_complaint_letter || null}, classification_of_complaint_letter),
+                name_of_the_presenting_the_complain = COALESCE(${name_of_the_presenting_the_complain || null}, name_of_the_presenting_the_complain),
+                address_of_the_person_presenting_the_complaint = COALESCE(${address_of_the_person_presenting_the_complaint || null}, address_of_the_person_presenting_the_complaint),
+                updated_at = NOW()
+            WHERE ref_number = ${refTrimmed};
+          `;
+        } else {
+          await prisma.$queryRaw`
+            UPDATE subject_officer_form_table
+            SET daily_mail_letter_id = COALESCE(${dailyMailId ? Number(dailyMailId) : null}, daily_mail_letter_id),
+                subject_file_no = COALESCE(${subject_file_no || null}, subject_file_no),
+                file_name = COALESCE(${fileNameVal}, file_name),
+                future_action = COALESCE(${future_action || null}, future_action),
+                description = COALESCE(${descVal}, description),
+                date_prepared_and_submitted_for_signature = COALESCE(${prepDateVal}, date_prepared_and_submitted_for_signature),
+                classification_of_complaint_letter = COALESCE(${classification_of_complaint_letter || null}, classification_of_complaint_letter),
+                name_of_the_presenting_the_complain = COALESCE(${name_of_the_presenting_the_complain || null}, name_of_the_presenting_the_complain),
+                address_of_the_person_presenting_the_complaint = COALESCE(${address_of_the_person_presenting_the_complaint || null}, address_of_the_person_presenting_the_complaint),
+                updated_at = NOW()
+            WHERE ref_number = ${refTrimmed};
+          `;
+        }
       } else {
         const insertedForm: any[] = await prisma.$queryRaw`
           INSERT INTO subject_officer_form_table (
@@ -3217,8 +3731,8 @@ export async function saveAccusedOfficerServer(officerData: any) {
         } catch (e) {}
       }
 
-      // 5. Update Many-to-Many junction table accused_officer_subject_officer_form_table
-      if (formId) {
+      // 5. Update Many-to-Many junction table accused_officer_subject_officer_form_table only if new officers provided
+      if (formId && savedOfficerIds.length > 0) {
         await prisma.$executeRaw`
           DELETE FROM accused_officer_subject_officer_form_table WHERE subject_officer_form_id = ${Number(formId)}::bigint;
         `;
@@ -3298,7 +3812,7 @@ export async function getAccusedOfficerByRefServer(refNumber: string) {
     const refTrimmed = String(refNumber).trim();
 
     // 1. Query subject_officer_form_table by ref_number or subject_file_no
-    const forms: any[] = await prisma.$queryRaw`
+    let forms: any[] = await prisma.$queryRaw`
       SELECT 
         sof.id as form_id,
         sof.ref_number,
@@ -3314,6 +3828,38 @@ export async function getAccusedOfficerByRefServer(refNumber: string) {
          OR LOWER(sof.subject_file_no) = LOWER(${refTrimmed})
       LIMIT 1;
     `;
+
+    // 1.1 If not found, check daily_mail_letter_table by letter_number or ref_number to link form
+    if (!forms || forms.length === 0) {
+      try {
+        const letters: any[] = await prisma.$queryRaw`
+          SELECT id, ref_number FROM public.daily_mail_letter_table
+          WHERE LOWER(letter_number) = LOWER(${refTrimmed}) OR LOWER(ref_number) = LOWER(${refTrimmed})
+          LIMIT 1;
+        `;
+        if (letters && letters.length > 0) {
+          const lId = letters[0].id;
+          const lRef = letters[0].ref_number;
+          forms = await prisma.$queryRaw`
+            SELECT 
+              sof.id as form_id,
+              sof.ref_number,
+              sof.subject_file_no,
+              sof.future_action,
+              sof.date_prepared_and_submitted_for_signature,
+              sof.classification_of_complaint_letter,
+              sof.name_of_the_presenting_the_complain,
+              sof.address_of_the_person_presenting_the_complaint,
+              sof.accused_officer_id
+            FROM subject_officer_form_table sof
+            WHERE daily_mail_letter_id = ${lId}::bigint
+               OR LOWER(sof.ref_number) = LOWER(${lRef})
+               OR LOWER(sof.subject_file_no) = LOWER(${lRef})
+            LIMIT 1;
+          `;
+        }
+      } catch (e) {}
+    }
 
     if (!forms || forms.length === 0) {
       // Fallback: Query dcmms_concerned_officers table if present
@@ -5123,6 +5669,46 @@ export async function saveSubjectDetailActionServer(data: {
         step_taken = EXCLUDED.step_taken,
         updated_at = NOW();
     `;
+
+    if (data.report_state) {
+      try {
+        await prisma.$executeRawUnsafe(
+          `INSERT INTO public.dcmms_subject (
+            id, case_no, status, officer_name, subject_officer_name, assigned_date, created_at, updated_at
+          ) VALUES (
+            $1, $2, $3, $4, $5, COALESCE($6::date, CURRENT_DATE), CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+          )
+          ON CONFLICT (case_no) DO UPDATE SET
+            status = EXCLUDED.status,
+            subject_officer_name = COALESCE(EXCLUDED.subject_officer_name, dcmms_subject.subject_officer_name),
+            updated_at = CURRENT_TIMESTAMP;`,
+          `case-${data.case_no}`,
+          data.case_no,
+          data.report_state,
+          data.officer_name || data.subject_officer_name || "Subject Officer",
+          data.subject_officer_name || "Subject Officer",
+          recDate ? recDate.toISOString().split("T")[0] : null
+        );
+      } catch (e) {
+        console.warn("dcmms_subject upsert notice:", e);
+      }
+
+      try {
+        await prisma.$executeRawUnsafe(
+          `UPDATE public.dcmms_daily_mail SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE serial_no = $2 OR letter_no = $2 OR ref_no = $2;`,
+          data.report_state,
+          data.case_no
+        );
+      } catch (e) {}
+
+      try {
+        await prisma.$executeRawUnsafe(
+          `UPDATE public.daily_mail_letter_table SET updated_at = CURRENT_TIMESTAMP WHERE ref_number = $1 OR letter_number = $1;`,
+          data.case_no
+        );
+      } catch (e) {}
+    }
+
     return serializeForServerAction({ success: true, id: idVal });
   } catch (error: any) {
     console.error("Error in saveSubjectDetailActionServer:", error);
@@ -8566,6 +9152,38 @@ export async function getDirectlyAssignedLettersServer(
 
     let lettersRaw: any[] = [];
 
+    // 1. Prioritize dcmms_daily_mail (live daily mail records with active routing, assignments, and priorities)
+    try {
+      const p2: any[] = await prisma.$queryRaw`
+        SELECT 
+          id::text as id,
+          serial_no as ref_no,
+          letter_no,
+          subject,
+          method,
+          type,
+          classification,
+          sender,
+          action_officer,
+          addressed_to,
+          addressed_role,
+          forwarded_to,
+          forward_reason,
+          created_by_name,
+          created_by_role,
+          received_date,
+          submitted_date as letter_date,
+          created_at,
+          updated_at,
+          priority,
+          status
+        FROM public.dcmms_daily_mail
+        ORDER BY created_at DESC;
+      `;
+      lettersRaw.push(...(p2 || []));
+    } catch (e) {}
+
+    // 2. Fallback to daily_mail_letter_table for letters not present in dcmms_daily_mail
     try {
       const p1: any[] = await prisma.$queryRaw`
         SELECT 
@@ -8598,40 +9216,14 @@ export async function getDirectlyAssignedLettersServer(
       console.warn("p1 fetch error in getDirectlyAssignedLettersServer:", e);
     }
 
-    try {
-      const p2: any[] = await prisma.$queryRaw`
-        SELECT 
-          id::text as id,
-          serial_no as ref_no,
-          letter_no,
-          subject,
-          method,
-          type,
-          classification,
-          sender,
-          action_officer,
-          addressed_to,
-          addressed_role,
-          forwarded_to,
-          forward_reason,
-          created_by_name,
-          created_by_role,
-          received_date,
-          submitted_date as letter_date,
-          created_at,
-          updated_at,
-          priority,
-          status
-        FROM public.dcmms_daily_mail
-        ORDER BY created_at DESC;
-      `;
-      lettersRaw.push(...(p2 || []));
-    } catch (e) {}
-
     const seenRefs = new Set<string>();
     const matchedLetters: any[] = [];
 
-    const isUserAddSec = activeRole.includes("additional") || activeRole.includes("additional_secretary");
+    const isUserAddSec =
+      activeRole.includes("additional") ||
+      activeRole.includes("additional_secretary") ||
+      activeRole === "admin" ||
+      activeRole === "system_admin";
 
     lettersRaw.forEach((l) => {
       const ref = l.ref_no || l.letter_no || l.id;
@@ -8649,31 +9241,13 @@ export async function getDirectlyAssignedLettersServer(
       let isMatch = false;
 
       if (isUserAddSec) {
-        // Additional Secretary sees:
-        // 1. Letters whose action_officer matches Additional Secretary, Nihal Ranasinghe, or active name
-        // 2. Letters forwarded to Additional Secretary (forwarded_to contains "additional" or "nihal" or active name)
-        // 3. Letters addressed to Additional Secretary
-        // 4. Letters entered/created by Additional Secretary
-        if (
-          actOfficer.includes("additional") ||
-          actOfficer.includes("nihal") ||
-          actOfficer.includes("ranasinghe") ||
-          actOfficer.includes("ලේකම්") ||
-          fwdTo.includes("additional") ||
-          fwdTo.includes("nihal") ||
-          fwdTo.includes("ranasinghe") ||
-          addrTo.includes("additional") ||
-          addrTo.includes("nihal") ||
-          addrRole.includes("additional") ||
-          (activeName && (
-            actOfficer.includes(activeName) ||
-            fwdTo.includes(activeName) ||
-            addrTo.includes(activeName) ||
-            createdByName.includes(activeName)
-          ))
-        ) {
-          isMatch = true;
-        }
+        // Additional Secretary (and System Admin) oversee all assigned/forwarded letters across all branches:
+        // 1. Letters directly received / meant for Additional Secretary
+        // 2. Letters from / routed through Deputy Secretary / Senior Assistant Secretary
+        // 3. Letters from / routed through Assistant Secretary (Discipline)
+        // 4. Letters from / routed through Assistant Secretary (Investigations)
+        // 5. All entered and registered letters in the executive workflow
+        isMatch = true;
       } else if (activeRole.includes("subject")) {
         // Subject Officer: letters assigned to this subject officer
         if (activeName) {
@@ -8725,11 +9299,12 @@ export async function getDirectlyAssignedLettersServer(
           activeRole === "deputy_secretary";
 
         if (isChiefClerkRole) {
-          // Chief Clerk receives strictly:
+          // Chief Clerk receives:
           // 1. Letters assigned or forwarded to Chief Clerk (by name, employee no, or role)
           // 2. Letters addressed to Chief Clerk
           // 3. Letters assigned by Chief Clerk to Subject Officers
-          const isChiefTarget = (
+          // 4. Letters assigned to Subject Officers under Chief Clerk's branch (Discipline Branch)
+          const isDirectChiefTarget = (
             matchesName(actOfficer) ||
             matchesName(fwdTo) ||
             matchesName(addrTo) ||
@@ -8749,8 +9324,47 @@ export async function getDirectlyAssignedLettersServer(
             fwdReason.includes("assigned by chief clerk")
           );
 
-          if (isChiefTarget) {
+          if (isDirectChiefTarget) {
             isMatch = true;
+          } else {
+            // For Discipline Branch Chief Clerk: also include letters assigned to Subject Officers in Discipline branch
+            const isDisciplineChief =
+              activeRole.includes("discipline") ||
+              activeRole === "chief_clerk" ||
+              activeRole.includes("විනය");
+
+            if (isDisciplineChief) {
+              const isExclusivelyInvestigation =
+                (fwdTo.includes("investigation") || addrRole.includes("investigation")) &&
+                !fwdReason.includes("discipline") &&
+                !fwdReason.includes("disciplinary") &&
+                !fwdReason.includes("විනය") &&
+                !fwdTo.includes("discipline") &&
+                !addrRole.includes("discipline");
+
+              if (!isExclusivelyInvestigation) {
+                const isDisciplineContext =
+                  fwdReason.includes("discipline") ||
+                  fwdReason.includes("disciplinary") ||
+                  fwdReason.includes("විනය") ||
+                  fwdReason.includes("senior assistant") ||
+                  fwdReason.includes("additional secretary") ||
+                  Boolean(l.letter_date || l.received_date);
+
+                const isSubjectTarget =
+                  addrRole.includes("subject") ||
+                  actOfficer.includes("subject") ||
+                  fwdTo.includes("subject") ||
+                  actOfficer.includes("upul") ||
+                  fwdTo.includes("upul") ||
+                  String(l.status || "").toLowerCase().includes("subject") ||
+                  String(l.status || "").toLowerCase().includes("answer");
+
+                if (isSubjectTarget && isDisciplineContext) {
+                  isMatch = true;
+                }
+              }
+            }
           }
         } else if (isSenior) {
           // Deputy Secretary / Senior Assistant Secretary sees:
@@ -8959,15 +9573,55 @@ export async function getOfficerNotificationsServer(targetOfficerName?: string, 
   }
 }
 
-// ── Fetch FULLY-REGISTERED letters filled BY Additional Secretary, forwarded TO Senior Assistant Secretary ──
+// ── Fetch letters forwarded TO Senior Assistant Secretary BY Additional Secretary ──
 export async function getLettersForwardedToSeniorServer() {
   try {
     let lettersRaw: any[] = [];
 
-    // ── ONLY query the full-registration table (daily_mail_letter_table) ──
-    // These are letters filled in by the Additional Secretary using the full
-    // registration form at /daily-mail/register. Quick-add letters from
-    // daily mail officers (dcmms_daily_mail) are intentionally excluded.
+    // 1. Query daily mail table (dcmms_daily_mail) first for real-time routing
+    try {
+      const p2: any[] = await prisma.$queryRaw`
+        SELECT
+          id::text as id,
+          serial_no as ref_no,
+          letter_no,
+          subject,
+          type,
+          sender,
+          action_officer,
+          addressed_to,
+          addressed_role,
+          forwarded_to,
+          forward_reason,
+          created_by_name,
+          created_by_role,
+          received_date,
+          submitted_date as letter_date,
+          created_at,
+          'daily_mail' as source_table
+        FROM public.dcmms_daily_mail
+        WHERE
+          LOWER(COALESCE(forwarded_to, '')) LIKE '%senior%'
+          OR LOWER(COALESCE(forwarded_to, '')) LIKE '%deputy%'
+          OR LOWER(COALESCE(forwarded_to, '')) LIKE '%dharshana%'
+          OR LOWER(COALESCE(addressed_role, '')) LIKE '%senior%'
+          OR LOWER(COALESCE(addressed_role, '')) LIKE '%deputy%'
+          OR LOWER(COALESCE(action_officer, '')) LIKE '%dharshana%'
+          OR LOWER(COALESCE(action_officer, '')) LIKE '%senior assistant%'
+          OR LOWER(COALESCE(forward_reason, '')) LIKE '%senior%'
+          OR LOWER(COALESCE(forward_reason, '')) LIKE '%deputy%'
+          OR LOWER(COALESCE(forward_reason, '')) LIKE '%dharshana%'
+          OR LOWER(COALESCE(created_by_name, '')) LIKE '%dharshana%'
+          OR LOWER(COALESCE(created_by_role, '')) LIKE '%senior%'
+          OR LOWER(COALESCE(created_by_role, '')) LIKE '%deputy%'
+        ORDER BY created_at DESC;
+      `;
+      lettersRaw.push(...(p2 || []));
+    } catch (e) {
+      console.warn("p2 fetch error in getLettersForwardedToSeniorServer:", e);
+    }
+
+    // 2. Query full-registration table (daily_mail_letter_table) as fallback
     try {
       const p1: any[] = await prisma.$queryRaw`
         SELECT
@@ -8990,14 +9644,19 @@ export async function getLettersForwardedToSeniorServer() {
           'registered' as source_table
         FROM public.daily_mail_letter_table
         WHERE
-          -- Must have been created/registered by the Additional Secretary role
-          LOWER(COALESCE(created_by_role, '')) LIKE '%additional%'
-          AND (
-            -- And must be addressed/forwarded towards Senior Assistant Secretary
-            LOWER(COALESCE(addressed_role, '')) LIKE '%senior%'
-            OR LOWER(COALESCE(forwarded_to, '')) LIKE '%senior%'
-            OR LOWER(COALESCE(forward_reason, '')) LIKE '%senior assistant%'
-          )
+          LOWER(COALESCE(forwarded_to, '')) LIKE '%senior%'
+          OR LOWER(COALESCE(forwarded_to, '')) LIKE '%deputy%'
+          OR LOWER(COALESCE(forwarded_to, '')) LIKE '%dharshana%'
+          OR LOWER(COALESCE(addressed_role, '')) LIKE '%senior%'
+          OR LOWER(COALESCE(addressed_role, '')) LIKE '%deputy%'
+          OR LOWER(COALESCE(action_officer, '')) LIKE '%dharshana%'
+          OR LOWER(COALESCE(action_officer, '')) LIKE '%senior assistant%'
+          OR LOWER(COALESCE(forward_reason, '')) LIKE '%senior%'
+          OR LOWER(COALESCE(forward_reason, '')) LIKE '%deputy%'
+          OR LOWER(COALESCE(forward_reason, '')) LIKE '%dharshana%'
+          OR LOWER(COALESCE(created_by_name, '')) LIKE '%dharshana%'
+          OR LOWER(COALESCE(created_by_role, '')) LIKE '%senior%'
+          OR LOWER(COALESCE(created_by_role, '')) LIKE '%deputy%'
         ORDER BY created_at DESC;
       `;
       lettersRaw.push(...(p1 || []));
@@ -9028,6 +9687,7 @@ export async function getLettersForwardedToSeniorServer() {
         addressedRole: l.addressed_role || "",
         createdByName: l.created_by_name || "Additional Secretary",
         createdByRole: l.created_by_role || "",
+        forwardedBy: "Additional Secretary",
         actionOfficer: l.action_officer || "",
         sourceTable: l.source_table || "",
         createdAt: l.created_at ? new Date(l.created_at).toISOString() : new Date().toISOString(),
@@ -9050,16 +9710,17 @@ export async function getLettersForwardedToSeniorServer() {
  * and dcmms_subject with the assigned Subject Officer details.
  */
 export async function assignLetterToSubjectOfficerServer(params: {
-  letterId?: string;
+  letterId?: string | number;
   letterNo?: string;
   refNo?: string;
-  subjectOfficerId?: string;
+  subjectOfficerId?: string | number;
   subjectOfficerName: string;
   subjectOfficerEmployeeNo?: string;
   subjectType?: string;
   instructions?: string;
   chiefClerkName?: string;
   chiefClerkRole?: string;
+  isAnswerLetter?: boolean;
 }) {
   try {
     const {
@@ -9073,6 +9734,7 @@ export async function assignLetterToSubjectOfficerServer(params: {
       instructions,
       chiefClerkName = "Chief Clerk",
       chiefClerkRole = "chief_clerk",
+      isAnswerLetter: explicitIsAnswer,
     } = params;
 
     if (!subjectOfficerName || (!letterNo && !refNo && !letterId)) {
@@ -9087,8 +9749,57 @@ export async function assignLetterToSubjectOfficerServer(params: {
     const cleanTargetCaseNo = cleanRefNo || cleanLetterNo;
     const cleanOfficerName = String(subjectOfficerName).trim();
     const today = new Date().toISOString().split("T")[0];
+
+    // Detect if this letter is an answer letter
+    let isAnswer = explicitIsAnswer === true;
+    if (!isAnswer) {
+      try {
+        const foundDm: any[] = await prisma.$queryRawUnsafe(
+          `SELECT is_answer_letter, status, region_province, type, subject FROM public.dcmms_daily_mail
+           WHERE (CASE WHEN $1 <> '' THEN id::text = $1 ELSE FALSE END)
+              OR (CASE WHEN $2 <> '' THEN letter_no = $2 ELSE FALSE END)
+              OR (CASE WHEN $3 <> '' THEN serial_no = $3 ELSE FALSE END)
+           LIMIT 1`,
+          letterId ? String(letterId) : "",
+          cleanLetterNo,
+          cleanRefNo
+        );
+        if (foundDm && foundDm.length > 0) {
+          const row = foundDm[0];
+          const text = (String(row.region_province || "") + " " + String(row.type || "") + " " + String(row.status || "") + " " + String(row.subject || "")).toLowerCase();
+          if (row.is_answer_letter === true || String(row.is_answer_letter) === "true" || text.includes("answer") || text.includes("reply") || text.includes("පිළිතුරු") || text.includes("பதில்")) {
+            isAnswer = true;
+          }
+        }
+      } catch (e) {}
+
+      if (!isAnswer) {
+        try {
+          const foundDmlt: any[] = await prisma.$queryRawUnsafe(
+            `SELECT nature_of_letter, region_province, subject_of_letter FROM public.daily_mail_letter_table
+             WHERE (CASE WHEN $1 <> '' THEN id::text = $1 ELSE FALSE END)
+                OR (CASE WHEN $2 <> '' THEN letter_number = $2 ELSE FALSE END)
+                OR (CASE WHEN $3 <> '' THEN ref_number = $3 ELSE FALSE END)
+             LIMIT 1`,
+            letterId ? String(letterId) : "",
+            cleanLetterNo,
+            cleanRefNo
+          );
+          if (foundDmlt && foundDmlt.length > 0) {
+            const row = foundDmlt[0];
+            const text = (String(row.nature_of_letter || "") + " " + String(row.region_province || "") + " " + String(row.subject_of_letter || "")).toLowerCase();
+            if (text.includes("answer") || text.includes("reply") || text.includes("පිළිතුරු") || text.includes("பதில்")) {
+              isAnswer = true;
+            }
+          }
+        } catch (e) {}
+      }
+    }
+
     const assignmentRemarks = instructions && instructions.trim()
       ? instructions.trim()
+      : isAnswer
+      ? `Assigned Answer Letter (පිළිතුරු ලිපිය) by Chief Clerk ${chiefClerkName} to Subject Officer ${cleanOfficerName}${subjectType ? ` (${subjectType})` : ""}`
       : `Assigned by Chief Clerk ${chiefClerkName} to Subject Officer ${cleanOfficerName}${subjectType ? ` (${subjectType})` : ""}`;
 
     // 1. Update daily_mail_letter_table in PostgreSQL
@@ -9100,6 +9811,7 @@ export async function assignLetterToSubjectOfficerServer(params: {
           addressed_role = 'Subject Officer',
           forwarded_to = $1,
           forward_reason = $2,
+          is_answer_letter = CASE WHEN $6 = true THEN true ELSE is_answer_letter END,
           updated_at = CURRENT_TIMESTAMP
         WHERE
           (CASE WHEN $3 <> '' THEN id::text = $3 ELSE FALSE END)
@@ -9109,7 +9821,8 @@ export async function assignLetterToSubjectOfficerServer(params: {
         assignmentRemarks,
         letterId ? String(letterId) : "",
         cleanLetterNo,
-        cleanRefNo
+        cleanRefNo,
+        isAnswer
       );
     } catch (e) {
       console.warn("daily_mail_letter_table assignment update warning:", e);
@@ -9124,7 +9837,8 @@ export async function assignLetterToSubjectOfficerServer(params: {
           addressed_role = 'Subject Officer',
           forwarded_to = $1,
           forward_reason = $2,
-          status = 'Under Subject Officer',
+          status = CASE WHEN $6 = true THEN 'Assigned Answer Letter' ELSE 'Under Subject Officer' END,
+          is_answer_letter = CASE WHEN $6 = true THEN true ELSE is_answer_letter END,
           updated_at = CURRENT_TIMESTAMP
         WHERE
           (CASE WHEN $3 <> '' THEN id::text = $3 ELSE FALSE END)
@@ -9134,7 +9848,8 @@ export async function assignLetterToSubjectOfficerServer(params: {
         assignmentRemarks,
         letterId ? String(letterId) : "",
         cleanLetterNo,
-        cleanRefNo
+        cleanRefNo,
+        isAnswer
       );
     } catch (e) {
       console.warn("dcmms_daily_mail assignment update warning:", e);
@@ -9148,12 +9863,12 @@ export async function assignLetterToSubjectOfficerServer(params: {
             id, case_no, subject_officer_name, assigned_officers, status, assigned_date,
             progress_details, created_at, updated_at
           ) VALUES (
-            $1, $2, $3, $3, 'In Progress', $4::date, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            $1, $2, $3, $3, $5, $4::date, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
           )
           ON CONFLICT (case_no) DO UPDATE SET
             subject_officer_name = EXCLUDED.subject_officer_name,
             assigned_officers = EXCLUDED.assigned_officers,
-            status = 'In Progress',
+            status = CASE WHEN dcmms_subject_assignments.status ILIKE '%inquiry%' OR dcmms_subject_assignments.status ILIKE '%inspection%' THEN dcmms_subject_assignments.status ELSE EXCLUDED.status END,
             assigned_date = EXCLUDED.assigned_date,
             progress_details = COALESCE(EXCLUDED.progress_details, dcmms_subject_assignments.progress_details),
             updated_at = CURRENT_TIMESTAMP;`,
@@ -9161,6 +9876,7 @@ export async function assignLetterToSubjectOfficerServer(params: {
           cleanTargetCaseNo,
           cleanOfficerName,
           today,
+          isAnswer ? 'assigned answer letter' : 'In Progress',
           assignmentRemarks
         );
       } catch (e) {
@@ -9169,44 +9885,81 @@ export async function assignLetterToSubjectOfficerServer(params: {
 
       // 4. Upsert into dcmms_subject
       try {
-        await prisma.$executeRawUnsafe(
-          `INSERT INTO public.dcmms_subject (
-            id, case_no, status, officer_name, assigned_date, created_at, updated_at
-          ) VALUES (
-            $1, $2, 'Under Subject Officer', $3, $4::date, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-          )
-          ON CONFLICT (case_no) DO UPDATE SET
-            officer_name = EXCLUDED.officer_name,
-            status = 'Under Subject Officer',
-            assigned_date = EXCLUDED.assigned_date,
-            updated_at = CURRENT_TIMESTAMP;`,
-          `case-${cleanTargetCaseNo}`,
-          cleanTargetCaseNo,
-          cleanOfficerName,
-          today
-        );
+        if (isAnswer) {
+          // For answer letters, always force the status to 'Assigned Answer Letter'
+          // so it is correctly routed to the Reply tab on the subject officer dashboard
+          await prisma.$executeRawUnsafe(
+            `INSERT INTO public.dcmms_subject (
+              id, case_no, status, officer_name, assigned_date, created_at, updated_at
+            ) VALUES (
+              $1, $2, 'Assigned Answer Letter', $3, $4::date, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            )
+            ON CONFLICT (case_no) DO UPDATE SET
+              officer_name = EXCLUDED.officer_name,
+              status = 'Assigned Answer Letter',
+              assigned_date = EXCLUDED.assigned_date,
+              updated_at = CURRENT_TIMESTAMP;`,
+            `case-${cleanTargetCaseNo}`,
+            cleanTargetCaseNo,
+            cleanOfficerName,
+            today
+          );
+        } else {
+          await prisma.$executeRawUnsafe(
+            `INSERT INTO public.dcmms_subject (
+              id, case_no, status, officer_name, assigned_date, created_at, updated_at
+            ) VALUES (
+              $1, $2, $5, $3, $4::date, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            )
+            ON CONFLICT (case_no) DO UPDATE SET
+              officer_name = EXCLUDED.officer_name,
+              status = CASE WHEN dcmms_subject.status ILIKE '%inquiry%' THEN dcmms_subject.status ELSE EXCLUDED.status END,
+              assigned_date = EXCLUDED.assigned_date,
+              updated_at = CURRENT_TIMESTAMP;`,
+            `case-${cleanTargetCaseNo}`,
+            cleanTargetCaseNo,
+            cleanOfficerName,
+            today,
+            'Under Subject Officer'
+          );
+        }
       } catch (e) {
         console.warn("dcmms_subject update warning:", e);
       }
+
+      // 5. Update dcmms_subsequent_mails if referencing this case
+      try {
+        await prisma.$executeRawUnsafe(
+          `UPDATE public.dcmms_subsequent_mails SET
+            mail_officer_name = $1,
+            is_answer_letter = CASE WHEN $2 = true THEN true ELSE is_answer_letter END
+          WHERE case_no = $3;`,
+          cleanOfficerName,
+          isAnswer,
+          cleanTargetCaseNo
+        );
+      } catch (subErr) {}
     }
 
-    // 5. Send Notification to Subject Officer
+    // 6. Send Notification to Subject Officer
     try {
       await createOfficerNotificationServer({
         targetOfficerName: cleanOfficerName,
         targetRole: "subject_officer",
         letterNo: cleanLetterNo || cleanRefNo,
         caseNo: cleanTargetCaseNo,
-        type: "letter_assigned",
-        title: "New Case Assigned by Chief Clerk",
-        message: `Letter ${cleanLetterNo || cleanRefNo} has been assigned to you by Chief Clerk ${chiefClerkName} for subject processing.${instructions ? ` Directives: ${instructions}` : ""}`,
+        type: isAnswer ? "answer_letter_assigned" : "letter_assigned",
+        title: isAnswer ? "New Answer Letter Assigned by Chief Clerk" : "New Case Assigned by Chief Clerk",
+        message: isAnswer
+          ? `Answer letter (පිළිතුරු ලිපිය) ${cleanLetterNo || cleanRefNo} has been assigned to you by Chief Clerk ${chiefClerkName} and routed to your Reply tab.${instructions ? ` Directives: ${instructions}` : ""}`
+          : `Letter ${cleanLetterNo || cleanRefNo} has been assigned to you by Chief Clerk ${chiefClerkName} for subject processing.${instructions ? ` Directives: ${instructions}` : ""}`,
         senderName: chiefClerkName,
       });
     } catch (e) {
       console.warn("Notification send warning in assignLetterToSubjectOfficerServer:", e);
     }
 
-    // 6. Log Audit Event
+    // 7. Log Audit Event
     try {
       await prisma.$executeRawUnsafe(
         `INSERT INTO public.dcmms_audit_logs (action, entity_type, entity_id, user_name, user_role, details)
@@ -9219,6 +9972,7 @@ export async function assignLetterToSubjectOfficerServer(params: {
           refNo: cleanRefNo,
           subjectOfficer: cleanOfficerName,
           subjectType,
+          isAnswerLetter: isAnswer,
           instructions,
           assignedAt: new Date().toISOString(),
         })
@@ -9235,7 +9989,8 @@ export async function assignLetterToSubjectOfficerServer(params: {
         actionOfficer: cleanOfficerName,
         forwardedTo: cleanOfficerName,
         forwardReason: assignmentRemarks,
-        status: "Under Subject Officer",
+        status: isAnswer ? "Assigned Answer Letter" : "Under Subject Officer",
+        isAnswerLetter: isAnswer,
         assignedDate: today,
       },
     });
@@ -9263,10 +10018,11 @@ export async function forwardLetterFromAdditionalSecretaryServer(params: {
   forwardReason?: string;
   senderName?: string;
   senderRole?: string;
+  addSecInstructions?: string;
 }) {
   try {
-    const { letterId, letterNo, refNo, forwardToOfficerName, forwardToRole, forwardReason, senderName, senderRole } = params;
-    const senderTitle = senderRole || "Senior Assistant Secretary";
+    const { letterId, letterNo, refNo, forwardToOfficerName, forwardToRole, forwardReason, senderName, senderRole, addSecInstructions } = params;
+    const senderTitle = senderRole || "Additional Secretary";
     const finalReason = forwardReason || `Forwarded by ${senderTitle} to ${forwardToOfficerName} for review and necessary action`;
     const forwardedToStr = `${forwardToOfficerName} (${forwardToRole})`;
     const idKey = letterNo || refNo || letterId || "";
@@ -9284,11 +10040,13 @@ export async function forwardLetterFromAdditionalSecretaryServer(params: {
           action_officer = $3,
           addressed_to = $3,
           addressed_role = $4,
+          add_sec_forward_method = 'Forwarded to ' || $3,
+          add_sec_instructions = CASE WHEN $8::text IS NOT NULL AND $8::text <> '' THEN $8::text ELSE add_sec_instructions END,
           updated_at = CURRENT_TIMESTAMP
         WHERE letter_number = $5 OR ref_number = $6 OR id::text = $7
            OR (TRIM(letter_number) != '' AND TRIM(letter_number) = TRIM($5))
            OR (TRIM(ref_number) != '' AND TRIM(ref_number) = TRIM($6))
-      `, forwardedToStr, finalReason, forwardToOfficerName, forwardToRole, letterNo || "", refNo || "", String(letterId || ""));
+      `, forwardedToStr, finalReason, forwardToOfficerName, forwardToRole, letterNo || "", refNo || "", String(letterId || ""), addSecInstructions || null);
     } catch (err) {
       console.warn("Update warning in daily_mail_letter_table:", err);
     }
@@ -9302,11 +10060,14 @@ export async function forwardLetterFromAdditionalSecretaryServer(params: {
           action_officer = $3,
           addressed_to = $3,
           addressed_role = $4,
+          status = 'forwarded',
+          add_sec_forward_method = 'Forwarded to ' || $3,
+          add_sec_instructions = CASE WHEN $8::text IS NOT NULL AND $8::text <> '' THEN $8::text ELSE add_sec_instructions END,
           updated_at = CURRENT_TIMESTAMP
         WHERE letter_no = $5 OR serial_no = $6 OR id::text = $7
            OR (TRIM(letter_no) != '' AND TRIM(letter_no) = TRIM($5))
            OR (TRIM(serial_no) != '' AND TRIM(serial_no) = TRIM($6))
-      `, forwardedToStr, finalReason, forwardToOfficerName, forwardToRole, letterNo || "", refNo || "", String(letterId || ""));
+      `, forwardedToStr, finalReason, forwardToOfficerName, forwardToRole, letterNo || "", refNo || "", String(letterId || ""), addSecInstructions || null);
     } catch (err) {
       console.warn("Update warning in dcmms_daily_mail:", err);
     }
@@ -9706,6 +10467,427 @@ export async function updateLetterRecordServer(payload: {
     return serializeForServerAction({ success: false, error: error?.message || "Failed to update letter" });
   }
 }
+
+export async function assignLetterToInvestigationAdminServer(params: {
+  caseNo: string;
+  refNo?: string;
+  letterNo?: string;
+  subjectOfficerName?: string;
+  remarks?: string;
+  investigationType?: string;
+}) {
+  try {
+    const {
+      caseNo,
+      refNo,
+      letterNo,
+      subjectOfficerName = "Subject Officer",
+      remarks = "",
+      investigationType = "Institutional Basic Investigation",
+    } = params;
+
+    const cleanCaseNo = String(caseNo || refNo || letterNo || "").trim();
+    if (!cleanCaseNo) {
+      return serializeForServerAction({ success: false, error: "Case number or reference number is required." });
+    }
+
+    const cleanLetterNo = String(letterNo || cleanCaseNo).trim();
+    const cleanRefNo = String(refNo || cleanCaseNo).trim();
+    const cleanOfficerName = String(subjectOfficerName || "Subject Officer").trim();
+    const today = new Date().toISOString().split("T")[0];
+
+    // 1. Discover registered Investigation Administrator / Investigation Officer
+    let invAdminName = "Investigation Administrator";
+    let invAdminRole = "Investigation Administrator";
+    try {
+      const invUsers: any[] = await prisma.$queryRaw`
+        SELECT full_name, role FROM public.register_officer_table
+        WHERE (role ILIKE '%investigation%' OR role ILIKE '%විමර්ශන%') AND is_active = true
+        ORDER BY created_at ASC
+        LIMIT 1;
+      `;
+      if (invUsers && invUsers.length > 0 && invUsers[0].full_name) {
+        invAdminName = invUsers[0].full_name;
+        invAdminRole = invUsers[0].role || "Investigation Administrator";
+      }
+    } catch (e) {
+      console.warn("Notice querying register_officer_table for investigation officer:", e);
+    }
+
+    const forwardReasonText = remarks && remarks.trim()
+      ? `Assigned by Subject Officer ${cleanOfficerName} for ${investigationType}. Directives: ${remarks.trim()}`
+      : `Assigned by Subject Officer ${cleanOfficerName} for ${investigationType} (ආයතනික මූලික විමර්ශනය)`;
+
+    const forwardedToText = `${invAdminName} (Investigation Administrator)`;
+
+    // 2. Update daily_mail_letter_table in PostgreSQL
+    try {
+      await prisma.$executeRawUnsafe(
+        `UPDATE public.daily_mail_letter_table SET
+          action_officer = $1,
+          addressed_to = $1,
+          addressed_role = 'Investigation Administrator',
+          forwarded_to = $2,
+          forward_reason = $3,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE ref_number = $4 OR letter_number = $4 OR letter_number = $5 OR ref_number = $5;`,
+        invAdminName,
+        forwardedToText,
+        forwardReasonText,
+        cleanCaseNo,
+        cleanLetterNo
+      );
+    } catch (e) {
+      console.warn("daily_mail_letter_table assignment update warning:", e);
+    }
+
+    // 3. Update dcmms_daily_mail in PostgreSQL
+    try {
+      await prisma.$executeRawUnsafe(
+        `UPDATE public.dcmms_daily_mail SET
+          action_officer = $1,
+          officer_name = $1,
+          addressed_to = $1,
+          addressed_role = 'Investigation Administrator',
+          forwarded_to = $2,
+          forward_reason = $3,
+          status = $6,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE serial_no = $4 OR letter_no = $4 OR letter_no = $5 OR serial_no = $5;`,
+        invAdminName,
+        forwardedToText,
+        forwardReasonText,
+        cleanCaseNo,
+        cleanLetterNo,
+        investigationType
+      );
+    } catch (e) {
+      console.warn("dcmms_daily_mail assignment update warning:", e);
+    }
+
+    // 4. Upsert into dcmms_subject_assignments
+    try {
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO public.dcmms_subject_assignments (
+          id, case_no, subject_officer_name, assigned_officers, status, assigned_date,
+          progress_details, created_at, updated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6::date, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        )
+        ON CONFLICT (case_no) DO UPDATE SET
+          subject_officer_name = COALESCE(EXCLUDED.subject_officer_name, dcmms_subject_assignments.subject_officer_name),
+          assigned_officers = EXCLUDED.assigned_officers,
+          status = EXCLUDED.status,
+          assigned_date = EXCLUDED.assigned_date,
+          progress_details = COALESCE(EXCLUDED.progress_details, dcmms_subject_assignments.progress_details),
+          updated_at = CURRENT_TIMESTAMP;`,
+        `asgn-${cleanCaseNo}`,
+        cleanCaseNo,
+        cleanOfficerName,
+        invAdminName,
+        investigationType,
+        today,
+        forwardReasonText
+      );
+    } catch (e) {
+      console.warn("dcmms_subject_assignments update warning:", e);
+    }
+
+    // 5. Upsert into dcmms_subject
+    try {
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO public.dcmms_subject (
+          id, case_no, status, officer_name, subject_officer_name, assigned_date, created_at, updated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6::date, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        )
+        ON CONFLICT (case_no) DO UPDATE SET
+          status = EXCLUDED.status,
+          officer_name = EXCLUDED.officer_name,
+          subject_officer_name = COALESCE(EXCLUDED.subject_officer_name, dcmms_subject.subject_officer_name),
+          assigned_date = EXCLUDED.assigned_date,
+          updated_at = CURRENT_TIMESTAMP;`,
+        `case-${cleanCaseNo}`,
+        cleanCaseNo,
+        investigationType,
+        invAdminName,
+        cleanOfficerName,
+        today
+      );
+    } catch (e) {
+      console.warn("dcmms_subject update warning:", e);
+    }
+
+    // 6. Create Notification for Investigation Administrator
+    try {
+      await createOfficerNotificationServer({
+        targetOfficerName: invAdminName,
+        targetRole: "investigation",
+        letterNo: cleanLetterNo || cleanRefNo || cleanCaseNo,
+        caseNo: cleanCaseNo,
+        type: "letter_assigned_investigation",
+        title: "New Letter Assigned for Institutional Basic Investigation",
+        message: `Letter / Case ${cleanCaseNo} has been assigned to you by Subject Officer ${cleanOfficerName} for ${investigationType} (ආයතනික මූලික විමර්ශනය).`,
+        senderName: cleanOfficerName,
+      });
+    } catch (notifErr) {
+      console.warn("Notification send warning in assignLetterToInvestigationAdminServer:", notifErr);
+    }
+
+    // 7. Audit Log
+    try {
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO public.dcmms_audit_logs (action, entity_type, entity_id, user_name, user_role, details)
+        VALUES ('SUBJECT_OFFICER_ASSIGNED_TO_INVESTIGATION_ADMIN', 'LETTER', $1, $2, 'subject_officer', $3)`,
+        cleanCaseNo,
+        cleanOfficerName,
+        JSON.stringify({
+          caseNo: cleanCaseNo,
+          letterNo: cleanLetterNo,
+          refNo: cleanRefNo,
+          investigationAdminName: invAdminName,
+          investigationType,
+          remarks,
+          assignedAt: new Date().toISOString(),
+        })
+      );
+    } catch (auditErr) {
+      console.warn("Audit log notice in assignLetterToInvestigationAdminServer:", auditErr);
+    }
+
+    return serializeForServerAction({
+      success: true,
+      data: {
+        caseNo: cleanCaseNo,
+        assignedOfficer: invAdminName,
+        forwardedTo: forwardedToText,
+        status: investigationType,
+        forwardReason: forwardReasonText,
+      },
+    });
+  } catch (error: any) {
+    console.error("Error in assignLetterToInvestigationAdminServer:", error);
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to assign letter to Investigation Administrator" });
+  }
+}
+
+// -------------------------------------------------------------
+// Auto-fill Case & Letter Details by Letter No / Ref No Server Action
+// -------------------------------------------------------------
+export async function getLetterAndCaseDetailsByAnyRefServer(queryParam: string) {
+  try {
+    if (!queryParam || !String(queryParam).trim()) {
+      return serializeForServerAction({ success: false, error: "Case / Letter reference is required", data: null });
+    }
+    const clean = String(queryParam).trim();
+
+    const formatDateStr = (d: any): string | null => {
+      if (!d) return null;
+      if (d instanceof Date) return d.toISOString().split("T")[0];
+      const str = String(d).trim();
+      if (!str) return null;
+      if (str.includes("T")) return str.split("T")[0];
+      return str;
+    };
+
+    // 1. Fetch Letter from daily_mail_letter_table
+    let letters: any[] = [];
+    try {
+      letters = await prisma.$queryRaw`
+        SELECT * FROM public.daily_mail_letter_table
+        WHERE LOWER(letter_number) = LOWER(${clean})
+           OR LOWER(ref_number) = LOWER(${clean})
+           OR id::text = ${clean}
+        LIMIT 1;
+      `;
+    } catch (e) {
+      console.warn("Letter lookup warning:", e);
+    }
+    const letter = (letters && letters.length > 0) ? letters[0] : null;
+
+    // 2. Fetch Form from subject_officer_form_table
+    let forms: any[] = [];
+    try {
+      forms = await prisma.$queryRaw`
+        SELECT * FROM public.subject_officer_form_table
+        WHERE LOWER(ref_number) = LOWER(${clean})
+           OR LOWER(subject_file_no) = LOWER(${clean})
+        LIMIT 1;
+      `;
+      if ((!forms || forms.length === 0) && letter?.id) {
+        forms = await prisma.$queryRaw`
+          SELECT * FROM public.subject_officer_form_table
+          WHERE daily_mail_letter_id = ${letter.id}::bigint
+          LIMIT 1;
+        `;
+      }
+    } catch (e) {
+      console.warn("Form lookup warning:", e);
+    }
+    const form = (forms && forms.length > 0) ? forms[0] : null;
+
+    // 3. Fetch reply details
+    let replies: any[] = [];
+    try {
+      replies = await prisma.$queryRaw`
+        SELECT * FROM public.reply_letter_details_table
+        WHERE LOWER(ref_number) = LOWER(${clean}) OR LOWER(file_no) = LOWER(${clean})
+        ORDER BY created_at DESC LIMIT 1;
+      `;
+    } catch (e) {}
+    const reply = (replies && replies.length > 0) ? replies[0] : null;
+
+    // 4. Fetch assignments from dcmms_subject_assignments
+    let asgns: any[] = [];
+    try {
+      asgns = await prisma.$queryRaw`
+        SELECT * FROM public.dcmms_subject_assignments
+        WHERE LOWER(case_no) = LOWER(${clean})
+        LIMIT 1;
+      `;
+      if ((!asgns || asgns.length === 0) && letter?.letter_number) {
+        asgns = await prisma.$queryRaw`
+          SELECT * FROM public.dcmms_subject_assignments
+          WHERE LOWER(case_no) = LOWER(${letter.letter_number})
+          LIMIT 1;
+        `;
+      }
+    } catch (e) {}
+    const asgn = (asgns && asgns.length > 0) ? asgns[0] : null;
+
+    // 5. Fetch Appointment & Report Due Dates from case_by_appointment_and_report_due_date
+    let dateRows: any[] = [];
+    try {
+      dateRows = await prisma.$queryRaw`
+        SELECT * FROM public.case_by_appointment_and_report_due_date
+        WHERE LOWER(subject_file_no) = LOWER(${clean})
+           OR LOWER(sub_file_no) = LOWER(${clean})
+        ORDER BY created_at DESC LIMIT 1;
+      `;
+    } catch (e) {}
+    const dateRow = (dateRows && dateRows.length > 0) ? dateRows[0] : null;
+
+    // 6. Fetch Accused Officers
+    let accusedList: any[] = [];
+    const targetFormId = form?.id;
+    if (targetFormId) {
+      try {
+        accusedList = await prisma.$queryRaw`
+          SELECT 
+            ao.id as accused_officer_id,
+            ao.accused_officer_name,
+            ao.address as officer_address,
+            ao.position,
+            ao.date_of_birth,
+            ao.nic_no,
+            ao.appointment_date,
+            sch.id as school_id,
+            sch.accused_school_name,
+            sch.address as school_address,
+            sch.province,
+            sch.district,
+            sch.zone
+          FROM public.accused_officer_subject_officer_form_table j
+          JOIN public.accused_officer_table ao ON j.accused_officer_id = ao.id
+          LEFT JOIN public.accused_school_table sch ON ao.accused_school_id = sch.id
+          WHERE j.subject_officer_form_id = ${targetFormId}::bigint;
+        `;
+      } catch (e) {}
+
+      if ((!accusedList || accusedList.length === 0) && form.accused_officer_id) {
+        try {
+          accusedList = await prisma.$queryRaw`
+            SELECT 
+              ao.id as accused_officer_id,
+              ao.accused_officer_name,
+              ao.address as officer_address,
+              ao.position,
+              ao.date_of_birth,
+              ao.nic_no,
+              ao.appointment_date,
+              sch.id as school_id,
+              sch.accused_school_name,
+              sch.address as school_address,
+              sch.province,
+              sch.district,
+              sch.zone
+            FROM public.accused_officer_table ao
+            LEFT JOIN public.accused_school_table sch ON ao.accused_school_id = sch.id
+            WHERE ao.id = ${form.accused_officer_id}::uuid;
+          `;
+        } catch (e) {}
+      }
+    }
+
+    // 7. Resolve consolidated fields
+    const letterNo = letter?.letter_number || clean;
+    const refNo = letter?.ref_number || form?.ref_number || clean;
+    const complainantName = form?.name_of_the_presenting_the_complain || letter?.senders_party || "Complainant";
+    const complainantAddress = form?.address_of_the_person_presenting_the_complaint || letter?.institute_name || "";
+    const subject = letter?.subject_of_letter || reply?.description || form?.description || "Formal Disciplinary Inquiry";
+    const subjectOfficer = asgn?.subject_officer_name || letter?.action_officer || letter?.addressed_to || "Subject Officer";
+    
+    // Dates
+    const appointmentLetterDate = formatDateStr(dateRow?.appointment_letter_date || asgn?.appointment_letter_date || asgn?.appointment_date || letter?.date_letter_handover_discipline || letter?.date_received_by_add_secretary);
+    const reportDueDate = formatDateStr(dateRow?.report_due_date || asgn?.report_due_date);
+    const receivedDate = formatDateStr(letter?.date_received_by_add_secretary || letter?.date_letter_handover_discipline);
+    const targetDate = reportDueDate || appointmentLetterDate || receivedDate || new Date().toISOString().split("T")[0];
+
+    // Committee details
+    const chairman = asgn?.chairman || null;
+    const members = asgn?.members || null;
+
+    return serializeForServerAction({
+      success: true,
+      data: {
+        letterNo,
+        refNo,
+        caseNo: clean,
+        inquiryNo: clean,
+        complainantName,
+        complainantAddress,
+        subject,
+        subjectOfficerName: subjectOfficer,
+        assignee: subjectOfficer,
+        status: asgn?.status || "In Progress",
+        appointmentLetterDate,
+        reportDueDate,
+        receivedDate,
+        targetDate,
+        inquiryNotes: asgn?.progress_details || asgn?.investigation_notes || letter?.forward_reason || "",
+        investigationFileNo: asgn?.investigation_file_no || form?.subject_file_no || "",
+        chairman,
+        members,
+        extensionTerm: asgn?.extension_term || "First",
+        extensionStartDate: formatDateStr(asgn?.extension_start_date) || "",
+        extensionEndDate: formatDateStr(asgn?.extension_end_date) || "",
+        extensionApprovalStatus: asgn?.extension_approval_status || null,
+        accusedOfficers: accusedList.map((ao: any) => ({
+          officer_name: ao.accused_officer_name || "",
+          position: ao.position || "",
+          dob: formatDateStr(ao.date_of_birth) || "",
+          nic: ao.nic_no || "",
+          appointment_date: formatDateStr(ao.appointment_date) || "",
+          address: ao.officer_address || "",
+          institute_name: ao.accused_school_name || "",
+          institute_address: ao.school_address || "",
+          province: ao.province || "",
+          district: ao.district || "",
+          zone: ao.zone || "",
+        })),
+        rawLetter: letter,
+        rawForm: form,
+        rawReply: reply,
+        rawAssignment: asgn,
+      }
+    });
+  } catch (error: any) {
+    console.error("Error in getLetterAndCaseDetailsByAnyRefServer:", error);
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to fetch letter and case details", data: null });
+  }
+}
+
+
 
 
 

@@ -221,6 +221,43 @@ function getLetterOfficerRole(letter: any, lang: string = "si"): string {
   return lang === "si" ? "දෛනික තැපැල් නිලධාරී" : "Daily Mail Officer";
 }
 
+/** Format letter priority badge with dot indicator and localized label */
+function getLetterPriorityBadge(letter: any, currentLang: string = "si") {
+  const rawP = String(letter?.priority || "Normal").toLowerCase().trim();
+  const isHigh = rawP.includes("high") || rawP.includes("today") || rawP.includes("urgent") || rawP.includes("අද");
+  const isLow = rawP.includes("low") || rawP.includes("14") || rawP.includes("21") || rawP.includes("අඩු");
+  const prioLevel = isHigh ? "high" : isLow ? "low" : "medium";
+
+  if (prioLevel === "high") {
+    return {
+      level: "high",
+      label: currentLang === "si" ? "අදම (High)" : currentLang === "ta" ? "இன்றே (High)" : "Today (High)",
+      bg: "#fee2e2",
+      color: "#991b1b",
+      border: "#fecaca",
+      dot: "#ef4444"
+    };
+  }
+  if (prioLevel === "low") {
+    return {
+      level: "low",
+      label: currentLang === "si" ? "දින 14/21ක් තුළ (Low)" : currentLang === "ta" ? "14/21 நாட்கள் (Low)" : "14/21 Days (Low)",
+      bg: "#dcfce7",
+      color: "#166534",
+      border: "#bbf7d0",
+      dot: "#22c55e"
+    };
+  }
+  return {
+    level: "medium",
+    label: currentLang === "si" ? "දින 3ක් තුළ (Medium)" : currentLang === "ta" ? "3 நாட்கள் (Medium)" : "In 3 Days (Medium)",
+    bg: "#fef3c7",
+    color: "#92400e",
+    border: "#fde68a",
+    dot: "#f59e0b"
+  };
+}
+
 function AdminDashboardContent() {
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
@@ -259,6 +296,7 @@ function AdminDashboardContent() {
   const [isDirectLettersMinimized, setIsDirectLettersMinimized] = useState(false);
   const [assignedLettersSearchQuery, setAssignedLettersSearchQuery] = useState("");
   const [assignedLettersFilter, setAssignedLettersFilter] = useState<string>("all");
+  const [assignedLettersPriorityFilter, setAssignedLettersPriorityFilter] = useState<string>("all");
 
   // Forward Letter Modal state for Additional Secretary
   const [isForwardModalOpen, setIsForwardModalOpen] = useState(false);
@@ -555,6 +593,25 @@ function AdminDashboardContent() {
           }
         } catch (caseErr) {
           console.error("Failed to load cases from database", caseErr);
+        }
+
+        // Also reload directly assigned letters for live sync
+        try {
+          let curProf: any = null;
+          try {
+            const sim = localStorage.getItem("dcmms_simulated_session");
+            if (sim) curProf = JSON.parse(sim);
+          } catch {}
+          const activeRole = isChiefClerkParam ? "chief_clerk_discipline" : (curProf?.role || localStorage.getItem("dcmms_user_role"));
+          const activeName = isChiefClerkParam ? "Chief Clerk Officer (ශාඛා ප්‍රධානී)" : (curProf?.full_name || localStorage.getItem("dcmms_username"));
+          if (activeRole || activeName) {
+            const directRes = await getDirectlyAssignedLettersServer(activeName, activeRole);
+            if (directRes && directRes.success && Array.isArray(directRes.data)) {
+              setDirectlyAssignedLetters(directRes.data);
+            }
+          }
+        } catch (dirErr) {
+          console.warn("Direct letters live sync error in fetchCases:", dirErr);
         }
 
       } catch (err) {
@@ -877,9 +934,22 @@ function AdminDashboardContent() {
 
     setIsSubmittingAssignment(true);
     try {
+      const targetCaseNo = assigningLetter.letterNo || assigningLetter.refNo || assigningLetter.id || "N/A";
       const chiefName = currentUserProfile?.full_name || "Chief Clerk";
       const chiefRole = currentUserProfile?.role || "chief_clerk";
-      const targetCaseNo = assigningLetter.letterNo || assigningLetter.refNo;
+      const isAns = Boolean(
+        assigningLetter.is_answer_letter ||
+        assigningLetter.isAnswerLetter ||
+        String(assigningLetter.letter_type || "").toLowerCase().includes("answer") ||
+        String(assigningLetter.letterType || "").toLowerCase().includes("answer") ||
+        String(assigningLetter.region_province || "").toLowerCase().includes("answer") ||
+        String(assigningLetter.regionProvince || "").toLowerCase().includes("answer") ||
+        String(assigningLetter.nature_of_letter || "").toLowerCase().includes("answer") ||
+        String(assigningLetter.nature || "").toLowerCase().includes("answer") ||
+        String(assigningLetter.region_province || "").includes("පිළිතුරු") ||
+        String(assigningLetter.regionProvince || "").includes("පිළිතුරු") ||
+        String(assigningLetter.nature_of_letter || "").includes("පිළිතුරු")
+      );
 
       const res = await assignLetterToSubjectOfficerServer({
         letterId: assigningLetter.id,
@@ -892,6 +962,7 @@ function AdminDashboardContent() {
         instructions: assignmentInstructions.trim(),
         chiefClerkName: chiefName,
         chiefClerkRole: chiefRole,
+        isAnswerLetter: isAns,
       });
 
       if (res && res.success) {
@@ -1120,7 +1191,7 @@ function AdminDashboardContent() {
       )}
 
       {/* ── Letters Forwarded to Senior Assistant Secretary Section ── */}
-      {isMounted && (currentUserProfile?.role === "senior_assistant_secretary" || (currentUserProfile?.role || "").toLowerCase().includes("senior")) && seniorSecLetters.length > 0 && (
+      {isMounted && !isChiefClerk && (currentUserProfile?.role === "senior_assistant_secretary" || (currentUserProfile?.role || "").toLowerCase().includes("senior")) && seniorSecLetters.length > 0 && (
         <section style={{
           margin: "0 0 28px 0",
           borderRadius: "16px",
@@ -1409,8 +1480,8 @@ function AdminDashboardContent() {
       {(() => {
         if (directlyAssignedLetters.length === 0 && !isChiefClerk) return null;
 
-        const isAddSec = isMounted && currentUserProfile?.role === "additional_secretary";
-        const isSeniorAsstSec = isMounted && (currentUserProfile?.role === "senior_assistant_secretary" || (currentUserProfile?.role || "").toLowerCase().includes("senior") || (currentUserProfile?.role || "").toLowerCase().includes("deputy"));
+        const isAddSec = !isChiefClerk && isMounted && currentUserProfile?.role === "additional_secretary";
+        const isSeniorAsstSec = !isChiefClerk && isMounted && (currentUserProfile?.role === "senior_assistant_secretary" || (currentUserProfile?.role || "").toLowerCase().includes("senior") || (currentUserProfile?.role || "").toLowerCase().includes("deputy"));
 
         const baseLettersList = isChiefClerk
           ? directlyAssignedLetters.filter((l: any) => isLetterForChiefClerk(l, effectiveChiefProfile))
@@ -1432,7 +1503,14 @@ function AdminDashboardContent() {
         const directAddSecLetters = directlyAssignedLetters.filter((l: any) => getLetterOriginGroup(l) === "direct_additional_sec");
 
         const filteredList = baseLettersList.filter((l: any) => {
-          if (isAddSec) {
+          if (isChiefClerk) {
+            // Chief Clerk sees letters assigned directly to Chief Clerk or assigned by Chief Clerk
+            if (!isLetterForChiefClerk(l, effectiveChiefProfile)) {
+              return false;
+            }
+            if (chiefAssignmentFilter === "pending" && isLetterAssignedToSubject(l)) return false;
+            if (chiefAssignmentFilter === "assigned" && !isLetterAssignedToSubject(l)) return false;
+          } else if (isAddSec) {
             if (assignedLettersFilter === "deputy_secretary" && getLetterOriginGroup(l) !== "deputy_secretary") return false;
             if (assignedLettersFilter === "asst_sec_discipline" && getLetterOriginGroup(l) !== "asst_sec_discipline") return false;
             if (assignedLettersFilter === "asst_sec_investigation" && getLetterOriginGroup(l) !== "asst_sec_investigation") return false;
@@ -1449,12 +1527,6 @@ function AdminDashboardContent() {
               const reason = (l.forwardReason || l.forward_reason || "").toLowerCase().trim();
 
               if (isSeniorAsstSec) {
-                // Exclude letters entered/created by Additional Secretary —
-                // Senior Asst Sec only needs to see letters forwarded TO them, not those entered by Addl. Sec.
-                const creatorRole = (l.created_by_role || l.createdByRole || "").toLowerCase().trim();
-                if (creatorRole.includes("additional")) {
-                  return false;
-                }
                 const matchesSenior =
                   actOfficer.includes(myName) ||
                   fwdTo.includes(myName) ||
@@ -1474,13 +1546,16 @@ function AdminDashboardContent() {
                   addrRole.includes("senior") ||
                   addrRole.includes("deputy") ||
                   reason.includes("senior assistant") ||
-                  reason.includes("deputy");
-                if (!matchesSenior) {
+                  reason.includes("deputy") ||
+                  reason.includes("dharshana") ||
+                  creator.includes("dharshana");
+
+                // Exclude letters entered by Additional Secretary ONLY if they were NOT routed to Senior Asst Sec
+                const creatorRole = (l.created_by_role || l.createdByRole || "").toLowerCase().trim();
+                if (creatorRole.includes("additional") && !matchesSenior) {
                   return false;
                 }
-              } else if (isChiefClerk) {
-                // Chief Clerk sees letters assigned directly to Chief Clerk or assigned by Chief Clerk
-                if (!isLetterForChiefClerk(l, effectiveChiefProfile)) {
+                if (!matchesSenior) {
                   return false;
                 }
               } else {
@@ -1494,13 +1569,13 @@ function AdminDashboardContent() {
               }
             }
 
-            if (isChiefClerk) {
-              if (chiefAssignmentFilter === "pending" && isLetterAssignedToSubject(l)) return false;
-              if (chiefAssignmentFilter === "assigned" && !isLetterAssignedToSubject(l)) return false;
-            } else {
-              if (assignedLettersFilter === "direct" && l.isForwarded) return false;
-              if (assignedLettersFilter === "forwarded" && !l.isForwarded) return false;
-            }
+            if (assignedLettersFilter === "direct" && l.isForwarded) return false;
+            if (assignedLettersFilter === "forwarded" && !l.isForwarded) return false;
+          }
+
+          if (assignedLettersPriorityFilter !== "all") {
+            const prioBadge = getLetterPriorityBadge(l, lang);
+            if (prioBadge.level !== assignedLettersPriorityFilter) return false;
           }
 
           if (assignedLettersSearchQuery.trim()) {
@@ -1514,6 +1589,8 @@ function AdminDashboardContent() {
             const soOfficer = getAssignedSubjectOfficer(l);
             const soName = (soOfficer?.full_name || "").toLowerCase();
             const soType = (soOfficer?.subject_type || "").toLowerCase();
+            const prioBadge = getLetterPriorityBadge(l, lang);
+            const prioSearch = `${prioBadge.level} ${prioBadge.label} ${(l.priority || "")}`.toLowerCase();
             return (
               lNo.includes(q) ||
               sender.includes(q) ||
@@ -1522,21 +1599,28 @@ function AdminDashboardContent() {
               type.includes(q) ||
               subject.includes(q) ||
               soName.includes(q) ||
-              soType.includes(q)
+              soType.includes(q) ||
+              prioSearch.includes(q)
             );
           }
           return true;
         });
 
-        const title = isAddSec
+        const title = isChiefClerk
+          ? (lang === "si" ? "ශාඛා ප්‍රධානී වෙත පවරන ලද ලිපි - විනය ශාඛාව" : lang === "ta" ? "முதன்மை எழுதுநருக்கு ஒதுக்கப்பட்ட கடிதங்கள் - ஒழுக்க கிளை" : "Letters Assigned to Chief Clerk - Discipline Branch")
+          : isAddSec
           ? (lang === "si" ? "අතිරේක ලේකම් වෙත පවරන ලද ලිපි" : "Assigned Letters to Additional Secretary")
           : isSeniorAsstSec
           ? (lang === "si" ? "ජ්‍යෙෂ්ඨ සහකාර ලේකම් වෙත පවරන ලද ලිපි" : "Assigned Letters to Senior Assistant Secretary")
-          : isChiefClerk
-          ? (lang === "si" ? "ශාඛා ප්‍රධානී වෙත පවරන ලද ලිපි" : "Letters Assigned to Chief Clerk")
           : (lang === "si" ? "ඔබ විසින් ඇතුළත් කළ ලිපි" : "Letters Entered by You");
 
-        const description = isAddSec
+        const description = isChiefClerk
+          ? (lang === "si"
+              ? "විෂයභාර නිලධාරීන්ට පැවරීම සඳහා ශාඛා ප්‍රධානී (විනය ශාඛාව) වෙත යොමු කරන ලද සියලුම ලිපි සහ පැමිණිලි."
+              : lang === "ta"
+              ? "விடய அதிகாரிகளுக்கு ஒதுக்குவதற்காக முதன்மை எழுதுநருக்கு (ஒழுக்க கிளை) அனுப்பப்பட்ட அனைத்து கடிதங்களும் முறைப்பாடுகளும்."
+              : "All letters and complaints assigned to the Chief Clerk (Discipline Branch) for routing to Subject Officers.")
+          : isAddSec
           ? (lang === "si"
               ? "නියෝජ්‍ය ලේකම්, විනය සහකාර ලේකම් සහ විමර්ශන සහකාර ලේකම් මඟින් ලැබුණු ලිපි මෙන්ම අතිරේක ලේකම් වෙත සෘජුවම ලැබුණු ලිපි වෙන් වෙන්ව පහත දැක්වේ."
               : "Letters coming separately from Deputy Secretary, Assistant Secretary (Discipline), and Assistant Secretary (Investigations), with options to forward direct letters.")
@@ -1544,10 +1628,6 @@ function AdminDashboardContent() {
           ? (lang === "si"
               ? "අතිරේක ලේකම් මඟින් ඔබ වෙත විමර්ශන සහ විනය ක්‍රියාමාර්ග සඳහා යොමු කරන ලද සියලුම ලිපි සහ පැමිණිලි."
               : "All letters and complaints forwarded to Senior Assistant Secretary by Additional Secretary for review and action.")
-          : isChiefClerk
-          ? (lang === "si"
-              ? "විෂයභාර නිලධාරීන්ට පැවරීම සඳහා ශාඛා ප්‍රධානී වෙත යොමු කරන ලද සියලුම ලිපි සහ පැමිණිලි."
-              : "All letters and complaints assigned to the Chief Clerk for routing to Subject Officers.")
           : (lang === "si"
               ? "ඔබ විසින් පද්ධතියට ඇතුළත් කර අතිරේක ලේකම් වෙත යොමු කරන ලද ලිපි."
               : "Letters entered by you and forwarded to the Additional Secretary.");
@@ -1994,34 +2074,66 @@ function AdminDashboardContent() {
                     )}
                   </div>
 
-                  <div className="assigned-letters-search-box">
-                    <Search size={14} className="assigned-letters-search-icon" />
-                    <input
-                      type="text"
-                      className="assigned-letters-search-input"
-                      placeholder={lang === "si" ? "ලිපි අංකය, එවූ පාර්ශවය සොයන්න..." : "Search letter no, sender..."}
-                      value={assignedLettersSearchQuery}
-                      onChange={(e) => setAssignedLettersSearchQuery(e.target.value)}
-                    />
-                    {assignedLettersSearchQuery && (
-                      <button
-                        type="button"
-                        onClick={() => setAssignedLettersSearchQuery("")}
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                    {/* Priority Filter Dropdown */}
+                    <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+                      <select
+                        value={assignedLettersPriorityFilter}
+                        onChange={(e) => setAssignedLettersPriorityFilter(e.target.value)}
                         style={{
-                          position: "absolute",
-                          right: "8px",
-                          background: "none",
-                          border: "none",
-                          color: "#94a3b8",
+                          height: "36px",
+                          padding: "0 28px 0 12px",
+                          borderRadius: "8px",
+                          border: assignedLettersPriorityFilter !== "all" ? "1.5px solid #3b82f6" : "1.5px solid #cbd5e1",
+                          backgroundColor: assignedLettersPriorityFilter !== "all" ? "#eff6ff" : "#ffffff",
+                          color: assignedLettersPriorityFilter !== "all" ? "#1d4ed8" : "#334155",
+                          fontWeight: 600,
+                          fontSize: "12px",
                           cursor: "pointer",
-                          padding: "2px",
-                          display: "flex",
-                          alignItems: "center"
+                          appearance: "none",
+                          outline: "none",
+                          boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+                          transition: "all 0.15s ease"
                         }}
+                        aria-label="Filter by priority"
                       >
-                        <X size={14} />
-                      </button>
-                    )}
+                        <option value="all">{lang === "si" ? "සියලුම ප්‍රමුඛතා (All Priorities)" : lang === "ta" ? "அனைத்து முன்னுரிமைகளும்" : "All Priorities"}</option>
+                        <option value="high">{lang === "si" ? "🔴 අදම (High Priority)" : lang === "ta" ? "🔴 இன்றே (High)" : "🔴 Today (High Priority)"}</option>
+                        <option value="medium">{lang === "si" ? "🟠 දින 3ක් තුළ (Medium Priority)" : lang === "ta" ? "🟠 3 நாட்கள் (Medium)" : "🟠 In 3 Days (Medium Priority)"}</option>
+                        <option value="low">{lang === "si" ? "🟢 දින 14/21ක් තුළ (Low Priority)" : lang === "ta" ? "🟢 14/21 நாட்கள் (Low)" : "🟢 14/21 Days (Low Priority)"}</option>
+                      </select>
+                      <ChevronDown size={14} style={{ position: "absolute", right: "10px", pointerEvents: "none", color: assignedLettersPriorityFilter !== "all" ? "#1d4ed8" : "#64748b" }} />
+                    </div>
+
+                    <div className="assigned-letters-search-box">
+                      <Search size={14} className="assigned-letters-search-icon" />
+                      <input
+                        type="text"
+                        className="assigned-letters-search-input"
+                        placeholder={lang === "si" ? "ලිපි අංකය, එවූ පාර්ශවය, ප්‍රමුඛතාව සොයන්න..." : "Search letter no, sender, priority..."}
+                        value={assignedLettersSearchQuery}
+                        onChange={(e) => setAssignedLettersSearchQuery(e.target.value)}
+                      />
+                      {assignedLettersSearchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setAssignedLettersSearchQuery("")}
+                          style={{
+                            position: "absolute",
+                            right: "8px",
+                            background: "none",
+                            border: "none",
+                            color: "#94a3b8",
+                            cursor: "pointer",
+                            padding: "2px",
+                            display: "flex",
+                            alignItems: "center"
+                          }}
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -2032,6 +2144,7 @@ function AdminDashboardContent() {
                         <th>{lang === "si" ? "ලිපි අංකය" : "Letter No"}</th>
                         <th>{isAddSec ? (lang === "si" ? "ලිපියේ ප්‍රභවය / යොමු කළ නිලධාරියා" : "Origin / Sender Officer") : isChiefClerk ? (lang === "si" ? "යොමු කළ ජ්‍යෙෂ්ඨ නිලධාරියා" : "Assigned By Senior Official") : (lang === "si" ? "ඇතුළත් කළ නිලධාරියා" : "Entered By")}</th>
                         {isChiefClerk && <th>{lang === "si" ? "විෂයභාර නිලධාරියා" : "Assigned Subject Officer"}</th>}
+                        <th>{lang === "si" ? "ප්‍රමුඛතාව" : lang === "ta" ? "முன்னுரிமை" : "Priority"}</th>
                         <th>{lang === "si" ? "ලිපි වර්ගය" : "Letter Type"}</th>
                         <th>{lang === "si" ? "එවූ පාර්ශවය" : "Sender"}</th>
                         <th>{lang === "si" ? "ලිපි දිනය" : "Letter Date"}</th>
@@ -2042,7 +2155,7 @@ function AdminDashboardContent() {
                     <tbody>
                       {filteredList.length === 0 ? (
                         <tr>
-                          <td colSpan={isChiefClerk ? 8 : 7} style={{ textAlign: "center", padding: "36px 16px", color: "#64748b" }}>
+                          <td colSpan={isChiefClerk ? 9 : 8} style={{ textAlign: "center", padding: "36px 16px", color: "#64748b" }}>
                             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px" }}>
                               <Search size={24} style={{ color: "#94a3b8" }} />
                               <span style={{ fontWeight: 600, fontSize: "14px", color: "#334155" }}>
@@ -2236,6 +2349,41 @@ function AdminDashboardContent() {
                                   )}
                                 </td>
                               )}
+                              {/* Priority Column */}
+                              <td>
+                                {(() => {
+                                  const pBadge = getLetterPriorityBadge(l, lang);
+                                  return (
+                                    <span
+                                      style={{
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        gap: "6px",
+                                        padding: "3px 9px",
+                                        borderRadius: "12px",
+                                        fontSize: "11.5px",
+                                        fontWeight: 700,
+                                        backgroundColor: pBadge.bg,
+                                        color: pBadge.color,
+                                        border: `1px solid ${pBadge.border}`,
+                                        whiteSpace: "nowrap"
+                                      }}
+                                    >
+                                      <span
+                                        style={{
+                                          width: "7px",
+                                          height: "7px",
+                                          borderRadius: "50%",
+                                          backgroundColor: pBadge.dot,
+                                          display: "inline-block"
+                                        }}
+                                      />
+                                      <span>{pBadge.label}</span>
+                                    </span>
+                                  );
+                                })()}
+                              </td>
+
                               <td>
                                 <span style={{
                                   display: "inline-block",
@@ -2299,6 +2447,7 @@ function AdminDashboardContent() {
                                   )}
 
                                   {/* View Details Link */}
+                                  {!isChiefClerk && (
                                   <Link
                                     href={`/admin/view-letter?id=${encodeURIComponent(l.letterNo || l.refNo)}`}
                                     style={{
@@ -2328,6 +2477,7 @@ function AdminDashboardContent() {
                                     <span>{lang === "si" ? "විස්තර" : "View"}</span>
                                     <ArrowRight size={13} />
                                   </Link>
+                                  )}
                                 </div>
                               </td>
                             </tr>
@@ -2421,6 +2571,31 @@ function AdminDashboardContent() {
                           <span style={{ fontSize: "12.5px", fontWeight: 600, color: "#334155" }}>
                             {forwardingLetter.sender}
                           </span>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                          <span style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>
+                            {lang === "si" ? "ප්‍රමුඛතාව" : "Priority"}:
+                          </span>
+                          {(() => {
+                            const pBadge = getLetterPriorityBadge(forwardingLetter, lang);
+                            return (
+                              <span style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "5px",
+                                padding: "2px 8px",
+                                borderRadius: "10px",
+                                fontSize: "11px",
+                                fontWeight: 700,
+                                backgroundColor: pBadge.bg,
+                                color: pBadge.color,
+                                border: `1px solid ${pBadge.border}`
+                              }}>
+                                <span style={{ width: "6px", height: "6px", borderRadius: "50%", backgroundColor: pBadge.dot }} />
+                                {pBadge.label}
+                              </span>
+                            );
+                          })()}
                         </div>
                         {forwardingLetter.subject && (
                           <div style={{ marginTop: "4px", paddingTop: "6px", borderTop: "1px dashed #cbd5e1" }}>
@@ -2703,6 +2878,31 @@ function AdminDashboardContent() {
                             {assigningLetter.sender || "—"}
                           </span>
                         </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                          <span style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>
+                            {lang === "si" ? "ප්‍රමුඛතාව" : "Priority"}:
+                          </span>
+                          {(() => {
+                            const pBadge = getLetterPriorityBadge(assigningLetter, lang);
+                            return (
+                              <span style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "5px",
+                                padding: "2px 8px",
+                                borderRadius: "10px",
+                                fontSize: "11px",
+                                fontWeight: 700,
+                                backgroundColor: pBadge.bg,
+                                color: pBadge.color,
+                                border: `1px solid ${pBadge.border}`
+                              }}>
+                                <span style={{ width: "6px", height: "6px", borderRadius: "50%", backgroundColor: pBadge.dot }} />
+                                {pBadge.label}
+                              </span>
+                            );
+                          })()}
+                        </div>
                         {assigningLetter.subject && (
                           <div style={{ marginTop: "4px", paddingTop: "6px", borderTop: "1px dashed #cbd5e1" }}>
                             <span style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>
@@ -2711,6 +2911,37 @@ function AdminDashboardContent() {
                             <p style={{ margin: "2px 0 0", fontSize: "12.5px", color: "#1e293b", fontWeight: 500 }}>
                               {assigningLetter.subject}
                             </p>
+                          </div>
+                        )}
+                        {Boolean(
+                          assigningLetter.is_answer_letter ||
+                          assigningLetter.isAnswerLetter ||
+                          String(assigningLetter.letter_type || "").toLowerCase().includes("answer") ||
+                          String(assigningLetter.letterType || "").toLowerCase().includes("answer") ||
+                          String(assigningLetter.region_province || "").toLowerCase().includes("answer") ||
+                          String(assigningLetter.regionProvince || "").toLowerCase().includes("answer") ||
+                          String(assigningLetter.nature_of_letter || "").toLowerCase().includes("answer") ||
+                          String(assigningLetter.nature || "").toLowerCase().includes("answer") ||
+                          String(assigningLetter.region_province || "").includes("පිළිතුරු") ||
+                          String(assigningLetter.regionProvince || "").includes("පිළිතුරු") ||
+                          String(assigningLetter.nature_of_letter || "").includes("පිළිතුරු")
+                        ) && (
+                          <div style={{ marginTop: "8px", paddingTop: "6px", borderTop: "1px dashed #cbd5e1", display: "flex", alignItems: "center", gap: "6px" }}>
+                            <span style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "5px",
+                              backgroundColor: "#ecfdf5",
+                              color: "#047857",
+                              border: "1px solid #a7f3d0",
+                              padding: "3px 8px",
+                              borderRadius: "6px",
+                              fontSize: "11.5px",
+                              fontWeight: 700
+                            }}>
+                              <CheckCircle2 size={13} />
+                              {lang === "si" ? "පිළිතුරු ලිපියකි (පැවරූ පසු විෂය නිලධාරී 'පවරන ලද පිළිතුරු ලිපි' ටැබ් එකට යොමු වේ)" : "Answer Letter (Will route to officer's Assigned Answers letters tab)"}
+                            </span>
                           </div>
                         )}
                       </div>
@@ -3244,38 +3475,16 @@ function AdminDashboardContent() {
       </section>
 
       {/* Recent Cases Section */}
-      <section className="letters-list-section">
-        <div className="letters-list-header" style={{ flexWrap: "wrap", gap: "12px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
-            <h3 className="section-title" style={{ margin: 0 }} suppressHydrationWarning>
-              <svg className="admin-section-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-              {isChiefClerk ? (
-                <>
-                  <span suppressHydrationWarning>
-                    {lang === "si" ? "ජ්‍යෙෂ්ඨ සහකාර ලේකම් මඟින් පවරන ලද ලිපි" : "Letters Assigned by Senior Assistant Secretary"}
-                  </span>
-                  <span style={{
-                    marginLeft: "8px",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "4px",
-                    fontSize: "11px",
-                    fontWeight: 700,
-                    backgroundColor: "#ede9fe",
-                    color: "#6d28d9",
-                    padding: "3px 9px",
-                    borderRadius: "12px",
-                    border: "1px solid #ddd6fe"
-                  }}>
-                    🏛️ {lang === "si" ? "ශාඛා ප්‍රධානී සඳහා පමණි" : "Chief Clerk Exclusive"} ({filteredRecentCases.length})
-                  </span>
-                </>
-              ) : (
+      {!isChiefClerk && (
+        <section className="letters-list-section">
+          <div className="letters-list-header" style={{ flexWrap: "wrap", gap: "12px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
+              <h3 className="section-title" style={{ margin: 0 }} suppressHydrationWarning>
+                <svg className="admin-section-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
                 <span suppressHydrationWarning>{t("recentCases", "Recent Cases")}</span>
-              )}
-            </h3>
+              </h3>
 
             {isMounted && currentUserProfile?.role === "additional_secretary" && (
               <div style={{
@@ -3542,11 +3751,9 @@ function AdminDashboardContent() {
               ) : (
                 <tr>
                   <td colSpan={7} className="admin-table-no-data" suppressHydrationWarning>
-                    {isChiefClerk
-                      ? (lang === "si" ? "ජ්‍යෙෂ්ඨ සහකාර ලේකම් මඟින් පවරන ලද ලිපි කිසිවක් නොමැත." : "No letters assigned by Senior Assistant Secretary found.")
-                      : (allCases.length === 0
-                        ? t("noCasesInDatabase", "No cases found in the database yet.")
-                        : t("noCasesMatchFilters", "No cases match the selected filters."))}
+                    {allCases.length === 0
+                      ? t("noCasesInDatabase", "No cases found in the database yet.")
+                      : t("noCasesMatchFilters", "No cases match the selected filters.")}
                   </td>
                 </tr>
               )}
@@ -3554,6 +3761,7 @@ function AdminDashboardContent() {
           </table>
         </div>
       </section>
+      )}
 
       {/* ── Visualization Charts Slide Bar Drawer (Offcanvas Side Panel) ── */}
       {isChartSlideBarOpen && (

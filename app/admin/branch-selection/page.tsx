@@ -94,6 +94,7 @@ function BranchSelectionInner() {
     if (!option || !option.officerName) return;
     setIsSubmitting(true);
     setSubmitError("");
+    const forwardNote = `Forwarded by Senior Assistant Secretary to ${option.label} for review and action`;
     try {
       const res = await forwardLetterFromAdditionalSecretaryServer({
         letterId:             letterId || undefined,
@@ -101,12 +102,17 @@ function BranchSelectionInner() {
         refNo:                refNo || undefined,
         forwardToOfficerName: option.officerName,
         forwardToRole:        option.value,
-        forwardReason:        forwardReason || (`Forwarded by Senior Assistant Secretary to ${option.label} for review and action`),
+        forwardReason:        forwardNote,
         senderName:           sender,
         senderRole:           "Senior Assistant Secretary",
       });
       if (res && res.success) {
         setSubmitStatus("success");
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("dcmms_data_updated"));
+          window.dispatchEvent(new CustomEvent("dcmms_assignment_updated"));
+          window.dispatchEvent(new CustomEvent("dcmms_notifications_updated"));
+        }
         let targetPage = "/admin";
         if (option.value.includes("investigation")) {
           targetPage = `/investigation?highlight=${encodeURIComponent(letterNo || refNo)}`;

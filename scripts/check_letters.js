@@ -15,8 +15,8 @@ async function main() {
     FROM public.dcmms_daily_mail 
     ORDER BY created_at DESC LIMIT 10
   `);
-  console.log('--- dcmms_daily_mail ---');
-  console.log(JSON.stringify(p2, null, 2));
+
 }
 
 main().catch(console.error).finally(() => prisma.$disconnect());
+

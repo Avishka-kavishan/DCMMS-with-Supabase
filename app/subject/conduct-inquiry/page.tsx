@@ -47,7 +47,7 @@ import {
   Save,
 } from "lucide-react";
 
-export const formatToInputDate = (dateStr?: string | null): string => {
+const formatToInputDate = (dateStr?: string | null): string => {
   if (!dateStr || typeof dateStr !== "string") return "";
   const trimmed = dateStr.trim();
   if (!trimmed) return "";
@@ -73,14 +73,14 @@ function parseCommitteeDetails(asgn: any) {
 
   if (asgn?.chairman) {
     if (typeof asgn.chairman === "object" && asgn.chairman !== null) {
-      chairmanName = asgn.chairman.fullName || asgn.chairman.name || asgn.chairman.officer_name || "";
-      chairmanEmail = asgn.chairman.email || asgn.chairman.nicNo || asgn.chairman.nic || asgn.chairman.nic_no || "";
+      chairmanName = asgn.chairman.fullName || asgn.chairman.name || asgn.chairman.full_name || asgn.chairman.officer_name || "";
+      chairmanEmail = asgn.chairman.email || asgn.chairman.nicNo || asgn.chairman.nic || asgn.chairman.nic_no || asgn.chairman.employeeNo || "";
     } else if (typeof asgn.chairman === "string") {
       if (asgn.chairman.startsWith("{")) {
         try {
           const parsed = JSON.parse(asgn.chairman);
-          chairmanName = parsed.fullName || parsed.name || parsed.officer_name || "";
-          chairmanEmail = parsed.email || parsed.nicNo || parsed.nic || parsed.nic_no || "";
+          chairmanName = parsed.fullName || parsed.name || parsed.full_name || parsed.officer_name || "";
+          chairmanEmail = parsed.email || parsed.nicNo || parsed.nic || parsed.nic_no || parsed.employeeNo || "";
         } catch (e) {
           chairmanName = asgn.chairman;
         }
@@ -95,27 +95,28 @@ function parseCommitteeDetails(asgn: any) {
       memberList = asgn.members.map((m: any) => {
         if (typeof m === "object" && m !== null) {
           return {
-            name: m.fullName || m.name || m.officer_name || "",
+            name: m.fullName || m.name || m.full_name || m.officer_name || "",
             email: m.email || m.nicNo || m.nic || m.idNo || m.employeeNo || "",
             idNo: m.idNo || m.nic || m.email || "",
           };
         }
         return { name: String(m || ""), email: "", idNo: "" };
-      }).filter((m: any) => m.name.trim() !== "");
+      }).filter((m: any) => m.name.trim() !== "" && m.name !== "undefined");
     } else if (typeof asgn.members === "string") {
       try {
         const parsed = JSON.parse(asgn.members);
         if (Array.isArray(parsed)) {
-          memberList = parsed.map((m: any) => (typeof m === "object" ? { name: m.fullName || m.name || m.officer_name || "", email: m.email || m.nicNo || m.nic || m.idNo || "", idNo: m.idNo || m.nic || m.email || "" } : { name: String(m), email: "", idNo: "" })).filter((m: any) => m.name.trim() !== "");
+          memberList = parsed.map((m: any) => (typeof m === "object" ? { name: m.fullName || m.name || m.full_name || m.officer_name || "", email: m.email || m.nicNo || m.nic || m.idNo || "", idNo: m.idNo || m.nic || m.email || "" } : { name: String(m), email: "", idNo: "" })).filter((m: any) => m.name.trim() !== "" && m.name !== "undefined");
         } else {
-          memberList = asgn.members.split(",").map((s: string) => ({ name: s.trim(), email: "", idNo: "" })).filter((m: any) => m.name.trim() !== "");
+          memberList = asgn.members.split(",").map((s: string) => ({ name: s.trim(), email: "", idNo: "" })).filter((m: any) => m.name.trim() !== "" && m.name !== "undefined");
         }
       } catch (e) {
-        memberList = asgn.members.split(",").map((s: string) => ({ name: s.trim(), email: "", idNo: "" })).filter((m: any) => m.name.trim() !== "");
+        memberList = asgn.members.split(",").map((s: string) => ({ name: s.trim(), email: "", idNo: "" })).filter((m: any) => m.name.trim() !== "" && m.name !== "undefined");
       }
     }
   }
 
+  if (chairmanName === "undefined" || chairmanName === "null") chairmanName = "";
   return { chairmanName, chairmanEmail, chairmanNic: chairmanEmail, memberList };
 }
 

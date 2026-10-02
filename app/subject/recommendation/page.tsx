@@ -932,7 +932,7 @@ function RecommendationFormContent() {
       loadCasesAndRecommendationsList();
 
       setTimeout(() => {
-        if (isChargeSheet) {
+        if (isChargeSheet || recommendationCategory === "issuing_charge_sheet") {
           router.push(`/subject?tab=issuing_charge_sheet&caseNo=${encodeURIComponent(caseNo)}`);
         } else if (isFormalInspection) {
           router.push(`/subject?tab=disciplinary_inspection&caseNo=${encodeURIComponent(caseNo)}`);

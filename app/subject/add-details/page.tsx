@@ -14,7 +14,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 import { getCurrentProfile, dashboardPath } from "@/lib/auth";
 import { CheckCircle, X, ShieldCheck, Users, UserCheck, CalendarClock, Calendar } from "lucide-react";
-import { getInstitutesServer, saveInstituteServer, saveAccusedOfficerServer, getAccusedOfficerByRefServer, saveReplyLetterDetailsServer, getReplyLetterDetailsByRefServer, saveSubjectDetailActionServer } from "@/lib/db-actions";
+import { getInstitutesServer, saveInstituteServer, saveAccusedOfficerServer, getAccusedOfficerByRefServer, saveReplyLetterDetailsServer, getReplyLetterDetailsByRefServer, saveSubjectDetailActionServer, assignLetterToInvestigationAdminServer, getSubjectOfficerAssignmentByCaseServer } from "@/lib/db-actions";
 const formatStepTaken = (step: string, t: any) => {
   if (!step) return "";
   if (step.startsWith("[EduSecApproval:")) {
@@ -37,14 +37,14 @@ function parseCommitteeDetails(asgn: any) {
 
   if (asgn?.chairman) {
     if (typeof asgn.chairman === "object" && asgn.chairman !== null) {
-      chairmanName = asgn.chairman.fullName || asgn.chairman.name || asgn.chairman.officer_name || "";
-      chairmanNic = asgn.chairman.nicNo || asgn.chairman.nic || asgn.chairman.nic_no || "";
+      chairmanName = asgn.chairman.fullName || asgn.chairman.name || asgn.chairman.full_name || asgn.chairman.officer_name || "";
+      chairmanNic = asgn.chairman.nicNo || asgn.chairman.nic || asgn.chairman.nic_no || asgn.chairman.employeeNo || "";
     } else if (typeof asgn.chairman === "string") {
       if (asgn.chairman.startsWith("{")) {
         try {
           const parsed = JSON.parse(asgn.chairman);
-          chairmanName = parsed.fullName || parsed.name || parsed.officer_name || "";
-          chairmanNic = parsed.nicNo || parsed.nic || parsed.nic_no || "";
+          chairmanName = parsed.fullName || parsed.name || parsed.full_name || parsed.officer_name || "";
+          chairmanNic = parsed.nicNo || parsed.nic || parsed.nic_no || parsed.employeeNo || "";
         } catch (e) {
           chairmanName = asgn.chairman;
         }
@@ -58,20 +58,20 @@ function parseCommitteeDetails(asgn: any) {
     if (Array.isArray(asgn.members)) {
       memberList = asgn.members.map((m: any) => {
         if (typeof m === "object" && m !== null) {
-          return m.fullName || m.name || m.officer_name || "";
+          return m.fullName || m.name || m.full_name || m.officer_name || "";
         }
         return String(m || "");
-      }).filter(Boolean);
+      }).filter((x: any) => x && x !== "undefined" && x !== "null");
     } else if (typeof asgn.members === "string") {
       try {
         const parsed = JSON.parse(asgn.members);
         if (Array.isArray(parsed)) {
-          memberList = parsed.map((m: any) => (typeof m === "object" ? m.fullName || m.name || m.officer_name : String(m))).filter(Boolean);
+          memberList = parsed.map((m: any) => (typeof m === "object" ? m.fullName || m.name || m.full_name || m.officer_name : String(m))).filter((x: any) => x && x !== "undefined" && x !== "null");
         } else {
-          memberList = asgn.members.split(",").map((s: string) => s.trim()).filter(Boolean);
+          memberList = asgn.members.split(",").map((s: string) => s.trim()).filter((x: any) => x && x !== "undefined" && x !== "null");
         }
       } catch (e) {
-        memberList = asgn.members.split(",").map((s: string) => s.trim()).filter(Boolean);
+        memberList = asgn.members.split(",").map((s: string) => s.trim()).filter((x: any) => x && x !== "undefined" && x !== "null");
       }
     }
   }
@@ -81,10 +81,10 @@ function parseCommitteeDetails(asgn: any) {
   if (!chairmanName && rawText) {
     if (rawText.includes("Chairman:")) {
       const match = rawText.match(/Chairman:\s*([^|]+)/i);
-      if (match && match[1]) chairmanName = match[1].trim();
+      if (match && match[1] && match[1].trim() !== "undefined") chairmanName = match[1].trim();
     } else if (rawText.includes("(Chairman)")) {
       const match = rawText.match(/([^(,]+)\s*\(Chairman\)/i);
-      if (match && match[1]) chairmanName = match[1].trim();
+      if (match && match[1] && match[1].trim() !== "undefined") chairmanName = match[1].trim();
     }
   }
 
@@ -92,18 +92,21 @@ function parseCommitteeDetails(asgn: any) {
     if (rawText.includes("Members:")) {
       const match = rawText.match(/Members:\s*([^|]+)/i);
       if (match && match[1]) {
-        memberList = match[1].split(",").map((s) => s.trim()).filter(Boolean);
+        memberList = match[1].split(",").map((s) => s.trim()).filter((x) => x && x !== "undefined" && x !== "null");
       }
     } else if (rawText.includes("(Member)") || rawText.includes("(Members)")) {
       const matches = rawText.matchAll(/([^(,]+)\s*\(Members?\)/gi);
       for (const m of matches) {
-        if (m[1] && m[1].trim()) memberList.push(m[1].trim());
+        if (m[1] && m[1].trim() && m[1].trim() !== "undefined") memberList.push(m[1].trim());
       }
     }
   }
 
+  if (chairmanName === "undefined" || chairmanName === "null") chairmanName = "";
+  memberList = memberList.filter((m) => m && m !== "undefined" && m !== "null");
+
   const isPlaceholder = !rawText || rawText.includes("—") || rawText.includes("not yet assigned") || rawText.includes("යවා නොමැත");
-  const hasDetails = !!(chairmanName || memberList.length > 0 || (!isPlaceholder && rawText));
+  const hasDetails = !!(chairmanName || memberList.length > 0 || (!isPlaceholder && rawText && !rawText.includes("undefined")));
 
   return {
     chairmanName,
@@ -264,6 +267,8 @@ function CaseDetailsForm() {
       lower === "conducting an inspection" ||
       lower === "actionconductinspection" ||
       lower.includes("විමර්ශනයක් පැවැත්වීම") ||
+      lower.includes("පරීක්ශනයක් සිදු කිරීම") ||
+      lower.includes("පරීක්ෂණයක් සිදු කිරීම") ||
       lower.includes("ආய்வு நடத்துதல்") ||
       lower === "conduct an inquiry" ||
       lower === "conducting an inquiry" ||
@@ -362,7 +367,18 @@ function CaseDetailsForm() {
     return trimmed;
   };
 
+  const isInitialInvestigation =
+    reportState === "Initial investigation" ||
+    reportState === "actionInitialInvestigation" ||
+    (typeof reportState === "string" && (
+      reportState.toLowerCase().includes("initial") ||
+      reportState.includes("මූලික විමර්ශනය") ||
+      reportState.includes("මූලික විමර්ශන") ||
+      reportState.includes("ஆரம்ப விசாரணை")
+    ));
+
   const isPreliminaryInvestigation =
+    isInitialInvestigation ||
     reportState === "statusPreliminaryInvestigation" ||
     reportState === "statusInstitutionalPreliminary" ||
     reportState === "statusProvincialPreliminary" ||
@@ -370,7 +386,6 @@ function CaseDetailsForm() {
     reportState === "Provincial Basic Investigation" ||
     (typeof reportState === "string" && (
       reportState.toLowerCase().includes("preliminary") ||
-      reportState.toLowerCase().includes("මූලික විමර්ශන") ||
       reportState.toLowerCase().includes("විමර්ශන සිදු කිරීම") ||
       reportState.toLowerCase().includes("முதற்கட்ட விசாரணை") ||
       reportState.toLowerCase().includes("basic investigation")
@@ -579,7 +594,15 @@ function CaseDetailsForm() {
         // Fetch Subject Assignment details (Chairman, Members, Extension, After-Investigation details)
         if (caseNoParam) {
           let asgn: any = null;
-          if (isSupabaseConfigured) {
+          try {
+            const pgRes = await getSubjectOfficerAssignmentByCaseServer(caseNoParam);
+            if (pgRes && pgRes.success && pgRes.data) {
+              asgn = pgRes.data;
+            }
+          } catch (e) {
+            console.warn("getSubjectOfficerAssignmentByCaseServer error:", e);
+          }
+          if (isSupabaseConfigured && !asgn) {
             try {
               const { data } = await supabase
                 .from("dcmms_subject_assignments")
@@ -620,16 +643,29 @@ function CaseDetailsForm() {
                   (a.caseNo && String(a.caseNo).trim().toLowerCase() === String(caseNoParam).trim().toLowerCase()) ||
                   (a.case_no && String(a.case_no).trim().toLowerCase() === String(caseNoParam).trim().toLowerCase())
                 );
-                if (found) asgn = { ...asgn, ...found };
+                if (found) {
+                  asgn = {
+                    ...found,
+                    ...asgn,
+                    chairman: asgn?.chairman || found.chairman,
+                    members: (asgn?.members && asgn.members.length > 0) ? asgn.members : (found.members || []),
+                    assignedOfficers: asgn?.assignedOfficers || found.assignedOfficers || asgn?.assigned_officers || found.assigned_officers,
+                    committeeSent: asgn?.committeeSent !== undefined ? asgn.committeeSent : (found.committeeSent !== undefined ? found.committeeSent : false),
+                    committee_sent: asgn?.committee_sent !== undefined ? asgn.committee_sent : (found.committee_sent !== undefined ? found.committee_sent : false),
+                  };
+                }
               }
             } catch (e) {}
           }
           if (asgn) {
             setAssignmentData(asgn);
             let officerText = asgn.assigned_officers || asgn.assignedOfficers || "";
-            if (!officerText && (asgn.chairman || asgn.members)) {
-              const chairmanPart = asgn.chairman ? `Chairman: ${asgn.chairman.fullName || asgn.chairman.name}` : "";
-              const membersPart = Array.isArray(asgn.members) && asgn.members.length > 0 ? `Members: ${asgn.members.map((m: any) => m.fullName || m.name).join(", ")}` : "";
+            if (!officerText || officerText.includes("undefined")) {
+              const cName = asgn.chairman?.fullName || asgn.chairman?.name || asgn.chairman?.full_name || (typeof asgn.chairman === "string" ? asgn.chairman : "");
+              const chairmanPart = (cName && cName !== "undefined") ? `Chairman: ${cName}` : "";
+              const membersPart = Array.isArray(asgn.members) && asgn.members.length > 0 
+                ? `Members: ${asgn.members.map((m: any) => m.fullName || m.name || m.full_name || m).filter((x: any) => x && x !== "undefined").join(", ")}` 
+                : "";
               officerText = [chairmanPart, membersPart].filter(Boolean).join(" | ");
             }
             if (officerText) setAssignedOfficersText(officerText);
@@ -1136,7 +1172,8 @@ function CaseDetailsForm() {
 
     // 1. Save directly into PostgreSQL database tables (subject_officer_form_table, accused_officer_table, accused_school_table, institute_table)
     try {
-      const formattedAccusedOfficers = isConcerned === "yes"
+      const hasEnteredConcernedPersons = concernedPersons.some(p => (p.name && p.name.trim()) || (p.nic && p.nic.trim()));
+      const formattedAccusedOfficers = (isConcerned === "yes" || hasEnteredConcernedPersons)
         ? concernedPersons.map(p => ({
             accused_officer_name: p.name || "",
             address: p.address || "",
@@ -1229,6 +1266,41 @@ function CaseDetailsForm() {
           });
         } catch (e) {}
       }
+
+      // If institutional basic investigation is selected, assign the letter to Investigation Administrator
+      const isInstitutionalBasic =
+        (isPreliminaryInvestigation || isInitialInvestigation) &&
+        (preliminaryChecks.institutional || !preliminaryChecks.provincial);
+
+      if (isInstitutionalBasic) {
+        try {
+          await assignLetterToInvestigationAdminServer({
+            caseNo: refNo,
+            refNo: refNo,
+            letterNo: refNo,
+            subjectOfficerName: subjectOfficer,
+            remarks: specialNotes || "",
+            investigationType: "Institutional Basic Investigation",
+          });
+        } catch (assignErr) {
+          console.warn("Failed calling assignLetterToInvestigationAdminServer:", assignErr);
+        }
+      }
+
+      // Always save subject details and sync case status in PostgreSQL
+      try {
+        await saveSubjectDetailActionServer({
+          id: actionId,
+          case_no: refNo,
+          received_date: receivedDate || null,
+          report_state: status,
+          special_notes: specialNotes || null,
+          subject_officer_name: subjectOfficer || null,
+          step_taken: serializedStepTaken || null,
+        });
+      } catch (dbErr) {
+        console.warn("Failed saving subject details to PostgreSQL:", dbErr);
+      }
     } catch (postErr) {
       console.error("Failed to save data to PostgreSQL database tables:", postErr);
     }
@@ -1243,6 +1315,7 @@ function CaseDetailsForm() {
             reportState.toLowerCase().includes("inspection") ||
             reportState.toLowerCase().includes("inquiry") ||
             reportState.includes("පරීක්ෂණ") ||
+            reportState.includes("පරීක්ශන") ||
             reportState.includes("විමර්ශන") ||
             reportState.includes("ஆய்வு")
           ));
@@ -1250,6 +1323,11 @@ function CaseDetailsForm() {
         const finalCaseStatus = isPreliminaryInvestigation
           ? computedFutureAction
           : (isInspectionOrInquiry ? "Conducting an Inquiry" : (status || "In Progress"));
+
+        const isInstitutionalBasic =
+          isPreliminaryInvestigation &&
+          (preliminaryChecks.institutional || !preliminaryChecks.provincial);
+        const invAdminDisplayName = "Investigation Administrator";
 
         // 1. Ensure the case row exists or is updated in dcmms_subject
         const { data: existingCase } = await supabase
@@ -1263,6 +1341,7 @@ function CaseDetailsForm() {
             .from("dcmms_subject")
             .update({
               subject_officer_name: subjectOfficer || existingCase.subject_officer_name || existingCase.officer_name || "Subject Officer",
+              officer_name: isInstitutionalBasic ? invAdminDisplayName : (existingCase.officer_name || subjectOfficer || "Subject Officer"),
               subject: complaintMatter || existingCase.subject || `Case ${refNo}`,
               status: finalCaseStatus,
             })
@@ -1275,6 +1354,7 @@ function CaseDetailsForm() {
               case_no: refNo,
               subject: complaintMatter || `Case ${refNo}`,
               subject_officer_name: subjectOfficer || "Subject Officer",
+              officer_name: isInstitutionalBasic ? invAdminDisplayName : (subjectOfficer || "Subject Officer"),
               status: finalCaseStatus,
               priority: priority || "medium",
               assigned_date: receivedDate || new Date().toISOString().split("T")[0],
@@ -1286,23 +1366,34 @@ function CaseDetailsForm() {
           await supabase.from("dcmms_subject_assignments").upsert({
             case_no: refNo,
             subject_officer_name: subjectOfficer || "Subject Officer",
+            assigned_officers: isInstitutionalBasic ? invAdminDisplayName : undefined,
             status: finalCaseStatus,
+            progress_details: isInstitutionalBasic ? `Assigned to Investigation Administrator for Institutional Basic Investigation` : undefined,
             updated_at: new Date().toISOString(),
           }, { onConflict: "case_no" });
         } catch (asgnErr) {}
 
         // 2. Update the priority, complainant, school, classification, and status in dcmms_daily_mail
+        const dailyMailPayload: any = {
+          priority: priority,
+          sender_name: classification === "anonymous" ? "Anonymous" : (complainantName || null),
+          sender_address: classification === "anonymous" ? "N/A" : (complainantAddress || null),
+          institute_name: schoolName || null,
+          subject: complaintMatter || null,
+          region_province: classification === "anonymous" ? "Anonymous" : "Nominal",
+          status: finalCaseStatus,
+        };
+        if (isInstitutionalBasic) {
+          dailyMailPayload.action_officer = invAdminDisplayName;
+          dailyMailPayload.officer_name = invAdminDisplayName;
+          dailyMailPayload.addressed_to = invAdminDisplayName;
+          dailyMailPayload.addressed_role = "Investigation Administrator";
+          dailyMailPayload.forwarded_to = `${invAdminDisplayName} (Investigation Administrator)`;
+          dailyMailPayload.forward_reason = `Assigned by Subject Officer ${subjectOfficer || ""} for Institutional Basic Investigation`;
+        }
         await supabase
           .from("dcmms_daily_mail")
-          .update({
-            priority: priority,
-            sender_name: classification === "anonymous" ? "Anonymous" : (complainantName || null),
-            sender_address: classification === "anonymous" ? "N/A" : (complainantAddress || null),
-            institute_name: schoolName || null,
-            subject: complaintMatter || null,
-            region_province: classification === "anonymous" ? "Anonymous" : "Nominal",
-            status: finalCaseStatus,
-          })
+          .update(dailyMailPayload)
           .eq("ref_no", refNo);
 
         // 3. Save action/letters details as a new row in dcmms_subject_details (PostgreSQL & Supabase fallback)
@@ -1397,6 +1488,7 @@ function CaseDetailsForm() {
           reportState.toLowerCase().includes("inspection") ||
           reportState.toLowerCase().includes("inquiry") ||
           reportState.includes("පරීක්ෂණ") ||
+          reportState.includes("පරීක්ශන") ||
           reportState.includes("විමර්ශන") ||
           reportState.includes("ஆய்வு")
         ));
@@ -1452,6 +1544,11 @@ function CaseDetailsForm() {
       try { casesList = storedCases ? JSON.parse(storedCases) : []; } catch (e) {}
       if (!Array.isArray(casesList)) casesList = [];
 
+      const isInstitutionalBasic =
+        isPreliminaryInvestigation &&
+        (preliminaryChecks.institutional || !preliminaryChecks.provincial);
+      const invAdminDisplayName = "Investigation Administrator";
+
       let foundCase = false;
       const updated = casesList.map((c: any) => {
         if (c.caseNo === refNo || c.refNo === refNo) {
@@ -1463,6 +1560,8 @@ function CaseDetailsForm() {
             stageKey: isInspectionOrInquiry ? "inquiry" : c.stageKey,
             upcomingAction: computedFutureAction,
             isOld: complaintAge === "old",
+            assignedOfficer: isInstitutionalBasic ? invAdminDisplayName : c.assignedOfficer,
+            officerName: isInstitutionalBasic ? invAdminDisplayName : c.officerName,
           };
         }
         return c;
@@ -1482,6 +1581,8 @@ function CaseDetailsForm() {
           assignedDate: receivedDate || new Date().toISOString().split("T")[0],
           receivedDate: receivedDate || new Date().toISOString().split("T")[0],
           isOld: complaintAge === "old",
+          assignedOfficer: isInstitutionalBasic ? invAdminDisplayName : (subjectOfficer || "Subject Officer"),
+          officerName: isInstitutionalBasic ? invAdminDisplayName : (subjectOfficer || "Subject Officer"),
         });
       }
       localStorage.setItem("dcmms_cases", JSON.stringify(updated));
@@ -1504,11 +1605,76 @@ function CaseDetailsForm() {
                 isProcessedAnswer: isAnswerLetter || isInspectionOrInquiry,
                 upcomingAction: computedFutureAction,
                 status: localStatus,
+                action_officer: isInstitutionalBasic ? invAdminDisplayName : l.action_officer,
+                officer_name: isInstitutionalBasic ? invAdminDisplayName : l.officer_name,
+                assigned_to: isInstitutionalBasic ? invAdminDisplayName : l.assigned_to,
+                forwarded_to: isInstitutionalBasic ? `${invAdminDisplayName} (Investigation Administrator)` : l.forwarded_to,
+                forward_reason: isInstitutionalBasic ? `Assigned by Subject Officer ${subjectOfficer || ""} for Institutional Basic Investigation` : l.forward_reason,
               };
             }
             return l;
           });
           localStorage.setItem("dcmms_letters", JSON.stringify(updatedLetters));
+        } catch (e) {}
+      }
+
+      // Update subject assignments in localStorage
+      if (isInstitutionalBasic) {
+        try {
+          const storedAsgns = localStorage.getItem("dcmms_subject_assignments") || "[]";
+          let asgnList = JSON.parse(storedAsgns);
+          if (!Array.isArray(asgnList)) asgnList = [];
+          let asgnFound = false;
+          asgnList = asgnList.map((a: any) => {
+            if ((a.case_no || a.caseNo) === refNo) {
+              asgnFound = true;
+              return {
+                ...a,
+                status: localStatus,
+                assigned_officers: invAdminDisplayName,
+                assignedOfficers: invAdminDisplayName,
+                progress_details: `Assigned to Investigation Administrator for Institutional Basic Investigation`,
+                updated_at: new Date().toISOString(),
+              };
+            }
+            return a;
+          });
+          if (!asgnFound) {
+            asgnList.push({
+              id: `asgn-${refNo}`,
+              case_no: refNo,
+              caseNo: refNo,
+              subject_officer_name: subjectOfficer,
+              assigned_officers: invAdminDisplayName,
+              status: localStatus,
+              assigned_date: receivedDate || new Date().toISOString().split("T")[0],
+              progress_details: `Assigned to Investigation Administrator for Institutional Basic Investigation`,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            });
+          }
+          localStorage.setItem("dcmms_subject_assignments", JSON.stringify(asgnList));
+        } catch (e) {}
+
+        try {
+          const notifKey = "dcmms_notifications";
+          const storedNotifs = localStorage.getItem(notifKey) || "[]";
+          let notifList = JSON.parse(storedNotifs);
+          if (!Array.isArray(notifList)) notifList = [];
+          notifList.unshift({
+            id: `notif-${refNo}-${Date.now()}`,
+            caseNo: refNo,
+            letterNo: refNo,
+            title: "New Letter Assigned for Institutional Basic Investigation",
+            message: `Letter / Case ${refNo} has been assigned to Investigation Administrator by Subject Officer ${subjectOfficer || ""}.`,
+            recipientRole: "investigation",
+            targetOfficerName: "Investigation Administrator",
+            timestamp: new Date().toISOString(),
+            read: false,
+          });
+          localStorage.setItem(notifKey, JSON.stringify(notifList));
+          window.dispatchEvent(new CustomEvent("dcmms_notifications_updated"));
+          window.dispatchEvent(new StorageEvent("storage", { key: "dcmms_notifications" }));
         } catch (e) {}
       }
 
@@ -1555,6 +1721,7 @@ function CaseDetailsForm() {
         reportState.toLowerCase().includes("inspection") ||
         reportState.toLowerCase().includes("inquiry") ||
         reportState.includes("පරීක්ෂණ") ||
+        reportState.includes("පරීක්ශන") ||
         reportState.includes("විමර්ශන") ||
         reportState.includes("ஆய்வு")
       ));
@@ -1588,10 +1755,10 @@ function CaseDetailsForm() {
       } else {
         alert(
           lang === "si"
-            ? "නඩුවේ විස්තර සාර්ථකව යාවත්කාලීන විය! නඩුව ආයතනික මූලික විමර්ශනය (Institutional Basic Investigation) සඳහා විමර්ශන පරිපාලක (Investigation Admin) වෙත මාරු කරන ලදී."
+            ? "නඩුවේ විස්තර සාර්ථකව යාවත්කාලීන විය! ලිපිය ආයතනික මූලික විමර්ශනය (Institutional Basic Investigation) සඳහා විමර්ශන පරිපාලක (Investigation Administrator) වෙත පවරන ලදී."
             : lang === "ta"
-            ? "வழக்கு விவரங்கள் வெற்றிகரமாக புதுப்பிக்கப்பட்டன! நிறுவன அடிப்படை விசாரணைக்காக வழக்கு விசாரணை நிர்வாகிக்கு (Investigation Admin) நகர்த்தப்பட்டது."
-            : "Case details updated successfully! The case has been moved to Institutional Basic Investigation (Investigation Admin)."
+            ? "வழக்கு விவரங்கள் வெற்றிகரமாக புதுப்பிக்கப்பட்டன! கடிதம் நிறுவன அடிப்படை விசாரணைக்காக விசாரணை நிர்வாகிக்கு (Investigation Administrator) ஒதுக்கப்பட்டது."
+            : "Case details updated successfully! The letter has been assigned to the Investigation Administrator for Institutional Basic Investigation."
         );
         router.push(`/subject?tab=conducting_inquiry&caseNo=${encodeURIComponent(refNo)}`);
       }
@@ -1958,74 +2125,77 @@ function CaseDetailsForm() {
                 )}
 
                 {/* Standalone Investigation Details Cards Section (Placed separately outside form grid) */}
-                {(assignedOfficersText || (assignmentData && (assignmentData.extensionTerm || assignmentData.extensionStartDate || assignmentData.extension_start_date || assignmentData.extensionRequestedByAdmin))) && (
-                  <div className="investigation-details-banners-wrapper">
-                    {/* Assigned Investigation Committee Card */}
-                    {assignedOfficersText && (
-                      <div className="committee-detail-card">
-                        <div className="committee-card-header">
-                          <div className="committee-header-title">
-                            <ShieldCheck className="committee-header-icon" />
-                            {i18n.language === "si" ? "පවරන ලද විමර්ශන කමිටුව (Investigation Admin වෙතින්):" : "Assigned Investigation Committee (From Admin):"}
-                          </div>
-                          <span className="committee-header-badge">
-                            <CheckCircle className="w-3.5 h-3.5" />
-                            {i18n.language === "si" ? "පත් කර ඇත" : "Assigned"}
-                          </span>
-                        </div>
+                {(() => {
+                  const committee = parseCommitteeDetails({
+                    assignedOfficers: assignedOfficersText || assignmentData?.assignedOfficers || assignmentData?.assigned_officers,
+                    chairman: assignmentData?.chairman,
+                    members: assignmentData?.members
+                  });
+                  const showCommitteeCard = committee.hasDetails || !!(
+                    assignmentData?.committeeSent ||
+                    assignmentData?.committee_sent ||
+                    (typeof assignmentData?.status === "string" && assignmentData.status.toLowerCase().includes("committee details sent"))
+                  );
+                  const showExtensionCard = !!(assignmentData && (assignmentData.extensionTerm || assignmentData.extensionStartDate || assignmentData.extension_start_date || assignmentData.extensionRequestedByAdmin));
 
-                        {(() => {
-                          const committee = parseCommitteeDetails({
-                            assignedOfficers: assignedOfficersText,
-                            chairman: assignmentData?.chairman,
-                            members: assignmentData?.members
-                          });
+                  if (!showCommitteeCard && !showExtensionCard) return null;
 
-                          if (committee.hasDetails) {
-                            return (
-                              <div className="committee-members-body">
-                                {committee.chairmanName && (
-                                  <div className="committee-chairman-row">
-                                    <span className="chairman-role-badge">
-                                      👑 {i18n.language === "si" ? "සභාපති" : "Chairman"}:
-                                    </span>
-                                    <span className="chairman-name-text">{committee.chairmanName}</span>
-                                    {committee.chairmanNic && (
-                                      <span className="chairman-nic-text">
-                                        NIC: {committee.chairmanNic}
-                                      </span>
-                                    )}
-                                  </div>
-                                )}
-
-                                {committee.memberList.length > 0 && (
-                                  <div className="committee-members-row">
-                                    <span className="members-role-badge">
-                                      <Users className="w-3.5 h-3.5 inline mr-1" />
-                                      {i18n.language === "si"
-                                        ? `සාමාජිකයින් (${committee.memberList.length})`
-                                        : `Members (${committee.memberList.length})`}:
-                                    </span>
-                                    {committee.memberList.map((m: string, idx: number) => (
-                                      <span key={idx} className="member-chip-item">
-                                        <UserCheck className="w-3.5 h-3.5 text-slate-500" />
-                                        {m}
-                                      </span>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          }
-
-                          return (
-                            <div style={{ fontSize: "14px", fontWeight: 700, color: "#0369a1" }}>
-                              {assignedOfficersText}
+                  return (
+                    <div className="investigation-details-banners-wrapper">
+                      {/* Assigned Investigation Committee Card */}
+                      {showCommitteeCard && (
+                        <div className="committee-detail-card">
+                          <div className="committee-card-header">
+                            <div className="committee-header-title">
+                              <ShieldCheck className="committee-header-icon" />
+                              {i18n.language === "si" ? "පවරන ලද විමර්ශන කමිටුව (Investigation Admin වෙතින්):" : "Assigned Investigation Committee (From Admin):"}
                             </div>
-                          );
-                        })()}
-                      </div>
-                    )}
+                            <span className="committee-header-badge">
+                              <CheckCircle className="w-3.5 h-3.5" />
+                              {i18n.language === "si" ? "පත් කර ඇත" : "Assigned"}
+                            </span>
+                          </div>
+
+                          {committee.hasDetails ? (
+                            <div className="committee-members-body">
+                              {committee.chairmanName && (
+                                <div className="committee-chairman-row">
+                                  <span className="chairman-role-badge">
+                                    👑 {i18n.language === "si" ? "සභාපති" : "Chairman"}:
+                                  </span>
+                                  <span className="chairman-name-text">{committee.chairmanName}</span>
+                                  {committee.chairmanNic && (
+                                    <span className="chairman-nic-text">
+                                      NIC: {committee.chairmanNic}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+
+                              {committee.memberList.length > 0 && (
+                                <div className="committee-members-row">
+                                  <span className="members-role-badge">
+                                    <Users className="w-3.5 h-3.5 inline mr-1" />
+                                    {i18n.language === "si"
+                                      ? `සාමාජිකයින් (${committee.memberList.length})`
+                                      : `Members (${committee.memberList.length})`}:
+                                  </span>
+                                  {committee.memberList.map((m: string, idx: number) => (
+                                    <span key={idx} className="member-chip-item">
+                                      <UserCheck className="w-3.5 h-3.5 text-slate-500" />
+                                      {m}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: "14px", fontWeight: 700, color: "#0369a1" }}>
+                              {assignedOfficersText || assignmentData?.assignedOfficers || assignmentData?.assigned_officers || (i18n.language === "si" ? "කමිටු විස්තර ලැබී ඇත" : "Committee details received")}
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                     {/* Date Extension Details Card */}
                     {assignmentData && (assignmentData.extensionTerm || assignmentData.extensionStartDate || assignmentData.extension_start_date || assignmentData.extensionRequestedByAdmin) && (
@@ -2086,8 +2256,9 @@ function CaseDetailsForm() {
                         </div>
                       </div>
                     )}
-                  </div>
-                )}
+                    </div>
+                  );
+                })()}
 
 {isAnswerLetter ? (
                   /* ───────────────── Streamlined Case Details Form (Matching Handwritten Specification for Assigned Answer Letters) ───────────────── */

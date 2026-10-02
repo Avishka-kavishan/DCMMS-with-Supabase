@@ -83,6 +83,7 @@ function RegisterComplaintForm() {
     { value: "Appeal", labelKey: "natureAppeal" },
     { value: "Request", labelKey: "natureRequest" },
     { value: "Notification", labelKey: "natureNotification" },
+    { value: "Answer Letter", labelKey: "natureAnswerLetter" },
     { value: "Other", labelKey: "natureOther" }
   ];
 
@@ -1027,6 +1028,16 @@ function RegisterComplaintForm() {
     const sasOfficerName = seniorAsstSecOfficer?.full_name || "Dharshana Senanayake";
     const sasRole = "Senior Assistant Secretary";
 
+    const isAnswer =
+      formState.isAnswerLetter === "true" ||
+      formState.isAnswerLetter === true ||
+      formState.regionProvince === "Answer Letter" ||
+      formState.regionProvince === "Answer Letters" ||
+      String(formState.regionProvince || "").toLowerCase().includes("answer") ||
+      String(formState.regionProvince || "").includes("පිළිතුරු") ||
+      String(formState.letterType || "").toLowerCase().includes("answer") ||
+      String(formState.letterType || "").includes("පිළිතුරු");
+
     const newLetter = {
       id: formState.id || Date.now().toString(),
       refNo: formState.refNo,
@@ -1036,7 +1047,7 @@ function RegisterComplaintForm() {
       receivedDate: formState.receivedDate || new Date().toISOString().split("T")[0],
       subject: formState.subject || "N/A", // maps to subject / title
       priority: formState.priority,
-      status: "assigned" as const,
+      status: isAnswer ? ("Assigned Answer Letter" as any) : ("assigned" as const),
       // Extra fields captured
       letterNo: finalLetterNo,
       letterType: formState.letterType,
@@ -1044,7 +1055,7 @@ function RegisterComplaintForm() {
       subjectCategory: formState.subjectCategory,
       instituteName: formState.instituteName,
       regionProvince: formState.regionProvince,
-      isAnswerLetter: formState.isAnswerLetter,
+      isAnswerLetter: isAnswer,
       documentUrl: uploadedUrl,
       documentName: uploadedName,
       // Routing to Senior Assistant Secretary
@@ -1105,10 +1116,10 @@ function RegisterComplaintForm() {
         is_forwarded: true,
         created_by_name: currentUserProfile?.full_name || "Additional Secretary",
         created_by_role: "additional_secretary",
-        status: "assigned",
+        status: isAnswer ? "Assigned Answer Letter" : "assigned",
         document_url: uploadedUrl,
         document_name: uploadedName,
-        is_answer_letter: formState.isAnswerLetter === "true" || formState.isAnswerLetter === true,
+        is_answer_letter: isAnswer,
         institute_name: newLetter.instituteName,
         region_province: newLetter.regionProvince,
       });
@@ -2354,7 +2365,15 @@ function RegisterComplaintForm() {
                           id="regionProvince"
                           disabled={isFieldDisabled}
                           value={formState.regionProvince}
-                          onChange={(e) => setFormState({ ...formState, regionProvince: e.target.value })}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const isAns = val === "Answer Letter" || val === "Answer Letters" || val.toLowerCase().includes("answer") || val.includes("පිළිතුරු");
+                            setFormState((prev) => ({
+                              ...prev,
+                              regionProvince: val,
+                              isAnswerLetter: isAns ? "true" : prev.isAnswerLetter,
+                            }));
+                          }}
                           className="field-select"
                           style={isFieldDisabled ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
                         >

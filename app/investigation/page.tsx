@@ -3152,6 +3152,8 @@ export default function InvestigationPage() {
           item.status === "Conducting preliminary investigations" ||
           item.status === "Institutional Basic Investigation" ||
           item.status === "Institutional Preliminary Investigation" ||
+          item.status === "Initial investigation" ||
+          item.status === "Initial Investigation" ||
           item.status === "Conducting an Inquiry" ||
           item.status === "Under Investigation";
         if (!isProg) return false;
@@ -3224,7 +3226,7 @@ export default function InvestigationPage() {
 
   // Count calculations
   const activeInquiriesCount = inquiries.length;
-  const inProgressInquiriesCount = inquiries.filter((i) => i.status === "In Progress" || i.status === "Preliminary Investigation" || i.status === "Conducting preliminary investigations" || i.status === "Under Investigation").length;
+  const inProgressInquiriesCount = inquiries.filter((i) => i.status === "In Progress" || i.status === "Preliminary Investigation" || i.status === "Conducting preliminary investigations" || i.status === "Institutional Basic Investigation" || i.status === "Institutional Preliminary Investigation" || i.status === "Initial investigation" || i.status === "Initial Investigation" || i.status === "Under Investigation").length;
   const evidenceReviewsInquiriesCount = inquiries.filter((i) => i.status === "Evidence Review").length;
   const scheduledHearingsInquiriesCount = inquiries.filter((i) => i.status === "Scheduled").length;
 

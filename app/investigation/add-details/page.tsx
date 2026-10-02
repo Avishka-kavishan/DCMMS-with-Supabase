@@ -13,7 +13,20 @@ import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 import { getCurrentProfile, signOut } from "@/lib/auth";
-import { getAccusedOfficerByRefServer, getCommitteeOfficersWithSchoolsServer, saveChairmanByCaseServer, getChairmanByCaseServer, saveMembersByCaseServer, getMembersByCaseServer, saveCaseByDateExtensionServer, getCaseByDateExtensionServer, saveCaseByAppointmentAndReportDueDateServer, getCaseByAppointmentAndReportDueDateServer, saveSubjectOfficerAssignmentServer } from "@/lib/db-actions";
+import { 
+  getAccusedOfficerByRefServer, 
+  getCommitteeOfficersWithSchoolsServer, 
+  saveChairmanByCaseServer, 
+  getChairmanByCaseServer, 
+  saveMembersByCaseServer, 
+  getMembersByCaseServer, 
+  saveCaseByDateExtensionServer, 
+  getCaseByDateExtensionServer, 
+  saveCaseByAppointmentAndReportDueDateServer, 
+  getCaseByAppointmentAndReportDueDateServer, 
+  saveSubjectOfficerAssignmentServer,
+  getLetterAndCaseDetailsByAnyRefServer
+} from "@/lib/db-actions";
 import { 
   Shield, User, Calendar as CalendarIcon, FileCheck, Send, Clock, 
   CheckCircle, ArrowLeft, RefreshCw, AlertCircle, Award, Building, 
@@ -26,7 +39,7 @@ function InvestigationCaseDetailsContent() {
   const { t, i18n } = useTranslation();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const caseNoParam = searchParams?.get("id") || searchParams?.get("caseNo") || searchParams?.get("inquiryNo") || searchParams?.get("refNo") || "INQ/2026/001";
+  const caseNoParam = searchParams?.get("id") || searchParams?.get("caseNo") || searchParams?.get("inquiryNo") || searchParams?.get("refNo") || searchParams?.get("letterNo") || searchParams?.get("letter_no") || searchParams?.get("letterNumber") || "INQ/2026/001";
   const lang = i18n.language;
 
   // Layout & Accessibility State
@@ -625,9 +638,52 @@ function InvestigationCaseDetailsContent() {
       const allSubjOfficers = Array.from(subjSet);
       setSubjectOfficersList(allSubjOfficers);
 
-      // Load Data Flow Assignment FIRST
+      // 0. Primary: Query PostgreSQL for consolidated Case & Letter Details
+      let pgCaseDetails: any = null;
+      if (caseNoParam) {
+        try {
+          const pgRes = await getLetterAndCaseDetailsByAnyRefServer(caseNoParam);
+          if (pgRes && pgRes.success && pgRes.data) {
+            pgCaseDetails = pgRes.data;
+          }
+        } catch (e) {
+          console.warn("Failed to load letter/case details from PostgreSQL:", e);
+        }
+      }
+
+      // Load Data Flow Assignment
       let assignment: any = null;
-      if (isSupabaseConfigured && caseNoParam) {
+      if (pgCaseDetails) {
+        const rawAsgn = pgCaseDetails.rawAssignment;
+        assignment = {
+          id: rawAsgn?.id || `asgn-${caseNoParam}`,
+          caseNo: pgCaseDetails.caseNo,
+          subjectOfficerName: pgCaseDetails.subjectOfficerName,
+          status: pgCaseDetails.status,
+          assignedOfficers: rawAsgn?.assigned_officers || pgCaseDetails.subjectOfficerName,
+          appointmentDate: pgCaseDetails.appointmentLetterDate,
+          reportDueDate: pgCaseDetails.reportDueDate,
+          datesSubmittedBySubject: rawAsgn?.dates_submitted_by_subject ?? true,
+          chairman: pgCaseDetails.chairman,
+          members: pgCaseDetails.members,
+          extensionTerm: pgCaseDetails.extensionTerm,
+          extensionStartDate: pgCaseDetails.extensionStartDate,
+          extensionEndDate: pgCaseDetails.extensionEndDate,
+          extensionApprovalStatus: pgCaseDetails.extensionApprovalStatus,
+          extensionDecisionDate: rawAsgn?.extension_decision_date,
+          certificationSubmitted: rawAsgn?.certification_submitted,
+          reportSubmitDate: rawAsgn?.report_submit_date,
+          reportContent: rawAsgn?.report_content,
+          afterInvestigationSent: rawAsgn?.after_investigation_sent,
+          afterInvestigationDate: rawAsgn?.after_investigation_date,
+          investigationFileNo: pgCaseDetails.investigationFileNo,
+          investigationStatus: rawAsgn?.investigation_status || pgCaseDetails.status,
+          investigationNotes: pgCaseDetails.inquiryNotes,
+          progressDetails: pgCaseDetails.inquiryNotes,
+        };
+      }
+
+      if (!assignment && isSupabaseConfigured && caseNoParam) {
         try {
           const { data: dbAsgn } = await supabase
             .from("dcmms_subject_assignments")
@@ -799,7 +855,28 @@ function InvestigationCaseDetailsContent() {
 
       // Load case data
       let matchedCase: any = null;
-      if (isSupabaseConfigured && caseNoParam) {
+
+      if (pgCaseDetails) {
+        matchedCase = {
+          id: pgCaseDetails.caseNo || `case-${caseNoParam}`,
+          inquiryNo: pgCaseDetails.inquiryNo || caseNoParam,
+          caseNo: pgCaseDetails.caseNo || caseNoParam,
+          refNo: pgCaseDetails.refNo || caseNoParam,
+          letterNo: pgCaseDetails.letterNo || caseNoParam,
+          subject: pgCaseDetails.subject || "Formal Disciplinary Inquiry",
+          targetDate: pgCaseDetails.targetDate || pgCaseDetails.reportDueDate || pgCaseDetails.appointmentLetterDate || new Date().toISOString().slice(0, 10),
+          assignee: pgCaseDetails.subjectOfficerName || assignment?.subjectOfficerName || "",
+          subjectOfficerName: pgCaseDetails.subjectOfficerName || assignment?.subjectOfficerName || "",
+          officerName: pgCaseDetails.subjectOfficerName || assignment?.subjectOfficerName || "",
+          status: pgCaseDetails.status || assignment?.status || "In Progress",
+          inquiryNotes: pgCaseDetails.inquiryNotes || "",
+          complainantName: pgCaseDetails.complainantName || "Complainant",
+          complainantAddress: pgCaseDetails.complainantAddress || "",
+          appointmentLetterDate: pgCaseDetails.appointmentLetterDate || "",
+          reportDueDate: pgCaseDetails.reportDueDate || "",
+          investigationFileNo: pgCaseDetails.investigationFileNo || "",
+        };
+      } else if (isSupabaseConfigured && caseNoParam) {
         try {
           const { data: dbMail } = await supabase
             .from("dcmms_daily_mail")
@@ -883,14 +960,14 @@ function InvestigationCaseDetailsContent() {
           inquiryNo: caseNoParam,
           caseNo: caseNoParam,
           refNo: caseNoParam,
-          subject: "Formal disciplinary inquiry regarding misconduct",
+          subject: "Formal Disciplinary Inquiry",
           targetDate: new Date().toISOString().slice(0, 10),
           assignee: assignment?.subjectOfficerName || "",
           subjectOfficerName: assignment?.subjectOfficerName || "",
           officerName: assignment?.subjectOfficerName || "",
           status: "In Progress",
           inquiryNotes: "",
-          complainantName: "Director of Education",
+          complainantName: "Complainant",
         };
       }
 
@@ -945,7 +1022,9 @@ function InvestigationCaseDetailsContent() {
 
       // Fetch Accused / Concerned Officers Information
       let fetchedConcerned: any[] = [];
-      if (caseNoParam) {
+      if (pgCaseDetails?.accusedOfficers && pgCaseDetails.accusedOfficers.length > 0) {
+        fetchedConcerned = pgCaseDetails.accusedOfficers;
+      } else if (caseNoParam) {
         try {
           const pgRes = await getAccusedOfficerByRefServer(caseNoParam);
           if (pgRes && pgRes.success && pgRes.data) {
@@ -964,6 +1043,9 @@ function InvestigationCaseDetailsContent() {
                 address: ao.address || ao.officer_address || "",
                 institute_name: ao.accused_school_name || ao.institute_name || d.accused_school?.accused_school_name || "",
                 institute_address: ao.school_address || d.accused_school?.address || "",
+                province: ao.province || d.accused_school?.province || "",
+                district: ao.district || d.accused_school?.district || "",
+                zone: ao.zone || d.accused_school?.zone || "",
               }));
             }
           }
@@ -1084,7 +1166,35 @@ function InvestigationCaseDetailsContent() {
   const reloadAssignmentData = async () => {
     if (!caseNoParam) return;
     let assignment: any = null;
-    if (isSupabaseConfigured && caseNoParam) {
+
+    try {
+      const pgRes = await getLetterAndCaseDetailsByAnyRefServer(caseNoParam);
+      if (pgRes && pgRes.success && pgRes.data) {
+        const d = pgRes.data;
+        assignment = {
+          id: d.rawAssignment?.id || `asgn-${caseNoParam}`,
+          caseNo: d.caseNo,
+          subjectOfficerName: d.subjectOfficerName,
+          status: d.status,
+          assignedOfficers: d.rawAssignment?.assigned_officers || d.subjectOfficerName,
+          appointmentDate: d.appointmentLetterDate,
+          reportDueDate: d.reportDueDate,
+          datesSubmittedBySubject: d.rawAssignment?.dates_submitted_by_subject ?? true,
+          chairman: d.chairman,
+          members: d.members,
+          extensionTerm: d.extensionTerm,
+          extensionStartDate: d.extensionStartDate,
+          extensionEndDate: d.extensionEndDate,
+          extensionApprovalStatus: d.extensionApprovalStatus,
+          investigationFileNo: d.investigationFileNo,
+          investigationStatus: d.status,
+          investigationNotes: d.inquiryNotes,
+          progressDetails: d.inquiryNotes,
+        };
+      }
+    } catch (e) {}
+
+    if (!assignment && isSupabaseConfigured && caseNoParam) {
       try {
         const { data: dbAsgn } = await supabase
           .from("dcmms_subject_assignments")
@@ -1259,6 +1369,10 @@ function InvestigationCaseDetailsContent() {
         extension_end_date: updatedFields.extensionEndDate || updatedFields.extension_end_date || existing.extensionEndDate || existing.extension_end_date,
         extensionRequestedByAdmin: updatedFields.extensionRequestedByAdmin !== undefined ? updatedFields.extensionRequestedByAdmin : true,
         extension_requested_by_admin: updatedFields.extensionRequestedByAdmin !== undefined ? updatedFields.extensionRequestedByAdmin : true,
+        committeeSent: updatedFields.committeeSent !== undefined ? updatedFields.committeeSent : (updatedFields.committee_sent !== undefined ? updatedFields.committee_sent : existing.committeeSent),
+        committee_sent: updatedFields.committeeSent !== undefined ? updatedFields.committeeSent : (updatedFields.committee_sent !== undefined ? updatedFields.committee_sent : existing.committeeSent),
+        committeeSentAt: updatedFields.committeeSentAt || updatedFields.committee_sent_at || existing.committeeSentAt,
+        committee_sent_at: updatedFields.committeeSentAt || updatedFields.committee_sent_at || existing.committeeSentAt,
       };
 
       if (idx >= 0) list[idx] = updated;
@@ -1276,7 +1390,7 @@ function InvestigationCaseDetailsContent() {
 
       // Direct save to PostgreSQL database for multi-device real-time synchronization
       try {
-        saveSubjectOfficerAssignmentServer(updated).then();
+        await saveSubjectOfficerAssignmentServer(updated);
       } catch (pgErr) {
         console.warn("PostgreSQL saveSubjectAssignment error:", pgErr);
       }
@@ -1710,8 +1824,11 @@ function InvestigationCaseDetailsContent() {
       return;
     }
 
-    const chairmanPart = selectedChairman ? `Chairman: ${selectedChairman.fullName || selectedChairman.name}` : "";
-    const membersPart = selectedMembers.length > 0 ? `Members: ${selectedMembers.map((m) => m.fullName || m.name).join(", ")}` : "";
+    const cName = selectedChairman ? (selectedChairman.fullName || selectedChairman.name || selectedChairman.full_name || "") : "";
+    const chairmanPart = (cName && cName !== "undefined") ? `Chairman: ${cName}` : "";
+    const membersPart = selectedMembers.length > 0 
+      ? `Members: ${selectedMembers.map((m) => m.fullName || m.name || m.full_name || "").filter((x) => x && x !== "undefined").join(", ")}` 
+      : "";
     const formattedAssignedText = [chairmanPart, membersPart].filter(Boolean).join(" | ");
 
     setStep1AssignedOfficers(formattedAssignedText);
@@ -1725,13 +1842,15 @@ function InvestigationCaseDetailsContent() {
       chairman: selectedChairman,
       members: selectedMembers,
       committeeSent: true,
-      committeeSentAt: new Date().toISOString().slice(0, 10),
+      committee_sent: true,
+      committeeSentAt: new Date().toISOString(),
+      committee_sent_at: new Date().toISOString(),
       status: "Committee Details Sent to Subject Officer",
     });
 
     if (selectedChairman && caseNoParam) {
       const payload = {
-        fullName: selectedChairman.fullName || selectedChairman.name || "",
+        fullName: cName,
         position: selectedChairman.position || "Chairman",
         email: selectedChairman.email || "",
       };
@@ -2355,7 +2474,7 @@ function InvestigationCaseDetailsContent() {
                         {lang === "si" ? "පැමිණිලිකරුගේ නම" : "Complainant Name"}
                       </span>
                       <span style={{ fontSize: "13px", fontWeight: 700, color: "#0f172a" }}>
-                        {selectedCase?.complainantName || "Director of Education"}
+                        {selectedCase?.complainantName || "—"}
                       </span>
                     </div>
 
@@ -2365,7 +2484,7 @@ function InvestigationCaseDetailsContent() {
                         {lang === "si" ? "පත්වීම් ලිපියේ දිනය" : "Appointment Letter Date"}
                       </span>
                       <span style={{ fontSize: "13px", fontWeight: 700, color: "#0369a1" }}>
-                        {existingAssignment?.appointmentDate || step2ApptDate || "—"}
+                        {selectedCase?.appointmentLetterDate || existingAssignment?.appointmentDate || step2ApptDate || "—"}
                       </span>
                     </div>
 
@@ -2375,7 +2494,7 @@ function InvestigationCaseDetailsContent() {
                         {lang === "si" ? "වාර්තා භාරදිය යුතු දිනය" : "Report Due Date"}
                       </span>
                       <span style={{ fontSize: "13px", fontWeight: 700, color: "#dc2626" }}>
-                        {existingAssignment?.reportDueDate || step2DueDate || selectedCase?.targetDate || "—"}
+                        {existingAssignment?.reportDueDate || step2DueDate || selectedCase?.reportDueDate || selectedCase?.targetDate || "—"}
                       </span>
                     </div>
 
@@ -2387,7 +2506,7 @@ function InvestigationCaseDetailsContent() {
                       {lang === "si" ? "පෙර විෂය කරුණ / පැමිණිල්ලේ සාරාංශය" : "Subject Matter / Complaint Summary"}
                     </span>
                     <p style={{ margin: "4px 0 0 0", fontSize: "13px", color: "#1e293b", fontWeight: 600 }}>
-                      {selectedCase?.subject || "Formal disciplinary inquiry regarding teacher absenteeism and misconduct"}
+                      {selectedCase?.subject || "—"}
                     </p>
                   </div>
                 </div>
