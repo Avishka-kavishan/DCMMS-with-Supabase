@@ -328,7 +328,7 @@ function buildSeparateNotifications(assignments: any[], currentLang: string = "e
         asgn,
         adminName,
         headline: currentLang === "si"
-          ? `${adminName} විසින් මෙම නඩුවේ මූලික විමර්ශන කටයුතු අවසන් බව දැනුම් දී ඇත`
+          ? `${adminName} විසින් මූලික විමර්ශන කටයුතු අවසන් බව දැනුම් දී ඇත`
           : currentLang === "ta"
           ? `${adminName} ஆரம்ப விசாரணை முடிவடைந்ததாக அறிவித்துள்ளார்`
           : `${adminName} informed that initial preliminary investigation is complete`,
@@ -336,7 +336,7 @@ function buildSeparateNotifications(assignments: any[], currentLang: string = "e
           ? "මූලික විමර්ශන කටයුතු අවසන් බවට නිල වශයෙන් දැනුම් දී ඇත. නිර්දේශ (Recommendation) ඉදිරිපත් කළ හැක."
           : currentLang === "ta"
           ? "ஆரம்ப விசாரணை முடிவடைந்துவிட்டது என உத்தியோகபூர்வமாக தெரிவிக்கப்பட்டுள்ளது."
-          : "Official notification: Investigation Administrator has informed that the initial preliminary investigation is complete.",
+          : "Official notification: Assistant Secretary Investigation Branch has informed that the initial preliminary investigation is complete.",
         badgeColor: "badge-green",
         statusPill: currentLang === "si" ? "✓ Step 5 — මූලික විමර්ශනය අවසන්" : currentLang === "ta" ? "✓ Step 5 — ஆரம்ப விசாரணை முடிந்தது" : "✓ Step 5 — Initial Investigation Complete",
         iconType: "check",
@@ -506,15 +506,15 @@ function getNotifMeta(asgn: any, currentLang: string = "en") {
     iconType = "check";
     statusPill = currentLang === "si" ? "✓ මූලික විමර්ශනය අවසන් බව දැනුම් දෙන ලදී" : currentLang === "ta" ? "✓ ஆரம்ப விசாரணை முடிவடைந்தது" : "✓ Initial Investigation Complete";
     headline = currentLang === "si"
-      ? `${adminName} විසින් මෙම නඩුවේ මූලික විමර්ශන කටයුතු අවසන් බව දැනුම් දී ඇත`
+      ? `${adminName} විසින් මූලික විමර්ශන කටයුතු අවසන් බව දැනුම් දී ඇත`
       : currentLang === "ta"
       ? `${adminName} ஆரம்ப விசாரணை முடிவடைந்ததாக அறிவித்துள்ளார்`
       : `${adminName} informed that initial investigation is complete`;
     actionSnippet = currentLang === "si"
-      ? "විමර්ශන පරිපාලක විසින් මූලික විමර්ශන කටයුතු අවසන් බව භාරකාර නිලධාරියා වෙත දැනුම් දී ඇත. නිර්දේශ (Recommendation) ඉදිරිපත් කළ හැක."
+      ? "සහකාර ලේකම් (විමර්ශන ශාඛාව) විසින් මූලික විමර්ශන කටයුතු අවසන් බව භාරකාර නිලධාරියා වෙත දැනුම් දී ඇත. නිර්දේශ (Recommendation) ඉදිරිපත් කළ හැක."
       : currentLang === "ta"
-      ? "ஆரம்ப விசாரணை முடிவடைந்தது என தெரிவிக்கப்பட்டுள்ளது. நீங்கள் பரிந்துரைகளை சமர்ப்பிக்கலாம்."
-      : "Investigation Administrator has informed the officer in charge that the initial preliminary investigation is complete. Ready for recommendations.";
+      ? "ஆரம்ப விசாரணை முடிவடைந்துவிட்டது என உதவிச் செயலாளர் (விசாரணைப் பிரிவு) அவர்களால் தெரிவிக்கப்பட்டுள்ளது. நீங்கள் பரிந்துரைகளை சமர்ப்பிக்கலாம்."
+      : "Assistant Secretary Investigation Branch has informed the officer in charge that the initial preliminary investigation is complete. Ready for recommendations.";
   } else if (isPendingExtension) {
     badgeColor = "badge-amber";
     iconType = "clock";
@@ -548,7 +548,7 @@ function getNotifMeta(asgn: any, currentLang: string = "en") {
     iconType = "file";
     statusPill = currentLang === "si" ? "● Step 2 — දිනයන් තහවුරු කළා" : "● Step 2 — Dates Confirmed";
     headline = currentLang === "si"
-      ? `නඩුව සඳහා දිනයන් සහ විමර්ශන කමිටු තොරතුරු තහවුරු කර ඇත`
+      ? `දිනයන් සහ විමර්ශන කමිටු තොරතුරු තහවුරු කර ඇත`
       : currentLang === "ta"
       ? `வழக்கு தேதிகள் உறுதிப்படுத்தப்பட்டு நிர்வாகிக்கு அனுப்பப்பட்டது`
       : `Investigation committee assigned & dates confirmed with Admin`;
@@ -1098,7 +1098,10 @@ function SubjectOfficerDashboardContent() {
                   act.includes("finalize") ||
                   act.includes("additional secretary") ||
                   act.includes("අතිරේක ලේකම්") ||
+                  act.includes("මාණ්ඩලික") ||
+                  act.includes("කටයුතු අවසන්") ||
                   act.includes("අවසන් කිරීම") ||
+                  act.includes("අවසන් කිරිම") ||
                   act.includes("ගොනුව අවසන්")
                 );
               })
@@ -1604,6 +1607,7 @@ function SubjectOfficerDashboardContent() {
   const [chargeSheetScheduleFilter, setChargeSheetScheduleFilter] = useState("all");
   const [chargeSheetAuthorityFilter, setChargeSheetAuthorityFilter] = useState("all");
   const [chargeSheetPriorityFilter, setChargeSheetPriorityFilter] = useState<"all" | "high" | "medium" | "low">("all");
+  const [chargeSheetResponseFilter, setChargeSheetResponseFilter] = useState<"all" | "received" | "pending">("all");
   const [selectedChargeSheetModal, setSelectedChargeSheetModal] = useState<any | null>(null);
 
   // Appeals state
@@ -2430,7 +2434,7 @@ function SubjectOfficerDashboardContent() {
       }).then();
     }
 
-    showToast("Step 2 Complete: Appointment Date & Report Due Date submitted to Investigation Administrator!");
+    showToast("Step 2 Complete: Appointment Date & Report Due Date submitted to Assistant Secretary Investigation Branch!");
     fetchAssignments();
   };
 
@@ -2712,7 +2716,7 @@ function SubjectOfficerDashboardContent() {
       }).then();
     }
 
-    showToast("Certification submitted to Investigation Administrator!");
+    showToast("Certification submitted to Assistant Secretary Investigation Branch!");
     fetchAssignments();
   };
 
@@ -2786,7 +2790,7 @@ function SubjectOfficerDashboardContent() {
       }).then();
     }
 
-    showToast("Investigation Report successfully submitted to Investigation Administrator!");
+    showToast("Investigation Report successfully submitted to Assistant Secretary Investigation Branch!");
     setIsReportModalOpen(false);
     fetchAssignments();
   };
@@ -3439,7 +3443,7 @@ function SubjectOfficerDashboardContent() {
             upcomingAction: upcomingAct,
             upcoming_action: upcomingAct,
             notes: recommendationText || (idx >= 0 ? list[idx].notes : ""),
-            status: upcomingAct.toLowerCase().includes("finalize") || upcomingAct.includes("අතිරේක ලේකම්") ? "Closed" : "Conducting an Inquiry",
+            status: upcomingAct.toLowerCase().includes("finalize") || upcomingAct.includes("අතිරේක ලේකම්") || upcomingAct.includes("මාණ්ඩලික") || upcomingAct.includes("කටයුතු අවසන්") ? "Closed" : "Conducting an Inquiry",
             updatedAt: new Date().toISOString(),
           };
 
@@ -3464,7 +3468,7 @@ function SubjectOfficerDashboardContent() {
               casesList[cIdx].upcomingAction = upcomingAct;
               casesList[cIdx].upcoming_action = upcomingAct;
             }
-            if (upcomingAct.toLowerCase().includes("finalize") || upcomingAct.includes("අතිරේක ලේකම්")) {
+            if (upcomingAct.toLowerCase().includes("finalize") || upcomingAct.includes("අතිරේක ලේකම්") || upcomingAct.includes("මාණ්ඩලික") || upcomingAct.includes("කටයුතු අවසන්")) {
               casesList[cIdx].status = "Closed";
               casesList[cIdx].stage = "Closed";
             } else {
@@ -3876,7 +3880,7 @@ function SubjectOfficerDashboardContent() {
           id: rec.id || matchingCase?.id || `cs-${cNo}`,
           caseNo: cNo,
           letterNo: rec.letterNo || matchingCase?.caseNo || cNo,
-          subject: rec.subject || matchingCase?.subject || (lang === "si" ? `චෝදනා පත්‍ර නඩුව #${cNo}` : `Charge Sheet Case #${cNo}`),
+          subject: rec.subject || matchingCase?.subject || (lang === "si" ? `චෝදනා පත්‍රය #${cNo}` : `Charge Sheet Case #${cNo}`),
           accusedName: rec.accusedName || matchingCase?.accusedName || (lang === "si" ? "අදාළ නිලධාරී" : "Concerned Officer"),
           accusedDesignation: rec.accusedDesignation || matchingCase?.accusedDesignation || (lang === "si" ? "අධ්‍යාපන නිලධාරී" : "Educational Officer"),
           schoolName: rec.schoolName || matchingCase?.schoolName || (lang === "si" ? "රජයේ අධ්‍යාපන ආයතනය" : "Government Educational Institute"),
@@ -3913,7 +3917,7 @@ function SubjectOfficerDashboardContent() {
           id: c.id || `cs-${c.caseNo}`,
           caseNo: c.caseNo,
           letterNo: c.caseNo,
-          subject: c.subject || (lang === "si" ? `චෝදනා පත්‍ර නඩුව #${c.caseNo}` : `Charge Sheet Case #${c.caseNo}`),
+          subject: c.subject || (lang === "si" ? `චෝදනා පත්‍රය #${c.caseNo}` : `Charge Sheet Case #${c.caseNo}`),
           accusedName: (c as any).accusedName || (lang === "si" ? "අදාළ නිලධාරී" : "Concerned Officer"),
           accusedDesignation: (c as any).accusedDesignation || (lang === "si" ? "අධ්‍යාපන නිලධාරී" : "Educational Officer"),
           schoolName: (c as any).schoolName || (lang === "si" ? "රජයේ අධ්‍යාපන ආයතනය" : "Government Educational Institute"),
@@ -3966,9 +3970,15 @@ function SubjectOfficerDashboardContent() {
         chargeSheetPriorityFilter === "all" ||
         item.priority === chargeSheetPriorityFilter;
 
-      return matchesSearch && matchesSchedule && matchesAuthority && matchesPriority;
+      const hasResponse = Boolean(item.chargeSheetResponseDate && item.chargeSheetResponseDate !== "—");
+      const matchesResponse =
+        chargeSheetResponseFilter === "all" ||
+        (chargeSheetResponseFilter === "received" && hasResponse) ||
+        (chargeSheetResponseFilter === "pending" && !hasResponse);
+
+      return matchesSearch && matchesSchedule && matchesAuthority && matchesPriority && matchesResponse;
     });
-  }, [issuingChargeSheetCases, chargeSheetSearchQuery, chargeSheetScheduleFilter, chargeSheetAuthorityFilter, chargeSheetPriorityFilter]);
+  }, [issuingChargeSheetCases, chargeSheetSearchQuery, chargeSheetScheduleFilter, chargeSheetAuthorityFilter, chargeSheetPriorityFilter, chargeSheetResponseFilter]);
 
   // ── Provincial Basic Investigation Case List ──
   const provincialInvestigationCases = useMemo(() => {
@@ -4230,7 +4240,7 @@ function SubjectOfficerDashboardContent() {
   const handleSaveNewAppeal = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!newAppealForm.caseNo.trim() || !newAppealForm.appellantName.trim()) {
-      showToast(lang === "si" ? "කරුණාකර නඩු අංකය සහ අභියාචකගේ නම ඇතුළත් කරන්න." : "Please fill in Case No and Appellant Name.");
+      showToast(lang === "si" ? "කරුණාකර යොමු අංකය සහ අභියාචකගේ නම ඇතුළත් කරන්න." : "Please fill in Case No and Appellant Name.");
       return;
     }
     setSavingAppealForm(true);
@@ -4358,14 +4368,32 @@ function SubjectOfficerDashboardContent() {
 
   const getCategoryLabel = (category: string) => {
     switch (category) {
+      case "formal_inquiry":
+        return lang === "si" ? "විධිමත් විනය පරීක්ෂණයක් පැවැත්වීම" : lang === "ta" ? "முறைசார் ஒழுக்காற்று விசாரணை" : "Formal Disciplinary Inquiry";
       case "issuing_charge_sheet":
         return lang === "si" ? "චෝදනා පත්‍රයක් නිකුත් කිරීම" : lang === "ta" ? "குற்றப்பத்திரிகை வழங்குதல்" : "Issuing a charge sheet";
-      case "action_based_on_court_verdict":
-        return lang === "si" ? "අධිකරණ තීන්දුව මත පදනම්ව ඉදිරි ක්‍රියාමාර්ග" : lang === "ta" ? "நீதிமன்ற தீர்ப்பின் அடிப்படையில் நடவடிக்கை" : "Action based on court verdict";
+      case "issue_warning":
+        return lang === "si" ? "අවවාද නිකුත් කිරීම" : lang === "ta" ? "எச்சரிக்கை விடுத்தல்" : "Issue Warning";
+      case "reprimand":
+        return lang === "si" ? "තරවටු කිරීම" : lang === "ta" ? "கண்டித்தல்" : "Reprimand";
+      case "giving_advice":
+        return lang === "si" ? "උපදෙස් ලබාදීම" : lang === "ta" ? "ஆலோசனைகள் வழங்குதல்" : "Giving Instructions / Advice";
       case "giving_warnings_advice":
         return lang === "si" ? "අවවාද / උපදෙස් ලබා දීම" : lang === "ta" ? "எச்சரிக்கைகள் / ஆலோசனைகள் வழங்குதல்" : "Giving warnings/advice";
+      case "financial_recovery":
+        return lang === "si" ? "අලාභ අයකර ගැනීම / අධිභාරය" : lang === "ta" ? "இழப்பீடு அறவீடு" : "Surcharge / Recovery";
+      case "interdiction":
+        return lang === "si" ? "වැඩ තහනම් කිරීම" : lang === "ta" ? "பணி இடைநிறுத்தம்" : "Interdiction / Suspension";
+      case "transfer":
       case "transfers":
         return lang === "si" ? "ස්ථාන මාරු කිරීම්" : lang === "ta" ? "இடமாற்றங்கள்" : "Transfers";
+      case "exoneration":
+        return lang === "si" ? "ඉදිරි විනය කටයුතු අවශ්‍ය නොවන බව" : lang === "ta" ? "மேலதிக ஒழுங்கு நடவடிக்கை தேவையில்லை" : "No Further Disciplinary Action Needed";
+      case "court_verdict":
+      case "action_based_on_court_verdict":
+        return lang === "si" ? "අධිකරණ තීන්දුව මත පදනම්ව ඉදිරි ක්‍රියාමාර්ග" : lang === "ta" ? "நீதிமன்ற தீர்ப்பின் அடிப்படையில் நடவடிக்கை" : "Action based on court verdict";
+      case "refer_ciaboc_police":
+        return lang === "si" ? "අල්ලස් / පොලිස් විමර්ශන වෙත යොමු කිරීම" : lang === "ta" ? "இலஞ்சம் / பொலிஸ் விசாரணைக்கு அனுப்புதல்" : "Refer to CIABOC / Police";
       case "charging_based_on_more_104":
         return lang === "si" ? "MoRE 104 පරීක්ෂණය මත චෝදනා ගොනු කිරීම" : lang === "ta" ? "MoRE 104 குற்றஞ்சாட்டுதல்" : "Charging based on MoRE 104";
       case "terminating_service":
@@ -5248,7 +5276,7 @@ function SubjectOfficerDashboardContent() {
                                     <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                                       <span style={{ fontWeight: 800, fontSize: "15px", color: "#050505" }}>
                                         <strong style={{ color: "#1877f2" }}>{notif.adminName}</strong>{" "}
-                                        <span>{lang === "si" ? "නඩු අංක " : "for case "}</span>
+                                        <span>{lang === "si" ? "යොමු අංක " : "for case "}</span>
                                         <strong>{notif.caseNo}</strong>
                                       </span>
 
@@ -5720,7 +5748,7 @@ function SubjectOfficerDashboardContent() {
                                             </div>
                                             <div>
                                               <div style={{ fontWeight: 700, color: "#065f46", fontSize: "13px" }}>
-                                                {lang === "si" ? "මූලික විමර්ශන කටයුතු අවසන් බවට විමර්ශන පරිපාලක විසින් නිල වශයෙන් දැනුම් දී ඇත." : lang === "ta" ? "ஆரம்ப விசாரணை முடிவடைந்துவிட்டது என விசாரணை நிர்வாகியால் உத்தியோகபூர்வமாக தெரிவிக்கப்பட்டுள்ளது." : "Official notification: Investigation Administrator has informed that the initial preliminary investigation for this case is complete."}
+                                                {lang === "si" ? "මූලික විමර්ශන කටයුතු අවසන් බවට සහකාර ලේකම් (විමර්ශන ශාඛාව) විසින් නිල වශයෙන් දැනුම් දී ඇත." : lang === "ta" ? "ஆரம்ப விசாரணை முடிவடைந்துவிட்டது என உதவிச் செயலாளர் (விசாரணைப் பிரிவு) உத்தியோகபூர்வமாக தெரிவிக்கப்பட்டுள்ளது." : "Official notification: Assistant Secretary Investigation Branch has informed that the initial preliminary investigation for this case is complete."}
                                               </div>
                                               <div style={{ fontSize: "12px", color: "#047857", marginTop: "2px" }}>
                                                 {lang === "si" ? `යොමු අංකය: ${asgn.caseNo} | දිනය: ${asgn.initialInvestigationCompletedAt || new Date().toISOString().slice(0, 10)}` : `Ref: ${asgn.caseNo} | Date: ${asgn.initialInvestigationCompletedAt || new Date().toISOString().slice(0, 10)}`}
@@ -5772,7 +5800,7 @@ function SubjectOfficerDashboardContent() {
                             {lang === "si" ? "දැනුම්දීම් කිසිවක් නැත" : "No Directives / Notifications Found"}
                           </div>
                           <div style={{ fontSize: "13px", color: "#65676b" }}>
-                            {lang === "si" ? "Investigation Administrator විසින් තොරතුරු පත් කළ විට දැනුම්දීම් මෙතන දිස්වනු ඇත." : "Once the Investigation Administrator assigns investigation officers or updates dates, notifications will appear here."}
+                            {lang === "si" ? "සහකාර ලේකම් (විමර්ශන ශාඛාව) විසින් තොරතුරු පත් කළ විට දැනුම්දීම් මෙතන දිස්වනු ඇත." : lang === "ta" ? "உதவிச் செயலாளர் (விசாரணைப் பிரிவு) தகவல்களை ஒதுக்கும் போது அறிவிப்புகள் இங்கு தோன்றும்." : "Once the Assistant Secretary Investigation Branch assigns investigation officers or updates dates, notifications will appear here."}
                           </div>
                         </div>
                       )}
@@ -5837,7 +5865,7 @@ function SubjectOfficerDashboardContent() {
               <table className="letters-data-table">
                 <thead>
                   <tr>
-                    <th scope="col">{lang === "si" ? "ලිපි / නඩු අංකය" : lang === "ta" ? "கடிதம் / வழக்கு எண்" : "Letter & Case No"}</th>
+                    <th scope="col">{lang === "si" ? "ලිපි / යොමු අංකය" : lang === "ta" ? "கடிதம் / வழக்கு எண்" : "Letter & Case No"}</th>
                     <th scope="col">{lang === "si" ? "යවන්නා / ආයතනය" : lang === "ta" ? "அனுப்புநர் / நிறுவனம்" : "Sender & Institute"}</th>
                     <th scope="col">{t("subjectText")}</th>
                     <th scope="col">{lang === "si" ? "ලිපි / ලැබුණු දිනය" : lang === "ta" ? "கடிதம் / பெறப்பட்ட தேதி" : "Letter & Received Dates"}</th>
@@ -6098,7 +6126,7 @@ function SubjectOfficerDashboardContent() {
                       type="text"
                       value={answerSearchQuery}
                       onChange={(e) => setAnswerSearchQuery(e.target.value)}
-                      placeholder={lang === "si" ? "ලිපි සොයන්න (නඩු අංකය, යවන්නා, විෂය)..." : "Search answer letters (Case No, Sender, Subject)..."}
+                      placeholder={lang === "si" ? "ලිපි සොයන්න (යොමු අංකය, යවන්නා, විෂය)..." : "Search answer letters (Case No, Sender, Subject)..."}
                       className="search-input"
                     />
                   </div>
@@ -6290,7 +6318,7 @@ function SubjectOfficerDashboardContent() {
               <div className="letters-list-header" style={{ marginBottom: "16px", backgroundColor: "#ffffff", padding: "12px 18px", borderRadius: "12px", border: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: 700, color: "#1e1b4b", fontSize: "14px" }}>
                   <Filter size={16} style={{ color: "#0284c7" }} />
-                  <span>{lang === "si" ? "පරීක්ෂණ නඩු පෙරීම" : "Filter Inquiries"}</span>
+                  <span>{lang === "si" ? "පරීක්ෂණ පෙරීම" : "Filter Inquiries"}</span>
                 </div>
 
                 <div className="letters-filters-group" style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", margin: 0 }}>
@@ -6579,151 +6607,345 @@ function SubjectOfficerDashboardContent() {
                 </div>
               </div>
 
-              {/* Charge Sheet KPI Cards */}
-              <div className="inquiry-kpi-grid">
-                <div className="inquiry-kpi-card inquiry-card-amber">
-                  <div className="premium-card-top">
-                    <div className="premium-card-title-area">
-                      <FileCheck className="premium-card-icon" />
-                      <span>{lang === "si" ? "මුළු චෝදනා පත්‍ර නඩු" : "Total Charge Sheet Cases"}</span>
-                    </div>
-                  </div>
-                  <div className="premium-card-bottom">
-                    <div className="premium-card-value-area">
-                      <span className="premium-card-value">{String(issuingChargeSheetCases.length).padStart(2, "0")}</span>
-                      <span className="premium-card-label">{lang === "si" ? "නඩු" : "cases"}</span>
-                    </div>
-                  </div>
-                </div>
+              {/* Charge Sheet KPI Cards (Interactive Filters) */}
+              {(() => {
+                const totalCs = issuingChargeSheetCases.length;
+                const firstScheduleCs = issuingChargeSheetCases.filter((c: any) => c.issuedChargeSheet === "first_schedule" || c.issuedChargeSheet?.toLowerCase().includes("first") || c.issuedChargeSheet?.toLowerCase().includes("පළමු")).length;
+                const secondScheduleCs = issuingChargeSheetCases.filter((c: any) => c.issuedChargeSheet === "second_schedule" || c.issuedChargeSheet?.toLowerCase().includes("second") || c.issuedChargeSheet?.toLowerCase().includes("දෙවන")).length;
+                const responseReceivedCs = issuingChargeSheetCases.filter((c: any) => c.chargeSheetResponseDate && c.chargeSheetResponseDate !== "—").length;
+                const responsePendingCs = issuingChargeSheetCases.filter((c: any) => !c.chargeSheetResponseDate || c.chargeSheetResponseDate === "—").length;
+                const secEdAuthCs = issuingChargeSheetCases.filter((c: any) => c.disciplinaryAuthority === "secretary_of_education").length;
+                const pscAuthCs = issuingChargeSheetCases.filter((c: any) => c.disciplinaryAuthority === "psc_esc" || c.disciplinaryAuthority?.toLowerCase().includes("psc")).length;
+                const highPriorityCs = issuingChargeSheetCases.filter((c: any) => c.priority === "high").length;
+                const medPriorityCs = issuingChargeSheetCases.filter((c: any) => c.priority === "medium").length;
+                const lowPriorityCs = issuingChargeSheetCases.filter((c: any) => c.priority === "low").length;
 
-                <div className="inquiry-kpi-card inquiry-card-sky">
-                  <div className="premium-card-top">
-                    <div className="premium-card-title-area">
-                      <FileText className="premium-card-icon" />
-                      <span>{lang === "si" ? "පළමු උපලේඛනය (1st Schedule)" : "First Schedule (1st)"}</span>
+                const hasActiveCsFilters = Boolean(
+                  chargeSheetSearchQuery ||
+                  chargeSheetScheduleFilter !== "all" ||
+                  chargeSheetAuthorityFilter !== "all" ||
+                  chargeSheetPriorityFilter !== "all" ||
+                  chargeSheetResponseFilter !== "all"
+                );
+
+                const isTotalCardActive = chargeSheetScheduleFilter === "all" && chargeSheetResponseFilter === "all";
+                const isFirstCardActive = chargeSheetScheduleFilter === "first_schedule";
+                const isSecondCardActive = chargeSheetScheduleFilter === "second_schedule";
+                const isResponseCardActive = chargeSheetResponseFilter === "received";
+
+                return (
+                  <>
+                    <div className="inquiry-kpi-grid">
+                      {/* Card 1: Total */}
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => {
+                          setChargeSheetScheduleFilter("all");
+                          setChargeSheetResponseFilter("all");
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            setChargeSheetScheduleFilter("all");
+                            setChargeSheetResponseFilter("all");
+                          }
+                        }}
+                        className={`inquiry-kpi-card inquiry-card-amber is-clickable ${isTotalCardActive ? "is-active" : ""}`}
+                        title={lang === "si" ? "සියල්ල බැලීමට ක්ලික් කරන්න" : "Click to view all cases"}
+                      >
+                        <div className="premium-card-top">
+                          <div className="premium-card-title-area">
+                            <FileCheck className="premium-card-icon" />
+                            <span>{lang === "si" ? "මුළු චෝදනා පත්‍ර" : "Total Charge Sheet Cases"}</span>
+                          </div>
+                          {isTotalCardActive && (
+                            <span className="kpi-active-badge">
+                              <Check size={11} /> {lang === "si" ? "ක්‍රියාකාරීයි" : "Active"}
+                            </span>
+                          )}
+                        </div>
+                        <div className="premium-card-bottom">
+                          <div className="premium-card-value-area">
+                            <span className="premium-card-value">{String(totalCs).padStart(2, "0")}</span>
+                            <span className="premium-card-label">{lang === "si" ? "ප්‍රමාණය" : "cases"}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Card 2: 1st Schedule */}
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setChargeSheetScheduleFilter((prev) => (prev === "first_schedule" ? "all" : "first_schedule"))}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            setChargeSheetScheduleFilter((prev) => (prev === "first_schedule" ? "all" : "first_schedule"));
+                          }
+                        }}
+                        className={`inquiry-kpi-card inquiry-card-sky is-clickable ${isFirstCardActive ? "is-active" : ""}`}
+                        title={lang === "si" ? "පළමු උපලේඛනය පමණක් පෙරහන් කිරීමට ක්ලික් කරන්න" : "Click to filter 1st Schedule cases"}
+                      >
+                        <div className="premium-card-top">
+                          <div className="premium-card-title-area">
+                            <FileText className="premium-card-icon" />
+                            <span>{lang === "si" ? "පළමු උපලේඛනය (1st Schedule)" : "First Schedule (1st)"}</span>
+                          </div>
+                          {isFirstCardActive && (
+                            <span className="kpi-active-badge">
+                              <Check size={11} /> {lang === "si" ? "ක්‍රියාකාරීයි" : "Active"}
+                            </span>
+                          )}
+                        </div>
+                        <div className="premium-card-bottom">
+                          <div className="premium-card-value-area">
+                            <span className="premium-card-value">{String(firstScheduleCs).padStart(2, "0")}</span>
+                            <span className="premium-card-label">{lang === "si" ? "චෝදනා" : "charges"}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Card 3: 2nd Schedule */}
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setChargeSheetScheduleFilter((prev) => (prev === "second_schedule" ? "all" : "second_schedule"))}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            setChargeSheetScheduleFilter((prev) => (prev === "second_schedule" ? "all" : "second_schedule"));
+                          }
+                        }}
+                        className={`inquiry-kpi-card inquiry-card-purple is-clickable ${isSecondCardActive ? "is-active" : ""}`}
+                        title={lang === "si" ? "දෙවන උපලේඛනය පමණක් පෙරහන් කිරීමට ක්ලික් කරන්න" : "Click to filter 2nd Schedule cases"}
+                      >
+                        <div className="premium-card-top">
+                          <div className="premium-card-title-area">
+                            <ShieldCheck className="premium-card-icon" />
+                            <span>{lang === "si" ? "දෙවන උපලේඛනය (2nd Schedule)" : "Second Schedule (2nd)"}</span>
+                          </div>
+                          {isSecondCardActive && (
+                            <span className="kpi-active-badge">
+                              <Check size={11} /> {lang === "si" ? "ක්‍රියාකාරීයි" : "Active"}
+                            </span>
+                          )}
+                        </div>
+                        <div className="premium-card-bottom">
+                          <div className="premium-card-value-area">
+                            <span className="premium-card-value">{String(secondScheduleCs).padStart(2, "0")}</span>
+                            <span className="premium-card-label">{lang === "si" ? "චෝදනා" : "charges"}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Card 4: Responses Recorded */}
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setChargeSheetResponseFilter((prev) => (prev === "received" ? "all" : "received"))}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            setChargeSheetResponseFilter((prev) => (prev === "received" ? "all" : "received"));
+                          }
+                        }}
+                        className={`inquiry-kpi-card inquiry-card-rose is-clickable ${isResponseCardActive ? "is-active" : ""}`}
+                        title={lang === "si" ? "පිළිතුරු ලැබී ඇති ලිපි පමණක් පෙරහන් කිරීමට ක්ලික් කරන්න" : "Click to filter cases with responses"}
+                      >
+                        <div className="premium-card-top">
+                          <div className="premium-card-title-area">
+                            <Clock className="premium-card-icon" />
+                            <span>{lang === "si" ? "පිළිතුරු ලැබී ඇති ලිපි" : "Responses Recorded"}</span>
+                          </div>
+                          {isResponseCardActive && (
+                            <span className="kpi-active-badge">
+                              <Check size={11} /> {lang === "si" ? "ක්‍රියාකාරීයි" : "Active"}
+                            </span>
+                          )}
+                        </div>
+                        <div className="premium-card-bottom">
+                          <div className="premium-card-value-area">
+                            <span className="premium-card-value">{String(responseReceivedCs).padStart(2, "0")}</span>
+                            <span className="premium-card-label">{lang === "si" ? "පිළිතුරු" : "answers"}</span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <div className="premium-card-bottom">
-                    <div className="premium-card-value-area">
-                      <span className="premium-card-value">
-                        {String(issuingChargeSheetCases.filter((c: any) => c.issuedChargeSheet === "first_schedule" || c.issuedChargeSheet?.toLowerCase().includes("first") || c.issuedChargeSheet?.toLowerCase().includes("පළමු")).length).padStart(2, "0")}
-                      </span>
-                      <span className="premium-card-label">{lang === "si" ? "චෝදනා" : "charges"}</span>
+
+                    {/* Filter Options as Selection Dropdowns Toolbar */}
+                    <div className="cs-selection-toolbar">
+                      {/* Search Bar & Actions Top Row */}
+                      <div className="cs-selection-row">
+                        <div className="cs-search-input-wrapper" style={{ flex: "1 1 320px" }}>
+                          <svg className="cs-search-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                          </svg>
+                          <input
+                            type="text"
+                            value={chargeSheetSearchQuery}
+                            onChange={(e) => setChargeSheetSearchQuery(e.target.value)}
+                            placeholder={lang === "si" ? "චෝදනා පත්‍ර සොයන්න (යොමු අංකය, නිලධාරී, උපලේඛනය, බලධාරියා)..." : "Search charge sheets (Case No, Officer, Schedule, Authority)..."}
+                            className="cs-search-input"
+                          />
+                          {chargeSheetSearchQuery && (
+                            <button
+                              type="button"
+                              onClick={() => setChargeSheetSearchQuery("")}
+                              className="cs-search-clear-btn"
+                              title={lang === "si" ? "සෙවුම මකන්න" : "Clear search"}
+                            >
+                              <X size={14} />
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="cs-filter-actions-right">
+                          <div className="cs-results-badge">
+                            <Filter size={13} style={{ color: "#4f46e5" }} />
+                            <span>
+                              {lang === "si"
+                                ? `ප්‍රමාණය: ${filteredChargeSheetCases.length} / ${totalCs}`
+                                : `Showing: ${filteredChargeSheetCases.length} / ${totalCs}`}
+                            </span>
+                          </div>
+
+                          {hasActiveCsFilters && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setChargeSheetSearchQuery("");
+                                setChargeSheetScheduleFilter("all");
+                                setChargeSheetAuthorityFilter("all");
+                                setChargeSheetPriorityFilter("all");
+                                setChargeSheetResponseFilter("all");
+                              }}
+                              className="cs-reset-all-btn"
+                              title={lang === "si" ? "සියලු පෙරහන් ඉවත් කරන්න" : "Clear all filters"}
+                            >
+                              <X size={13} />
+                              <span>{lang === "si" ? "පෙරහන් ඉවත් කරන්න" : "Reset Filters"}</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Dropdown Selections Grid */}
+                      <div className="cs-selection-grid">
+                        {/* 1. Schedule Selection */}
+                        <div className="cs-select-wrapper">
+                          <Layers className="cs-select-icon" style={{ color: "#0284c7" }} />
+                          <select
+                            value={chargeSheetScheduleFilter}
+                            onChange={(e) => setChargeSheetScheduleFilter(e.target.value)}
+                            className={`cs-select-input ${chargeSheetScheduleFilter !== "all" ? "has-value" : ""}`}
+                            aria-label="Filter by Schedule"
+                          >
+                            <option value="all">{lang === "si" ? `සියලුම උපලේඛන (${totalCs})` : `All Schedules (${totalCs})`}</option>
+                            <option value="first_schedule">{lang === "si" ? `1 වන උපලේඛනය (${firstScheduleCs})` : `1st Schedule (${firstScheduleCs})`}</option>
+                            <option value="second_schedule">{lang === "si" ? `2 වන උපලේඛනය (${secondScheduleCs})` : `2nd Schedule (${secondScheduleCs})`}</option>
+                          </select>
+                        </div>
+
+                        {/* 2. Authority Selection */}
+                        <div className="cs-select-wrapper">
+                          <Scale className="cs-select-icon" style={{ color: "#d97706" }} />
+                          <select
+                            value={chargeSheetAuthorityFilter}
+                            onChange={(e) => setChargeSheetAuthorityFilter(e.target.value)}
+                            className={`cs-select-input ${chargeSheetAuthorityFilter !== "all" ? "has-value" : ""}`}
+                            aria-label="Filter by Authority"
+                          >
+                            <option value="all">{lang === "si" ? "සියලුම විනය බලධාරීන් (All Authorities)" : "All Authorities"}</option>
+                            <option value="secretary_of_education">{lang === "si" ? `අධ්‍යාපන ලේකම් (${secEdAuthCs})` : `Sec. of Education (${secEdAuthCs})`}</option>
+                            <option value="psc_esc">{lang === "si" ? `රා.සේ.කො. / අධ්‍යාපන සේවා (${pscAuthCs})` : `PSC / ESC (${pscAuthCs})`}</option>
+                          </select>
+                        </div>
+
+                        {/* 3. Response Status Selection */}
+                        <div className="cs-select-wrapper">
+                          <Clock className="cs-select-icon" style={{ color: "#f43f5e" }} />
+                          <select
+                            value={chargeSheetResponseFilter}
+                            onChange={(e) => setChargeSheetResponseFilter(e.target.value as any)}
+                            className={`cs-select-input ${chargeSheetResponseFilter !== "all" ? "has-value" : ""}`}
+                            aria-label="Filter by Response Status"
+                          >
+                            <option value="all">{lang === "si" ? "සියලුම පිළිතුරු තත්ත්ව (All Statuses)" : "All Response Statuses"}</option>
+                            <option value="received">{lang === "si" ? `✅ පිළිතුරු ලැබී ඇත (${responseReceivedCs})` : `✅ Response Received (${responseReceivedCs})`}</option>
+                            <option value="pending">{lang === "si" ? `⏳ අපේක්ෂිතයි (${responsePendingCs})` : `⏳ Response Pending (${responsePendingCs})`}</option>
+                          </select>
+                        </div>
+
+                        {/* 4. Priority Selection */}
+                        <div className="cs-select-wrapper">
+                          <AlertCircle className="cs-select-icon" style={{ color: "#ef4444" }} />
+                          <select
+                            value={chargeSheetPriorityFilter}
+                            onChange={(e) => setChargeSheetPriorityFilter(e.target.value as any)}
+                            className={`cs-select-input ${chargeSheetPriorityFilter !== "all" ? "has-value" : ""}`}
+                            aria-label="Filter by Priority"
+                          >
+                            <option value="all">{lang === "si" ? "සියලු ප්‍රමුඛතාවන් (All Priorities)" : "All Priorities"}</option>
+                            <option value="high">🔴 {lang === "si" ? `ඉහළ ප්‍රමුඛතාව (${highPriorityCs})` : `High Priority (${highPriorityCs})`}</option>
+                            <option value="medium">🟡 {lang === "si" ? `මධ්‍යම ප්‍රමුඛතාව (${medPriorityCs})` : `Medium Priority (${medPriorityCs})`}</option>
+                            <option value="low">🟢 {lang === "si" ? `සාමාන්‍ය ප්‍රමුඛතාව (${lowPriorityCs})` : `Low Priority (${lowPriorityCs})`}</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Active Filter Tags */}
+                      {hasActiveCsFilters && (
+                        <div className="cs-active-tags-row">
+                          <span style={{ fontWeight: 700, color: "#64748b", display: "flex", alignItems: "center", gap: "4px" }}>
+                            <Filter size={12} /> {lang === "si" ? "ක්‍රියාකාරී පෙරහන්:" : "Active Filters:"}
+                          </span>
+                          {chargeSheetSearchQuery && (
+                            <span className="cs-active-tag">
+                              {lang === "si" ? "සෙවුම" : "Search"}: &ldquo;{chargeSheetSearchQuery}&rdquo;
+                              <button type="button" onClick={() => setChargeSheetSearchQuery("")} className="cs-active-tag-remove">
+                                <X size={12} />
+                              </button>
+                            </span>
+                          )}
+                          {chargeSheetScheduleFilter !== "all" && (
+                            <span className="cs-active-tag">
+                              {chargeSheetScheduleFilter === "first_schedule" ? (lang === "si" ? "1 වන උපලේඛනය" : "1st Schedule") : (lang === "si" ? "2 වන උපලේඛනය" : "2nd Schedule")}
+                              <button type="button" onClick={() => setChargeSheetScheduleFilter("all")} className="cs-active-tag-remove">
+                                <X size={12} />
+                              </button>
+                            </span>
+                          )}
+                          {chargeSheetAuthorityFilter !== "all" && (
+                            <span className="cs-active-tag">
+                              {chargeSheetAuthorityFilter === "secretary_of_education" ? (lang === "si" ? "අධ්‍යාපන ලේකම්" : "Secretary of Education") : "PSC / ESC"}
+                              <button type="button" onClick={() => setChargeSheetAuthorityFilter("all")} className="cs-active-tag-remove">
+                                <X size={12} />
+                              </button>
+                            </span>
+                          )}
+                          {chargeSheetResponseFilter !== "all" && (
+                            <span className="cs-active-tag">
+                              {chargeSheetResponseFilter === "received" ? (lang === "si" ? "පිළිතුරු ලැබී ඇත" : "Response Received") : (lang === "si" ? "පිළිතුරු අපේක්ෂිත" : "Response Pending")}
+                              <button type="button" onClick={() => setChargeSheetResponseFilter("all")} className="cs-active-tag-remove">
+                                <X size={12} />
+                              </button>
+                            </span>
+                          )}
+                          {chargeSheetPriorityFilter !== "all" && (
+                            <span className="cs-active-tag">
+                              {chargeSheetPriorityFilter.toUpperCase()} {lang === "si" ? "ප්‍රමුඛතාව" : "Priority"}
+                              <button type="button" onClick={() => setChargeSheetPriorityFilter("all")} className="cs-active-tag-remove">
+                                <X size={12} />
+                              </button>
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                </div>
-
-                <div className="inquiry-kpi-card inquiry-card-purple">
-                  <div className="premium-card-top">
-                    <div className="premium-card-title-area">
-                      <ShieldCheck className="premium-card-icon" />
-                      <span>{lang === "si" ? "දෙවන උපලේඛනය (2nd Schedule)" : "Second Schedule (2nd)"}</span>
-                    </div>
-                  </div>
-                  <div className="premium-card-bottom">
-                    <div className="premium-card-value-area">
-                      <span className="premium-card-value">
-                        {String(issuingChargeSheetCases.filter((c: any) => c.issuedChargeSheet === "second_schedule" || c.issuedChargeSheet?.toLowerCase().includes("second") || c.issuedChargeSheet?.toLowerCase().includes("දෙවන")).length).padStart(2, "0")}
-                      </span>
-                      <span className="premium-card-label">{lang === "si" ? "චෝදනා" : "charges"}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="inquiry-kpi-card inquiry-card-rose">
-                  <div className="premium-card-top">
-                    <div className="premium-card-title-area">
-                      <Clock className="premium-card-icon" />
-                      <span>{lang === "si" ? "පිළිතුරු ලැබී ඇති නඩු" : "Responses Recorded"}</span>
-                    </div>
-                  </div>
-                  <div className="premium-card-bottom">
-                    <div className="premium-card-value-area">
-                      <span className="premium-card-value">
-                        {String(issuingChargeSheetCases.filter((c: any) => c.chargeSheetResponseDate && c.chargeSheetResponseDate !== "—").length).padStart(2, "0")}
-                      </span>
-                      <span className="premium-card-label">{lang === "si" ? "පිළිතුරු" : "answers"}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Search & Filter Toolbar */}
-              <div className="letters-filter-section" style={{ marginTop: "24px" }}>
-                <div className="search-filter-controls-row">
-                  {/* Search Input */}
-                  <div className="search-input-wrapper">
-                    <svg className="search-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                    <input
-                      type="text"
-                      value={chargeSheetSearchQuery}
-                      onChange={(e) => setChargeSheetSearchQuery(e.target.value)}
-                      placeholder={lang === "si" ? "චෝදනා පත්‍ර නඩු සොයන්න (නඩු අංකය, නිලධාරී, උපලේඛනය, බලධාරියා)..." : "Search charge sheets (Case No, Officer, Schedule, Authority)..."}
-                      className="search-input"
-                    />
-                  </div>
-
-                  {/* Schedule Filter */}
-                  <div className="filter-dropdown-wrapper">
-                    <select
-                      value={chargeSheetScheduleFilter}
-                      onChange={(e) => setChargeSheetScheduleFilter(e.target.value)}
-                      className="filter-priority-select"
-                      style={{ maxWidth: "220px" }}
-                    >
-                      <option value="all">{lang === "si" ? "සියලුම උපලේඛන (All Schedules)" : "All Schedules"}</option>
-                      <option value="first_schedule">{lang === "si" ? "පළමු උපලේඛනය (First Schedule)" : "First Schedule"}</option>
-                      <option value="second_schedule">{lang === "si" ? "දෙවන උපලේඛනය (Second Schedule)" : "Second Schedule"}</option>
-                    </select>
-                  </div>
-
-                  {/* Authority Filter */}
-                  <div className="filter-dropdown-wrapper">
-                    <select
-                      value={chargeSheetAuthorityFilter}
-                      onChange={(e) => setChargeSheetAuthorityFilter(e.target.value)}
-                      className="filter-priority-select"
-                      style={{ maxWidth: "230px" }}
-                    >
-                      <option value="all">{lang === "si" ? "සියලුම විනය බලධාරීන් (All Authorities)" : "All Authorities"}</option>
-                      <option value="secretary_of_education">{lang === "si" ? "අධ්‍යාපන ලේකම්" : "Secretary of Education"}</option>
-                      <option value="psc_esc">{lang === "si" ? "රා.සේ.කො. / අධ්‍යාපන සේවා කමිටුව (PSC/ESC)" : "PSC / ESC"}</option>
-                    </select>
-                  </div>
-
-                  {/* Priority Filter */}
-                  <div className="filter-dropdown-wrapper">
-                    <select
-                      value={chargeSheetPriorityFilter}
-                      onChange={(e: any) => setChargeSheetPriorityFilter(e.target.value)}
-                      className="filter-priority-select"
-                    >
-                      <option value="all">{t("priorityAll", "All Priorities")}</option>
-                      <option value="high">🔴 {t("priorityHigh", "High Priority")}</option>
-                      <option value="medium">🟡 {t("priorityMedium", "Medium Priority")}</option>
-                      <option value="low">🟢 {t("priorityLow", "Low Priority")}</option>
-                    </select>
-                  </div>
-
-                  {(chargeSheetSearchQuery || chargeSheetScheduleFilter !== "all" || chargeSheetAuthorityFilter !== "all" || chargeSheetPriorityFilter !== "all") && (
-                    <a
-                      href="#"
-                      className="view-all-reset-link"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setChargeSheetSearchQuery("");
-                        setChargeSheetScheduleFilter("all");
-                        setChargeSheetAuthorityFilter("all");
-                        setChargeSheetPriorityFilter("all");
-                      }}
-                    >
-                      {t("viewAll", "Reset Filters")} <span className="arrow-span">→</span>
-                    </a>
-                  )}
-                </div>
-              </div>
+                  </>
+                );
+              })()}
 
               {/* Charge Sheet Data Table */}
               <div className="table-responsive-container">
@@ -6919,9 +7141,9 @@ function SubjectOfficerDashboardContent() {
                           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
                             <FileCheck size={44} style={{ color: "#cbd5e1" }} />
                             <span style={{ fontSize: "15px", fontWeight: 600, color: "#64748b" }}>
-                              {lang === "si" ? "සෙවුමට ගැළපෙන චෝදනා පත්‍ර නඩු කිසිවක් හමු නොවීය." : "No charge sheet cases found matching search criteria."}
+                              {lang === "si" ? "සෙවුමට ගැළපෙන චෝදනා පත්‍ර කිසිවක් හමු නොවීය." : "No charge sheet cases found matching search criteria."}
                             </span>
-                            {(chargeSheetSearchQuery || chargeSheetScheduleFilter !== "all" || chargeSheetAuthorityFilter !== "all" || chargeSheetPriorityFilter !== "all") && (
+                            {(chargeSheetSearchQuery || chargeSheetScheduleFilter !== "all" || chargeSheetAuthorityFilter !== "all" || chargeSheetPriorityFilter !== "all" || chargeSheetResponseFilter !== "all") && (
                               <button
                                 type="button"
                                 onClick={() => {
@@ -6929,6 +7151,7 @@ function SubjectOfficerDashboardContent() {
                                   setChargeSheetScheduleFilter("all");
                                   setChargeSheetAuthorityFilter("all");
                                   setChargeSheetPriorityFilter("all");
+                                  setChargeSheetResponseFilter("all");
                                 }}
                                 className="btn-create-rec"
                                 style={{ marginTop: "4px", backgroundColor: "#f1f5f9", color: "#334155", border: "1px solid #cbd5e1" }}
@@ -6985,7 +7208,7 @@ function SubjectOfficerDashboardContent() {
                   <div className="premium-card-bottom">
                     <div className="premium-card-value-area">
                       <span className="premium-card-value">{String(disciplinaryInspectionCases.length).padStart(2, "0")}</span>
-                      <span className="premium-card-label">{lang === "si" ? "නඩු" : "cases"}</span>
+                      <span className="premium-card-label">{lang === "si" ? "පරීක්ෂණ" : "cases"}</span>
                     </div>
                   </div>
                 </div>
@@ -7496,9 +7719,9 @@ function SubjectOfficerDashboardContent() {
                 <table className="letters-data-table">
                   <thead>
                     <tr>
-                      <th scope="col">{lang === "si" ? "නඩු / අභියාචනා අංකය" : "Case No / Appeal Ref"}</th>
+                      <th scope="col">{lang === "si" ? "යොමු / අභියාචනා අංකය" : "Case No / Appeal Ref"}</th>
                       <th scope="col">{lang === "si" ? "අභියාචක නිලධාරී සහ ආයතනය" : "Appellant Officer & Institution"}</th>
-                      <th scope="col">{lang === "si" ? "අභියාචනා බලධාරියා සහ මුල් නියෝගය" : "Appeal Forum & Authority"}</th>
+                      <th scope="col">{lang === "si" ? "අභියාචනා බලධාරියා සහ විනය නියෝගය" : "Appeal Forum & Disciplinary Order"}</th>
                       <th scope="col">{lang === "si" ? "අභියාචනා හේතුව සහ විෂය" : "Grounds of Appeal & Subject"}</th>
                       <th scope="col">{lang === "si" ? "වත්මන් තත්ත්වය" : "Appeal Stage / Status"}</th>
                       <th scope="col">{lang === "si" ? "දිනයන්" : "Submission & Due Dates"}</th>
@@ -8021,8 +8244,16 @@ function SubjectOfficerDashboardContent() {
                             </td>
 
                             {/* Actions */}
-                            <td className="text-center">
+                            <td className="text-center actions-cell">
                               <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+                                <Link
+                                  href={`/subject/provincial-preliminary?caseNo=${encodeURIComponent(item.caseNo)}&letterNo=${encodeURIComponent(item.letterNo || item.caseNo)}`}
+                                  className="add-details-link"
+                                  style={{ padding: "4px 12px", fontSize: "11px", backgroundColor: "#0d9488" }}
+                                  title={lang === "si" ? "පළාත් මූලික විමර්ශන විස්තර එක් කරන්න" : "Add Provincial Investigation Details"}
+                                >
+                                  {t("addDetails", "Add Details")}
+                                </Link>
                                 <button
                                   type="button"
                                   onClick={() => setSelectedProvincialModal(item)}
@@ -8032,14 +8263,6 @@ function SubjectOfficerDashboardContent() {
                                 >
                                   <Eye size={13} />
                                 </button>
-                                <Link
-                                  href={`/subject/provincial-preliminary?caseNo=${encodeURIComponent(item.caseNo)}`}
-                                  className="btn-quick-view"
-                                  title="Open Provincial Investigation Form"
-                                  style={{ backgroundColor: "#f0fdf4", color: "#15803d", border: "1px solid #bbf7d0" }}
-                                >
-                                  <ExternalLink size={13} />
-                                </Link>
                               </div>
                             </td>
                           </tr>
@@ -8125,7 +8348,7 @@ function SubjectOfficerDashboardContent() {
                     <div>
                       <div style={{ fontSize: "14px", fontWeight: 700, color: "#1e3a8a" }}>
                         {lang === "si" 
-                          ? `විමර්ශනය අවසන් නඩු ${completedAwaitingRecCases.length} ක් නිර්දේශ සඳහා පවරා ඇත` 
+                          ? `විමර්ශනය අවසන් ${completedAwaitingRecCases.length} ක් නිර්දේශ සඳහා පවරා ඇත` 
                           : `${completedAwaitingRecCases.length} Completed Investigation Case(s) Assigned for Recommendation`}
                       </div>
                       <div style={{ fontSize: "12px", color: "#3b82f6", marginTop: "2px" }}>
@@ -8156,7 +8379,7 @@ function SubjectOfficerDashboardContent() {
                   <div className="premium-card-bottom">
                     <div className="premium-card-value-area">
                       <span className="premium-card-value">{String(completedInvestigationCases.length).padStart(2, "0")}</span>
-                      <span className="premium-card-label">{lang === "si" ? "නඩු" : "cases"}</span>
+                      <span className="premium-card-label">{lang === "si" ? "විමර්ශන" : "cases"}</span>
                     </div>
                   </div>
                 </div>
@@ -8220,7 +8443,7 @@ function SubjectOfficerDashboardContent() {
                         <CheckCircle size={18} style={{ color: "#16a34a" }} />
                         <span>{t("completedInvestigationsTitle", "Completed Investigation Cases Assigned for Recommendation")}</span>
                         <span style={{ fontSize: "11px", fontWeight: 700, backgroundColor: "#dcfce7", color: "#15803d", padding: "2px 8px", borderRadius: "12px" }}>
-                          {completedInvestigationCases.length} {lang === "si" ? "නඩු" : "Cases"}
+                          {completedInvestigationCases.length} {lang === "si" ? "විමර්ශන" : "Cases"}
                         </span>
                       </h4>
                       <p style={{ margin: "3px 0 0 0", fontSize: "12px", color: "#64748b" }}>
@@ -8234,7 +8457,7 @@ function SubjectOfficerDashboardContent() {
                       <thead>
                         <tr style={{ backgroundColor: "#f1f5f9" }}>
                           <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 700, color: "#475569", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.05em", borderBottom: "1px solid #e2e8f0", whiteSpace: "nowrap" }}>
-                            {lang === "si" ? "නඩු අංකය" : "Case No"}
+                            {lang === "si" ? "යොමු අංකය" : "Case No"}
                           </th>
                           <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 700, color: "#475569", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.05em", borderBottom: "1px solid #e2e8f0" }}>
                             {lang === "si" ? "විෂය" : "Subject"}
@@ -9780,12 +10003,12 @@ function SubjectOfficerDashboardContent() {
                 Close
               </button>
               <Link
-                href={`/subject/provincial-preliminary?caseNo=${encodeURIComponent(selectedProvincialModal.caseNo)}`}
+                href={`/subject/provincial-preliminary?caseNo=${encodeURIComponent(selectedProvincialModal.caseNo)}&letterNo=${encodeURIComponent(selectedProvincialModal.letterNo || selectedProvincialModal.caseNo)}`}
                 className="btn-create-rec"
                 style={{ padding: "8px 16px", fontSize: "13px", background: "linear-gradient(135deg, #0d9488 0%, #0f766e 100%)" }}
               >
-                <ExternalLink size={14} />
-                <span>Open Provincial Form</span>
+                <Plus size={14} />
+                <span>{t("addDetails", "Add Details")}</span>
               </Link>
             </footer>
 
@@ -10277,7 +10500,7 @@ function SubjectOfficerDashboardContent() {
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
                   <div>
                     <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#334155", marginBottom: "4px" }}>
-                      {lang === "si" ? "නඩු අංකය (Case No)" : "Case No"} <span style={{ color: "#dc2626" }}>*</span>
+                      {lang === "si" ? "යොමු අංකය (Case No)" : "Case No"} <span style={{ color: "#dc2626" }}>*</span>
                     </label>
                     <input
                       type="text"
@@ -10382,7 +10605,7 @@ function SubjectOfficerDashboardContent() {
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
                   <div>
                     <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#334155", marginBottom: "4px" }}>
-                      {lang === "si" ? "අභියාචනයට අදාළ මුල් නියෝගය (Original Order)" : "Original Order Being Appealed"}
+                      {lang === "si" ? "අභියාචනයට අදාළ විනය නියෝගය (Disciplinary Order)" : "Disciplinary Order Being Appealed"}
                     </label>
                     <input
                       type="text"

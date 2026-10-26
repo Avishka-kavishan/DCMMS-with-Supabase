@@ -10,7 +10,6 @@ export interface Role {
     | 'System Administrator'
     | 'Daily Mail Reporter'
     | 'Subject Officer'
-    | 'Investigation Branch Administrator'
     | 'Assistant Secretary Discipline Branch'
     | 'Assistant Secretary Investigation Branch'
     | 'Senior Assistant Secretary'
@@ -195,7 +194,7 @@ export const ROLE_MAP: Record<number, string> = {
   2: 'System Administrator',
   3: 'Daily Mail Reporter',
   4: 'Subject Officer',
-  5: 'Investigation Branch Administrator',
+  5: 'Assistant Secretary Investigation Branch',
   6: 'Assistant Secretary Discipline Branch',
   7: 'Assistant Secretary Investigation Branch',
   8: 'Senior Assistant Secretary',

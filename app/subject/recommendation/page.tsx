@@ -78,6 +78,7 @@ interface RecommendationRecord {
   chargeSheetResponseDate?: string;
   disciplinaryOrder?: string;
   disciplinaryAuthority?: string;
+  otherDisciplinaryAuthority?: string;
   dateRequestDocuments?: string;
   dateSubmissionDocuments?: string;
   agreeWithAnswers?: string;
@@ -161,6 +162,7 @@ function RecommendationFormContent() {
   const [chargeSheetResponseDate, setChargeSheetResponseDate] = useState("");
   const [disciplinaryOrder, setDisciplinaryOrder] = useState("");
   const [disciplinaryAuthority, setDisciplinaryAuthority] = useState("secretary_of_education");
+  const [otherDisciplinaryAuthority, setOtherDisciplinaryAuthority] = useState("");
   const [dateRequestDocuments, setDateRequestDocuments] = useState("");
   const [dateSubmissionDocuments, setDateSubmissionDocuments] = useState("");
   const [agreeWithAnswers, setAgreeWithAnswers] = useState<"yes" | "no" | "">("");
@@ -254,6 +256,7 @@ function RecommendationFormContent() {
           chargeSheetResponseDate: r.chargeSheetResponseDate ? String(r.chargeSheetResponseDate).slice(0, 10) : "",
           disciplinaryOrder: r.disciplinaryOrder || r.disciplinary_order,
           disciplinaryAuthority: r.disciplinaryAuthority || r.disciplinary_authority || "",
+          otherDisciplinaryAuthority: r.otherDisciplinaryAuthority || r.other_disciplinary_authority || "",
           dateRequestDocuments: r.dateRequestDocuments ? String(r.dateRequestDocuments).slice(0, 10) : "",
           dateSubmissionDocuments: r.dateSubmissionDocuments ? String(r.dateSubmissionDocuments).slice(0, 10) : "",
           agreeWithAnswers: r.agreeWithAnswers || r.agree_with_answers || "",
@@ -299,6 +302,7 @@ function RecommendationFormContent() {
                   chargeSheetResponseDate: lr.chargeSheetResponseDate || lr.charge_sheet_response_date || lr.responseChargeSheetDate,
                   disciplinaryOrder: lr.disciplinaryOrder || lr.disciplinary_order,
                   disciplinaryAuthority: lr.disciplinaryAuthority || lr.disciplinary_authority || "",
+                  otherDisciplinaryAuthority: lr.otherDisciplinaryAuthority || lr.other_disciplinary_authority || "",
                   dateRequestDocuments: lr.dateRequestDocuments || lr.date_request_documents || "",
                   dateSubmissionDocuments: lr.dateSubmissionDocuments || lr.date_submission_documents || "",
                   agreeWithAnswers: lr.agreeWithAnswers || lr.agree_with_answers || "",
@@ -430,6 +434,7 @@ function RecommendationFormContent() {
           chargeSheetResponseDate: "",
           disciplinaryOrder: "",
           disciplinaryAuthority: "",
+          otherDisciplinaryAuthority: "",
           dateRequestDocuments: "",
           dateSubmissionDocuments: "",
           agreeWithAnswers: "",
@@ -487,6 +492,7 @@ function RecommendationFormContent() {
     setChargeSheetResponseDate("");
     setDisciplinaryOrder("");
     setDisciplinaryAuthority("secretary_of_education");
+    setOtherDisciplinaryAuthority("");
     setDateRequestDocuments("");
     setDateSubmissionDocuments("");
     setAgreeWithAnswers("");
@@ -524,6 +530,7 @@ function RecommendationFormContent() {
           if (rec.chargeSheetResponseDate) setChargeSheetResponseDate(rec.chargeSheetResponseDate);
           if (rec.disciplinaryOrder) setDisciplinaryOrder(rec.disciplinaryOrder);
           if (rec.disciplinaryAuthority || rec.disciplinary_authority) setDisciplinaryAuthority(rec.disciplinaryAuthority || rec.disciplinary_authority);
+          if (rec.otherDisciplinaryAuthority || rec.other_disciplinary_authority) setOtherDisciplinaryAuthority(rec.otherDisciplinaryAuthority || rec.other_disciplinary_authority);
           if (rec.dateRequestDocuments || rec.date_request_documents) setDateRequestDocuments(rec.dateRequestDocuments || rec.date_request_documents);
           if (rec.dateSubmissionDocuments || rec.date_submission_documents) setDateSubmissionDocuments(rec.dateSubmissionDocuments || rec.date_submission_documents);
           if (rec.agreeWithAnswers || rec.agree_with_answers) setAgreeWithAnswers(rec.agreeWithAnswers || rec.agree_with_answers);
@@ -570,6 +577,7 @@ function RecommendationFormContent() {
           if (foundRec.chargeSheetResponseDate) setChargeSheetResponseDate((prev) => prev || foundRec.chargeSheetResponseDate);
           if (foundRec.disciplinaryOrder) setDisciplinaryOrder((prev) => prev || foundRec.disciplinaryOrder);
           if (foundRec.disciplinaryAuthority || foundRec.disciplinary_authority) setDisciplinaryAuthority((prev) => prev || foundRec.disciplinaryAuthority || foundRec.disciplinary_authority);
+          if (foundRec.otherDisciplinaryAuthority || foundRec.other_disciplinary_authority) setOtherDisciplinaryAuthority((prev) => prev || foundRec.otherDisciplinaryAuthority || foundRec.other_disciplinary_authority);
           if (foundRec.dateRequestDocuments || foundRec.date_request_documents) setDateRequestDocuments((prev) => prev || foundRec.dateRequestDocuments || foundRec.date_request_documents);
           if (foundRec.dateSubmissionDocuments || foundRec.date_submission_documents) setDateSubmissionDocuments((prev) => prev || foundRec.dateSubmissionDocuments || foundRec.date_submission_documents);
           if (foundRec.agreeWithAnswers || foundRec.agree_with_answers) setAgreeWithAnswers((prev) => prev || foundRec.agreeWithAnswers || foundRec.agree_with_answers);
@@ -605,7 +613,7 @@ function RecommendationFormContent() {
   // Save Draft Handler
   const handleSaveDraft = async () => {
     if (!caseNo.trim()) {
-      showToast(lang === "si" ? "කරුණාකර නඩුවක් තෝරන්න." : "Please select or specify a case number.");
+      showToast(lang === "si" ? "කරුණාකර යොමු අංකයක් තෝරන්න." : "Please select or specify a case number.");
       return;
     }
 
@@ -651,6 +659,7 @@ function RecommendationFormContent() {
       date_the_response_to_the_charge_sheet_was_given: isChargeSheet ? (chargeSheetResponseDate || null) : null,
       disciplinary_order: isChargeSheet ? disciplinaryOrder : null,
       disciplinary_authority: isChargeSheet ? disciplinaryAuthority : null,
+      other_disciplinary_authority: (isChargeSheet && disciplinaryAuthority === "other") ? otherDisciplinaryAuthority : null,
       date_request_documents: isChargeSheet ? (dateRequestDocuments || null) : null,
       date_submission_documents: isChargeSheet ? (dateSubmissionDocuments || null) : null,
       agree_with_answers: (isChargeSheet && disciplinaryAuthority !== "psc_esc") ? (agreeWithAnswers || null) : null,
@@ -691,6 +700,7 @@ function RecommendationFormContent() {
           chargeSheetResponseDate: isChargeSheet ? chargeSheetResponseDate : "",
           disciplinaryOrder: isChargeSheet ? disciplinaryOrder : "",
           disciplinaryAuthority: isChargeSheet ? disciplinaryAuthority : "",
+          otherDisciplinaryAuthority: (isChargeSheet && disciplinaryAuthority === "other") ? otherDisciplinaryAuthority : "",
           dateRequestDocuments: isChargeSheet ? dateRequestDocuments : "",
           dateSubmissionDocuments: isChargeSheet ? dateSubmissionDocuments : "",
           agreeWithAnswers: (isChargeSheet && disciplinaryAuthority !== "psc_esc") ? agreeWithAnswers : "",
@@ -721,7 +731,7 @@ function RecommendationFormContent() {
     e.preventDefault();
 
     if (!caseNo.trim()) {
-      showToast(lang === "si" ? "කරුණාකර නඩුවක් තෝරන්න." : "Please select or specify a case number.");
+      showToast(lang === "si" ? "කරුණාකර යොමු අංකයක් තෝරන්න." : "Please select or specify a case number.");
       return;
     }
 
@@ -798,6 +808,7 @@ function RecommendationFormContent() {
       date_the_response_to_the_charge_sheet_was_given: isChargeSheet ? (chargeSheetResponseDate || null) : null,
       disciplinary_order: isChargeSheet ? disciplinaryOrder : null,
       disciplinary_authority: isChargeSheet ? disciplinaryAuthority : null,
+      other_disciplinary_authority: (isChargeSheet && disciplinaryAuthority === "other") ? otherDisciplinaryAuthority : null,
       date_request_documents: isChargeSheet ? (dateRequestDocuments || null) : null,
       date_submission_documents: isChargeSheet ? (dateSubmissionDocuments || null) : null,
       agree_with_answers: (isChargeSheet && disciplinaryAuthority !== "psc_esc") ? (agreeWithAnswers || null) : null,
@@ -840,6 +851,7 @@ function RecommendationFormContent() {
           chargeSheetResponseDate: isChargeSheet ? chargeSheetResponseDate : "",
           disciplinaryOrder: isChargeSheet ? disciplinaryOrder : "",
           disciplinaryAuthority: isChargeSheet ? disciplinaryAuthority : "",
+          otherDisciplinaryAuthority: (isChargeSheet && disciplinaryAuthority === "other") ? otherDisciplinaryAuthority : "",
           dateRequestDocuments: isChargeSheet ? dateRequestDocuments : "",
           dateSubmissionDocuments: isChargeSheet ? dateSubmissionDocuments : "",
           agreeWithAnswers: (isChargeSheet && disciplinaryAuthority !== "psc_esc") ? agreeWithAnswers : "",
@@ -959,7 +971,11 @@ function RecommendationFormContent() {
         return lang === "si" ? "චෝදනා පත්‍රයක් නිකුත් කිරීම" : "Issuing Charge Sheet";
       case "issue_warning":
       case "giving_warnings_advice":
-        return lang === "si" ? "දැඩි අවවාද නිකුත් කිරීම" : "Issue Severe Warning";
+        return lang === "si" ? "අවවාද නිකුත් කිරීම" : "Issue Warning";
+      case "reprimand":
+        return lang === "si" ? "තරවටු කිරීම" : "Reprimand";
+      case "giving_advice":
+        return lang === "si" ? "උපදෙස් ලබාදීම" : "Giving Instructions / Advice";
       case "financial_recovery":
         return lang === "si" ? "අලාභ අයකර ගැනීම / අධිභාරය" : "Surcharge / Recovery";
       case "interdiction":
@@ -969,7 +985,7 @@ function RecommendationFormContent() {
         return lang === "si" ? "ස්ථාන මාරු කිරීම" : "Administrative / Disciplinary Transfer";
       case "exoneration":
       case "closing_action_non_disclosure":
-        return lang === "si" ? "චෝදනාවලින් නිදොස් කොට ගොනුව අවසන් කිරීම" : "Exonerate & File Closed";
+        return lang === "si" ? "ඉදිරි විනය කටයුතු අවශ්‍ය නොවන බව" : "No Further Disciplinary Action Needed";
       case "court_verdict":
       case "action_based_on_court_verdict":
         return lang === "si" ? "අධිකරණ තීන්දුව මත ක්‍රියාමාර්ග" : "Action Based on Court Verdict";
@@ -1140,7 +1156,7 @@ function RecommendationFormContent() {
                       ? "ආයතන සංග්‍රහය සහ රාජ්‍ය සේවා කොමිෂන් සභා රීති යටතේ චෝදනා පත්‍ර විස්තර, උපලේඛන සහ විනය බලධාරියාගේ තීරණ කළමනාකරණය."
                       : "Formal charge sheet proceedings under Establishment Code & PSC rules, tracking of 1st/2nd schedules, disciplinary authorities, and response submissions.")
                   : (lang === "si"
-                      ? "මූලික විමර්ශනය අවසන් වූ නඩුව සඳහා නිල නිර්දේශ සහ ඉදිරි විනය ක්‍රියාමාර්ග ඇතුලත් කිරීමේ ආකෘතිය."
+                      ? "මූලික විමර්ශනය අවසන් වූ පසු නිල නිර්දේශ සහ ඉදිරි විනය ක්‍රියාමාර්ග ඇතුලත් කිරීමේ ආකෘතිය."
                       : "Enter formal recommendations and subsequent disciplinary actions for the case with completed preliminary investigation.")}
               </p>
 
@@ -1224,7 +1240,7 @@ function RecommendationFormContent() {
               <div style={{ backgroundColor: "#ffffff", border: "1px solid #cbd5e1", borderRadius: "12px", padding: "12px 18px", marginBottom: "18px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                   <label htmlFor="caseSelectorSelect" style={{ fontSize: "13px", fontWeight: 700, color: "#1e1b4b" }}>
-                    {lang === "si" ? "අදාළ නඩුව තෝරන්න (Select Case):" : "Select Case for Recommendation:"}
+                    {lang === "si" ? "අදාළ යොමුව තෝරන්න (Select Case):" : "Select Case for Recommendation:"}
                   </label>
                   <select
                     id="caseSelectorSelect"
@@ -1246,7 +1262,7 @@ function RecommendationFormContent() {
 
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                   <span style={{ fontSize: "12px", color: "#64748b" }}>
-                    {availableCases.length} {lang === "si" ? "නඩු පවතී" : "cases loaded"}
+                    {availableCases.length} {lang === "si" ? "පවතී" : "cases loaded"}
                   </span>
                 </div>
               </div>
@@ -1256,7 +1272,7 @@ function RecommendationFormContent() {
                 <div className="case-summary-top">
                   <div className="case-badge-group">
                     <span className="badge-case-no">
-                      {lang === "si" ? "නඩු අංකය:" : "Case Ref:"} {caseNo || "DMMS/T/02"}
+                      {lang === "si" ? "යොමු අංකය:" : "Case Ref:"} {caseNo || "DMMS/T/02"}
                     </span>
                     <span className="badge-case-no" style={{ backgroundColor: "#f8fafc" }}>
                       {lang === "si" ? "ලිපි අංකය:" : "Letter Ref:"} {letterNo || "2"}
@@ -1338,7 +1354,13 @@ function RecommendationFormContent() {
                           {lang === "si" ? "චෝදනා පත්‍රයක් නිකුත් කිරීම (Issuing Charge Sheet)" : "Issuing Charge Sheet"}
                         </option>
                         <option value="issue_warning">
-                          {lang === "si" ? "දැඩි අවවාද නිකුත් කිරීම (Issue Severe Warning)" : "Issue Severe Warning"}
+                          {lang === "si" ? "අවවාද නිකුත් කිරීම (Issue Warning)" : "Issue Warning"}
+                        </option>
+                        <option value="reprimand">
+                          {lang === "si" ? "තරවටු කිරීම (Reprimand)" : "Reprimand"}
+                        </option>
+                        <option value="giving_advice">
+                          {lang === "si" ? "උපදෙස් ලබාදීම (Giving Instructions / Advice)" : "Giving Instructions / Advice"}
                         </option>
                         <option value="financial_recovery">
                           {lang === "si" ? "අලාභ අයකර ගැනීම / අධිභාරය (Surcharge / Recovery)" : "Surcharge / Recovery"}
@@ -1350,7 +1372,7 @@ function RecommendationFormContent() {
                           {lang === "si" ? "ස්ථාන මාරු කිරීම (Administrative / Disciplinary Transfer)" : "Administrative / Disciplinary Transfer"}
                         </option>
                         <option value="exoneration">
-                          {lang === "si" ? "චෝදනාවලින් නිදොස් කොට ගොනුව අවසන් කිරීම (Exonerate & File Closed)" : "Exonerate & File Closed"}
+                          {lang === "si" ? "ඉදිරි විනය කටයුතු අවශ්‍ය නොවන බව (No Further Disciplinary Action Needed)" : "No Further Disciplinary Action Needed"}
                         </option>
                         <option value="court_verdict">
                           {lang === "si" ? "අධිකරණ තීන්දුව මත ක්‍රියාමාර්ග (Action Based on Court Verdict)" : "Action Based on Court Verdict"}
@@ -1488,7 +1510,7 @@ function RecommendationFormContent() {
                         onClick={() =>
                           handleApplyPreset(
                             lang === "si"
-                              ? "පරීක්ෂණ වාර්තාව අනුව චෝදනා තහවුරු නොවන බැවින් මෙම නඩුව තවදුරටත් ඉදිරියට නොගෙන නිදොස් කොට ගොනුව අවසන් කිරීමට නිර්දේශ කරමි."
+                              ? "පරීක්ෂණ වාර්තාව අනුව චෝදනා තහවුරු නොවන බැවින් තවදුරටත් ඉදිරියට නොගෙන නිදොස් කොට අවසන් කිරීමට නිර්දේශ කරමි."
                               : "Allegations are unsubstantiated per investigation findings; recommend closing the case file with exoneration."
                           )
                         }
@@ -1583,7 +1605,7 @@ function RecommendationFormContent() {
 
                     <div className="form-field-group">
                       <label className="form-field-label">
-                        {lang === "si" ? "නඩුවේ තත්ත්වය (Case Status Update)" : "Case Status Update"}
+                        {lang === "si" ? "වත්මන් තත්ත්වය (Status Update)" : "Case Status Update"}
                       </label>
                       <select
                         value={recommendationStatus}
@@ -1731,7 +1753,32 @@ function RecommendationFormContent() {
                               ? "பொதுச் சேவை ஆணைக்குழு / கல்விச் சேவைக் குழு (PSC / ESC)"
                               : "PSC / ESC"}
                           </option>
+                          <option value="other">
+                            {lang === "si"
+                              ? "වෙනත් (Other)"
+                              : lang === "ta"
+                              ? "மற்றவை (Other)"
+                              : "Other"}
+                          </option>
                         </select>
+                        {disciplinaryAuthority === "other" && (
+                          <div style={{ marginTop: "10px" }}>
+                            <input
+                              type="text"
+                              value={otherDisciplinaryAuthority}
+                              onChange={(e) => setOtherDisciplinaryAuthority(e.target.value)}
+                              className="form-field-input"
+                              placeholder={
+                                lang === "si"
+                                  ? "විනය බලධාරියා ඇතුළත් කරන්න (Specify Disciplinary Authority)"
+                                  : lang === "ta"
+                                  ? "ஒழுங்கு நடவடிக்கை அதிகாரியைக் குறிப்பிடவும் (Specify Disciplinary Authority)"
+                                  : "Specify Disciplinary Authority"
+                              }
+                              required={disciplinaryAuthority === "other"}
+                            />
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -1774,7 +1821,7 @@ function RecommendationFormContent() {
                         </div>
                         <div>
                           <span style={{ fontSize: "11px", color: "#64748b", fontWeight: 600, display: "block" }}>
-                            {lang === "si" ? "නඩු ලිපිගොනු අංකය" : "Case / File Ref No"}
+                            {lang === "si" ? "යොමු අංකය" : "Case / File Ref No"}
                           </span>
                           <span style={{ fontSize: "13px", fontWeight: 700, color: "#4f46e5" }}>
                             {caseNo || "—"}
@@ -2164,7 +2211,7 @@ function RecommendationFormContent() {
                     <div>
                       <div style={{ fontSize: "14px", fontWeight: 700, color: "#1e3a8a" }}>
                         {lang === "si" 
-                          ? `විමර්ශනය අවසන් නඩු ${pendingCases.length} ක් නිර්දේශ සඳහා පවරා ඇත` 
+                          ? `විමර්ශනය අවසන් ${pendingCases.length} ක් නිර්දේශ සඳහා පවරා ඇත` 
                           : `${pendingCases.length} Completed Investigation Case(s) Assigned for Recommendation`}
                       </div>
                       <div style={{ fontSize: "12px", color: "#3b82f6", marginTop: "2px" }}>
@@ -2254,7 +2301,7 @@ function RecommendationFormContent() {
               <div className="letters-list-header" style={{ marginBottom: "16px", backgroundColor: "#ffffff", padding: "12px 18px", borderRadius: "12px", border: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: 700, color: "#1e1b4b", fontSize: "14px" }}>
                   <Filter size={16} style={{ color: "#4f46e5" }} />
-                  <span>{lang === "si" ? "නඩු සහ නිර්දේශ පෙරහන" : "Filter Cases & Recommendations"}</span>
+                  <span>{lang === "si" ? "නිර්දේශ පෙරහන" : "Filter Cases & Recommendations"}</span>
                 </div>
 
                 <div className="letters-filters-group" style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", margin: 0 }}>
@@ -2264,7 +2311,7 @@ function RecommendationFormContent() {
                       type="text"
                       value={recSearchQuery}
                       onChange={(e) => setRecSearchQuery(e.target.value)}
-                      placeholder={lang === "si" ? "නඩු හෝ නිර්දේශ සොයන්න..." : "Search cases or recommendations..."}
+                      placeholder={lang === "si" ? "නිර්දේශ සොයන්න..." : "Search cases or recommendations..."}
                       className="search-input"
                     />
                   </div>
@@ -2653,6 +2700,8 @@ function RecommendationFormContent() {
                             <div style={{ fontSize: "13px", fontWeight: 600, color: "#1e1b4b", marginTop: "2px" }}>
                               {selectedRecModal.disciplinaryAuthority === "psc_esc"
                                 ? "PSC / ESC (රාජ්‍ය සේවා කොමිෂන් සභාව)"
+                                : selectedRecModal.disciplinaryAuthority === "other"
+                                ? (selectedRecModal.otherDisciplinaryAuthority ? `වෙනත් (Other): ${selectedRecModal.otherDisciplinaryAuthority}` : (lang === "si" ? "වෙනත් (Other)" : "Other"))
                                 : "Secretary of Education (අධ්‍යාපන ලේකම්)"}
                             </div>
                           </div>

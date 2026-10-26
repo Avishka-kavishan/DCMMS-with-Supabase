@@ -1103,7 +1103,7 @@ function DisciplinaryInspectionContent() {
                 <div className="fdi-section-title">
                   <FileText size={18} style={{ color: "#4f46e5" }} />
                   <span>
-                    {tr("1. නඩුවේ වත්මන් විස්තර", "1. வழக்கின் தற்போதைய விவரங்கள்", "1. Case Current Details")}
+                    {tr("1. වත්මන් විස්තර", "1. வழக்கின் தற்போதைய விவரங்கள்", "1. Case Current Details")}
                   </span>
                 </div>
                 <span className="fdi-section-badge">
@@ -1372,7 +1372,7 @@ function DisciplinaryInspectionContent() {
                   </div>
                 </div>
 
-                {/* 3. Officer conducting the maintenance */}
+                {/* 3. Care Officer (රැකවරණ නිලධාරී) */}
                 <div className="fdi-officer-card card-maintenance">
                   <div className="fdi-officer-header">
                     <div className="fdi-officer-title-wrap">
@@ -1380,20 +1380,20 @@ function DisciplinaryInspectionContent() {
                       <div>
                         <span className="fdi-officer-title">
                           {tr(
-                            "නඩත්තු මෙහෙයවන නිලධාරී",
-                            "பராமரிப்பை நடத்தும் அதிகாரி",
-                            "Officer conducting the maintenance"
+                            "රැකවරණ නිලධාරී",
+                            "பாதுகாப்பு அதிகாரி",
+                            "Care Officer"
                           )}
                         </span>
                         {lang !== "en" && (
                           <span className="fdi-officer-subtitle">
-                            (Officer conducting the maintenance)
+                            (Care Officer)
                           </span>
                         )}
                       </div>
                     </div>
                     <span className="fdi-officer-badge badge-maint">
-                      {tr("නඩත්තු නිලධාරී", "பராமரிப்பு அதிகாரி", "Maintenance Officer")}
+                      {tr("රැකවරණ නිලධාරී", "பாதுகாப்பு அதிகாரி", "Care Officer")}
                     </span>
                   </div>
 

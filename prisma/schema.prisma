@@ -41,6 +41,7 @@ model DailyMailLetterTable {
   document_url                    String?
   document_name                   String?                   @db.VarChar(255)
   document_size                   BigInt?
+  sent_branch                     String?                   @db.VarChar(255)
   subject_officer_form_table      SubjectOfficerFormTable[]
 
   @@map("daily_mail_letter_table")
@@ -106,6 +107,7 @@ model charge_sheet_table {
   date_the_response_to_the_charge_sheet_was_given DateTime?                @db.Date
   disciplinary_order                              String?
   disciplinary_authority                          String?                  @db.VarChar(100)
+  other_disciplinary_authority                    String?                  @db.Text
   date_request_documents                          DateTime?                @db.Date
   date_submission_documents                       DateTime?                @db.Date
   agree_with_answers                              String?                  @db.VarChar(20)

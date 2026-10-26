@@ -1019,11 +1019,49 @@
 .inquiry-card-purple { background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%); }
 .inquiry-card-amber { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); }
 .inquiry-card-blue { background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); }
+.inquiry-card-sky { background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); }
 .inquiry-card-emerald { background: linear-gradient(135deg, #10b981 0%, #047857 100%); }
 .inquiry-card-rose { background: linear-gradient(135deg, #f43f5e 0%, #be123c 100%); }
 .inquiry-card-indigo { background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%); }
 .inquiry-card-teal { background: linear-gradient(135deg, #0d9488 0%, #0f766e 100%); }
 .inquiry-card-violet { background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%); }
+
+.inquiry-kpi-card.is-clickable {
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 2px solid transparent;
+}
+
+.inquiry-kpi-card.is-clickable:hover {
+  transform: translateY(-4px) scale(1.015);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.18);
+}
+
+.inquiry-kpi-card.is-clickable:active {
+  transform: translateY(-1px) scale(0.99);
+}
+
+.inquiry-kpi-card.is-active {
+  border-color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.9), 0 10px 25px rgba(0, 0, 0, 0.25);
+  transform: translateY(-2px);
+}
+
+.kpi-active-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background-color: rgba(255, 255, 255, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  backdrop-filter: blur(4px);
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: 0.3px;
+}
 
 .inquiry-stage-pill {
   display: inline-flex;
@@ -1396,4 +1434,391 @@
   background-color: #e2e8f0;
   color: #1e293b;
 }
+
+/* ==========================================================================
+   Interactive Filter Panel & Buttons (Charge Sheets & Inquiry Tabs)
+   ========================================================================== */
+.cs-filter-panel {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 20px 22px;
+  margin-top: 24px;
+  margin-bottom: 22px;
+  box-shadow: 0 4px 18px -2px rgba(15, 23, 42, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  transition: all 0.2s ease;
+}
+
+.cs-filter-search-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.cs-search-input-wrapper {
+  position: relative;
+  flex: 1;
+  min-width: 280px;
+  display: flex;
+  align-items: center;
+}
+
+.cs-search-input-wrapper .cs-search-icon {
+  position: absolute;
+  left: 14px;
+  color: #64748b;
+  pointer-events: none;
+  width: 17px;
+  height: 17px;
+}
+
+.cs-search-input {
+  width: 100%;
+  height: 42px;
+  background-color: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 0 38px 0 40px;
+  font-size: 13.5px;
+  color: #1e293b;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.cs-search-input:focus {
+  background-color: #ffffff;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.cs-search-clear-btn {
+  position: absolute;
+  right: 10px;
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.cs-search-clear-btn:hover {
+  color: #334155;
+  background-color: #e2e8f0;
+}
+
+.cs-filter-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cs-results-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #475569;
+  white-space: nowrap;
+}
+
+.cs-reset-all-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  background-color: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.cs-reset-all-btn:hover {
+  background-color: #fecaca;
+  color: #7f1d1d;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.2);
+}
+
+.cs-filter-groups-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.cs-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cs-filter-group-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #64748b;
+}
+
+.cs-filter-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cs-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  border: 1px solid #e2e8f0;
+  background-color: #f8fafc;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.cs-filter-btn:hover {
+  background-color: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #0f172a;
+  transform: translateY(-1px);
+}
+
+.cs-filter-btn.is-active {
+  background-color: #1e1b4b;
+  border-color: #1e1b4b;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(30, 27, 75, 0.25);
+}
+
+.cs-filter-btn.is-active-amber {
+  background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+  border-color: #b45309;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(217, 119, 6, 0.3);
+}
+
+.cs-filter-btn.is-active-blue {
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  border-color: #0369a1;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(2, 132, 199, 0.3);
+}
+
+.cs-filter-btn.is-active-purple {
+  background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%);
+  border-color: #4338ca;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+}
+
+.cs-filter-btn.is-active-rose {
+  background: linear-gradient(135deg, #f43f5e 0%, #be123c 100%);
+  border-color: #be123c;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(244, 63, 94, 0.3);
+}
+
+.cs-filter-btn.is-active-high {
+  background-color: #ef4444;
+  border-color: #dc2626;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+}
+
+.cs-filter-btn.is-active-medium {
+  background-color: #f59e0b;
+  border-color: #d97706;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+}
+
+.cs-filter-btn.is-active-low {
+  background-color: #10b981;
+  border-color: #059669;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+}
+
+.cs-filter-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(0, 0, 0, 0.08);
+  color: inherit;
+}
+
+.cs-filter-btn.is-active .cs-filter-badge,
+.cs-filter-btn.is-active-amber .cs-filter-badge,
+.cs-filter-btn.is-active-blue .cs-filter-badge,
+.cs-filter-btn.is-active-purple .cs-filter-badge,
+.cs-filter-btn.is-active-rose .cs-filter-badge,
+.cs-filter-btn.is-active-high .cs-filter-badge,
+.cs-filter-btn.is-active-medium .cs-filter-badge,
+.cs-filter-btn.is-active-low .cs-filter-badge {
+  background: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+}
+
+.cs-active-tags-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px dashed #e2e8f0;
+  font-size: 12px;
+}
+
+.cs-active-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  background-color: #ede9fe;
+  color: #5b21b6;
+  border: 1px solid #ddd6fe;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 11.5px;
+}
+
+.cs-active-tag-remove {
+  background: none;
+  border: none;
+  color: #7c3aed;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 2px;
+}
+
+.cs-active-tag-remove:hover {
+  color: #4c1d95;
+}
+
+/* ==========================================================================
+   Filter Option Selections (Dropdown Toolbar)
+   ========================================================================== */
+.cs-selection-toolbar {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 16px 18px;
+  margin-top: 22px;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cs-selection-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.cs-selection-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px;
+  width: 100%;
+}
+
+.cs-select-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 190px;
+}
+
+.cs-select-icon {
+  position: absolute;
+  left: 12px;
+  width: 15px;
+  height: 15px;
+  color: #6366f1;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.cs-select-input {
+  width: 100%;
+  height: 40px;
+  background-color: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  padding: 0 32px 0 36px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #1e293b;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.2s ease;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 14px;
+}
+
+.cs-select-input:hover {
+  background-color: #ffffff;
+  border-color: #94a3b8;
+}
+
+.cs-select-input:focus {
+  background-color: #ffffff;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.cs-select-input.has-value {
+  background-color: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+
 

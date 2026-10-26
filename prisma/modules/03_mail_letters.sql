@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS dcmms_daily_mail (
     classification VARCHAR(50),
     action_officer VARCHAR(150),
     status VARCHAR(50) DEFAULT 'Pending',
+    sent_branch VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

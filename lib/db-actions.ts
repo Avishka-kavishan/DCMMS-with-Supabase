@@ -43,6 +43,7 @@ async function ensureDailyMailColumnsOnce() {
     `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS forward_reason TEXT`,
     `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS created_by_name VARCHAR(255)`,
     `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS created_by_role VARCHAR(255)`,
+    `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS sent_branch VARCHAR(255)`,
     `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS document_url TEXT`,
     `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS document_name VARCHAR(255)`,
     `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS addressed_to VARCHAR(255)`,
@@ -50,7 +51,8 @@ async function ensureDailyMailColumnsOnce() {
     `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS forwarded_to VARCHAR(255)`,
     `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS forward_reason TEXT`,
     `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS created_by_name VARCHAR(255)`,
-    `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS created_by_role VARCHAR(255)`
+    `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS created_by_role VARCHAR(255)`,
+    `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS sent_branch VARCHAR(255)`
   ];
   for (const sql of ensureCols) {
     try {
@@ -92,6 +94,8 @@ export async function getDailyMailRecordsServer() {
           forward_reason,
           created_by_name,
           created_by_role,
+          region_province,
+          sent_branch,
           created_at,
           updated_at
         FROM public.daily_mail_letter_table
@@ -120,6 +124,10 @@ export async function getDailyMailRecordsServer() {
             created_by_role: row.created_by_role || "",
             priority: "normal",
             status: row.action_officer ? "assigned" : "registered",
+            region_province: row.region_province || null,
+            regionProvince: row.region_province || null,
+            sent_branch: row.sent_branch || null,
+            sentBranch: row.sent_branch || null,
             document_url: row.document_url || null,
             document_name: row.document_name || null,
             created_at: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
@@ -157,6 +165,8 @@ export async function getDailyMailRecordsServer() {
           forward_reason,
           created_by_name,
           created_by_role,
+          region_province,
+          sent_branch,
           created_at,
           updated_at
         FROM public.dcmms_daily_mail
@@ -173,6 +183,10 @@ export async function getDailyMailRecordsServer() {
                 submitted_date: rec.submitted_date ? new Date(rec.submitted_date).toISOString().split("T")[0] : "",
                 created_by_name: rec.created_by_name || "",
                 created_by_role: rec.created_by_role || "",
+                region_province: rec.region_province || null,
+                regionProvince: rec.region_province || null,
+                sent_branch: rec.sent_branch || null,
+                sentBranch: rec.sent_branch || null,
                 created_at: rec.created_at ? new Date(rec.created_at).toISOString() : new Date().toISOString(),
                 updated_at: rec.updated_at ? new Date(rec.updated_at).toISOString() : new Date().toISOString(),
               });
@@ -286,7 +300,9 @@ export async function saveDailyMailRecordServer(mailData: any) {
       `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS forward_reason TEXT`,
       `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS created_by_name VARCHAR(255)`,
       `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS created_by_role VARCHAR(255)`,
-      `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS region_province VARCHAR(255)`
+      `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS sent_branch VARCHAR(255)`,
+      `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS region_province VARCHAR(255)`,
+      `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS sent_branch VARCHAR(255)`
     ];
     for (const sql of ddlMigrationStmts) {
       try {
@@ -340,6 +356,8 @@ export async function saveDailyMailRecordServer(mailData: any) {
       is_answer_letter: isAnswer,
       institute_name: mailData.institute_name || mailData.instituteName,
       region_province: mailData.region_province || mailData.regionProvince || (isAnswer ? "Answer Letter" : null),
+      sent_branch: mailData.sent_branch || mailData.sentBranch || null,
+      sentBranch: mailData.sent_branch || mailData.sentBranch || null,
       document_url: docUrl,
       document_name: docName,
       addressed_to: mailData.addressed_to || mailData.addressedTo,
@@ -397,6 +415,8 @@ export async function saveDailyMailToNewTableServer(data: {
   institute_name?: string | null;
   region_province?: string | null;
   regionProvince?: string | null;
+  sent_branch?: string | null;
+  sentBranch?: string | null;
   document_url?: string | null;
   document_name?: string | null;
   addressed_to?: string | null;
@@ -432,6 +452,7 @@ export async function saveDailyMailToNewTableServer(data: {
     const rawDateHandover = data.date_letter_handover_discipline || data.date_letter_handed_over_to_dicipline_branch || data.submitted_date || null;
     const documentUrl = data.document_url || null;
     const documentName = data.document_name || null;
+    const sentBranch = (data.sent_branch || data.sentBranch || null)?.trim() || null;
 
     const formatDateForSql = (val: any) => {
       if (!val || val === "" || val === "N/A") return null;
@@ -483,12 +504,14 @@ export async function saveDailyMailToNewTableServer(data: {
         document_url TEXT,
         document_name VARCHAR(255),
         action_officer VARCHAR(255),
+        sent_branch VARCHAR(255),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       )`,
       `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS action_officer VARCHAR(255)`,
       `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS is_answer_letter BOOLEAN DEFAULT FALSE`,
       `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS region_province VARCHAR(255)`,
+      `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS sent_branch VARCHAR(255)`,
       `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS document_url TEXT`,
       `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS document_name VARCHAR(255)`,
       `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS addressed_to VARCHAR(255)`,
@@ -512,6 +535,7 @@ export async function saveDailyMailToNewTableServer(data: {
         is_answer_letter BOOLEAN DEFAULT FALSE,
         document_url TEXT,
         document_name VARCHAR(255),
+        sent_branch VARCHAR(255),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       )`,
@@ -523,6 +547,7 @@ export async function saveDailyMailToNewTableServer(data: {
       `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS addressed_role VARCHAR(255)`,
       `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS forwarded_to VARCHAR(255)`,
       `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS forward_reason TEXT`,
+      `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS sent_branch VARCHAR(255)`,
       `CREATE TABLE IF NOT EXISTS public.dcmms_subject (
         id VARCHAR(255) PRIMARY KEY,
         case_no VARCHAR(255) UNIQUE,
@@ -775,6 +800,7 @@ export async function saveDailyMailToNewTableServer(data: {
               created_by_role = COALESCE($18, daily_mail_letter_table.created_by_role),
               is_answer_letter = $19,
               region_province = $20,
+              sent_branch = $21,
               updated_at = CURRENT_TIMESTAMP
             WHERE ref_number = $2 OR letter_number = $1`,
             letterNumber,
@@ -796,7 +822,8 @@ export async function saveDailyMailToNewTableServer(data: {
             createdByName,
             createdByRole,
             isAnswer,
-            regProvince
+            regProvince,
+            sentBranch
           );
         } else {
           await prisma.$executeRawUnsafe(
@@ -821,6 +848,7 @@ export async function saveDailyMailToNewTableServer(data: {
               created_by_role,
               is_answer_letter,
               region_province,
+              sent_branch,
               created_at,
               updated_at
             ) VALUES (
@@ -828,7 +856,7 @@ export async function saveDailyMailToNewTableServer(data: {
               $8::date, $9::date,
               $10, $11, $12,
               $13, $14, $15, $16,
-              $17, $18, $19, $20,
+              $17, $18, $19, $20, $21,
               CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             )`,
             letterNumber,
@@ -850,7 +878,8 @@ export async function saveDailyMailToNewTableServer(data: {
             createdByName,
             createdByRole,
             isAnswer,
-            regProvince
+            regProvince,
+            sentBranch
           );
         }
       }
@@ -867,14 +896,14 @@ export async function saveDailyMailToNewTableServer(data: {
           subject, received_date, submitted_date, priority, action_officer,
           status, is_answer_letter, document_url, document_name,
           addressed_to, addressed_role, forwarded_to, forward_reason,
-          created_by_name, created_by_role, region_province,
+          created_by_name, created_by_role, region_province, sent_branch,
           created_at, updated_at
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7,
           $8, $9::date, $10::date, $11, $12,
           $13, $14, $15, $16,
           $17, $18, $19, $20,
-          $21, $22, $23,
+          $21, $22, $23, $24,
           CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
         )
         ON CONFLICT (id) DO UPDATE SET
@@ -900,6 +929,7 @@ export async function saveDailyMailToNewTableServer(data: {
           created_by_name = COALESCE(EXCLUDED.created_by_name, dcmms_daily_mail.created_by_name),
           created_by_role = COALESCE(EXCLUDED.created_by_role, dcmms_daily_mail.created_by_role),
           region_province = EXCLUDED.region_province,
+          sent_branch = EXCLUDED.sent_branch,
           updated_at = CURRENT_TIMESTAMP;`,
         dcmmsId,
         refNumber || letterNumber,
@@ -923,7 +953,8 @@ export async function saveDailyMailToNewTableServer(data: {
         forwardReason || null,
         createdByName,
         createdByRole,
-        regProvince
+        regProvince,
+        sentBranch
       );
     } catch (dErr) {
       console.warn("Insert into dcmms_daily_mail warning:", dErr);
@@ -1336,7 +1367,10 @@ export async function getSubjectOfficerDashboardCasesServer(targetOfficerName?: 
           act.includes("finalize") ||
           act.includes("additional secretary") ||
           act.includes("අතිරේක ලේකම්") ||
+          act.includes("මාණ්ඩලික") ||
+          act.includes("කටයුතු අවසන්") ||
           act.includes("අවසන් කිරීම") ||
+          act.includes("අවසන් කිරිම") ||
           act.includes("ගොනුව අවසන්")
         );
       })
@@ -6609,7 +6643,8 @@ async function ensureRecommendationsTable() {
       "ALTER TABLE public.charge_sheet_table ADD COLUMN IF NOT EXISTS date_submission_documents DATE;",
       "ALTER TABLE public.charge_sheet_table ADD COLUMN IF NOT EXISTS agree_with_answers VARCHAR(20);",
       "ALTER TABLE public.charge_sheet_table ADD COLUMN IF NOT EXISTS date_draft_submitted_psc DATE;",
-      "ALTER TABLE public.charge_sheet_table ADD COLUMN IF NOT EXISTS agree_with_psc_decision VARCHAR(20);"
+      "ALTER TABLE public.charge_sheet_table ADD COLUMN IF NOT EXISTS agree_with_psc_decision VARCHAR(20);",
+      "ALTER TABLE public.charge_sheet_table ADD COLUMN IF NOT EXISTS other_disciplinary_authority TEXT;"
     ];
     for (const q of chargeSheetMigrations) {
       try {
@@ -6644,6 +6679,7 @@ async function ensureRecommendationsTable() {
         charge_sheet_response_date DATE,
         disciplinary_order TEXT,
         disciplinary_authority VARCHAR(100),
+        other_disciplinary_authority TEXT,
         date_request_documents DATE,
         date_submission_documents DATE,
         agree_with_answers VARCHAR(20),
@@ -6660,6 +6696,7 @@ async function ensureRecommendationsTable() {
 
     const dcmmsMigrations = [
       "ALTER TABLE public.dcmms_recommendations ADD COLUMN IF NOT EXISTS disciplinary_authority VARCHAR(100);",
+      "ALTER TABLE public.dcmms_recommendations ADD COLUMN IF NOT EXISTS other_disciplinary_authority TEXT;",
       "ALTER TABLE public.dcmms_recommendations ADD COLUMN IF NOT EXISTS date_request_documents DATE;",
       "ALTER TABLE public.dcmms_recommendations ADD COLUMN IF NOT EXISTS date_submission_documents DATE;",
       "ALTER TABLE public.dcmms_recommendations ADD COLUMN IF NOT EXISTS agree_with_answers VARCHAR(20);",
@@ -7215,6 +7252,7 @@ export async function saveRecommendationServer(recData: any) {
     const chargeSheetResponseDate = parseSafeDate(recData.date_the_response_to_the_charge_sheet_was_given || recData.charge_sheet_response_date || recData.chargeSheetResponseDate);
     const disciplinaryOrder = recData.disciplinary_order || recData.disciplinaryOrder || null;
     const disciplinaryAuthority = recData.disciplinary_authority || recData.disciplinaryAuthority || null;
+    const otherDisciplinaryAuthority = recData.other_disciplinary_authority || recData.otherDisciplinaryAuthority || null;
     const dateRequestDocuments = parseSafeDate(recData.date_request_documents || recData.dateRequestDocuments);
     const dateSubmissionDocuments = parseSafeDate(recData.date_submission_documents || recData.dateSubmissionDocuments);
     const agreeWithAnswers = recData.agree_with_answers || recData.agreeWithAnswers || null;
@@ -7299,7 +7337,7 @@ export async function saveRecommendationServer(recData: any) {
           recommendation_text, circular_reference, minute_ref,
           date_approved_by_secretory, secretory_recommendation,
           issued_charge_sheet, date_the_charge_sheet_issued, date_the_response_to_the_charge_sheet_was_given,
-          disciplinary_order, disciplinary_authority, date_request_documents, date_submission_documents,
+          disciplinary_order, disciplinary_authority, other_disciplinary_authority, date_request_documents, date_submission_documents,
           agree_with_answers, date_draft_submitted_psc, agree_with_psc_decision,
           created_at, updated_at
         ) VALUES (
@@ -7307,7 +7345,7 @@ export async function saveRecommendationServer(recData: any) {
           ${recommendationText}, ${circularReference}, ${minuteRef},
           ${secretaryApprovalDate}, ${secretaryApprovedRecommendation},
           ${issuedChargeSheet}, ${chargeSheetIssuedDate}, ${chargeSheetResponseDate},
-          ${disciplinaryOrder}, ${disciplinaryAuthority}, ${dateRequestDocuments}, ${dateSubmissionDocuments},
+          ${disciplinaryOrder}, ${disciplinaryAuthority}, ${otherDisciplinaryAuthority}, ${dateRequestDocuments}, ${dateSubmissionDocuments},
           ${agreeWithAnswers}, ${dateDraftSubmittedPsc}, ${agreeWithPscDecision},
           NOW(), NOW()
         )
@@ -7325,6 +7363,7 @@ export async function saveRecommendationServer(recData: any) {
           date_the_response_to_the_charge_sheet_was_given = COALESCE(EXCLUDED.date_the_response_to_the_charge_sheet_was_given, public.charge_sheet_table.date_the_response_to_the_charge_sheet_was_given),
           disciplinary_order = COALESCE(EXCLUDED.disciplinary_order, public.charge_sheet_table.disciplinary_order),
           disciplinary_authority = COALESCE(EXCLUDED.disciplinary_authority, public.charge_sheet_table.disciplinary_authority),
+          other_disciplinary_authority = COALESCE(EXCLUDED.other_disciplinary_authority, public.charge_sheet_table.other_disciplinary_authority),
           date_request_documents = COALESCE(EXCLUDED.date_request_documents, public.charge_sheet_table.date_request_documents),
           date_submission_documents = COALESCE(EXCLUDED.date_submission_documents, public.charge_sheet_table.date_submission_documents),
           agree_with_answers = COALESCE(EXCLUDED.agree_with_answers, public.charge_sheet_table.agree_with_answers),
@@ -7397,6 +7436,7 @@ export async function saveRecommendationServer(recData: any) {
               charge_sheet_response_date = ${chargeSheetResponseDate},
               disciplinary_order = ${disciplinaryOrder},
               disciplinary_authority = ${disciplinaryAuthority},
+              other_disciplinary_authority = ${otherDisciplinaryAuthority},
               date_request_documents = ${dateRequestDocuments},
               date_submission_documents = ${dateSubmissionDocuments},
               agree_with_answers = ${agreeWithAnswers},
@@ -7414,14 +7454,14 @@ export async function saveRecommendationServer(recData: any) {
           INSERT INTO public.dcmms_recommendations (
             case_no, letter_no, category, urgency, title, recommendation_text, disciplinary_action,
             forward_to, target_date, reference_notes, issued_charge_sheet, charge_sheet_issued_date,
-            charge_sheet_response_date, disciplinary_order, disciplinary_authority,
+            charge_sheet_response_date, disciplinary_order, disciplinary_authority, other_disciplinary_authority,
             date_request_documents, date_submission_documents, agree_with_answers,
             date_draft_submitted_psc, agree_with_psc_decision,
             secretary_approval_date, secretary_approved_recommendation, status, submitted_at
           ) VALUES (
             ${matchedRef}, ${letterNo}, ${category}, ${urgency}, ${title}, ${recommendationText}, ${circularReference},
             ${forwardTo}, ${targetDate}, ${minuteRef}, ${issuedChargeSheet}, ${chargeSheetIssuedDate},
-            ${chargeSheetResponseDate}, ${disciplinaryOrder}, ${disciplinaryAuthority},
+            ${chargeSheetResponseDate}, ${disciplinaryOrder}, ${disciplinaryAuthority}, ${otherDisciplinaryAuthority},
             ${dateRequestDocuments}, ${dateSubmissionDocuments}, ${agreeWithAnswers},
             ${dateDraftSubmittedPsc}, ${agreeWithPscDecision},
             ${secretaryApprovalDate}, ${secretaryApprovedRecommendation}, ${status}, ${submittedAt}
@@ -7467,6 +7507,7 @@ export async function getRecommendationsListServer() {
           cs.date_the_response_to_the_charge_sheet_was_given as "chargeSheetResponseDate",
           cs.disciplinary_order as "disciplinaryOrder",
           cs.disciplinary_authority as "disciplinaryAuthority",
+          cs.other_disciplinary_authority as "otherDisciplinaryAuthority",
           cs.date_request_documents as "dateRequestDocuments",
           cs.date_submission_documents as "dateSubmissionDocuments",
           cs.agree_with_answers as "agreeWithAnswers",
@@ -7510,6 +7551,7 @@ export async function getRecommendationsListServer() {
             chargeSheetResponseDate: item.chargeSheetResponseDate ? new Date(item.chargeSheetResponseDate).toISOString().slice(0, 10) : "",
             disciplinaryOrder: item.disciplinaryOrder || "",
             disciplinaryAuthority: item.disciplinaryAuthority || "",
+            otherDisciplinaryAuthority: item.otherDisciplinaryAuthority || "",
             dateRequestDocuments: item.dateRequestDocuments ? new Date(item.dateRequestDocuments).toISOString().slice(0, 10) : "",
             dateSubmissionDocuments: item.dateSubmissionDocuments ? new Date(item.dateSubmissionDocuments).toISOString().slice(0, 10) : "",
             agreeWithAnswers: item.agreeWithAnswers || "",
@@ -7583,6 +7625,7 @@ export async function getRecommendationsListServer() {
             chargeSheetResponseDate: "",
             disciplinaryOrder: "",
             disciplinaryAuthority: "",
+            otherDisciplinaryAuthority: "",
             dateRequestDocuments: "",
             dateSubmissionDocuments: "",
             agreeWithAnswers: "",
@@ -7614,6 +7657,7 @@ export async function getRecommendationsListServer() {
           date_the_response_to_the_charge_sheet_was_given as "chargeSheetResponseDate",
           disciplinary_order as "disciplinaryOrder",
           disciplinary_authority as "disciplinaryAuthority",
+          other_disciplinary_authority as "otherDisciplinaryAuthority",
           date_request_documents as "dateRequestDocuments",
           date_submission_documents as "dateSubmissionDocuments",
           agree_with_answers as "agreeWithAnswers",
@@ -7632,6 +7676,7 @@ export async function getRecommendationsListServer() {
             if (cs.chargeSheetResponseDate) item.chargeSheetResponseDate = new Date(cs.chargeSheetResponseDate).toISOString().slice(0, 10);
             if (cs.disciplinaryOrder) item.disciplinaryOrder = cs.disciplinaryOrder;
             if (cs.disciplinaryAuthority) item.disciplinaryAuthority = cs.disciplinaryAuthority;
+            if (cs.otherDisciplinaryAuthority) item.otherDisciplinaryAuthority = cs.otherDisciplinaryAuthority;
             if (cs.dateRequestDocuments) item.dateRequestDocuments = new Date(cs.dateRequestDocuments).toISOString().slice(0, 10);
             if (cs.dateSubmissionDocuments) item.dateSubmissionDocuments = new Date(cs.dateSubmissionDocuments).toISOString().slice(0, 10);
             if (cs.agreeWithAnswers) item.agreeWithAnswers = cs.agreeWithAnswers;
@@ -7655,6 +7700,7 @@ export async function getRecommendationsListServer() {
               chargeSheetResponseDate: cs.chargeSheetResponseDate ? new Date(cs.chargeSheetResponseDate).toISOString().slice(0, 10) : "",
               disciplinaryOrder: cs.disciplinaryOrder || "",
               disciplinaryAuthority: cs.disciplinaryAuthority || "secretary_of_education",
+              otherDisciplinaryAuthority: cs.otherDisciplinaryAuthority || "",
               dateRequestDocuments: cs.dateRequestDocuments ? new Date(cs.dateRequestDocuments).toISOString().slice(0, 10) : "",
               dateSubmissionDocuments: cs.dateSubmissionDocuments ? new Date(cs.dateSubmissionDocuments).toISOString().slice(0, 10) : "",
               agreeWithAnswers: cs.agreeWithAnswers || "",
@@ -7695,6 +7741,7 @@ export async function getRecommendationsListServer() {
           r.charge_sheet_response_date as "chargeSheetResponseDate",
           r.disciplinary_order as "disciplinaryOrder",
           r.disciplinary_authority as "disciplinaryAuthority",
+          r.other_disciplinary_authority as "otherDisciplinaryAuthority",
           r.date_request_documents as "dateRequestDocuments",
           r.date_submission_documents as "dateSubmissionDocuments",
           r.agree_with_answers as "agreeWithAnswers",
@@ -7733,6 +7780,7 @@ export async function getRecommendationsListServer() {
             if (item.chargeSheetResponseDate && !existing.chargeSheetResponseDate) existing.chargeSheetResponseDate = new Date(item.chargeSheetResponseDate).toISOString().slice(0, 10);
             if (item.disciplinaryOrder && !existing.disciplinaryOrder) existing.disciplinaryOrder = item.disciplinaryOrder;
             if (item.disciplinaryAuthority && !existing.disciplinaryAuthority) existing.disciplinaryAuthority = item.disciplinaryAuthority;
+            if (item.otherDisciplinaryAuthority && !existing.otherDisciplinaryAuthority) existing.otherDisciplinaryAuthority = item.otherDisciplinaryAuthority;
             if (item.dateRequestDocuments && !existing.dateRequestDocuments) existing.dateRequestDocuments = new Date(item.dateRequestDocuments).toISOString().slice(0, 10);
             if (item.dateSubmissionDocuments && !existing.dateSubmissionDocuments) existing.dateSubmissionDocuments = new Date(item.dateSubmissionDocuments).toISOString().slice(0, 10);
             if (item.agreeWithAnswers && !existing.agreeWithAnswers) existing.agreeWithAnswers = item.agreeWithAnswers;
@@ -7756,6 +7804,7 @@ export async function getRecommendationsListServer() {
               chargeSheetResponseDate: item.chargeSheetResponseDate ? new Date(item.chargeSheetResponseDate).toISOString().slice(0, 10) : "",
               disciplinaryOrder: item.disciplinaryOrder || "",
               disciplinaryAuthority: item.disciplinaryAuthority || "",
+              otherDisciplinaryAuthority: item.otherDisciplinaryAuthority || "",
               dateRequestDocuments: item.dateRequestDocuments ? new Date(item.dateRequestDocuments).toISOString().slice(0, 10) : "",
               dateSubmissionDocuments: item.dateSubmissionDocuments ? new Date(item.dateSubmissionDocuments).toISOString().slice(0, 10) : "",
               agreeWithAnswers: item.agreeWithAnswers || "",
@@ -7801,6 +7850,7 @@ export async function getChargeSheetDetailsServer(refNumber: string) {
         cs.date_the_response_to_the_charge_sheet_was_given,
         cs.disciplinary_order,
         cs.disciplinary_authority,
+        cs.other_disciplinary_authority,
         cs.date_request_documents,
         cs.date_submission_documents,
         cs.agree_with_answers,
@@ -7825,6 +7875,7 @@ export async function getChargeSheetDetailsServer(refNumber: string) {
           date_the_response_to_the_charge_sheet_was_given: r.date_the_response_to_the_charge_sheet_was_given ? new Date(r.date_the_response_to_the_charge_sheet_was_given).toISOString().slice(0, 10) : "",
           disciplinary_order: r.disciplinary_order || "",
           disciplinary_authority: r.disciplinary_authority || "",
+          other_disciplinary_authority: r.other_disciplinary_authority || "",
           date_request_documents: r.date_request_documents ? new Date(r.date_request_documents).toISOString().slice(0, 10) : "",
           date_submission_documents: r.date_submission_documents ? new Date(r.date_submission_documents).toISOString().slice(0, 10) : "",
           agree_with_answers: r.agree_with_answers || "",
@@ -7850,6 +7901,7 @@ export async function saveChargeSheetDetailsServer(data: {
   date_the_response_to_the_charge_sheet_was_given?: string | null;
   disciplinary_order?: string | null;
   disciplinary_authority?: string | null;
+  other_disciplinary_authority?: string | null;
   date_request_documents?: string | null;
   date_submission_documents?: string | null;
   agree_with_answers?: string | null;
@@ -7866,6 +7918,7 @@ export async function saveChargeSheetDetailsServer(data: {
     const dateResponse = parseSafeDate(data.date_the_response_to_the_charge_sheet_was_given);
     const disciplinaryOrder = data.disciplinary_order || null;
     const disciplinaryAuthority = data.disciplinary_authority || null;
+    const otherDisciplinaryAuthority = data.other_disciplinary_authority || null;
     const dateRequestDocuments = parseSafeDate(data.date_request_documents);
     const dateSubmissionDocuments = parseSafeDate(data.date_submission_documents);
     const agreeWithAnswers = data.agree_with_answers || null;
@@ -7887,6 +7940,7 @@ export async function saveChargeSheetDetailsServer(data: {
         date_the_response_to_the_charge_sheet_was_given,
         disciplinary_order,
         disciplinary_authority,
+        other_disciplinary_authority,
         date_request_documents,
         date_submission_documents,
         agree_with_answers,
@@ -7900,6 +7954,7 @@ export async function saveChargeSheetDetailsServer(data: {
         ${dateResponse},
         ${disciplinaryOrder},
         ${disciplinaryAuthority},
+        ${otherDisciplinaryAuthority},
         ${dateRequestDocuments},
         ${dateSubmissionDocuments},
         ${agreeWithAnswers},
@@ -7913,6 +7968,7 @@ export async function saveChargeSheetDetailsServer(data: {
         date_the_response_to_the_charge_sheet_was_given = EXCLUDED.date_the_response_to_the_charge_sheet_was_given,
         disciplinary_order = EXCLUDED.disciplinary_order,
         disciplinary_authority = EXCLUDED.disciplinary_authority,
+        other_disciplinary_authority = EXCLUDED.other_disciplinary_authority,
         date_request_documents = EXCLUDED.date_request_documents,
         date_submission_documents = EXCLUDED.date_submission_documents,
         agree_with_answers = EXCLUDED.agree_with_answers,
@@ -8034,7 +8090,10 @@ export async function saveReplyLetterDetailsServer(data: {
       upcomingAction.toLowerCase().includes("finalize the file") ||
       upcomingAction.toLowerCase().includes("additional secretary") ||
       upcomingAction.includes("අතිරේක ලේකම්") ||
+      upcomingAction.includes("මාණ්ඩලික") ||
+      upcomingAction.includes("කටයුතු අවසන්") ||
       upcomingAction.includes("අවසන් කිරීම") ||
+      upcomingAction.includes("අවසන් කිරිම") ||
       upcomingAction.includes("ගොනුව අවසන්") ||
       upcomingAction.includes("கூடுதல் செயலாளர்") ||
       upcomingAction.includes("இறுதி செய்தல்")
@@ -8587,7 +8646,7 @@ export async function saveFormalDisciplinaryInspectionServer(payload: FormalDisc
       syncMembers.push({
         fullName: payload.maintenanceOfficerName,
         email: payload.maintenanceOfficerTel || "",
-        position: payload.maintenanceOfficerDesignation || "Officer conducting the maintenance",
+        position: payload.maintenanceOfficerDesignation || "Care Officer",
       });
     }
     if (syncMembers.length > 0) {
@@ -10229,6 +10288,8 @@ export async function updateLetterRecordServer(payload: {
   subjectCategory?: string;
   instituteName?: string;
   regionProvince?: string;
+  sentBranch?: string;
+  sent_branch?: string;
   priority?: string;
   letterDate?: string;
   receivedDate?: string;
@@ -10259,6 +10320,8 @@ export async function updateLetterRecordServer(payload: {
       subjectCategory,
       instituteName,
       regionProvince,
+      sentBranch,
+      sent_branch,
       priority = "Normal",
       letterDate,
       receivedDate,
@@ -10374,6 +10437,7 @@ export async function updateLetterRecordServer(payload: {
     const finalInstitute = instituteName;
     const finalRegion = regionProvince;
     const finalReceivedDate = sqlReceivedDate;
+    const finalSentBranch = (sentBranch !== undefined ? sentBranch : sent_branch) || null;
 
     // 1. Update daily_mail_letter_table
     try {
@@ -10400,13 +10464,14 @@ export async function updateLetterRecordServer(payload: {
           add_sec_forward_method = $19,
           document_url = COALESCE($20, daily_mail_letter_table.document_url),
           document_name = COALESCE($21, daily_mail_letter_table.document_name),
-          last_edited_by = $22,
+          sent_branch = COALESCE($22, daily_mail_letter_table.sent_branch),
+          last_edited_by = $23,
           last_edited_at = CURRENT_TIMESTAMP,
           updated_at = CURRENT_TIMESTAMP
         WHERE
-          (CASE WHEN $23 <> '' THEN id::text = $23 ELSE FALSE END)
-          OR (CASE WHEN $24 <> '' THEN letter_number = $24 ELSE FALSE END)
-          OR (CASE WHEN $25 <> '' THEN ref_number = $25 ELSE FALSE END)
+          (CASE WHEN $24 <> '' THEN id::text = $24 ELSE FALSE END)
+          OR (CASE WHEN $25 <> '' THEN letter_number = $25 ELSE FALSE END)
+          OR (CASE WHEN $26 <> '' THEN ref_number = $26 ELSE FALSE END)
           OR letter_number = $1
       `,
         finalLetterNo,
@@ -10430,6 +10495,7 @@ export async function updateLetterRecordServer(payload: {
         addSecForwardMethod || null,
         documentUrl || null,
         documentName || null,
+        finalSentBranch,
         `${editedByName} (${editedByRole})`,
         idStr,
         origNo,
@@ -10465,13 +10531,14 @@ export async function updateLetterRecordServer(payload: {
           document_url = COALESCE($20, dcmms_daily_mail.document_url),
           document_name = COALESCE($21, dcmms_daily_mail.document_name),
           is_answer_letter = $22,
-          last_edited_by = $23,
+          sent_branch = COALESCE($23, dcmms_daily_mail.sent_branch),
+          last_edited_by = $24,
           last_edited_at = CURRENT_TIMESTAMP,
           updated_at = CURRENT_TIMESTAMP
         WHERE
-          (CASE WHEN $24 <> '' THEN id::text = $24 ELSE FALSE END)
-          OR (CASE WHEN $25 <> '' THEN letter_no = $25 ELSE FALSE END)
-          OR (CASE WHEN $26 <> '' THEN serial_no = $26 ELSE FALSE END)
+          (CASE WHEN $25 <> '' THEN id::text = $25 ELSE FALSE END)
+          OR (CASE WHEN $26 <> '' THEN letter_no = $26 ELSE FALSE END)
+          OR (CASE WHEN $27 <> '' THEN serial_no = $27 ELSE FALSE END)
           OR letter_no = $1
       `,
         finalLetterNo,
@@ -10496,6 +10563,7 @@ export async function updateLetterRecordServer(payload: {
         documentUrl || null,
         documentName || null,
         Boolean(isAnswerLetter),
+        finalSentBranch,
         `${editedByName} (${editedByRole})`,
         idStr,
         origNo,
@@ -10601,9 +10669,9 @@ export async function assignLetterToInvestigationAdminServer(params: {
     const cleanOfficerName = String(subjectOfficerName || "Subject Officer").trim();
     const today = new Date().toISOString().split("T")[0];
 
-    // 1. Discover registered Investigation Administrator / Investigation Officer
-    let invAdminName = "Investigation Administrator";
-    let invAdminRole = "Investigation Administrator";
+    // 1. Discover registered Assistant Secretary Investigation Branch
+    let invAdminName = "Assistant Secretary Investigation Branch";
+    let invAdminRole = "Assistant Secretary Investigation Branch";
     try {
       const invUsers: any[] = await prisma.$queryRaw`
         SELECT full_name, role FROM public.register_officer_table
@@ -10613,7 +10681,7 @@ export async function assignLetterToInvestigationAdminServer(params: {
       `;
       if (invUsers && invUsers.length > 0 && invUsers[0].full_name) {
         invAdminName = invUsers[0].full_name;
-        invAdminRole = invUsers[0].role || "Investigation Administrator";
+        invAdminRole = invUsers[0].role || "Assistant Secretary Investigation Branch";
       }
     } catch (e) {
       console.warn("Notice querying register_officer_table for investigation officer:", e);
@@ -10623,7 +10691,7 @@ export async function assignLetterToInvestigationAdminServer(params: {
       ? `Assigned by Subject Officer ${cleanOfficerName} for ${investigationType}. Directives: ${remarks.trim()}`
       : `Assigned by Subject Officer ${cleanOfficerName} for ${investigationType} (ආයතනික මූලික විමර්ශනය)`;
 
-    const forwardedToText = `${invAdminName} (Investigation Administrator)`;
+    const forwardedToText = `${invAdminName} (Assistant Secretary Investigation Branch)`;
 
     // 2. Update daily_mail_letter_table in PostgreSQL
     try {
@@ -10631,7 +10699,7 @@ export async function assignLetterToInvestigationAdminServer(params: {
         `UPDATE public.daily_mail_letter_table SET
           action_officer = $1,
           addressed_to = $1,
-          addressed_role = 'Investigation Administrator',
+          addressed_role = 'Assistant Secretary Investigation Branch',
           forwarded_to = $2,
           forward_reason = $3,
           updated_at = CURRENT_TIMESTAMP
@@ -10653,7 +10721,7 @@ export async function assignLetterToInvestigationAdminServer(params: {
           action_officer = $1,
           officer_name = $1,
           addressed_to = $1,
-          addressed_role = 'Investigation Administrator',
+          addressed_role = 'Assistant Secretary Investigation Branch',
           forwarded_to = $2,
           forward_reason = $3,
           status = $6,
@@ -10723,7 +10791,7 @@ export async function assignLetterToInvestigationAdminServer(params: {
       console.warn("dcmms_subject update warning:", e);
     }
 
-    // 6. Create Notification for Investigation Administrator
+    // 6. Create Notification for Assistant Secretary Investigation Branch
     try {
       await createOfficerNotificationServer({
         targetOfficerName: invAdminName,
@@ -10743,7 +10811,7 @@ export async function assignLetterToInvestigationAdminServer(params: {
     try {
       await prisma.$executeRawUnsafe(
         `INSERT INTO public.dcmms_audit_logs (action, entity_type, entity_id, user_name, user_role, details)
-        VALUES ('SUBJECT_OFFICER_ASSIGNED_TO_INVESTIGATION_ADMIN', 'LETTER', $1, $2, 'subject_officer', $3)`,
+        VALUES ('SUBJECT_OFFICER_ASSIGNED_TO_INVESTIGATION_BRANCH', 'LETTER', $1, $2, 'subject_officer', $3)`,
         cleanCaseNo,
         cleanOfficerName,
         JSON.stringify({
@@ -10772,7 +10840,7 @@ export async function assignLetterToInvestigationAdminServer(params: {
     });
   } catch (error: any) {
     console.error("Error in assignLetterToInvestigationAdminServer:", error);
-    return serializeForServerAction({ success: false, error: error?.message || "Failed to assign letter to Investigation Administrator" });
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to assign letter to Assistant Secretary Investigation Branch" });
   }
 }
 
@@ -10991,6 +11059,648 @@ export async function getLetterAndCaseDetailsByAnyRefServer(queryParam: string) 
     return serializeForServerAction({ success: false, error: error?.message || "Failed to fetch letter and case details", data: null });
   }
 }
+
+// -------------------------------------------------------------
+// Subject Officer Reports: Categorized Letters (Discipline vs Mail)
+// -------------------------------------------------------------
+export async function getSubjectReportsCategorizedLettersServer() {
+  try {
+    try {
+      await prisma.$executeRawUnsafe(`ALTER TABLE subject_officer_form_table ADD COLUMN IF NOT EXISTS file_name VARCHAR(100);`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE subject_officer_form_table ADD COLUMN IF NOT EXISTS description TEXT;`);
+      await ensureReplyLetterDetailsTable();
+    } catch (e) {
+      console.warn("Table verification notice in getSubjectReportsCategorizedLettersServer:", e);
+    }
+
+    // 1. Fetch all subject_officer_form_table records
+    let formsRaw: any[] = [];
+    try {
+      formsRaw = await prisma.$queryRaw`
+        SELECT 
+          sof.id as form_id,
+          sof.daily_mail_letter_id,
+          sof.accused_officer_id,
+          sof.ref_number,
+          sof.subject_file_no,
+          sof.file_name,
+          sof.future_action,
+          sof.description,
+          sof.date_prepared_and_submitted_for_signature,
+          sof.classification_of_complaint_letter,
+          sof.name_of_the_presenting_the_complain,
+          sof.address_of_the_person_presenting_the_complaint,
+          sof.created_at,
+          sof.updated_at
+        FROM public.subject_officer_form_table sof
+        ORDER BY sof.created_at DESC;
+      `;
+    } catch (e) {
+      console.warn("Could not query subject_officer_form_table:", e);
+    }
+
+    // 2. Fetch all reply_letter_details_table records
+    let replyLettersRaw: any[] = [];
+    try {
+      replyLettersRaw = await prisma.$queryRaw`
+        SELECT 
+          id,
+          ref_number,
+          file_name,
+          file_no,
+          upcoming_action,
+          date,
+          description,
+          created_at,
+          updated_at
+        FROM public.reply_letter_details_table
+        ORDER BY updated_at DESC;
+      `;
+    } catch (e) {
+      console.warn("Could not query reply_letter_details_table:", e);
+    }
+
+    // 3. Fetch all daily mail letters (from daily_mail_letter_table and dcmms_daily_mail)
+    let dailyMailRaw: any[] = [];
+    try {
+      const p1: any[] = await prisma.$queryRaw`
+        SELECT 
+          id,
+          ref_number,
+          letter_number,
+          subject_of_letter,
+          mode_of_receipt,
+          nature_of_letter,
+          subject_category,
+          senders_party,
+          action_officer,
+          forwarded_to,
+          addressed_to,
+          date_received_by_add_secretary,
+          date_letter_handover_discipline,
+          institute_name,
+          add_sec_instructions,
+          priority
+        FROM public.daily_mail_letter_table
+        ORDER BY created_at DESC;
+      `;
+      dailyMailRaw.push(...(p1 || []));
+    } catch (e) {}
+
+    try {
+      const p2: any[] = await prisma.$queryRaw`
+        SELECT 
+          id,
+          serial_no as ref_number,
+          letter_no as letter_number,
+          subject as subject_of_letter,
+          method as mode_of_receipt,
+          type as nature_of_letter,
+          classification as subject_category,
+          sender as senders_party,
+          action_officer,
+          forwarded_to,
+          addressed_to,
+          received_date as date_received_by_add_secretary,
+          submitted_date as date_letter_handover_discipline,
+          institute_name,
+          add_sec_instructions,
+          priority,
+          status
+        FROM public.dcmms_daily_mail
+        ORDER BY created_at DESC;
+      `;
+      dailyMailRaw.push(...(p2 || []));
+    } catch (e) {}
+
+    const mailMap = new Map<string, any>();
+    dailyMailRaw.forEach((m) => {
+      const k1 = String(m.ref_number || "").trim().toLowerCase();
+      const k2 = String(m.letter_number || "").trim().toLowerCase();
+      const k3 = String(m.id || "").trim();
+      if (k1 && !mailMap.has(k1)) mailMap.set(k1, m);
+      if (k2 && !mailMap.has(k2)) mailMap.set(k2, m);
+      if (k3 && !mailMap.has(`id-${k3}`)) mailMap.set(`id-${k3}`, m);
+    });
+
+    // 4. Fetch all accused officers with schools via junction table
+    let junctionRows: any[] = [];
+    try {
+      junctionRows = await prisma.$queryRaw`
+        SELECT 
+          j.subject_officer_form_id,
+          ao.id as accused_officer_id,
+          ao.accused_officer_name,
+          ao.address as officer_address,
+          ao.position,
+          ao.date_of_birth,
+          ao.nic_no,
+          ao.appointment_date,
+          sch.id as school_id,
+          sch.accused_school_name,
+          sch.address as school_address,
+          sch.province,
+          sch.district,
+          sch.zone
+        FROM public.accused_officer_subject_officer_form_table j
+        JOIN public.accused_officer_table ao ON j.accused_officer_id = ao.id
+        LEFT JOIN public.accused_school_table sch ON ao.accused_school_id = sch.id;
+      `;
+    } catch (e) {}
+
+    const formToAccusedMap = new Map<string, any[]>();
+    junctionRows.forEach((r) => {
+      const fid = String(r.subject_officer_form_id);
+      if (!formToAccusedMap.has(fid)) formToAccusedMap.set(fid, []);
+      formToAccusedMap.get(fid)!.push(r);
+    });
+
+    // 5. Fetch legacy single accused officer fallback
+    let legacyAccused: any[] = [];
+    try {
+      legacyAccused = await prisma.$queryRaw`
+        SELECT 
+          ao.id as accused_officer_id,
+          ao.accused_officer_name,
+          ao.address as officer_address,
+          ao.position,
+          ao.date_of_birth,
+          ao.nic_no,
+          ao.appointment_date,
+          sch.id as school_id,
+          sch.accused_school_name,
+          sch.address as school_address,
+          sch.province,
+          sch.district,
+          sch.zone
+        FROM public.accused_officer_table ao
+        LEFT JOIN public.accused_school_table sch ON ao.accused_school_id = sch.id;
+      `;
+    } catch (e) {}
+    const accusedByIdMap = new Map<string, any>();
+    legacyAccused.forEach((a) => {
+      accusedByIdMap.set(String(a.accused_officer_id), a);
+    });
+
+    // 6. Fetch case statuses
+    const caseStatusMap = new Map<string, string>();
+    try {
+      const subCases: any[] = await prisma.$queryRaw`
+        SELECT case_no, status FROM public.dcmms_subject;
+      `;
+      subCases.forEach((sc) => {
+        if (sc.case_no && sc.status) caseStatusMap.set(String(sc.case_no).trim().toLowerCase(), sc.status);
+      });
+    } catch (e) {}
+
+    try {
+      const asgns: any[] = await prisma.$queryRaw`
+        SELECT case_no, status FROM public.dcmms_subject_assignments;
+      `;
+      asgns.forEach((a) => {
+        const k = String(a.case_no || "").trim().toLowerCase();
+        if (k && a.status && !caseStatusMap.has(k)) caseStatusMap.set(k, a.status);
+      });
+    } catch (e) {}
+
+    // 7. Map replies by ref_number and file_no
+    const replyByRef = new Map<string, any>();
+    replyLettersRaw.forEach((r) => {
+      const k1 = String(r.ref_number || "").trim().toLowerCase();
+      const k2 = String(r.file_no || "").trim().toLowerCase();
+      if (k1 && !replyByRef.has(k1)) replyByRef.set(k1, r);
+      if (k2 && !replyByRef.has(k2)) replyByRef.set(k2, r);
+    });
+
+    // 7b. Fetch inquiry details: formal inspection, appointments, chairmen, members
+    const formalInspMap = new Map<string, any>();
+    let formalRowsRaw: any[] = [];
+    try {
+      formalRowsRaw = await prisma.$queryRaw`
+        SELECT * FROM public.formal_disciplinary_inspection_table;
+      `;
+      formalRowsRaw.forEach((fr) => {
+        const k = String(fr.ref_number || "").trim().toLowerCase();
+        if (k) formalInspMap.set(k, fr);
+      });
+    } catch (e) {}
+
+    const apptDueMap = new Map<string, any>();
+    let apptRowsRaw: any[] = [];
+    try {
+      apptRowsRaw = await prisma.$queryRaw`
+        SELECT * FROM public.case_by_appointment_and_report_due_date;
+      `;
+      apptRowsRaw.forEach((ar) => {
+        const k1 = String(ar.subject_file_no || "").trim().toLowerCase();
+        const k2 = String(ar.sub_file_no || "").trim().toLowerCase();
+        if (k1 && !apptDueMap.has(k1)) apptDueMap.set(k1, ar);
+        if (k2 && !apptDueMap.has(k2)) apptDueMap.set(k2, ar);
+      });
+    } catch (e) {}
+
+    const chairMap = new Map<string, any>();
+    let chairRowsRaw: any[] = [];
+    try {
+      chairRowsRaw = await prisma.$queryRaw`
+        SELECT * FROM public.chairment_by_case;
+      `;
+      chairRowsRaw.forEach((cr) => {
+        const k = String(cr.ref_number || "").trim().toLowerCase();
+        if (k && !chairMap.has(k)) chairMap.set(k, cr);
+      });
+    } catch (e) {}
+
+    const membersMap = new Map<string, any[]>();
+    try {
+      const memberRows: any[] = await prisma.$queryRaw`
+        SELECT * FROM public.members_by_case ORDER BY id ASC;
+      `;
+      memberRows.forEach((mr) => {
+        const k = String(mr.ref_number || "").trim().toLowerCase();
+        if (k) {
+          if (!membersMap.has(k)) membersMap.set(k, []);
+          membersMap.get(k)!.push(mr);
+        }
+      });
+    } catch (e) {}
+
+    // 8. Consolidate letters
+    const seenRefs = new Set<string>();
+    const consolidatedLetters: any[] = [];
+
+    const formatDate = (val: any) => {
+      if (!val) return "";
+      try {
+        const d = new Date(val);
+        if (isNaN(d.getTime())) return String(val).split("T")[0];
+        return d.toISOString().split("T")[0];
+      } catch (e) {
+        return String(val).split("T")[0];
+      }
+    };
+
+    const buildInquiryDetails = (refLower: string, altRefLower?: string) => {
+      const fr = formalInspMap.get(refLower) || (altRefLower ? formalInspMap.get(altRefLower) : null);
+      const ar = apptDueMap.get(refLower) || (altRefLower ? apptDueMap.get(altRefLower) : null);
+      const cr = chairMap.get(refLower) || (altRefLower ? chairMap.get(altRefLower) : null);
+      const mm = membersMap.get(refLower) || (altRefLower ? membersMap.get(altRefLower) : null);
+
+      if (!fr && !ar && !cr && (!mm || mm.length === 0)) return null;
+
+      return {
+        is_formal_inspection: !!fr,
+        chairman: cr ? { name: cr.full_name || "", position: cr.position || "Chairman", email: cr.email || "" } : undefined,
+        members: mm ? mm.map((m) => ({ name: m.full_name || "", position: m.position || "Member", email: m.email || "" })) : [],
+        appointment_letter_date: formatDate(ar?.appointment_letter_date || ar?.appointment_date || fr?.date_submission_report),
+        report_due_date: formatDate(ar?.report_due_date || ar?.due_date),
+        recommendation_report: fr?.recommendation_report || fr?.recommendation || "",
+        recommendation_approved: fr?.recommendation_approved || fr?.granted_approval || "",
+        disciplinary_order: fr?.disciplinary_order || fr?.discipline_command || "",
+        approval_secretary_status: fr?.approval_secretary_status || "",
+        approval_secretary_details: fr?.approval_secretary_details || "",
+        order_start_date: formatDate(fr?.order_start_date),
+        order_end_date: formatDate(fr?.order_end_date),
+        inv_officer_name: fr?.inv_officer_name || "",
+        inv_officer_designation: fr?.inv_officer_designation || "",
+        complaint_officer_name: fr?.complaint_officer_name || "",
+        maintenance_officer_name: fr?.maintenance_officer_name || "",
+      };
+    };
+
+    // First process subject_officer_form_table rows
+    formsRaw.forEach((f) => {
+      const ref = String(f.ref_number || f.subject_file_no || f.form_id).trim();
+      const refLower = ref.toLowerCase();
+      if (seenRefs.has(refLower)) return;
+      seenRefs.add(refLower);
+
+      const rMatch = replyByRef.get(refLower) || (f.subject_file_no ? replyByRef.get(String(f.subject_file_no).trim().toLowerCase()) : null);
+      const mMatch = mailMap.get(refLower) || 
+        (f.subject_file_no ? mailMap.get(String(f.subject_file_no).trim().toLowerCase()) : null) ||
+        (f.daily_mail_letter_id ? mailMap.get(`id-${String(f.daily_mail_letter_id).trim()}`) : null);
+
+      let resolvedFileName: "discipline" | "mail" = "discipline";
+      const rawFN = String(f.file_name || rMatch?.file_name || "").trim().toLowerCase();
+      if (rawFN === "mail" || rawFN.includes("mail") || rawFN.includes("තැපැල්")) {
+        resolvedFileName = "mail";
+      }
+
+      const resolvedNature = String(mMatch?.nature_of_letter || mMatch?.type || "").trim();
+
+      const formIdStr = String(f.form_id);
+      let officers = formToAccusedMap.get(formIdStr) || [];
+      if (officers.length === 0 && f.accused_officer_id) {
+        const singleAcc = accusedByIdMap.get(String(f.accused_officer_id));
+        if (singleAcc) officers = [singleAcc];
+      }
+      const primaryOfficer = officers.length > 0 ? officers[0] : null;
+
+      const inqDetail = buildInquiryDetails(refLower, f.subject_file_no ? String(f.subject_file_no).trim().toLowerCase() : undefined);
+      const futureAction = f.future_action || rMatch?.upcoming_action || inqDetail?.recommendation_approved || (inqDetail?.is_formal_inspection ? "Formal Disciplinary Inspection" : "");
+      const isFinalize = futureAction.toLowerCase().includes("finalize") || futureAction.toLowerCase().includes("අවසන්");
+      const isInspection = !!inqDetail || futureAction.toLowerCase().includes("inspection") || futureAction.toLowerCase().includes("inquiry") || futureAction.toLowerCase().includes("පරීක්ෂණ");
+
+      const resolvedStatus = caseStatusMap.get(refLower) || (isFinalize ? "Closed" : (isInspection ? "Conducting an Inquiry" : "In Progress"));
+
+      consolidatedLetters.push({
+        id: String(f.form_id || ref),
+        ref_number: ref,
+        letter_no: f.subject_file_no || mMatch?.letter_number || ref,
+        subject_file_no: f.subject_file_no || rMatch?.file_no || ref,
+        file_name: resolvedFileName,
+        nature_of_letter: resolvedNature,
+        future_action: futureAction,
+        date_prepared_and_submitted_for_signature: formatDate(f.date_prepared_and_submitted_for_signature || rMatch?.date),
+        
+        subject: mMatch?.subject_of_letter || f.description || rMatch?.description || `Case ${ref}`,
+        classification_of_complaint_letter: f.classification_of_complaint_letter || mMatch?.subject_category || "nominal",
+        name_of_the_presenting_the_complain: f.name_of_the_presenting_the_complain || mMatch?.senders_party || "Complainant",
+        address_of_the_person_presenting_the_complaint: f.address_of_the_person_presenting_the_complaint || mMatch?.institute_name || "",
+        received_date: formatDate(mMatch?.date_received_by_add_secretary || f.created_at),
+        letter_date: formatDate(mMatch?.date_letter_handover_discipline || f.date_prepared_and_submitted_for_signature || f.created_at),
+        priority: (mMatch?.priority || "medium").toLowerCase(),
+        mode_of_receipt: mMatch?.mode_of_receipt || "Normal Post",
+        add_sec_instructions: mMatch?.add_sec_instructions || "",
+        status: resolvedStatus,
+
+        accused_officer_name: primaryOfficer?.accused_officer_name || "",
+        accused_designation: primaryOfficer?.position || "",
+        nic_no: primaryOfficer?.nic_no || "",
+        date_of_birth: formatDate(primaryOfficer?.date_of_birth),
+        appointment_date: formatDate(primaryOfficer?.appointment_date),
+        officer_address: primaryOfficer?.officer_address || "",
+        accused_officers: officers,
+
+        accused_school_name: primaryOfficer?.accused_school_name || mMatch?.institute_name || "",
+        school_address: primaryOfficer?.school_address || "",
+        province: primaryOfficer?.province || "",
+        district: primaryOfficer?.district || "",
+        zone: primaryOfficer?.zone || "",
+
+        inquiry_details: inqDetail,
+
+        created_at: formatDate(f.created_at),
+        updated_at: formatDate(f.updated_at),
+      });
+    });
+
+    // Process reply_letter_details_table rows not yet captured
+    replyLettersRaw.forEach((r) => {
+      const ref = String(r.ref_number || r.file_no || r.id).trim();
+      const refLower = ref.toLowerCase();
+      if (seenRefs.has(refLower)) return;
+      seenRefs.add(refLower);
+
+      const mMatch = mailMap.get(refLower);
+      let resolvedFileName: "discipline" | "mail" = "discipline";
+      const rawFN = String(r.file_name || "").trim().toLowerCase();
+      if (rawFN === "mail" || rawFN.includes("mail") || rawFN.includes("තැපැල්")) {
+        resolvedFileName = "mail";
+      }
+
+      const inqDetail = buildInquiryDetails(refLower, r.file_no ? String(r.file_no).trim().toLowerCase() : undefined);
+      const futureAction = r.upcoming_action || inqDetail?.recommendation_approved || (inqDetail?.is_formal_inspection ? "Formal Disciplinary Inspection" : "");
+      const isFinalize = futureAction.toLowerCase().includes("finalize") || futureAction.toLowerCase().includes("අවසන්");
+      const isInspection = !!inqDetail || futureAction.toLowerCase().includes("inspection") || futureAction.toLowerCase().includes("inquiry") || futureAction.toLowerCase().includes("පරීක්ෂණ");
+      const resolvedStatus = caseStatusMap.get(refLower) || (isFinalize ? "Closed" : (isInspection ? "Conducting an Inquiry" : "In Progress"));
+
+      const resolvedNature = String(mMatch?.nature_of_letter || mMatch?.type || "").trim();
+
+      consolidatedLetters.push({
+        id: String(r.id || ref),
+        ref_number: ref,
+        letter_no: r.file_no || mMatch?.letter_number || ref,
+        subject_file_no: r.file_no || ref,
+        file_name: resolvedFileName,
+        nature_of_letter: resolvedNature,
+        future_action: futureAction,
+        date_prepared_and_submitted_for_signature: formatDate(r.date),
+
+        subject: mMatch?.subject_of_letter || r.description || `Letter ${ref}`,
+        classification_of_complaint_letter: mMatch?.subject_category || "nominal",
+        name_of_the_presenting_the_complain: mMatch?.senders_party || "Complainant",
+        address_of_the_person_presenting_the_complaint: mMatch?.institute_name || "",
+        received_date: formatDate(mMatch?.date_received_by_add_secretary || r.created_at),
+        letter_date: formatDate(mMatch?.date_letter_handover_discipline || r.date || r.created_at),
+        priority: (mMatch?.priority || "medium").toLowerCase(),
+        mode_of_receipt: mMatch?.mode_of_receipt || "Normal Post",
+        add_sec_instructions: mMatch?.add_sec_instructions || "",
+        status: resolvedStatus,
+
+        accused_officer_name: "",
+        accused_designation: "",
+        nic_no: "",
+        date_of_birth: "",
+        appointment_date: "",
+        officer_address: "",
+        accused_officers: [],
+
+        accused_school_name: mMatch?.institute_name || "",
+        school_address: "",
+        province: "",
+        district: "",
+        zone: "",
+
+        inquiry_details: inqDetail,
+
+        created_at: formatDate(r.created_at),
+        updated_at: formatDate(r.updated_at),
+      });
+    });
+
+    // Also include any daily mail letters that haven't been submitted through subject form yet
+    dailyMailRaw.forEach((m) => {
+      const ref = String(m.ref_number || m.letter_number || m.id).trim();
+      const refLower = ref.toLowerCase();
+      if (seenRefs.has(refLower)) return;
+      seenRefs.add(refLower);
+
+      const rawType = String(m.nature_of_letter || m.subject_category || "").toLowerCase();
+      const isMailType = rawType.includes("mail") || rawType.includes("තැපැල්");
+      const resolvedNature = String(m.nature_of_letter || m.type || "").trim();
+
+      const inqDetail = buildInquiryDetails(refLower, m.letter_number ? String(m.letter_number).trim().toLowerCase() : undefined);
+
+      consolidatedLetters.push({
+        id: String(m.id || ref),
+        ref_number: ref,
+        letter_no: m.letter_number || ref,
+        subject_file_no: ref,
+        file_name: isMailType ? "mail" : "discipline",
+        nature_of_letter: resolvedNature,
+        future_action: inqDetail?.recommendation_approved || (inqDetail ? "Formal Disciplinary Inspection" : "Pending Action"),
+        date_prepared_and_submitted_for_signature: formatDate(m.date_letter_handover_discipline || m.date_received_by_add_secretary),
+
+        subject: m.subject_of_letter || `Letter ${ref}`,
+        classification_of_complaint_letter: m.subject_category || "nominal",
+        name_of_the_presenting_the_complain: m.senders_party || "Complainant",
+        address_of_the_person_presenting_the_complaint: m.institute_name || "",
+        received_date: formatDate(m.date_received_by_add_secretary),
+        letter_date: formatDate(m.date_letter_handover_discipline || m.date_received_by_add_secretary),
+        priority: (m.priority || "medium").toLowerCase(),
+        mode_of_receipt: m.mode_of_receipt || "Normal Post",
+        add_sec_instructions: m.add_sec_instructions || "",
+        status: m.status || (inqDetail ? "Conducting an Inquiry" : "Pending"),
+
+        accused_officer_name: "",
+        accused_designation: "",
+        nic_no: "",
+        date_of_birth: "",
+        appointment_date: "",
+        officer_address: "",
+        accused_officers: [],
+
+        accused_school_name: m.institute_name || "",
+        school_address: "",
+        province: "",
+        district: "",
+        zone: "",
+
+        inquiry_details: inqDetail,
+
+        created_at: formatDate(m.created_at || new Date()),
+        updated_at: formatDate(m.updated_at || new Date()),
+      });
+    });
+
+    // Also include any formal disciplinary inspection or committee records not yet captured
+    const standaloneInquiryRefs = new Set<string>();
+    formalRowsRaw.forEach((fr) => {
+      if (fr.ref_number) standaloneInquiryRefs.add(String(fr.ref_number).trim());
+    });
+    apptRowsRaw.forEach((ar) => {
+      if (ar.subject_file_no) standaloneInquiryRefs.add(String(ar.subject_file_no).trim());
+      if (ar.sub_file_no) standaloneInquiryRefs.add(String(ar.sub_file_no).trim());
+    });
+    chairRowsRaw.forEach((cr) => {
+      if (cr.ref_number) standaloneInquiryRefs.add(String(cr.ref_number).trim());
+    });
+
+    standaloneInquiryRefs.forEach((ref) => {
+      const refLower = ref.toLowerCase();
+      if (seenRefs.has(refLower)) return;
+      seenRefs.add(refLower);
+
+      const mMatch = mailMap.get(refLower);
+      const resolvedNature = String(mMatch?.nature_of_letter || mMatch?.type || "").trim();
+      const inqDetail = buildInquiryDetails(refLower);
+
+      consolidatedLetters.push({
+        id: `inq-${ref}`,
+        ref_number: ref,
+        letter_no: ref,
+        subject_file_no: ref,
+        file_name: "discipline",
+        nature_of_letter: resolvedNature,
+        future_action: inqDetail?.recommendation_approved || inqDetail?.disciplinary_order || "Formal Disciplinary Inspection",
+        date_prepared_and_submitted_for_signature: inqDetail?.appointment_letter_date || "",
+
+        subject: `Disciplinary Inquiry Case ${ref}`,
+        classification_of_complaint_letter: "Disciplinary Inspection",
+        name_of_the_presenting_the_complain: "Disciplinary Inquiry Committee",
+        address_of_the_person_presenting_the_complaint: "",
+        received_date: inqDetail?.appointment_letter_date || "",
+        letter_date: inqDetail?.appointment_letter_date || "",
+        priority: "medium",
+        mode_of_receipt: "Official Procedure",
+        add_sec_instructions: inqDetail?.approval_secretary_details || "",
+        status: inqDetail?.disciplinary_order ? "Closed" : "Conducting an Inquiry",
+
+        accused_officer_name: "",
+        accused_designation: "",
+        nic_no: "",
+        date_of_birth: "",
+        appointment_date: "",
+        officer_address: "",
+        accused_officers: [],
+
+        accused_school_name: "",
+        school_address: "",
+        province: "",
+        district: "",
+        zone: "",
+
+        inquiry_details: inqDetail,
+
+        created_at: inqDetail?.appointment_letter_date || formatDate(new Date()),
+        updated_at: formatDate(new Date()),
+      });
+    });
+
+    // Helper function to check if the nature of the letter is specifically an inquiry
+    const isNatureInquiry = (natureStr?: string | null): boolean => {
+      if (!natureStr || typeof natureStr !== "string") return false;
+      const n = natureStr.trim().toLowerCase();
+      if (n === "request" || n === "ඉල්ලීම" || n === "கோரிக்கை") return false;
+      if (n === "complaint" || n.includes("complaint") || n.includes("පැමිණිලි") || n.includes("முறைப்பாடு")) return false;
+      if (n.includes("answer") || n.includes("පිළිතුරු") || n.includes("பதில்")) return false;
+      return (
+        n === "inquiry" ||
+        n.startsWith("inquiry") ||
+        n === "inquiry / investigation" ||
+        n === "disciplinary inquiry" ||
+        n === "disciplinary inquiries" ||
+        n.includes("inquiry") ||
+        n.includes("විමසුම්") ||
+        n.includes("පරීක්ෂණ") ||
+        n.includes("විමර්ශන") ||
+        n.includes("விசாரணை")
+      );
+    };
+
+    // Helper to identify Disciplinary Inquiries - ONLY when the nature of the letter is inquiry
+    const isDisciplinaryInquiry = (l: any) => {
+      const nature = String(l.nature_of_letter || "").trim();
+      if (isNatureInquiry(nature)) {
+        return true;
+      }
+      const fn = String(l.file_name || "").trim().toLowerCase();
+      if (fn === "inquiry" || fn === "disciplinary_inquiry") {
+        return true;
+      }
+      return false;
+    };
+
+    // Separate into discipline, mail, and disciplinary inquiries lists
+    const disciplineLetters: any[] = [];
+    const mailLetters: any[] = [];
+    const disciplinaryInquiries: any[] = [];
+
+    consolidatedLetters.forEach((l) => {
+      if (l.file_name === "mail") {
+        mailLetters.push(l);
+      } else {
+        disciplineLetters.push(l);
+      }
+
+      if (isDisciplinaryInquiry(l)) {
+        disciplinaryInquiries.push(l);
+      }
+    });
+
+    return serializeForServerAction({
+      success: true,
+      disciplineLetters,
+      mailLetters,
+      disciplinaryInquiries,
+      inquiryLetters: disciplinaryInquiries,
+      totalCount: consolidatedLetters.length
+    });
+  } catch (err: any) {
+    console.error("Error in getSubjectReportsCategorizedLettersServer:", err);
+    return serializeForServerAction({
+      success: false,
+      error: err?.message || "Failed to load categorized report letters",
+      disciplineLetters: [],
+      mailLetters: [],
+      disciplinaryInquiries: [],
+      inquiryLetters: [],
+      totalCount: 0
+    });
+  }
+}
+
 
 
 

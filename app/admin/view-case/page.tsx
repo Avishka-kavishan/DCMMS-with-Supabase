@@ -42,9 +42,9 @@ const formatStepTaken = (step: string, t: any) => {
     const dateMatch = step.match(/Date:([^\]\s]+)/);
     const dateStr = dateMatch ? dateMatch[1] : "";
     if (isApproved) {
-      return `${t("eduSecretaryApproval", "Edu Secretary Approval")}: ${t("yesLabel", "Yes")} (${t("approvalDate", "Date")}: ${dateStr})`;
+      return `${t("eduSecretaryApproval", "Edu Secretary Approval")}: ${t("receivedLabel", "Received")} (${t("approvalDate", "Date")}: ${dateStr})`;
     } else {
-      return `${t("eduSecretaryApproval", "Edu Secretary Approval")}: ${t("noLabel", "No")}`;
+      return `${t("eduSecretaryApproval", "Edu Secretary Approval")}: ${t("notReceivedLabel", "Not Received")}`;
     }
   }
   return step;
@@ -128,7 +128,7 @@ interface LetterData {
 interface ConnectedOfficer {
   id: string;
   name: string;
-  role: "Daily Reporter" | "Investigation Administrator" | "Subject Officer" | "Committee Chairman" | "Committee Member" | "Accused Officer" | "Inquiry Officer" | "Connected Officer";
+  role: "Daily Reporter" | "Assistant Secretary Investigation Branch" | "Investigation Administrator" | "Subject Officer" | "Committee Chairman" | "Committee Member" | "Accused Officer" | "Inquiry Officer" | "Connected Officer";
   designation?: string;
   nic?: string;
   email?: string;
@@ -140,7 +140,7 @@ interface ConnectedOfficer {
 interface TrackingEntry {
   id: string;
   step: number;
-  role: "Daily Reporter" | "Investigation Administrator" | "Subject Officer" | "Committee Chairman" | "Committee Member" | "Accused Officer" | "Inquiry Officer" | "Connected Officer";
+  role: "Daily Reporter" | "Assistant Secretary Investigation Branch" | "Investigation Administrator" | "Subject Officer" | "Committee Chairman" | "Committee Member" | "Accused Officer" | "Inquiry Officer" | "Connected Officer";
   officerName: string;
   action: string;
   category: "daily-mail" | "investigation-admin" | "subject-officer" | "connected-officers";
@@ -181,10 +181,10 @@ function RoleBadge({ role }: { role: string }) {
     bg = "#eff6ff";
     color = "#1d4ed8";
     label = t("roleDailyReporter", "Daily Reporter");
-  } else if (role === "Investigation Administrator") {
+  } else if (role === "Assistant Secretary Investigation Branch" || role === "Investigation Administrator") {
     bg = "#fdf4ff";
     color = "#a21caf";
-    label = t("roleInvestigationAdmin", "Investigation Administrator");
+    label = t("roleAsstSecInvestigation", "Assistant Secretary Investigation Branch");
   } else if (role === "Subject Officer") {
     bg = "#f0fdf4";
     color = "#15803d";
@@ -284,7 +284,7 @@ function AdminViewCaseInner() {
     const officersMap = new Map<string, ConnectedOfficer>();
     let dmOfficerName = "Daily Mail Officer";
     let subjOfficerName = "Subject Officer";
-    let adminOfficerName = "Investigation Administrator";
+    let adminOfficerName = "Assistant Secretary Investigation Branch";
 
     // 1. Fetch comprehensive data from PostgreSQL Server Action
     try {
@@ -309,7 +309,7 @@ function AdminViewCaseInner() {
         const regList: any[] = Array.isArray(registeredOfficers) ? registeredOfficers : [];
         dmOfficerName = regList.find((o) => (o.role || "").toLowerCase().includes("daily mail"))?.full_name || "Daily Mail Officer";
         subjOfficerName = regList.find((o) => (o.role || "").toLowerCase().includes("subject"))?.full_name || "Subject Officer";
-        adminOfficerName = regList.find((o) => (o.role || "").toLowerCase().includes("investigation") || (o.role || "").toLowerCase().includes("branch admin"))?.full_name || "Investigation Administrator";
+        adminOfficerName = regList.find((o) => (o.role || "").toLowerCase().includes("investigation") || (o.role || "").toLowerCase().includes("branch admin"))?.full_name || "Assistant Secretary Investigation Branch";
         
         // Complainant / Senders Party (Separate from Subject Officer!)
         const complainantName = subjectForm?.name_of_the_presenting_the_complain || (dailyMailRows && dailyMailRows[0]?.senders_party) || "Complainant";
@@ -392,15 +392,15 @@ function AdminViewCaseInner() {
           });
         }
 
-        // 4. Investigation Administrator / Directing Authority
+        // 4. Assistant Secretary Investigation Branch / Directing Authority
         const adminReviewer = firstMail?.last_edited_by ? firstMail.last_edited_by.split("(")[0].trim() : (firstMail?.created_by_name || null);
         if (adminReviewer && adminReviewer.toLowerCase() !== dmOfficerName.toLowerCase() && !adminReviewer.toLowerCase().includes("daily mail")) {
           const regAdmin = regList.find((o) => (o.full_name || "").toLowerCase().trim() === adminReviewer.toLowerCase().trim());
           officersMap.set("inv-admin", {
             id: "inv-admin",
             name: adminReviewer,
-            role: "Investigation Administrator",
-            designation: regAdmin?.role || t("investigationAdminRole", "Additional Secretary / Investigation Administrator"),
+            role: "Assistant Secretary Investigation Branch",
+            designation: regAdmin?.role || t("roleAsstSecInvestigation", "Assistant Secretary Investigation Branch"),
             email: regAdmin?.email || undefined,
             status: "Completed",
           });
@@ -489,15 +489,15 @@ function AdminViewCaseInner() {
               });
             }
 
-            // Step 4 (Investigation Administrator): Directive & Referral
+            // Step 4 (Assistant Secretary Investigation Branch): Directive & Referral
             if (mail.forward_reason || mail.forwarded_to || mail.add_sec_notes || mail.last_edited_by) {
               const fwdPerson = mail.last_edited_by ? mail.last_edited_by.split("(")[0].trim() : (mail.created_by_name || adminOfficerName);
               const directiveTs = mail.last_edited_at ? new Date(mail.last_edited_at).getTime() : (mail.date_letter_handover_discipline ? new Date(mail.date_letter_handover_discipline).getTime() + 1800000 : ts + 1800000);
               raw.push({
                 id: `ia-directive-${mail.id || idx}`,
-                role: "Investigation Administrator",
+                role: "Assistant Secretary Investigation Branch",
                 officerName: fwdPerson,
-                action: t("adminDirectiveTitle", "Investigation Administrator Directive & Referral to Subject Officer"),
+                action: t("adminDirectiveTitle", "Assistant Secretary Investigation Branch Directive & Referral to Subject Officer"),
                 category: "investigation-admin",
                 details: `${mail.forward_reason || "Referral directive issued for disciplinary evaluation."}${mail.forwarded_to ? ` | Forwarded To: ${mail.forwarded_to}.` : ""}${mail.add_sec_notes ? ` | Notes: ${mail.add_sec_notes}` : ""}`,
                 date: formatEntryDate(mail.last_edited_at || mail.date_letter_handover_discipline || mail.created_at),
@@ -550,7 +550,7 @@ function AdminViewCaseInner() {
               const officer = match ? match[1] : log.username;
               raw.push({
                 id: `audit-assign-${log.id || aIdx}`,
-                role: "Investigation Administrator",
+                role: "Assistant Secretary Investigation Branch",
                 officerName: log.username || officer || adminOfficerName,
                 action: `${t("intakeAssignmentAudit", "Intake Audit Logged: Assigned to")} ${officer}`,
                 category: "investigation-admin",
@@ -662,7 +662,7 @@ function AdminViewCaseInner() {
         }
 
         // ============================================================
-        // C. INVESTIGATION ADMINISTRATOR TIMELINE ENTRIES
+        // C. ASSISTANT SECRETARY INVESTIGATION BRANCH TIMELINE ENTRIES
         // ============================================================
         const extList: any[] = Array.isArray(extensions) && extensions.length > 0 ? extensions : (extension ? [extension] : []);
         const hasInvAdminActions = Boolean(
@@ -678,8 +678,8 @@ function AdminViewCaseInner() {
           officersMap.set("inv-admin", {
             id: "inv-admin",
             name: adminOfficerName,
-            role: "Investigation Administrator",
-            designation: t("investigationAdminRole", "Branch Administrator / Head of Investigation"),
+            role: "Assistant Secretary Investigation Branch",
+            designation: t("roleAsstSecInvestigation", "Assistant Secretary Investigation Branch"),
             status: "Active",
           });
 
@@ -690,7 +690,7 @@ function AdminViewCaseInner() {
 
             raw.push({
               id: `ia-committee-appoint-${caseNo}`,
-              role: "Investigation Administrator",
+              role: "Assistant Secretary Investigation Branch",
               officerName: adminOfficerName,
               action: t("committeeAppointedTitle", "Inquiry Committee Formally Appointed"),
               category: "investigation-admin",
@@ -714,7 +714,7 @@ function AdminViewCaseInner() {
 
             raw.push({
               id: `ia-dates-schedule-${caseNo}`,
-              role: "Investigation Administrator",
+              role: "Assistant Secretary Investigation Branch",
               officerName: adminOfficerName,
               action: t("formalApptIssuedTitle", "Formal Appointment Letter Issued & Report Due Date Set"),
               category: "investigation-admin",
@@ -740,7 +740,7 @@ function AdminViewCaseInner() {
 
               raw.push({
                 id: `ia-extension-eval-${ext.id || eIdx}`,
-                role: "Investigation Administrator",
+                role: "Assistant Secretary Investigation Branch",
                 officerName: adminOfficerName,
                 action: `${t("dateExtensionDecision", "Date Extension Decision")}: ${ext.extention_term || "Extension"} (${ext.approval_status || "Pending"})`,
                 category: "investigation-admin",
@@ -766,7 +766,7 @@ function AdminViewCaseInner() {
 
             raw.push({
               id: `ia-final-report-${caseNo}`,
-              role: "Investigation Administrator",
+              role: "Assistant Secretary Investigation Branch",
               officerName: adminOfficerName,
               action: t("finalReportSecretaryTitle", "Final Investigation Report & Secretary Approval"),
               category: "investigation-admin",
@@ -1188,7 +1188,7 @@ function AdminViewCaseInner() {
                     <div key={off.id} className="officer-card-item">
                       <div className="officer-avatar-box">
                         {off.role === "Daily Reporter" && <Mail size={18} color="#1d4ed8" />}
-                        {off.role === "Investigation Administrator" && <Shield size={18} color="#a21caf" />}
+                        {(off.role === "Assistant Secretary Investigation Branch" || off.role === "Investigation Administrator") && <Shield size={18} color="#a21caf" />}
                         {off.role === "Subject Officer" && <UserCheck size={18} color="#15803d" />}
                         {off.role === "Committee Chairman" && <Award size={18} color="#b45309" />}
                         {off.role === "Committee Member" && <Users size={18} color="#6d28d9" />}
@@ -1221,7 +1221,7 @@ function AdminViewCaseInner() {
                     </span>
                   </h2>
                   <p className="vc-section-subtitle">
-                    {t("processTimelinesSubtitle", "Switch between specialized workflow views for Daily Reporter, Investigation Administrator, Subject Officer, and Connected Officers")}
+                    {t("processTimelinesSubtitle", "Switch between specialized workflow views for Daily Reporter, Assistant Secretary Investigation Branch, Subject Officer, and Connected Officers")}
                   </p>
                 </div>
                 <span className="vc-step-counter">{t("showingSteps", "Showing {{current}} of {{total}} Steps", { current: filteredTimelineEntries.length, total: totalSteps })}</span>
@@ -1252,7 +1252,7 @@ function AdminViewCaseInner() {
                   onClick={() => setActiveTab("investigation-admin")}
                 >
                   <Shield size={15} />
-                  {t("investigationAdminProcess", "Investigation Administrator Process")}
+                  {t("investigationAdminProcess", "Assistant Secretary Investigation Branch Process")}
                   <span className="tab-count">{counts.investigationAdmin}</span>
                 </button>
 
@@ -1358,7 +1358,7 @@ function AdminViewCaseInner() {
                     >
                       <option value="All">{t("allRoles", "All Roles")}</option>
                       <option value="Daily Reporter">{t("roleDailyReporter", "Daily Reporter")}</option>
-                      <option value="Investigation Administrator">{t("roleInvestigationAdmin", "Investigation Administrator")}</option>
+                      <option value="Assistant Secretary Investigation Branch">{t("roleAsstSecInvestigation", "Assistant Secretary Investigation Branch")}</option>
                       <option value="Subject Officer">{t("roleSubjectOfficer", "Subject Officer")}</option>
                       <option value="Committee Chairman">{t("roleCommitteeChairman", "Committee Chairman")}</option>
                       <option value="Committee Member">{t("roleCommitteeMember", "Committee Member")}</option>

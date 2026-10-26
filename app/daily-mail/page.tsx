@@ -33,6 +33,7 @@ interface Letter {
   subjectCategory?: string;
   instituteName?: string;
   regionProvince?: string;
+  sentBranch?: string;
   documentUrl?: string;
   documentName?: string;
   addressedTo?: string;
@@ -218,7 +219,8 @@ export default function DailyMailPage() {
               officerName: db.action_officer || "",
               subjectCategory: db.classification || "",
               instituteName: "",
-              regionProvince: "",
+              regionProvince: db.nature_of_letter || db.region_province || db.regionProvince || "",
+              sentBranch: db.sent_branch || db.sentBranch || "",
               documentUrl: db.document_url || "",
               documentName: db.document_name || "",
               addressedTo: db.addressed_to || "",
@@ -512,7 +514,7 @@ export default function DailyMailPage() {
           l.letterNo || "—",
           l.letterType || "—",
           l.senderName || "—",
-          l.regionProvince || "—",
+          l.regionProvince ? (l.sentBranch ? `${l.regionProvince} (${l.sentBranch})` : l.regionProvince) : "—",
           l.subjectCategory ? t(`opt${l.subjectCategory.replace(/\s+/g, "")}`, l.subjectCategory) : "—",
           l.subject || "—",
           l.receivedDate || "—",

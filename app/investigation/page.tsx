@@ -214,7 +214,7 @@ export default function InvestigationPage() {
   const [isDetailsLoading, setIsDetailsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Case details form state (editable by Investigation Administrator)
+  // Case details form state (editable by Assistant Secretary Investigation Branch)
   const [assignee, setAssignee] = useState("");
   const [targetDate, setTargetDate] = useState("");
   const [investigationStatus, setInvestigationStatus] = useState<Inquiry["status"]>("In Progress");
@@ -1894,7 +1894,7 @@ export default function InvestigationPage() {
     }
   };
 
-  // ── Handler: Investigation Administrator sends Investigation Committee Assignment details to Subject Officer ──
+  // ── Handler: Assistant Secretary Investigation Branch sends Investigation Committee Assignment details to Subject Officer ──
   const handleSendCommitteeToSubjectOfficer = async () => {
     if (!selectedChairman && selectedMembers.length === 0) {
       showToast(lang === "si" ? "කරුණාකර අවම වශයෙන් සභාපතිවරයෙකු හෝ එක් කමිටු සාමාජිකයෙකු තෝරන්න." : "Please select a Chairman or at least one Committee Member first.");
@@ -1903,7 +1903,7 @@ export default function InvestigationPage() {
 
     const caseNo = selectedCase?.inquiryNo || (selectedCase as any)?.caseNo || (selectedCase as any)?.refNo || (selectedCase as any)?.case_no || (selectedCase as any)?.id;
     if (!caseNo) {
-      showToast(lang === "si" ? "නඩු අංකය සොයාගත නොහැකි විය." : "Case Reference Number not found.");
+      showToast(lang === "si" ? "යොමු අංකය සොයාගත නොහැකි විය." : "Case Reference Number not found.");
       return;
     }
 
@@ -2776,7 +2776,7 @@ export default function InvestigationPage() {
             received_date: now,
             report_state: investigationStatus,
             special_notes: investigationNotes || null,
-            subject_officer_name: targetOfficer || "Investigation Administrator",
+            subject_officer_name: targetOfficer || "Assistant Secretary Investigation Branch",
             step_taken: desc,
           });
 
@@ -2878,7 +2878,7 @@ export default function InvestigationPage() {
         list.push({
           id: actionId,
           caseNo: caseNo,
-          subjectOfficerName: targetOfficer || "Investigation Administrator",
+          subjectOfficerName: targetOfficer || "Assistant Secretary Investigation Branch",
           reportState: investigationStatus,
           receivedDate: now,
           stepTaken: desc,
@@ -3276,7 +3276,7 @@ export default function InvestigationPage() {
               </button>
               <div className="dashboard-title-area">
                 <h2 className="dashboard-main-title">
-                  {getRoleDisplayName(currentUserProfile?.raw_role || currentUserProfile?.role, t) || t("investigationDashboardTitle", "Investigation Administrator Dashboard")}
+                  {getRoleDisplayName(currentUserProfile?.raw_role || currentUserProfile?.role, t) || t("investigationDashboardTitle", "Assistant Secretary Investigation Branch Dashboard")}
                 </h2>
                 <p className="dashboard-main-subtitle">{t("investigationDashboardDesc")}</p>
               </div>
@@ -3341,7 +3341,7 @@ export default function InvestigationPage() {
               </h3>
               <p style={{ margin: "4px 0 0 0", fontSize: "14px", color: "#64748b" }}>
                 {lang === "si" 
-                  ? "මෙමගින් ඔබට විමර්ශන නඩු විස්තර සහ විමර්ශන නිලධාරීන් පහසුවෙන් කළමනාකරණය කළ හැකිය."
+                  ? "මෙමගින් ඔබට විමර්ශන විස්තර සහ විමර්ශන නිලධාරීන් පහසුවෙන් කළමනාකරණය කළ හැකිය."
                   : "Manage inquiry progress, assign officers, and update case records seamlessly."}
               </p>
             </div>
@@ -3478,7 +3478,7 @@ export default function InvestigationPage() {
               onClick={() => setActiveTab("cases")}
             >
               <ClipboardList className="tab-icon" />
-              <span>{lang === "si" ? "විමර්ශන නඩු ලේඛනය" : "Inquiry & Investigation Cases"}</span>
+              <span>{lang === "si" ? "විමර්ශන ලේඛනය" : "Inquiry & Investigation Cases"}</span>
             </button>
             <button
               className={`nav-tab-btn${activeTab === "officers" ? " active" : ""}`}
@@ -3652,7 +3652,7 @@ export default function InvestigationPage() {
                                       </span>{" "}
                                       <span>{lang === "si" ? "විසින් දිනයන් ඇතුළත් කරන ලදී: " : "submitted dates for "}</span>
                                       <span style={{ fontWeight: 800, color: "#050505" }}>
-                                        {lang === "si" ? "නඩු අංක " : "Case No: "}{notif.caseNo}
+                                        {lang === "si" ? "යොමු අංක " : "Case No: "}{notif.caseNo}
                                       </span>
                                     </div>
 

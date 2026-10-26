@@ -47,7 +47,13 @@ export function normalizeRole(roleStr?: string): UserRole {
   }
 
   // Specific secretary & investigation roles
-  if (lower.includes("investigation branch") || (lower.includes("assistant secretary") && lower.includes("investigation"))) {
+  if (
+    lower.includes("investigation branch") ||
+    (lower.includes("assistant secretary") && lower.includes("investigation")) ||
+    lower.includes("investigation administrator") ||
+    lower.includes("investigation admin") ||
+    lower === "assistant_secretary_investigation"
+  ) {
     return "assistant_secretary_investigation";
   }
   if (lower.includes("deputy") || lower.includes("senior assistant") || lower.includes("senior_assistant_secretary") || lower.includes("නියෝජ්‍ය ලේකම්")) {
@@ -65,9 +71,9 @@ export function normalizeRole(roleStr?: string): UserRole {
   }
 
   // General branch / admin
+  if (lower.includes("investigation") || lower === "investigation_officer") return "assistant_secretary_investigation";
   if (lower.includes("branch") || lower.includes("administrator") || lower === "admin") return "admin";
   if (lower.includes("subject") || lower === "subject_officer") return "subject_officer";
-  if (lower.includes("investigation") || lower === "investigation_officer") return "investigation_officer";
   // Former daily_mail role — map to additional_secretary for backward compatibility
   if (lower.includes("daily") || lower.includes("mail") || lower === "daily_mail") return "additional_secretary";
   return "additional_secretary";
@@ -120,6 +126,9 @@ export function getRoleDisplayName(
     lower.includes("assistant secretary investigation") ||
     (lower.includes("assistant secretary") && lower.includes("investigation")) ||
     (lower.includes("investigation branch") && lower.includes("assistant")) ||
+    lower.includes("investigation administrator") ||
+    lower.includes("investigation admin") ||
+    lower.includes("investigation branch administrator") ||
     lower === "assistant_secretary_investigation"
   ) {
     return t ? t("roleAsstSecInvestigation", "Assistant Secretary Investigation Branch") : "Assistant Secretary Investigation Branch";
@@ -140,9 +149,9 @@ export function getRoleDisplayName(
     return t ? t("sysAdmin", "System Administrator") : "System Administrator";
   }
 
-  // Investigation Administrator / Investigation Officer
+  // Investigation role fallback -> Assistant Secretary Investigation Branch
   if (lower.includes("investigation")) {
-    return t ? t("roleInvestigationAdmin", "Investigation Branch Administrator") : "Investigation Branch Administrator";
+    return t ? t("roleAsstSecInvestigation", "Assistant Secretary Investigation Branch") : "Assistant Secretary Investigation Branch";
   }
 
   // Subject Officer

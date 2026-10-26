@@ -28,6 +28,7 @@
 }
 
 .sysadmin-stat-card {
+  background-color: #16324F;
   border-radius: 16px;
   padding: 20px;
   display: flex;
@@ -79,6 +80,47 @@
   box-shadow: 0 12px 28px rgba(0, 143, 107, 0.45) !important;
 }
 
+/* Branch Admin Management Specific Stat Cards */
+.card-total-branch-admins,
+.sysadmin-stat-card.card-total-branch-admins {
+  background: linear-gradient(135deg, #16324F 0%, #1e3a8a 100%) !important;
+  background-color: #16324F !important;
+}
+.card-total-branch-admins:hover,
+.sysadmin-stat-card.card-total-branch-admins:hover {
+  box-shadow: 0 12px 28px rgba(22, 50, 79, 0.45) !important;
+}
+
+.card-active-branch-admins,
+.sysadmin-stat-card.card-active-branch-admins {
+  background: linear-gradient(135deg, #008F6B 0%, #059669 100%) !important;
+  background-color: #008F6B !important;
+}
+.card-active-branch-admins:hover,
+.sysadmin-stat-card.card-active-branch-admins:hover {
+  box-shadow: 0 12px 28px rgba(0, 143, 107, 0.45) !important;
+}
+
+.card-inactive-branch-admins,
+.sysadmin-stat-card.card-inactive-branch-admins {
+  background: linear-gradient(135deg, #DC2626 0%, #E11D48 100%) !important;
+  background-color: #DC2626 !important;
+}
+.card-inactive-branch-admins:hover,
+.sysadmin-stat-card.card-inactive-branch-admins:hover {
+  box-shadow: 0 12px 28px rgba(220, 38, 38, 0.45) !important;
+}
+
+.card-recent-branch-admin,
+.sysadmin-stat-card.card-recent-branch-admin {
+  background: linear-gradient(135deg, #4F46E5 0%, #6366F1 100%) !important;
+  background-color: #4F46E5 !important;
+}
+.card-recent-branch-admin:hover,
+.sysadmin-stat-card.card-recent-branch-admin:hover {
+  box-shadow: 0 12px 28px rgba(79, 70, 229, 0.45) !important;
+}
+
 .stat-icon-wrapper {
   display: flex;
   align-items: center;
@@ -115,6 +157,21 @@
   color: #FFFFFF !important;
   opacity: 0.85;
   margin: 0;
+}
+
+.stat-card-badge {
+  font-size: calc(11px * var(--font-scale, 1));
+  font-weight: 700;
+  color: #FFFFFF !important;
+  background: rgba(255, 255, 255, 0.2) !important;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  line-height: 1.2;
 }
 
 .sysadmin-chart-card {

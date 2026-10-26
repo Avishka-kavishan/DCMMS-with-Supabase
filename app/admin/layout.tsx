@@ -142,7 +142,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     if (isChiefParam) {
       return {
         title: lang === "si" ? "ශාඛා ප්‍රධානී - විනය අංශය (Chief Clerk - Discipline Branch)" : "Chief Clerk - Discipline Branch",
-        subtitle: lang === "si" ? "ශාඛා ලිපි සහ නඩු කටයුතු කළමනාකරණය" : "Manage branch letters and case workflow"
+        subtitle: lang === "si" ? "ශාඛා ලිපි සහ විනය කටයුතු කළමනාකරණය" : "Manage branch letters and case workflow"
       };
     }
     if (cleanPath === "/admin/subject-officers") {
@@ -159,8 +159,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }
     if (cleanPath === "/admin/investigation-officers") {
       return {
-        title: t("investigationAdminTitle", "Investigation Administrators"),
-        subtitle: t("investigationAdminDescAdmin", "Manage investigation administrator accounts")
+        title: t("roleAsstSecInvestigation", "Assistant Secretary Investigation Branch"),
+        subtitle: t("investigationAdminDescAdmin", "Manage Assistant Secretary Investigation Branch accounts")
       };
     }
     if (cleanPath === "/admin/daily-mail-officers") {
@@ -203,7 +203,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return {
       title: dynamicRoleTitle || t("adminDashboardTitle", "Discipline Branch Administrator"),
       subtitle: isChief
-        ? (lang === "si" ? "ශාඛා ලිපි සහ නඩු කටයුතු කළමනාකරණය" : lang === "ta" ? "கிளைக் கடிதங்கள் மற்றும் வழக்குகளை நிர்வகிக்கவும்" : "Manage branch letters and case workflow")
+        ? (lang === "si" ? "ශාඛා ලිපි සහ විනය කටයුතු කළමනාකරණය" : lang === "ta" ? "கிளைக் கடிதங்கள் மற்றும் வழக்குகளை நிர்வகிக்கவும்" : "Manage branch letters and case workflow")
         : t("adminDashboardDesc", "Manage cases and user access")
     };
   };

@@ -150,6 +150,7 @@ CREATE TABLE IF NOT EXISTS dcmms_daily_mail (
     classification VARCHAR(50),
     action_officer VARCHAR(150),
     status VARCHAR(50) DEFAULT 'Pending',
+    sent_branch VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -298,6 +299,7 @@ CREATE TABLE IF NOT EXISTS charge_sheet_table (
     date_the_response_to_the_charge_sheet_was_given DATE,
     disciplinary_order TEXT,
     disciplinary_authority VARCHAR(100),
+    other_disciplinary_authority TEXT,
     date_request_documents DATE,
     date_submission_documents DATE,
     agree_with_answers VARCHAR(20),

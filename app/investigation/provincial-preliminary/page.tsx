@@ -24,8 +24,13 @@ import {
 
 function ProvincialPreliminaryContent() {
   const { t, i18n } = useTranslation();
+  const currentLang = i18n.language || "si";
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  const changeLanguage = (lng: string) => {
+    i18n.changeLanguage(lng);
+  };
 
   // Read URL parameters if available
   const letterNoParam = searchParams?.get("letterNo") || searchParams?.get("id") || "";
@@ -269,7 +274,7 @@ function ProvincialPreliminaryContent() {
     const trimmed = officerInput.trim();
     if (!trimmed) return;
     if (officers.includes(trimmed)) {
-      showToast("Officer is already added to the list.");
+      showToast(t("officerAlreadyAddedToast", "Officer is already added to the list."));
       return;
     }
     setOfficers([...officers, trimmed]);
@@ -303,10 +308,10 @@ function ProvincialPreliminaryContent() {
         const profile = await getCurrentProfile();
         await logAuditEvent(profile?.full_name || profile?.id || "user", "SAVE_PRELIMINARY_DRAFT", `Saved preliminary draft for ${subjectFileNo}`);
       }
-      showToast("Draft saved successfully!");
+      showToast(t("draftSavedToast", "Draft saved successfully!"));
     } catch (err) {
       console.error("Save error:", err);
-      showToast("Draft saved locally.");
+      showToast(t("draftSavedLocallyToast", "Draft saved locally."));
     } finally {
       setIsSaving(false);
     }
@@ -358,13 +363,13 @@ function ProvincialPreliminaryContent() {
         { recommendation: recommendations }
       ).catch((e) => console.error("PostgreSQL audit error:", e));
 
-      showToast("Provincial preliminary investigation submitted successfully!");
+      showToast(t("investigationSubmittedToast", "Provincial preliminary investigation submitted successfully!"));
       setTimeout(() => {
         router.push("/investigation");
       }, 1500);
     } catch (err) {
       console.error("Submit error:", err);
-      showToast("Investigation submitted!");
+      showToast(t("investigationSubmittedToast", "Provincial preliminary investigation submitted successfully!"));
       setTimeout(() => {
         router.push("/investigation");
       }, 1500);
@@ -420,10 +425,10 @@ function ProvincialPreliminaryContent() {
         { recommendation: recommendations, status: statusText }
       ).catch((e) => console.error("PostgreSQL audit error:", e));
 
-      showToast("Officer in charge has been informed that the initial investigation is complete!");
+      showToast(t("oicInformedToast", "Officer in charge has been informed that the initial investigation is complete!"));
     } catch (err) {
       console.error("Inform OIC error:", err);
-      showToast("Informed officer in charge successfully.");
+      showToast(t("oicInformedToast", "Officer in charge has been informed that the initial investigation is complete!"));
     } finally {
       setIsSaving(false);
     }
@@ -439,22 +444,62 @@ function ProvincialPreliminaryContent() {
       {/* Top Header */}
       <header className="provincial-header">
         <div className="provincial-title-group">
-          <h1>Conducting provincial preliminary investigation</h1>
-          <p>Provide detailed information for the selected letter.</p>
+          <h1>{t("provincialPrelimTitle", "Conducting provincial preliminary investigation")}</h1>
+          <p>{t("provincialPrelimSubtitle", "Provide detailed information for the selected letter.")}</p>
         </div>
         <div className="provincial-actions">
+          {/* Trilingual Language Selector */}
+          <div className="header-lang-selector" role="radiogroup" aria-label="Language selector">
+            <label className={`lang-btn${currentLang === "si" ? " active" : ""}`} lang="si">
+              <input
+                type="radio"
+                name="provincialLang"
+                value="si"
+                checked={currentLang === "si"}
+                onChange={() => changeLanguage("si")}
+                aria-label="Switch language to Sinhala"
+                className="sr-only"
+              />
+              සිංහල
+            </label>
+            <label className={`lang-btn${currentLang === "ta" ? " active" : ""}`} lang="ta">
+              <input
+                type="radio"
+                name="provincialLang"
+                value="ta"
+                checked={currentLang === "ta"}
+                onChange={() => changeLanguage("ta")}
+                aria-label="Switch language to Tamil"
+                className="sr-only"
+              />
+              தமிழ்
+            </label>
+            <label className={`lang-btn${currentLang === "en" ? " active" : ""}`} lang="en">
+              <input
+                type="radio"
+                name="provincialLang"
+                value="en"
+                checked={currentLang === "en"}
+                onChange={() => changeLanguage("en")}
+                aria-label="Switch language to English"
+                className="sr-only"
+              />
+              English
+            </label>
+          </div>
+
           <button
             type="button"
             className="btn-back-home-gray"
             onClick={() => router.push("/investigation")}
           >
             <ArrowLeft className="w-4 h-4" />
-            Back to Home
+            {t("backToHome", "Back to Home")}
           </button>
           <button
             type="button"
             className="btn-save-blue"
-            title="Save Details"
+            title={t("saveDraftTitle", "Save Details")}
             onClick={handleSave}
             disabled={isSaving}
           >
@@ -463,30 +508,30 @@ function ProvincialPreliminaryContent() {
         </div>
       </header>
 
-      {/* Card 1: Later details in the Letter */}
+      {/* Card 1: Details in the Letter */}
       <section className="details-card">
         <div className="details-banner-pill">
-          <h2>Later details in the Letter</h2>
+          <h2>{t("letterDetailsBanner", "Later details in the Letter")}</h2>
         </div>
         <div className="details-grid">
           <div className="detail-item">
-            <span className="detail-label">Letter No :</span>
+            <span className="detail-label">{t("letterNoLabelColon", "Letter No :")}</span>
             <span className="detail-value">{letterNo}</span>
           </div>
           <div className="detail-item">
-            <span className="detail-label">Subject File Number :</span>
+            <span className="detail-label">{t("subjectFileNoLabel", "Subject File Number :")}</span>
             <span className="detail-value">{subjectFileNo}</span>
           </div>
           <div className="detail-item">
-            <span className="detail-label">Name of the person who filed the complaint :</span>
+            <span className="detail-label">{t("complainantNameLabel", "Name of the person who filed the complaint :")}</span>
             <span className="detail-value">{complainantName}</span>
           </div>
           <div className="detail-item">
-            <span className="detail-label">Name of the accused person :</span>
+            <span className="detail-label">{t("accusedNameLabel", "Name of the accused person :")}</span>
             <span className="detail-value">{accusedName}</span>
           </div>
           <div className="detail-item">
-            <span className="detail-label">Name of the school concerned by the complaint :</span>
+            <span className="detail-label">{t("schoolConcernedLabel", "Name of the school concerned by the complaint :")}</span>
             <span className="detail-value">{schoolName}</span>
           </div>
         </div>
@@ -494,12 +539,12 @@ function ProvincialPreliminaryContent() {
 
       {/* Card 2: Conducting provincial preliminary investigation Form */}
       <form onSubmit={handleSubmit} className="form-card">
-        <h2 className="form-card-title">Conducting provincial preliminary investigation</h2>
+        <h2 className="form-card-title">{t("formConductingPrelim", "Conducting provincial preliminary investigation")}</h2>
 
         {/* Row 1: Appointment date, Due date, Next steps/status */}
         <div className="form-grid-3col">
           <div className="form-field-group">
-            <label className="form-field-label">Appointment date</label>
+            <label className="form-field-label">{t("formAppointmentDate", "Appointment date")}</label>
             <div className="input-with-icon">
               <input
                 ref={appointmentDateRef}
@@ -520,7 +565,7 @@ function ProvincialPreliminaryContent() {
           </div>
 
           <div className="form-field-group">
-            <label className="form-field-label">Due date</label>
+            <label className="form-field-label">{t("formDueDate", "Due date")}</label>
             <div className="input-with-icon">
               <input
                 ref={dueDateRef}
@@ -541,21 +586,21 @@ function ProvincialPreliminaryContent() {
           </div>
 
           <div className="form-field-group">
-            <label className="form-field-label">Next steps/status</label>
+            <label className="form-field-label">{t("formNextStepsStatus", "Next steps/status")}</label>
             <div className="select-wrapper">
               <select
                 className="provincial-select"
                 value={nextStepsStatus}
                 onChange={(e) => setNextStepsStatus(e.target.value)}
               >
-                <option value=""></option>
-                <option value="Under Review">Under Review</option>
-                <option value="In Progress">In Progress</option>
-                <option value="Evidence Gathering">Evidence Gathering</option>
-                <option value="Report Submitted">Report Submitted</option>
-                <option value="Referred to Formal Investigation">Referred to Formal Investigation</option>
-                <option value="Informing Officer In Charge - Initial Investigation Complete">Informing the officer in charge that the initial investigation is complete</option>
-                <option value="Completed">Completed</option>
+                <option value="">{t("statusSelectPlaceholder", "-- Select status --")}</option>
+                <option value="Under Review">{t("statusUnderReview", "Under Review")}</option>
+                <option value="In Progress">{t("statusInProgress", "In Progress")}</option>
+                <option value="Evidence Gathering">{t("statusEvidenceGathering", "Evidence Gathering")}</option>
+                <option value="Report Submitted">{t("statusReportSubmitted", "Report Submitted")}</option>
+                <option value="Referred to Formal Investigation">{t("statusReferredFormalInvestigation", "Referred to Formal Investigation")}</option>
+                <option value="Informing Officer In Charge - Initial Investigation Complete">{t("statusInformingOICInitialComplete", "Informing the officer in charge that the initial investigation is complete")}</option>
+                <option value="Completed">{t("statusCompleted", "Completed")}</option>
               </select>
               <ChevronDown className="select-chevron w-5 h-5" />
             </div>
@@ -565,27 +610,27 @@ function ProvincialPreliminaryContent() {
         {/* Row 2: Matter/Title, Approval Date, Report received date */}
         <div className="form-grid-3col">
           <div className="form-field-group">
-            <label className="form-field-label">Matter/Title</label>
+            <label className="form-field-label">{t("formMatterTitle", "Matter/Title")}</label>
             <div className="select-wrapper">
               <select
                 className="provincial-select"
                 value={matterTitle}
                 onChange={(e) => setMatterTitle(e.target.value)}
               >
-                <option value=""></option>
-                <option value="Teacher Absenteeism">Teacher Absenteeism</option>
-                <option value="Financial Irregularity">Financial Irregularity</option>
-                <option value="Misconduct">Misconduct</option>
-                <option value="Exam Malpractice">Exam Malpractice</option>
-                <option value="Administrative Violation">Administrative Violation</option>
-                <option value="Other">Other</option>
+                <option value="">{t("matterSelectPlaceholder", "-- Select matter/title --")}</option>
+                <option value="Teacher Absenteeism">{t("matterTeacherAbsenteeism", "Teacher Absenteeism")}</option>
+                <option value="Financial Irregularity">{t("matterFinancialIrregularity", "Financial Irregularity")}</option>
+                <option value="Misconduct">{t("matterMisconduct", "Misconduct")}</option>
+                <option value="Exam Malpractice">{t("matterExamMalpractice", "Exam Malpractice")}</option>
+                <option value="Administrative Violation">{t("matterAdminViolation", "Administrative Violation")}</option>
+                <option value="Other">{t("matterOther", "Other")}</option>
               </select>
               <ChevronDown className="select-chevron w-5 h-5" />
             </div>
           </div>
 
           <div className="form-field-group">
-            <label className="form-field-label">Approval Date</label>
+            <label className="form-field-label">{t("formApprovalDate", "Approval Date")}</label>
             <div className="input-with-icon">
               <input
                 ref={approvalDateRef}
@@ -606,7 +651,7 @@ function ProvincialPreliminaryContent() {
           </div>
 
           <div className="form-field-group">
-            <label className="form-field-label">Report received date</label>
+            <label className="form-field-label">{t("formReportReceivedDate", "Report received date")}</label>
             <div className="input-with-icon">
               <input
                 ref={reportReceivedDateRef}
@@ -629,7 +674,7 @@ function ProvincialPreliminaryContent() {
 
         {/* Row 3: Officers */}
         <div className="form-field-group" style={{ marginBottom: "24px" }}>
-          <label className="form-field-label">Officers</label>
+          <label className="form-field-label">{t("formOfficers", "Officers")}</label>
           <div className="officers-input-group" style={{ maxWidth: "340px" }}>
             <input
               type="text"
@@ -642,13 +687,13 @@ function ProvincialPreliminaryContent() {
                   handleAddOfficer();
                 }
               }}
-              placeholder=""
+              placeholder={t("addOfficerPlaceholder", "Enter officer name and click +")}
             />
             <button
               type="button"
               className="btn-add-officer"
               onClick={handleAddOfficer}
-              title="Add Officer"
+              title={t("addOfficerBtn", "Add Officer")}
             >
               <Plus className="w-5 h-5 text-blue-600" />
             </button>
@@ -674,12 +719,13 @@ function ProvincialPreliminaryContent() {
 
         {/* Row 4: Recommendations */}
         <div className="form-field-group">
-          <label className="form-field-label">Recommendations</label>
+          <label className="form-field-label">{t("formRecommendations", "Recommendations")}</label>
           <textarea
             className="provincial-textarea"
             value={recommendations}
             onChange={(e) => setRecommendations(e.target.value)}
             rows={5}
+            placeholder={t("recommendationsPlaceholder", "Enter investigation recommendations here...")}
           ></textarea>
         </div>
 
@@ -690,7 +736,7 @@ function ProvincialPreliminaryContent() {
             className="btn-pill-cancel"
             onClick={handleCancel}
           >
-            Cancel
+            {t("cancelBtnText", "Cancel")}
           </button>
           <button
             type="button"
@@ -699,21 +745,21 @@ function ProvincialPreliminaryContent() {
             disabled={isSaving}
           >
             <Send className="w-4 h-4" />
-            <span>Informing the officer in charge that the initial investigation is complete</span>
+            <span>{t("informOICBtn", "Informing the officer in charge that the initial investigation is complete")}</span>
           </button>
           <button
             type="submit"
             className="btn-pill-submit"
             disabled={isSaving}
           >
-            {isSaving ? "Saving..." : "Submit"}
+            {isSaving ? t("savingBtnText", "Saving...") : t("submitBtnText", "Submit")}
           </button>
         </div>
       </form>
 
       {/* Footer */}
       <footer className="provincial-footer">
-        © 2026 Ministry of Education, Sri Lanka. All rights reserved.
+        {t("siteFooterText", "© 2026 Ministry of Education, Sri Lanka. All rights reserved.")}
       </footer>
 
       {/* Toast Notification */}

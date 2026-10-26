@@ -22,9 +22,9 @@ const formatStepTaken = (step: string, t: any) => {
     const dateMatch = step.match(/Date:([^\]\s]+)/);
     const dateStr = dateMatch ? dateMatch[1] : "";
     if (isApproved) {
-      return `${t("eduSecretaryApproval")}: ${t("yesLabel")} (${t("approvalDate")}: ${dateStr})`;
+      return `${t("eduSecretaryApproval")}: ${t("receivedLabel", "ලැබී ඇත")} (${t("approvalDate")}: ${dateStr})`;
     } else {
-      return `${t("eduSecretaryApproval")}: ${t("noLabel")}`;
+      return `${t("eduSecretaryApproval")}: ${t("notReceivedLabel", "ලැබී නැත")}`;
     }
   }
   return step;
@@ -265,8 +265,13 @@ function CaseDetailsForm() {
       lower.includes("additional secretary") ||
       lower.includes("අතිරේක ලේකම්ගේ උපදෙස්") ||
       lower.includes("අතිරේක ලේකම්") ||
+      lower.includes("මාණ්ඩලික නිළධාරීන්ගේ උපදෙස්") ||
+      lower.includes("මාණ්ඩලික නිලධාරීන්ගේ උපදෙස්") ||
+      lower.includes("මාණ්ඩලික") ||
+      lower.includes("කටයුතු අවසන්") ||
       lower.includes("ගොනුව අවසන්") ||
       lower.includes("අවසන් කිරීම") ||
+      lower.includes("අවසන් කිරිම") ||
       lower.includes("கூடுதல் செயலாளர்") ||
       lower.includes("இறுதி செய்தல்")
     );
@@ -293,7 +298,7 @@ function CaseDetailsForm() {
       lower === "statusinquiry" ||
       lower === "inquiry"
     ) {
-      return "Conduct an inspection";
+      return isAnswerLetter ? "Conduct an inspection" : "statusInquiry";
     }
 
     if (
@@ -312,8 +317,13 @@ function CaseDetailsForm() {
       lower.includes("additional secretary") ||
       lower.includes("අතිරේක ලේකම්ගේ උපදෙස්") ||
       lower.includes("අතිරේක ලේකම්") ||
+      lower.includes("මාණ්ඩලික නිළධාරීන්ගේ උපදෙස්") ||
+      lower.includes("මාණ්ඩලික නිලධාරීන්ගේ උපදෙස්") ||
+      lower.includes("මාණ්ඩලික") ||
+      lower.includes("කටයුතු අවසන්") ||
       lower.includes("ගොනුව අවසන්") ||
       lower.includes("අවසන් කිරීම") ||
+      lower.includes("අවසන් කිරිම") ||
       lower.includes("கூடுதல் செயலாளர்") ||
       lower.includes("இறுதி செய்தல்")
     ) {
@@ -366,18 +376,23 @@ function CaseDetailsForm() {
       statusObtainStatements: [
         "statusobtainstatements",
         "proceeding by taking statements",
+        "ප්‍රකාශ ලබා ගැනීම මගින් ඉදිරි කටයුතු සිදු කිරීම",
         "ප්රකාශ ලබා ගැනීම මගින් ඉදිරි කටයුතු සිදු කිරීම",
         "කටඋත්තර ලබා ගනිමින් කටයුතු කිරීම",
       ],
       statusUnclearAnonymous: [
         "statusunclearanonymous",
         "unclear facts / anonymous letters file",
+        "ඉදිරි කටයුතු අවශ්‍ය නොවන ගොනුගත කළ යුතු ලිපි",
+        "ඉදිරි කටයුතු අවශ්ය නොවන ගොනුගත කළ යුතු ලිපි",
         "කරුණු අපැදිලි/නිර්නාමික ලිපි ගොනු",
         "අපැහැදිලි තොරතුරු / නිර්නාමික ලිපි ගොනු කිරීම",
       ],
       statusReferOtherInstitute: [
         "statusreferotherinstitute",
         "referring letters not related to this ministry system to other institutes",
+        "විනය අංශයට අදාළ නොවන ලිපි වෙනත් අංශ හා ආයතන වෙත යොමු කිරීම",
+        "විනය අංශයට අදාළ නොවන ලිපි වෙනත් අංශ හා ආයතන වෙත යොමු කිරිම",
         "මෙම අමාත්යංශ පද්ධතියට අයත් නොවන ලිපි වෙනත් ආයතන වෙත යොමු කිරීම",
         "මෙම අමාත්‍යාංශ පද්ධතියට අදාල නැති ලිපි වෙනත් ආයතන වලට යොමු කිරීම",
       ],
@@ -1293,7 +1308,7 @@ function CaseDetailsForm() {
         } catch (e) {}
       }
 
-      // If institutional basic investigation is selected, assign the letter to Investigation Administrator
+      // If institutional basic investigation is selected, assign the letter to Assistant Secretary Investigation Branch
       const isInstitutionalBasic =
         (isPreliminaryInvestigation || isInitialInvestigation) &&
         (preliminaryChecks.institutional || !preliminaryChecks.provincial);
@@ -1355,7 +1370,7 @@ function CaseDetailsForm() {
         const isInstitutionalBasic =
           isPreliminaryInvestigation &&
           (preliminaryChecks.institutional || !preliminaryChecks.provincial);
-        const invAdminDisplayName = "Investigation Administrator";
+        const invAdminDisplayName = "Assistant Secretary Investigation Branch";
 
         // 1. Ensure the case row exists or is updated in dcmms_subject
         const { data: existingCase } = await supabase
@@ -1398,7 +1413,7 @@ function CaseDetailsForm() {
             status: finalCaseStatus,
             progress_details: isFinalizeFile
               ? "File finalized according to additional secretary's instruction (Closed)"
-              : (isInstitutionalBasic ? `Assigned to Investigation Administrator for Institutional Basic Investigation` : undefined),
+              : (isInstitutionalBasic ? `Assigned to Assistant Secretary Investigation Branch for Institutional Basic Investigation` : undefined),
             updated_at: new Date().toISOString(),
           }, { onConflict: "case_no" });
         } catch (asgnErr) {}
@@ -1417,8 +1432,8 @@ function CaseDetailsForm() {
           dailyMailPayload.action_officer = invAdminDisplayName;
           dailyMailPayload.officer_name = invAdminDisplayName;
           dailyMailPayload.addressed_to = invAdminDisplayName;
-          dailyMailPayload.addressed_role = "Investigation Administrator";
-          dailyMailPayload.forwarded_to = `${invAdminDisplayName} (Investigation Administrator)`;
+          dailyMailPayload.addressed_role = "Assistant Secretary Investigation Branch";
+          dailyMailPayload.forwarded_to = `${invAdminDisplayName} (Assistant Secretary Investigation Branch)`;
           dailyMailPayload.forward_reason = `Assigned by Subject Officer ${subjectOfficer || ""} for Institutional Basic Investigation`;
         }
         await supabase
@@ -1541,6 +1556,8 @@ function CaseDetailsForm() {
       cleanList.push({
         id: actionId,
         caseNo: refNo,
+        fileName: fileName,
+        file_name: fileName,
         subjectOfficerName: subjectOfficer,
         reportState: localStatus,
         upcomingAction: computedFutureAction,
@@ -1579,7 +1596,7 @@ function CaseDetailsForm() {
       const isInstitutionalBasic =
         isPreliminaryInvestigation &&
         (preliminaryChecks.institutional || !preliminaryChecks.provincial);
-      const invAdminDisplayName = "Investigation Administrator";
+      const invAdminDisplayName = "Assistant Secretary Investigation Branch";
 
       let foundCase = false;
       const updated = casesList.map((c: any) => {
@@ -1591,6 +1608,8 @@ function CaseDetailsForm() {
             stage: isFinalizeFile ? "Closed" : (isInspectionOrInquiry ? "Conducting an Inquiry" : c.stage),
             stageKey: isFinalizeFile ? "closed" : (isInspectionOrInquiry ? "inquiry" : c.stageKey),
             upcomingAction: computedFutureAction,
+            fileName: fileName,
+            file_name: fileName,
             isOld: isFinalizeFile ? true : (complaintAge === "old"),
             assignedOfficer: isInstitutionalBasic ? invAdminDisplayName : c.assignedOfficer,
             officerName: isInstitutionalBasic ? invAdminDisplayName : c.officerName,
@@ -1609,6 +1628,8 @@ function CaseDetailsForm() {
           stage: isFinalizeFile ? "Closed" : (isInspectionOrInquiry ? "Conducting an Inquiry" : "In Progress"),
           stageKey: isFinalizeFile ? "closed" : (isInspectionOrInquiry ? "inquiry" : "in_progress"),
           upcomingAction: computedFutureAction,
+          fileName: fileName,
+          file_name: fileName,
           priority: priority || "medium",
           assignedDate: receivedDate || new Date().toISOString().split("T")[0],
           receivedDate: receivedDate || new Date().toISOString().split("T")[0],
@@ -1640,7 +1661,7 @@ function CaseDetailsForm() {
                 action_officer: isInstitutionalBasic ? invAdminDisplayName : l.action_officer,
                 officer_name: isInstitutionalBasic ? invAdminDisplayName : l.officer_name,
                 assigned_to: isInstitutionalBasic ? invAdminDisplayName : l.assigned_to,
-                forwarded_to: isInstitutionalBasic ? `${invAdminDisplayName} (Investigation Administrator)` : l.forwarded_to,
+                forwarded_to: isInstitutionalBasic ? `${invAdminDisplayName} (Assistant Secretary Investigation Branch)` : l.forwarded_to,
                 forward_reason: isInstitutionalBasic ? `Assigned by Subject Officer ${subjectOfficer || ""} for Institutional Basic Investigation` : l.forward_reason,
               };
             }
@@ -1666,7 +1687,7 @@ function CaseDetailsForm() {
               assignedOfficers: isInstitutionalBasic ? invAdminDisplayName : a.assignedOfficers,
               progress_details: isFinalizeFile
                 ? "File finalized according to additional secretary's instruction (Closed)"
-                : (isInstitutionalBasic ? `Assigned to Investigation Administrator for Institutional Basic Investigation` : a.progress_details),
+                : (isInstitutionalBasic ? `Assigned to Assistant Secretary Investigation Branch for Institutional Basic Investigation` : a.progress_details),
               updated_at: new Date().toISOString(),
             };
           }
@@ -1683,7 +1704,7 @@ function CaseDetailsForm() {
             assigned_date: receivedDate || new Date().toISOString().split("T")[0],
             progress_details: isFinalizeFile
               ? "File finalized according to additional secretary's instruction (Closed)"
-              : `Assigned to Investigation Administrator for Institutional Basic Investigation`,
+              : `Assigned to Assistant Secretary Investigation Branch for Institutional Basic Investigation`,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           });
@@ -1702,9 +1723,9 @@ function CaseDetailsForm() {
             caseNo: refNo,
             letterNo: refNo,
             title: "New Letter Assigned for Institutional Basic Investigation",
-            message: `Letter / Case ${refNo} has been assigned to Investigation Administrator by Subject Officer ${subjectOfficer || ""}.`,
+            message: `Letter / Case ${refNo} has been assigned to Assistant Secretary Investigation Branch by Subject Officer ${subjectOfficer || ""}.`,
             recipientRole: "investigation",
-            targetOfficerName: "Investigation Administrator",
+            targetOfficerName: "Assistant Secretary Investigation Branch",
             timestamp: new Date().toISOString(),
             read: false,
           });
@@ -1786,7 +1807,7 @@ function CaseDetailsForm() {
       if (preliminaryChecks.provincial && !preliminaryChecks.institutional) {
         alert(
           lang === "si"
-            ? "නඩුවේ විස්තර සාර්ථකව යාවත්කාලීන විය! පළාත් මූලික විමර්ශනය (Provincial Basic Investigation) පිටුව වෙත යොමු කෙරේ."
+            ? "විස්තර සාර්ථකව යාවත්කාලීන විය! පළාත් මූලික විමර්ශනය (Provincial Basic Investigation) පිටුව වෙත යොමු කෙරේ."
             : lang === "ta"
             ? "வழக்கு விவரங்கள் வெற்றிகரமாக புதுப்பிக்கப்பட்டன! மாகாண அடிப்படை விசாரணை பக்கத்திற்கு வழிநடத்தப்படுகிறது."
             : "Case details updated successfully! Redirecting to Provincial Basic Investigation..."
@@ -1795,17 +1816,17 @@ function CaseDetailsForm() {
       } else {
         alert(
           lang === "si"
-            ? "නඩුවේ විස්තර සාර්ථකව යාවත්කාලීන විය! ලිපිය ආයතනික මූලික විමර්ශනය (Institutional Basic Investigation) සඳහා විමර්ශන පරිපාලක (Investigation Administrator) වෙත පවරන ලදී."
+            ? "විස්තර සාර්ථකව යාවත්කාලීන විය! ලිපිය ආයතනික මූලික විමර්ශනය (Institutional Basic Investigation) සඳහා සහකාර ලේකම් (විමර්ශන ශාඛාව) (Assistant Secretary Investigation Branch) වෙත පවරන ලදී."
             : lang === "ta"
-            ? "வழக்கு விவரங்கள் வெற்றிகரமாக புதுப்பிக்கப்பட்டன! கடிதம் நிறுவன அடிப்படை விசாரணைக்காக விசாரணை நிர்வாகிக்கு (Investigation Administrator) ஒதுக்கப்பட்டது."
-            : "Case details updated successfully! The letter has been assigned to the Investigation Administrator for Institutional Basic Investigation."
+            ? "வழக்கு விவரங்கள் வெற்றிகரமாக புதுப்பிக்கப்பட்டன! கடிதம் நிறுவன அடிப்படை விசாரணைக்காக உதவிச் செயலாளர் (விசாரணைப் பிரிவு) (Assistant Secretary Investigation Branch) ஒதுக்கப்பட்டது."
+            : "Case details updated successfully! The letter has been assigned to the Assistant Secretary Investigation Branch for Institutional Basic Investigation."
         );
         router.push(`/subject?tab=conducting_inquiry&caseNo=${encodeURIComponent(refNo)}`);
       }
     } else if (isConductInspectionOrInquiry) {
       alert(
         lang === "si"
-          ? "නඩුවේ විස්තර සාර්ථකව යාවත්කාලීන විය! නඩුව 'පරීක්ෂණයක් සිදු කිරීම' (Conducting an inquiry) ටැබ් එකට මාරු කරන ලදී."
+          ? "විස්තර සාර්ථකව යාවත්කාලීන විය! 'පරීක්ෂණයක් සිදු කිරීම' (Conducting an inquiry) ටැබ් එකට මාරු කරන ලදී."
           : lang === "ta"
           ? "வழக்கு விவரங்கள் வெற்றிகரமாக புதுப்பிக்கப்பட்டன! வழக்கு விசாரணை தாவலுக்கு மாற்றப்பட்டது."
           : "Case details updated successfully! The case has been moved to the Conducting an inquiry tab."
@@ -1814,7 +1835,7 @@ function CaseDetailsForm() {
     } else if (isFinalizeFile) {
       alert(
         lang === "si"
-          ? "නඩුවේ විස්තර සාර්ථකව සුරකින ලදී! අතිරේක ලේකම්ගේ උපදෙස් පරිදි ලිපිය අවසන් කරන ලදී (Closed)."
+          ? "විස්තර සාර්ථකව සුරකින ලදී! මාණ්ඩලික නිළධාරීන්ගේ උපදෙස් පරිදි කටයුතු අවසන් කරන ලදී (Closed)."
           : lang === "ta"
           ? "வழக்கு விவரங்கள் வெற்றிகரமாக சேமிக்கப்பட்டன! கூடுதல் செயலாளரின் அறிவுறுத்தலின்படி கடிதம் முடிக்கப்பட்டது (Closed)."
           : "Case details saved successfully! The letter has been closed according to the additional secretary's instruction."
@@ -2364,7 +2385,9 @@ function CaseDetailsForm() {
                         {/* File No : (Right) */}
                         <div className="form-field-group">
                           <label htmlFor="fileNoInput" className="sketch-field-label">
-                            {t("fileNo", "File No")} : <span className="required-star">*</span>
+                            {fileName === "mail"
+                              ? t("mailFileNo", "තැපැල් ගොනු අංකය")
+                              : t("fileNo", "File No")} : <span className="required-star">*</span>
                           </label>
                           <input
                             id="fileNoInput"
@@ -2590,10 +2613,12 @@ function CaseDetailsForm() {
                               />
                             </div>
 
-                            {/* Subject File Number (විෂය ගොනු අංකය) */}
+                            {/* Subject File Number (විෂය ගොනු අංකය / තැපැල් ගොනු අංකය) */}
                             <div className="form-field-group">
                               <label htmlFor="specialNotes" className="field-label">
-                                {t("subjectFileNo", "විෂය ගොනු අංකය")}
+                                {fileName === "mail"
+                                  ? t("mailFileNo", "තැපැල් ගොනු අංකය")
+                                  : t("subjectFileNo", "විෂය ගොනු අංකය")}
                               </label>
                               <input
                                 id="specialNotes"
@@ -2601,7 +2626,7 @@ function CaseDetailsForm() {
                                 value={specialNotes}
                                 onChange={(e) => setSpecialNotes(e.target.value)}
                                 className="field-input"
-                                placeholder="e.g. SUB/FILE/102"
+                                placeholder={fileName === "mail" ? "e.g. MAIL/FILE/102" : "e.g. SUB/FILE/102"}
                               />
                             </div>
                           </div>
@@ -2616,7 +2641,7 @@ function CaseDetailsForm() {
                               <div className="select-wrapper">
                                 <select
                                   id="reportState"
-                                  value={reportState}
+                                  value={(!isAnswerLetter && reportState === "Conduct an inspection") ? "statusInquiry" : reportState}
                                   onChange={(e) => {
                                     isUserEditingReportStateRef.current = true;
                                     setReportState(e.target.value);
@@ -2625,7 +2650,6 @@ function CaseDetailsForm() {
                                   required
                                 >
                                   <option value="">{t("Choose report state", "Select current status...")}</option>
-                                  <option value="Conduct an inspection">{t("actionConductInspection", "Conduct an inspection")}</option>
                                   <option value="statusCallingReports">{t("statusCallingReports")}</option>
                                   <option value="statusCallingCourtReports">{t("statusCallingCourtReports")}</option>
                                   <option value="statusPreliminaryInvestigation">{t("statusPreliminaryInvestigation")}</option>
@@ -3141,7 +3165,7 @@ function CaseDetailsForm() {
                         <div className="step-indicator">{classification === "nominal" ? "7" : "6"}</div>
                         <div className="step-content">
                           <span className="field-label" style={{ display: "block", marginBottom: "8px" }}>
-                            {t("eduSecretaryApproval", "මූලික විමර්ශනයට යවන්නේනම් අධ්‍යාපන ලේකම්ගේ අනුමැතිය")} <span className="required-star">*</span>
+                            {t("eduSecretaryApproval", "මූලික විමර්ශනය සදහා අධ්‍යාපන ලේකම්ගේ අනුමැතිය")} <span className="required-star">*</span>
                           </span>
                           <div className="classification-toggle-group" role="radiogroup" aria-label="Education Secretary Approval Toggle">
                             <button
@@ -3151,7 +3175,7 @@ function CaseDetailsForm() {
                               aria-checked={eduSecretaryApproval === "yes"}
                               role="radio"
                             >
-                              {t("yesLabel", "Yes")}
+                              {t("receivedLabel", "ලැබී ඇත")}
                             </button>
                             <button
                               type="button"
@@ -3160,7 +3184,7 @@ function CaseDetailsForm() {
                               aria-checked={eduSecretaryApproval === "no"}
                               role="radio"
                             >
-                              {t("noLabel", "No")}
+                              {t("notReceivedLabel", "ලැබී නැත")}
                             </button>
                           </div>
 

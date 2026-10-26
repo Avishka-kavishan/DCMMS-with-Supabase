@@ -549,7 +549,7 @@ function ConductInquiryContent() {
   // Save Handler
   const handleSave = async () => {
     if (!formState.caseNo) {
-      showToast(lang === "si" ? "කරුණාකර නඩු අංකයක් තෝරන්න" : "Please select a valid case number.");
+      showToast(lang === "si" ? "කරුණාකර යොමු අංකයක් තෝරන්න" : "Please select a valid case number.");
       return;
     }
 
@@ -616,7 +616,7 @@ function ConductInquiryContent() {
             upcomingAction: upcomingAct,
             upcoming_action: upcomingAct,
             notes: recommendationText || (idx >= 0 ? list[idx].notes : ""),
-            status: upcomingAct.toLowerCase().includes("finalize") || upcomingAct.includes("අතිරේක ලේකම්") ? "Closed" : "Conducting an Inquiry",
+            status: upcomingAct.toLowerCase().includes("finalize") || upcomingAct.includes("අතිරේක ලේකම්") || upcomingAct.includes("මාණ්ඩලික") || upcomingAct.includes("කටයුතු අවසන්") ? "Closed" : "Conducting an Inquiry",
             updatedAt: new Date().toISOString(),
           };
 
@@ -640,7 +640,7 @@ function ConductInquiryContent() {
               casesList[cIdx].upcomingAction = upcomingAct;
               casesList[cIdx].upcoming_action = upcomingAct;
             }
-            if (upcomingAct.toLowerCase().includes("finalize") || upcomingAct.includes("අතිරේක ලේකම්")) {
+            if (upcomingAct.toLowerCase().includes("finalize") || upcomingAct.includes("අතිරේක ලේකම්") || upcomingAct.includes("මාණ්ඩලික") || upcomingAct.includes("කටයුතු අවසන්")) {
               casesList[cIdx].status = "Closed";
               casesList[cIdx].stage = "Closed";
             } else {
@@ -847,7 +847,7 @@ function ConductInquiryContent() {
             recommendation: recommendationText,
             upcoming_action: upcomingAct,
             notes: recommendationText,
-            status: upcomingAct.toLowerCase().includes("finalize") || upcomingAct.includes("අතිරේක ලේකම්") ? "Closed" : "Conducting an Inquiry",
+            status: upcomingAct.toLowerCase().includes("finalize") || upcomingAct.includes("අතිරේක ලේකම්") || upcomingAct.includes("මාණ්ඩලික") || upcomingAct.includes("කටයුතු අවසන්") ? "Closed" : "Conducting an Inquiry",
             updated_at: new Date().toISOString(),
           });
         } catch (e) {}

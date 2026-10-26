@@ -44,6 +44,10 @@
   gap: 12px;
 }
 
+.provincial-actions .header-lang-selector {
+  margin-right: 6px;
+}
+
 .btn-back-home-gray {
   display: inline-flex;
   align-items: center;

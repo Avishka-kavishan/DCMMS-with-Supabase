@@ -3510,7 +3510,7 @@ function AdminDashboardContent() {
                     transition: "all 0.15s ease"
                   }}
                 >
-                  {lang === "si" ? "සියලුම ලිපි / නඩු" : "All Cases"} ({recentCases.length})
+                  {lang === "si" ? "සියලුම ලිපි" : "All Cases"} ({recentCases.length})
                 </button>
                 <button
                   type="button"

@@ -242,6 +242,7 @@ function RegisterComplaintForm() {
     letterDate: "",
     subject: "", // maps to Letter Title
     regionProvince: "",
+    sentBranch: "",
     receivedDate: "",
     priority: "medium" as "high" | "medium" | "low",
     status: "registered" as "registered" | "assigned" | "pending",
@@ -858,6 +859,7 @@ function RegisterComplaintForm() {
           letterDate: formatFormDate(found.submitted_date || found.date_letter_handover_discipline || found.letter_date || found.letterDate),
           subject: found.subject || found.subject_of_letter || "",
           regionProvince: found.type || found.nature_of_letter || found.region_province || found.regionProvince || "",
+          sentBranch: found.sent_branch || found.sentBranch || "",
           receivedDate: formatFormDate(found.received_date || found.date_received_by_add_secretary || found.receivedDate),
           priority: validPriority as any,
           status: found.status || "registered",
@@ -1055,6 +1057,7 @@ function RegisterComplaintForm() {
       subjectCategory: formState.subjectCategory,
       instituteName: formState.instituteName,
       regionProvince: formState.regionProvince,
+      sentBranch: (formState.regionProvince === "Inquiry" || formState.regionProvince?.toLowerCase() === "inquiry") ? (formState.sentBranch?.trim() || "") : "",
       isAnswerLetter: isAnswer,
       documentUrl: uploadedUrl,
       documentName: uploadedName,
@@ -1122,6 +1125,8 @@ function RegisterComplaintForm() {
         is_answer_letter: isAnswer,
         institute_name: newLetter.instituteName,
         region_province: newLetter.regionProvince,
+        sent_branch: newLetter.sentBranch || null,
+        sentBranch: newLetter.sentBranch || null,
       });
       if (saveRes && saveRes.success && saveRes.data?.letter_no) {
         newLetter.letterNo = saveRes.data.letter_no;
@@ -1361,6 +1366,7 @@ function RegisterComplaintForm() {
           institute_name: newLetter.instituteName || null,
           region_province: mapRegionProvince(newLetter.regionProvince),
           is_answer_letter: formState.isAnswerLetter === "true",
+          sent_branch: newLetter.sentBranch || null,
         };
 
         let { data: upserted, error } = await supabase
@@ -1368,9 +1374,15 @@ function RegisterComplaintForm() {
           .upsert(dailyMailUpsertPayload)
           .select();
 
-        if (error && (error.code === "42703" || (error.message && error.message.includes("is_answer_letter")))) {
-          console.warn("Column is_answer_letter missing in dcmms_daily_mail DB, retrying upsert without column");
-          delete dailyMailUpsertPayload.is_answer_letter;
+        if (error && (error.code === "42703" || (error.message && (error.message.includes("is_answer_letter") || error.message.includes("sent_branch"))))) {
+          console.warn("Column missing in dcmms_daily_mail DB, retrying upsert without missing column");
+          if (error.message?.includes("sent_branch") || error.details?.includes("sent_branch")) {
+            delete dailyMailUpsertPayload.sent_branch;
+          }
+          if (error.message?.includes("is_answer_letter") || error.details?.includes("is_answer_letter") || error.code === "42703") {
+            delete dailyMailUpsertPayload.is_answer_letter;
+            delete dailyMailUpsertPayload.sent_branch;
+          }
           const { data: retryUpserted, error: retryError } = await supabase
             .from("dcmms_daily_mail")
             .upsert(dailyMailUpsertPayload)
@@ -1550,6 +1562,7 @@ function RegisterComplaintForm() {
       subjectCategory: formState.subjectCategory,
       instituteName: formState.instituteName,
       regionProvince: formState.regionProvince,
+      sentBranch: (formState.regionProvince === "Inquiry" || formState.regionProvince?.toLowerCase() === "inquiry") ? formState.sentBranch : "",
     };
 
     if (isSupabaseConfigured) {
@@ -1572,6 +1585,7 @@ function RegisterComplaintForm() {
             subject_category: draftLetter.subjectCategory || null,
             institute_name: draftLetter.instituteName || null,
             region_province: mapRegionProvince(draftLetter.regionProvince),
+            sent_branch: draftLetter.sentBranch || null,
           })
           .select();
 
@@ -2368,10 +2382,12 @@ function RegisterComplaintForm() {
                           onChange={(e) => {
                             const val = e.target.value;
                             const isAns = val === "Answer Letter" || val === "Answer Letters" || val.toLowerCase().includes("answer") || val.includes("පිළිතුරු");
+                            const isInq = val === "Inquiry" || val.toLowerCase() === "inquiry";
                             setFormState((prev) => ({
                               ...prev,
                               regionProvince: val,
                               isAnswerLetter: isAns ? "true" : prev.isAnswerLetter,
+                              sentBranch: isInq ? prev.sentBranch : "",
                             }));
                           }}
                           className="field-select"
@@ -2405,6 +2421,26 @@ function RegisterComplaintForm() {
                           ))}
                         </select>
                       </div>
+
+                      {/* Sent Branch - ONLY display if Nature of the letter is Inquiry */}
+                      {(formState.regionProvince === "Inquiry" || formState.regionProvince?.toLowerCase() === "inquiry") && (
+                        <div className="form-field-group" style={{ animation: "fadeIn 0.25s ease-out" }}>
+                          <label htmlFor="sentBranch" className="field-label">
+                            {t("sentBranch", "Sent Branch")}
+                          </label>
+                          <input
+                            id="sentBranch"
+                            type="text"
+                            disabled={isFieldDisabled}
+                            readOnly={isFieldDisabled}
+                            value={formState.sentBranch || ""}
+                            onChange={(e) => setFormState({ ...formState, sentBranch: e.target.value })}
+                            placeholder={t("sentBranchPlaceholder", "e.g., Investigation Branch / Disciplinary Branch")}
+                            className="field-input"
+                            style={isFieldDisabled ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
+                          />
+                        </div>
+                      )}
 
                     </div>
                   </div>
@@ -2852,6 +2888,17 @@ function RegisterComplaintForm() {
                         {submittedLetterData.letterType || "By Post"} {submittedLetterData.regionProvince ? `(${submittedLetterData.regionProvince})` : ""}
                       </div>
                     </div>
+
+                    {submittedLetterData.sentBranch && (
+                      <div>
+                        <div style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                          {lang === "si" ? "යැවූ ශාඛාව (Sent Branch)" : "Sent Branch"}
+                        </div>
+                        <div style={{ fontSize: "13.5px", fontWeight: 700, color: "#0284c7", marginTop: "2px" }}>
+                          {submittedLetterData.sentBranch}
+                        </div>
+                      </div>
+                    )}
 
                     <div>
                       <div style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px" }}>

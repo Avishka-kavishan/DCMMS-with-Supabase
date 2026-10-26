@@ -569,10 +569,10 @@ export default function SystemAdminDashboard() {
     }
     if (r.includes("investigation")) {
       return {
-        bg: "#ccfbf1",
-        color: "#0f766e",
-        border: "#99f6e4",
-        label: roleStr || "Investigation Administrator",
+        bg: "#ffedd5",
+        color: "#9a3412",
+        border: "#fed7aa",
+        label: roleStr || "Assistant Secretary Investigation Branch",
       };
     }
     if (r.includes("subject")) {
@@ -811,7 +811,6 @@ export default function SystemAdminDashboard() {
                 </optgroup>
                 <optgroup label="Branch Administration">
                   <option value="branch">Discipline Branch Administrator</option>
-                  <option value="investigation">Investigation Administrator</option>
                 </optgroup>
                 <optgroup label="Operational & System">
                   <option value="subject">Subject officer</option>

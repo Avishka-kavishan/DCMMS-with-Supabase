@@ -150,6 +150,7 @@ function ViewLetterInner() {
   const [editSubjectCategory, setEditSubjectCategory] = useState("");
   const [editInstituteName, setEditInstituteName] = useState("");
   const [editRegionProvince, setEditRegionProvince] = useState("");
+  const [editSentBranch, setEditSentBranch] = useState("");
   const [editPriority, setEditPriority] = useState("medium");
   const [editLetterDate, setEditLetterDate] = useState("");
   const [editReceivedDate, setEditReceivedDate] = useState("");
@@ -595,6 +596,7 @@ function ViewLetterInner() {
     setEditSubjectCategory(letter.subject_category || letter.classification || letter.subjectCategory || "");
     setEditInstituteName(letter.institute_name || letter.instituteName || "");
     setEditRegionProvince(letter.region_province || letter.regionProvince || "");
+    setEditSentBranch(letter.sent_branch || letter.sentBranch || "");
     const prio = (letter.priority || "medium").toLowerCase();
     setEditPriority(prio === "urgent" ? "high" : prio);
     setEditLetterDate(fmt(letter.letter_date || letter.letterDate || letter.submitted_date || letter.date_letter_handover_discipline));
@@ -622,6 +624,7 @@ function ViewLetterInner() {
       setEditSubjectCategory(letter.subject_category || letter.classification || letter.subjectCategory || "");
       setEditInstituteName(letter.institute_name || letter.instituteName || "");
       setEditRegionProvince(letter.region_province || letter.regionProvince || "");
+      setEditSentBranch(letter.sent_branch || letter.sentBranch || "");
       const prio = (letter.priority || "medium").toLowerCase();
       setEditPriority(prio === "urgent" ? "high" : prio);
       setEditLetterDate(fmt(letter.letter_date || letter.letterDate || letter.submitted_date || letter.date_letter_handover_discipline));
@@ -663,6 +666,7 @@ function ViewLetterInner() {
         subjectCategory: editSubjectCategory.trim(),
         instituteName: editInstituteName.trim(),
         regionProvince: editRegionProvince.trim(),
+        sentBranch: (editRegionProvince === "Inquiry" || editRegionProvince.toLowerCase() === "inquiry") ? editSentBranch.trim() : "",
         priority: editPriority.charAt(0).toUpperCase() + editPriority.slice(1),
         letterDate: editLetterDate,
         receivedDate: editReceivedDate,
@@ -684,6 +688,8 @@ function ViewLetterInner() {
       });
 
       if (res && res.success) {
+        const isInq = editRegionProvince === "Inquiry" || editRegionProvince.toLowerCase() === "inquiry";
+        const savedBranch = isInq ? editSentBranch.trim() : "";
         const updated = {
           ...letter,
           ...(isFromAdministrativeOfficer
@@ -700,6 +706,8 @@ function ViewLetterInner() {
                 instituteName: editInstituteName.trim(),
                 region_province: editRegionProvince.trim(),
                 regionProvince: editRegionProvince.trim(),
+                sent_branch: savedBranch,
+                sentBranch: savedBranch,
                 received_date: editReceivedDate,
                 receivedDate: editReceivedDate,
                 date_received_by_add_secretary: editReceivedDate,
@@ -726,6 +734,8 @@ function ViewLetterInner() {
                 instituteName: editInstituteName.trim(),
                 region_province: editRegionProvince.trim(),
                 regionProvince: editRegionProvince.trim(),
+                sent_branch: savedBranch,
+                sentBranch: savedBranch,
                 letter_date: editLetterDate,
                 letterDate: editLetterDate,
                 received_date: editReceivedDate,
@@ -1407,7 +1417,13 @@ function ViewLetterInner() {
                 </div>
                 <select
                   value={editRegionProvince}
-                  onChange={(e) => setEditRegionProvince(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setEditRegionProvince(val);
+                    if (val !== "Inquiry" && val.toLowerCase() !== "inquiry") {
+                      setEditSentBranch("");
+                    }
+                  }}
                   style={{
                     width: "100%", boxSizing: "border-box",
                     backgroundColor: "#ffffff",
@@ -1474,6 +1490,32 @@ function ViewLetterInner() {
                   <option value="Other">{lang === "si" ? "වෙනත් (Other)" : "Other"}</option>
                 </select>
               </div>
+
+              {/* Sent Branch - ONLY displayed if Nature of the letter is Inquiry */}
+              {(editRegionProvince === "Inquiry" || editRegionProvince?.toLowerCase() === "inquiry") && (
+                <div style={{ animation: "fadeIn 0.25s ease-out" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
+                    <label style={{ fontSize: "12.5px", fontWeight: 700, color: "#0e162f" }}>
+                      {lang === "si" ? "යැවූ ශාඛාව" : "Sent Branch"}
+                    </label>
+                  </div>
+                  <input
+                    type="text"
+                    value={editSentBranch}
+                    onChange={(e) => setEditSentBranch(e.target.value)}
+                    placeholder={lang === "si" ? "උදා: විමර්ශන ශාඛාව / විනය ශාඛාව" : "e.g., Investigation Branch / Disciplinary Branch"}
+                    style={{
+                      width: "100%", boxSizing: "border-box",
+                      backgroundColor: "#ffffff",
+                      border: "1px solid #cbd5e1", borderRadius: "6px", padding: "10px 14px",
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#0f172a",
+                      height: "42px", fontFamily: "inherit",
+                    }}
+                  />
+                </div>
+              )}
             </div>
           </div>
 

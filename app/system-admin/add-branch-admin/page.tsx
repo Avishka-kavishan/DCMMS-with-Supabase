@@ -59,7 +59,7 @@ interface BranchAdmin {
   createdAt: string;
 }
 
-export const ALLOWED_ADMIN_ROLES = [
+const ALLOWED_ADMIN_ROLES = [
   "Assistant Secretary Discipline Branch",
   "Assistant Secretary Investigation Branch",
   "Senior Assistant Secretary",
@@ -718,6 +718,14 @@ export default function AddBranchAdminPage() {
         label: roleStr || "Assistant Secretary Investigation Branch",
       };
     }
+    if (r.includes("chief clerk") || r.includes("ශාඛා ප්‍රධානී")) {
+      return {
+        bg: "#ccfbf1",
+        color: "#0f766e",
+        border: "#99f6e4",
+        label: roleStr || "Chief Clerk Officer",
+      };
+    }
     if (r.includes("system")) {
       return {
         bg: "#fee2e2",
@@ -728,10 +736,10 @@ export default function AddBranchAdminPage() {
     }
     if (r.includes("investigation")) {
       return {
-        bg: "#ccfbf1",
-        color: "#0f766e",
-        border: "#99f6e4",
-        label: roleStr || "Investigation Administrator",
+        bg: "#ffedd5",
+        color: "#9a3412",
+        border: "#fed7aa",
+        label: roleStr || "Assistant Secretary Investigation Branch",
       };
     }
     if (r.includes("subject")) {
@@ -875,64 +883,112 @@ export default function AddBranchAdminPage() {
           </header>
 
           {/* Quick Stats Grid */}
-          <div className="sysadmin-stats-grid" style={{ marginBottom: 24 }}>
-            <div className="sysadmin-stat-card">
-              <div className="stat-card-header">
-                <div className="stat-icon-wrapper active-users">
-                  <Shield size={20} />
+          <div className="dashboard-stats-grid" style={{ marginBottom: 24 }}>
+            <div className="premium-stat-card card-total-branch-admins">
+              <div className="premium-card-top">
+                <div className="premium-card-title-area">
+                  <Shield className="premium-card-icon" />
+                  <span>{t("totalBranchAdmins", "Total Branch Admins")}</span>
                 </div>
-                <h3 className="stat-card-title">{t("totalBranchAdmins", "Total Branch Admins")}</h3>
+                <span className="premium-card-percentage">Total</span>
               </div>
-              <div className="stat-card-value">{totalCount}</div>
-              <p className="stat-card-desc">{t("registeredAdminsDesc", "Registered in register_officer_table")}</p>
+              <div className="premium-card-bottom">
+                <div className="premium-card-value-area">
+                  <span className="premium-card-value">{String(totalCount).padStart(2, "0")}</span>
+                  <span className="premium-card-label">admins</span>
+                </div>
+                <div className="premium-card-sparkline">
+                  <svg viewBox="0 0 100 30" width="80" height="24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M 5,22 Q 25,10 45,20 T 75,8 T 95,15" strokeLinecap="round" />
+                    <circle cx="75" cy="8" r="3" fill="#ffffff" />
+                  </svg>
+                </div>
+              </div>
             </div>
 
-            <div className="sysadmin-stat-card">
-              <div className="stat-card-header">
-                <div className="stat-icon-wrapper logins-today">
-                  <UserCheck size={20} />
+            <div className="premium-stat-card card-active-branch-admins">
+              <div className="premium-card-top">
+                <div className="premium-card-title-area">
+                  <UserCheck className="premium-card-icon" />
+                  <span>{t("activeAdmins", "Active Status")}</span>
                 </div>
-                <h3 className="stat-card-title">{t("activeAdmins", "Active Status")}</h3>
+                <span className="premium-card-percentage">
+                  {totalCount > 0 ? `${Math.round((activeCount / totalCount) * 100)}%` : "0%"}
+                </span>
               </div>
-              <div className="stat-card-value" style={{ color: "#10b981" }}>
-                {activeCount}
+              <div className="premium-card-bottom">
+                <div className="premium-card-value-area">
+                  <span className="premium-card-value">{String(activeCount).padStart(2, "0")}</span>
+                  <span className="premium-card-label">active</span>
+                </div>
+                <div className="premium-card-sparkline">
+                  <svg viewBox="0 0 100 30" width="80" height="24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M 5,20 Q 25,25 45,12 T 75,5 T 95,15" strokeLinecap="round" />
+                    <circle cx="75" cy="5" r="3" fill="#ffffff" />
+                  </svg>
+                </div>
               </div>
-              <p className="stat-card-desc">{t("activeAdminsDesc", "Authorized branch administrators")}</p>
             </div>
 
-            <div className="sysadmin-stat-card">
-              <div className="stat-card-header">
-                <div className="stat-icon-wrapper failures-today">
-                  <UserX size={20} />
+            <div className="premium-stat-card card-inactive-branch-admins">
+              <div className="premium-card-top">
+                <div className="premium-card-title-area">
+                  <UserX className="premium-card-icon" />
+                  <span>{t("inactiveAdmins", "Inactive / Suspended")}</span>
                 </div>
-                <h3 className="stat-card-title">{t("inactiveAdmins", "Inactive / Suspended")}</h3>
+                <span className="premium-card-percentage">
+                  {totalCount > 0 ? `${Math.round((inactiveCount / totalCount) * 100)}%` : "0%"}
+                </span>
               </div>
-              <div className="stat-card-value" style={{ color: "#ef4444" }}>
-                {inactiveCount}
+              <div className="premium-card-bottom">
+                <div className="premium-card-value-area">
+                  <span className="premium-card-value">{String(inactiveCount).padStart(2, "0")}</span>
+                  <span className="premium-card-label">inactive</span>
+                </div>
+                <div className="premium-card-sparkline">
+                  <svg viewBox="0 0 100 30" width="80" height="24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M 5,15 Q 25,8 45,22 T 75,12 T 95,25" strokeLinecap="round" />
+                    <circle cx="75" cy="12" r="3" fill="#ffffff" />
+                  </svg>
+                </div>
               </div>
-              <p className="stat-card-desc">{t("inactiveAdminsDesc", "Access temporarily revoked")}</p>
             </div>
 
-            <div className="sysadmin-stat-card">
-              <div className="stat-card-header">
-                <div className="stat-icon-wrapper logouts-today">
-                  <UserPlus size={20} />
+            <div className="premium-stat-card card-recent-branch-admin">
+              <div className="premium-card-top">
+                <div className="premium-card-title-area">
+                  <UserPlus className="premium-card-icon" />
+                  <span>{t("latestRegistration", "Recent Entry")}</span>
                 </div>
-                <h3 className="stat-card-title">{t("latestRegistration", "Recent Entry")}</h3>
+                <span className="premium-card-percentage">New</span>
               </div>
-              <div
-                className="stat-card-value"
-                style={{
-                  fontSize: "1.1rem",
-                  fontWeight: 600,
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                }}
-              >
-                {latestAdmin}
+              <div className="premium-card-bottom">
+                <div className="premium-card-value-area" style={{ maxWidth: "68%" }}>
+                  <span
+                    style={{
+                      fontSize: "1.05rem",
+                      fontWeight: 700,
+                      color: "#ffffff",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      display: "block",
+                    }}
+                    title={latestAdmin}
+                  >
+                    {latestAdmin}
+                  </span>
+                  <span className="premium-card-label" style={{ fontSize: "0.75rem", opacity: 0.85 }}>
+                    {t("latestRegistrationDesc", "Latest admin")}
+                  </span>
+                </div>
+                <div className="premium-card-sparkline">
+                  <svg viewBox="0 0 100 30" width="80" height="24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M 5,18 Q 25,12 45,22 T 75,7 T 95,14" strokeLinecap="round" />
+                    <circle cx="75" cy="7" r="3" fill="#ffffff" />
+                  </svg>
+                </div>
               </div>
-              <p className="stat-card-desc">{t("latestRegistrationDesc", "Latest administrator onboarded")}</p>
             </div>
           </div>
 
@@ -988,9 +1044,20 @@ export default function AddBranchAdminPage() {
                     padding: "8px 14px",
                     borderRadius: 8,
                     fontSize: "0.875rem",
-                    border: "1px solid #e2e8f0",
+                    fontWeight: 500,
+                    border: "1px solid #cbd5e1",
                     background: "#ffffff",
+                    color: "#334155",
                     cursor: "pointer",
+                    transition: "all 0.15s ease",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "#f8fafc";
+                    e.currentTarget.style.borderColor = "#94a3b8";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "#ffffff";
+                    e.currentTarget.style.borderColor = "#cbd5e1";
                   }}
                   title="Refresh table"
                 >
@@ -1008,9 +1075,22 @@ export default function AddBranchAdminPage() {
                     padding: "8px 14px",
                     borderRadius: 8,
                     fontSize: "0.875rem",
-                    border: "1px solid #e2e8f0",
-                    background: "#ffffff",
+                    fontWeight: 500,
+                    border: "1px solid #a7f3d0",
+                    background: "#f0fdf4",
+                    color: "#15803d",
                     cursor: "pointer",
+                    transition: "all 0.15s ease",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "#dcfce7";
+                    e.currentTarget.style.borderColor = "#86efac";
+                    e.currentTarget.style.boxShadow = "0 2px 4px rgba(22, 163, 74, 0.1)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "#f0fdf4";
+                    e.currentTarget.style.borderColor = "#a7f3d0";
+                    e.currentTarget.style.boxShadow = "none";
                   }}
                 >
                   <Download size={15} />
@@ -1027,15 +1107,23 @@ export default function AddBranchAdminPage() {
                     borderRadius: 8,
                     fontSize: "0.875rem",
                     fontWeight: 600,
-                    backgroundColor: "#1e40af",
+                    background: "linear-gradient(135deg, #1e40af 0%, #1d4ed8 100%)",
                     color: "#ffffff",
                     border: "none",
                     cursor: "pointer",
-                    boxShadow: "0 4px 6px -1px rgba(30, 64, 175, 0.2)",
+                    boxShadow: "0 4px 10px rgba(30, 64, 175, 0.3)",
                     transition: "all 0.2s ease",
                   }}
-                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1d4ed8")}
-                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#1e40af")}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)";
+                    e.currentTarget.style.boxShadow = "0 6px 14px rgba(30, 64, 175, 0.4)";
+                    e.currentTarget.style.transform = "translateY(-1px)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "linear-gradient(135deg, #1e40af 0%, #1d4ed8 100%)";
+                    e.currentTarget.style.boxShadow = "0 4px 10px rgba(30, 64, 175, 0.3)";
+                    e.currentTarget.style.transform = "translateY(0)";
+                  }}
                 >
                   <UserPlus size={16} />
                   <span>{t("addBranchAdmin", "Add the branch admin")}</span>
@@ -1080,9 +1168,19 @@ export default function AddBranchAdminPage() {
                     width: "100%",
                     padding: "9px 12px 9px 36px",
                     borderRadius: 8,
-                    border: "1px solid #e2e8f0",
+                    border: "1px solid #cbd5e1",
                     fontSize: "0.875rem",
                     outline: "none",
+                    transition: "all 0.2s ease",
+                    boxShadow: "0 1px 2px rgba(0,0,0,0.03)",
+                  }}
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderColor = "#3b82f6";
+                    e.currentTarget.style.boxShadow = "0 0 0 3px rgba(59, 130, 246, 0.15)";
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor = "#cbd5e1";
+                    e.currentTarget.style.boxShadow = "0 1px 2px rgba(0,0,0,0.03)";
                   }}
                 />
               </div>
@@ -1098,8 +1196,8 @@ export default function AddBranchAdminPage() {
                     value={roleFilter}
                     onChange={(e) => setRoleFilter(e.target.value)}
                     style={{
-                      padding: "6px 12px",
-                      borderRadius: 6,
+                      padding: "7px 12px",
+                      borderRadius: 8,
                       fontSize: "0.825rem",
                       fontWeight: 500,
                       border: "1px solid #cbd5e1",
@@ -1107,6 +1205,16 @@ export default function AddBranchAdminPage() {
                       color: "#1e293b",
                       cursor: "pointer",
                       outline: "none",
+                      transition: "all 0.2s ease",
+                      boxShadow: "0 1px 2px rgba(0,0,0,0.03)",
+                    }}
+                    onFocus={(e) => {
+                      e.currentTarget.style.borderColor = "#3b82f6";
+                      e.currentTarget.style.boxShadow = "0 0 0 3px rgba(59, 130, 246, 0.15)";
+                    }}
+                    onBlur={(e) => {
+                      e.currentTarget.style.borderColor = "#cbd5e1";
+                      e.currentTarget.style.boxShadow = "0 1px 2px rgba(0,0,0,0.03)";
                     }}
                   >
                     <option value="all">All Roles</option>
@@ -1117,8 +1225,8 @@ export default function AddBranchAdminPage() {
                       <option value="Assistant Secretary Investigation Branch">Assistant Secretary Investigation Branch</option>
                     </optgroup>
                     <optgroup label="Branch Administration">
+                      <option value="Chief Clerk">Chief Clerk Officer</option>
                       <option value="Branch">Discipline Branch Administrator</option>
-                      <option value="Investigation">Investigation Administrator</option>
                     </optgroup>
                     <optgroup label="Operational & System">
                       <option value="Subject">Subject Officer</option>
@@ -1132,26 +1240,43 @@ export default function AddBranchAdminPage() {
                   <span style={{ fontSize: "0.85rem", color: "#64748b", fontWeight: 500 }}>
                     {t("status", "Status")}:
                   </span>
-                  {(["all", "Active", "Inactive"] as const).map((st) => (
-                    <button
-                      key={st}
-                      onClick={() => setStatusFilter(st)}
-                      style={{
-                        padding: "6px 12px",
-                        borderRadius: 6,
-                        fontSize: "0.8rem",
-                        fontWeight: 500,
-                        cursor: "pointer",
-                        border: "1px solid",
-                        borderColor: statusFilter === st ? "#3b82f6" : "#e2e8f0",
-                        background: statusFilter === st ? "#eff6ff" : "#ffffff",
-                        color: statusFilter === st ? "#1d4ed8" : "#64748b",
-                        transition: "all 0.15s ease",
-                      }}
-                    >
-                      {st === "all" ? "All" : st}
-                    </button>
-                  ))}
+                  {(["all", "Active", "Inactive"] as const).map((st) => {
+                    const isSelected = statusFilter === st;
+                    let activeBg = "#eff6ff";
+                    let activeBorder = "#3b82f6";
+                    let activeColor = "#1d4ed8";
+
+                    if (st === "Active") {
+                      activeBg = "#ecfdf5";
+                      activeBorder = "#10b981";
+                      activeColor = "#047857";
+                    } else if (st === "Inactive") {
+                      activeBg = "#fef2f2";
+                      activeBorder = "#ef4444";
+                      activeColor = "#b91c1c";
+                    }
+
+                    return (
+                      <button
+                        key={st}
+                        onClick={() => setStatusFilter(st)}
+                        style={{
+                          padding: "6px 14px",
+                          borderRadius: 8,
+                          fontSize: "0.8rem",
+                          fontWeight: 600,
+                          cursor: "pointer",
+                          border: `1px solid ${isSelected ? activeBorder : "#e2e8f0"}`,
+                          background: isSelected ? activeBg : "#ffffff",
+                          color: isSelected ? activeColor : "#64748b",
+                          boxShadow: isSelected ? "0 1px 2px rgba(0,0,0,0.05)" : "none",
+                          transition: "all 0.15s ease",
+                        }}
+                      >
+                        {st === "all" ? t("all", "All") : st === "Active" ? t("active", "Active") : t("inactive", "Inactive")}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -1213,31 +1338,46 @@ export default function AddBranchAdminPage() {
                       return (
                       <tr key={admin.id}>
                         <td>
-                          <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600, color: "#1e293b" }}>
-                            <Hash size={14} style={{ color: "#94a3b8" }} />
-                            <span>{admin.employeeNo}</span>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span
+                              style={{
+                                fontFamily: "monospace",
+                                fontSize: "0.825rem",
+                                fontWeight: 700,
+                                background: "#f8fafc",
+                                color: "#334155",
+                                padding: "3px 8px",
+                                borderRadius: 6,
+                                border: "1px solid #e2e8f0",
+                                letterSpacing: "0.02em",
+                              }}
+                            >
+                              #{admin.employeeNo}
+                            </span>
                           </div>
                         </td>
                         <td>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
                             <div
                               style={{
-                                width: 30,
-                                height: 30,
+                                width: 32,
+                                height: 32,
+                                minWidth: 32,
                                 borderRadius: "50%",
                                 backgroundColor: badge.bg,
                                 color: badge.color,
-                                border: `1px solid ${badge.border}`,
+                                border: `1.5px solid ${badge.border}`,
                                 display: "flex",
                                 alignItems: "center",
                                 justifyContent: "center",
-                                fontSize: "0.8rem",
+                                fontSize: "0.825rem",
                                 fontWeight: 700,
+                                boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
                               }}
                             >
                               {admin.fullName ? admin.fullName.charAt(0).toUpperCase() : "A"}
                             </div>
-                            <span style={{ fontWeight: 500, color: "#0f172a" }}>{admin.fullName}</span>
+                            <span style={{ fontWeight: 600, color: "#0f172a", fontSize: "0.875rem" }}>{admin.fullName}</span>
                           </div>
                         </td>
                         <td>
@@ -1251,14 +1391,16 @@ export default function AddBranchAdminPage() {
                             style={{
                               display: "inline-flex",
                               alignItems: "center",
-                              gap: 4,
-                              padding: "4px 8px",
+                              gap: 5,
+                              padding: "4px 9px",
                               borderRadius: 6,
                               fontSize: "0.75rem",
                               fontWeight: 600,
                               backgroundColor: badge.bg,
                               color: badge.color,
                               border: `1px solid ${badge.border}`,
+                              boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
+                              whiteSpace: "nowrap",
                             }}
                           >
                             <Shield size={12} />
@@ -1272,24 +1414,26 @@ export default function AddBranchAdminPage() {
                             style={{
                               display: "inline-flex",
                               alignItems: "center",
-                              gap: 4,
-                              padding: "4px 10px",
-                              borderRadius: 12,
+                              gap: 6,
+                              padding: "4px 12px",
+                              borderRadius: 20,
                               fontSize: "0.75rem",
                               fontWeight: 600,
-                              border: "none",
+                              border: admin.status === "Active" ? "1px solid #bbf7d0" : "1px solid #fecaca",
                               cursor: "pointer",
-                              backgroundColor: admin.status === "Active" ? "#dcfce7" : "#fee2e2",
-                              color: admin.status === "Active" ? "#166534" : "#991b1b",
+                              backgroundColor: admin.status === "Active" ? "#f0fdf4" : "#fef2f2",
+                              color: admin.status === "Active" ? "#15803d" : "#b91c1c",
                               transition: "all 0.15s ease",
+                              boxShadow: "0 1px 2px rgba(0,0,0,0.03)",
                             }}
                           >
                             <span
                               style={{
-                                width: 6,
-                                height: 6,
+                                width: 7,
+                                height: 7,
                                 borderRadius: "50%",
                                 backgroundColor: admin.status === "Active" ? "#16a34a" : "#dc2626",
+                                boxShadow: admin.status === "Active" ? "0 0 0 2px rgba(22, 163, 74, 0.2)" : "0 0 0 2px rgba(220, 38, 38, 0.2)",
                               }}
                             />
                             {admin.status}
@@ -1310,10 +1454,10 @@ export default function AddBranchAdminPage() {
                             <button
                               onClick={() => openEditModal(admin)}
                               style={{
-                                padding: "6px 8px",
+                                padding: "6px 9px",
                                 borderRadius: 6,
-                                border: "1px solid #e2e8f0",
-                                background: "#f8fafc",
+                                border: "1px solid #cbd5e1",
+                                background: "#ffffff",
                                 color: "#334155",
                                 cursor: "pointer",
                                 display: "inline-flex",
@@ -1321,6 +1465,17 @@ export default function AddBranchAdminPage() {
                                 gap: 4,
                                 fontSize: "0.75rem",
                                 fontWeight: 500,
+                                transition: "all 0.15s ease",
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.background = "#eff6ff";
+                                e.currentTarget.style.borderColor = "#93c5fd";
+                                e.currentTarget.style.color = "#1d4ed8";
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background = "#ffffff";
+                                e.currentTarget.style.borderColor = "#cbd5e1";
+                                e.currentTarget.style.color = "#334155";
                               }}
                               title="Edit Details"
                             >
@@ -1329,26 +1484,30 @@ export default function AddBranchAdminPage() {
                             <button
                               onClick={() => openResetModal(admin)}
                               style={{
-                                padding: "6px 10px",
+                                padding: "6px 11px",
                                 borderRadius: 6,
                                 border: "1px solid #fde68a",
                                 background: "#fffbeb",
-                                color: "#d97706",
+                                color: "#b45309",
                                 cursor: "pointer",
                                 display: "inline-flex",
                                 alignItems: "center",
-                                gap: 4,
+                                gap: 5,
                                 fontSize: "0.75rem",
                                 fontWeight: 600,
                                 transition: "all 0.15s ease",
                               }}
                               onMouseEnter={(e) => {
                                 e.currentTarget.style.background = "#fef3c7";
-                                e.currentTarget.style.borderColor = "#fcd34d";
+                                e.currentTarget.style.borderColor = "#f59e0b";
+                                e.currentTarget.style.color = "#92400e";
+                                e.currentTarget.style.boxShadow = "0 2px 4px rgba(245, 158, 11, 0.15)";
                               }}
                               onMouseLeave={(e) => {
                                 e.currentTarget.style.background = "#fffbeb";
                                 e.currentTarget.style.borderColor = "#fde68a";
+                                e.currentTarget.style.color = "#b45309";
+                                e.currentTarget.style.boxShadow = "none";
                               }}
                               title="Reset Password (Secure)"
                             >

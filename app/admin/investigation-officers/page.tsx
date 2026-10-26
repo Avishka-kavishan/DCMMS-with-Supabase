@@ -207,7 +207,7 @@ export default function InvestigationOfficersPage() {
       employee_no: formEmployeeNo.trim() || `EMP-${Date.now().toString().slice(-6)}`,
       full_name: formName.trim(),
       email: formEmail.trim().toLowerCase(),
-      role: "Investigation officer",
+      role: "Assistant Secretary Investigation Branch",
       is_active: formStatus === "Active",
       created_by: currentAdmin?.id || undefined,
     };
@@ -221,7 +221,7 @@ export default function InvestigationOfficersPage() {
       if (res.success) {
         saveSuccess = true;
         await logAuditEvent(
-          "REGISTER_INVESTIGATION_ADMIN",
+          "REGISTER_ASST_SEC_INVESTIGATION",
           "register_officer_table",
           res.data?.id || "new",
           { name: payload.full_name, email: payload.email, employee_no: payload.employee_no }
@@ -241,7 +241,7 @@ export default function InvestigationOfficersPage() {
           employee_no: payload.employee_no,
           full_name: payload.full_name,
           email: payload.email,
-          role: "Investigation officer",
+          role: "Assistant Secretary Investigation Branch",
           is_active: payload.is_active,
         };
         const { error } = await supabase.from("register_officer_table").upsert(supaPayload);
@@ -261,7 +261,7 @@ export default function InvestigationOfficersPage() {
         employeeNo: payload.employee_no,
         fullName: payload.full_name,
         email: payload.email,
-        role: "investigation_admin",
+        role: "assistant_secretary_investigation",
         status: formStatus,
         createdAt: new Date().toISOString().slice(0, 10),
       };
@@ -273,7 +273,7 @@ export default function InvestigationOfficersPage() {
 
     setIsSaving(false);
     if (saveSuccess) {
-      showToast(t("officerAddedSuccess", "Investigation Administrator registered successfully!"));
+      showToast(t("officerAddedSuccess", "Assistant Secretary Investigation Branch registered successfully!"));
       setIsModalOpen(false);
       fetchOfficers();
     } else {
@@ -405,7 +405,7 @@ export default function InvestigationOfficersPage() {
           </button>
           <button className="btn-admin-add" onClick={openAddModal}>
             <UserPlus size={18} />
-            <span>{t("addInvestigationAdmin", "Register Investigation Administrator")}</span>
+            <span>{t("addInvestigationAdmin", "Register Assistant Secretary Investigation Branch")}</span>
           </button>
         </div>
       </div>
@@ -428,7 +428,7 @@ export default function InvestigationOfficersPage() {
               {isLoading ? (
                 <tr>
                   <td colSpan={6} className="admin-table-no-data table-no-data-padding">
-                    {t("loadingData", "Loading investigation administrators from database…")}
+                    {t("loadingData", "Loading accounts from database…")}
                   </td>
                 </tr>
               ) : filteredOfficers.length > 0 ? (
@@ -451,7 +451,7 @@ export default function InvestigationOfficersPage() {
                     <td>
                       <span style={{ fontSize: "11px", backgroundColor: "#e0e7ff", color: "#3730a3", padding: "3px 10px", borderRadius: "12px", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "4px" }}>
                         <ShieldCheck size={12} />
-                        {t("roleInvestigation", "Investigation Administrator")}
+                        {t("roleAsstSecInvestigation", "Assistant Secretary Investigation Branch")}
                       </span>
                     </td>
                     <td>
@@ -485,7 +485,7 @@ export default function InvestigationOfficersPage() {
                 <tr>
                   <td colSpan={6} className="admin-table-no-data table-no-data-padding">
                     {officers.length === 0
-                      ? t("noOfficersInDatabase", "No investigation administrators registered yet.")
+                      ? t("noOfficersInDatabase", "No Assistant Secretary Investigation Branch registered yet.")
                       : t("noLettersFound", "No entries found matching search.")}
                   </td>
                 </tr>
@@ -502,10 +502,10 @@ export default function InvestigationOfficersPage() {
             <header className="modal-header">
               <div>
                 <h2 id="modal-title" className="modal-title">
-                  {t("addInvestigationAdmin", "Register Investigation Administrator")}
+                  {t("addInvestigationAdmin", "Register Assistant Secretary Investigation Branch")}
                 </h2>
                 <p className="modal-subtitle">
-                  {t("investigationAdminSubtitle", "Manage branch access credentials for the investigation administrator")}
+                  {t("investigationAdminSubtitle", "Manage branch access credentials for Assistant Secretary Investigation Branch")}
                 </p>
               </div>
               <button className="btn-modal-close" onClick={() => setIsModalOpen(false)} aria-label="Close modal">
@@ -571,7 +571,7 @@ export default function InvestigationOfficersPage() {
                     </label>
                     <div style={{ height: "42px", padding: "0 12px", backgroundColor: "#f8fafc", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13px", fontWeight: 600, color: "#334155", display: "flex", alignItems: "center", gap: "6px" }}>
                       <ShieldCheck size={16} color="#4f46e5" />
-                      <span>{t("roleInvestigation", "Investigation Administrator")}</span>
+                      <span>{t("roleAsstSecInvestigation", "Assistant Secretary Investigation Branch")}</span>
                     </div>
                   </div>
 

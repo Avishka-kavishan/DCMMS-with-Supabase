@@ -429,7 +429,7 @@ function AppealDetailsContent() {
                   </h2>
                   <p>
                     {lang === "si"
-                      ? "නඩුව 'Closed / Decision Issued' ලෙස සලකුණු කෙරිණි. ඔබව නැවත අභියාචනා ලැයිස්තුවට හරවා යවනු ලැබේ..."
+                      ? "'Closed / Decision Issued' ලෙස සලකුණු කෙරිණි. ඔබව නැවත අභියාචනා ලැයිස්තුවට හරවා යවනු ලැබේ..."
                       : "The case has been marked as Closed / Decision Issued. Redirecting you to the appeals registry..."}
                   </p>
                 </div>
@@ -455,25 +455,14 @@ function AppealDetailsContent() {
                           <FolderOpen size={18} />
                         </div>
                         <div className="officer-item-content">
-                          <span className="officer-item-label">{lang === "si" ? "නඩු අංකය" : "Case Number"}</span>
+                          <span className="officer-item-label">{lang === "si" ? "යොමු අංකය" : "Case Number"}</span>
                           <span className="officer-item-value" style={{ color: "#2563eb", fontWeight: 700 }}>
                             {caseNo || "—"}
                           </span>
                         </div>
                       </div>
 
-                      {/* Appeal Reference */}
-                      <div className="appeal-officer-item">
-                        <div className="officer-item-icon">
-                          <Bookmark size={18} />
-                        </div>
-                        <div className="officer-item-content">
-                          <span className="officer-item-label">{lang === "si" ? "අභියාචනය යොමු අංකය" : "Appeal Reference"}</span>
-                          <span className="officer-item-value" style={{ color: "#7c3aed", fontWeight: 700 }}>
-                            {appealRef || "—"}
-                          </span>
-                        </div>
-                      </div>
+
 
                       {/* Appellant Name */}
                       <div className="appeal-officer-item">
@@ -534,14 +523,14 @@ function AppealDetailsContent() {
                         </div>
                       )}
 
-                      {/* Original Order */}
+                      {/* Disciplinary Order */}
                       {originalOrder && (
                         <div className="appeal-officer-item span-full">
                           <div className="officer-item-icon">
                             <Scale size={18} />
                           </div>
                           <div className="officer-item-content" style={{ width: "100%" }}>
-                            <span className="officer-item-label">{lang === "si" ? "මුල් නියෝගය" : "Original Order"}</span>
+                            <span className="officer-item-label">{lang === "si" ? "විනය නියෝගය" : "Disciplinary Order"}</span>
                             <div className="appeal-callout-box" style={{ borderLeftColor: "#7c3aed" }}>
                               {originalOrder}
                             </div>
@@ -693,7 +682,7 @@ function AppealDetailsContent() {
                       <Info size={18} className="appeal-info-icon" />
                       <span>
                         {lang === "si"
-                          ? "සටහන: මෙම පෝරමය ඉදිරිපත් කළ පසු මෙම නඩුවේ තත්වය 'Closed / Decision Issued' ලෙස ස්වයංක්‍රීයව යාවත්කාලීන වේ."
+                          ? "සටහන: මෙම පෝරමය ඉදිරිපත් කළ පසු තත්වය 'Closed / Decision Issued' ලෙස ස්වයංක්‍රීයව යාවත්කාලීන වේ."
                           : "Notice: Submitting this form will finalize the appeal and mark this case as Closed / Decision Issued in the DCMMS registry."}
                       </span>
                     </div>

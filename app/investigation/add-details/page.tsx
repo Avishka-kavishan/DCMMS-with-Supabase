@@ -1811,7 +1811,7 @@ function InvestigationCaseDetailsContent() {
     );
   };
 
-  // ── Handler: Investigation Administrator sends Investigation Committee Assignment details to Subject Officer ──
+  // ── Handler: Assistant Secretary Investigation Branch sends Investigation Committee Assignment details to Subject Officer ──
   const handleSendCommitteeToSubjectOfficer = async () => {
     if (!selectedChairman && selectedMembers.length === 0) {
       showToast(lang === "si" ? "කරුණාකර අවම වශයෙන් සභාපතිවරයෙකු හෝ එක් කමිටු සාමාජිකයෙකු තෝරන්න." : "Please select a Chairman or at least one Committee Member first.");
@@ -2183,7 +2183,7 @@ function InvestigationCaseDetailsContent() {
             received_date: now,
             report_state: status,
             special_notes: inquiryNotes || null,
-            subject_officer_name: assignee || "Investigation Administrator",
+            subject_officer_name: assignee || "Assistant Secretary Investigation Branch",
             step_taken: desc,
           });
 
@@ -2341,7 +2341,7 @@ function InvestigationCaseDetailsContent() {
               </button>
               <div className="dashboard-title-area">
                 <h2 className="dashboard-main-title">
-                  {lang === "si" ? "විමර්ශන පරිපාලක උපකරණ පුවරුව" : "Investigation Administrator"}
+                  {lang === "si" ? "සහකාර ලේකම් (විමර්ශන ශාඛාව) උපකරණ පුවරුව" : lang === "ta" ? "உதவிச் செயலாளர் (விசாரணைப் பிரிவு)" : "Assistant Secretary Investigation Branch"}
                 </h2>
                 <p className="dashboard-main-subtitle">
                   {lang === "si" ? "විමර්ශන පියවර සහ දත්ත ප්‍රවාහය කළමනාකරණය" : "Investigation Progress & Subject Officer Data Flow"}
@@ -2451,7 +2451,7 @@ function InvestigationCaseDetailsContent() {
                     {/* Case No */}
                     <div style={{ backgroundColor: "#f8fafc", padding: "10px 12px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
                       <span style={{ fontSize: "11px", color: "#64748b", fontWeight: 600, display: "block" }}>
-                        {lang === "si" ? "නඩු අංකය / යොමු අංකය" : "Case / Reference No"}
+                        {lang === "si" ? "යොමු අංකය" : "Case / Reference No"}
                       </span>
                       <span style={{ fontSize: "13px", fontWeight: 700, color: "#4f46e5" }}>
                         {caseNoParam}
