@@ -1885,8 +1885,8 @@ export async function saveSubjectOfficerAssignmentServer(payload: {
 
     // Ensure schema columns exist
     try {
-      await prisma.$executeRawUnsafe(
-        `CREATE TABLE IF NOT EXISTS public.dcmms_subject_assignments (
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS public.dcmms_subject_assignments (
           id VARCHAR(255) PRIMARY KEY,
           case_no VARCHAR(255) UNIQUE,
           subject_officer_name VARCHAR(255),
@@ -1918,33 +1918,7 @@ export async function saveSubjectOfficerAssignmentServer(payload: {
           created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
-        ALTER TABLE public.dcmms_subject_assignments ADD COLUMN IF NOT EXISTS subject_officer_name VARCHAR(255);
-        ALTER TABLE public.dcmms_subject_assignments ADD COLUMN IF NOT EXISTS assigned_officers TEXT;
-        ALTER TABLE public.dcmms_subject_assignments ADD COLUMN IF NOT EXISTS status VARCHAR(100);
-        ALTER TABLE public.dcmms_subject_assignments ADD COLUMN IF NOT EXISTS assigned_date DATE;
-        ALTER TABLE public.dcmms_subject_assignments ADD COLUMN IF NOT EXISTS chairman TEXT;
-        ALTER TABLE public.dcmms_subject_assignments ADD COLUMN IF NOT EXISTS members TEXT;
-        ALTER TABLE public.dcmms_subject_assignments ADD COLUMN IF NOT EXISTS appointment_date DATE;
-        ALTER TABLE public.dcmms_subject_assignments ADD COLUMN IF NOT EXISTS report_due_date DATE;
-        ALTER TABLE public.dcmms_subject_assignments ADD COLUMN IF NOT EXISTS appointment_letter_date DATE;
-        ALTER TABLE public.dcmms_subject_assignments ADD COLUMN IF NOT EXISTS initial_investigation_complete BOOLEAN DEFAULT FALSE;
-        ALTER TABLE public.dcmms_subject_assignments ADD COLUMN IF NOT EXISTS initial_investigation_completed_at TIMESTAMP WITH TIME ZONE;
-        ALTER TABLE public.dcmms_subject_assignments ADD COLUMN IF NOT EXISTS extension_term VARCHAR(100);
-        ALTER TABLE public.dcmms_subject_assignments ADD COLUMN IF NOT EXISTS extension_start_date DATE;
-        ALTER TABLE public.dcmms_subject_assignments ADD COLUMN IF NOT EXISTS extension_end_date DATE;
-        ALTER TABLE public.dcmms_subject_assignments ADD COLUMN IF NOT EXISTS extension_requested_by_admin BOOLEAN DEFAULT FALSE;
-        ALTER TABLE public.dcmms_subject_assignments ADD COLUMN IF NOT EXISTS extension_approval_status VARCHAR(100);
-        ALTER TABLE public.dcmms_subject_assignments ADD COLUMN IF NOT EXISTS extension_decision_date DATE;
-        ALTER TABLE public.dcmms_subject_assignments ADD COLUMN IF NOT EXISTS dates_submitted_by_subject BOOLEAN DEFAULT TRUE;
-        ALTER TABLE public.dcmms_subject_assignments ADD COLUMN IF NOT EXISTS report_submit_date DATE;
-        ALTER TABLE public.dcmms_subject_assignments ADD COLUMN IF NOT EXISTS report_content TEXT;
-        ALTER TABLE public.dcmms_subject_assignments ADD COLUMN IF NOT EXISTS investigation_file_no VARCHAR(255);
-        ALTER TABLE public.dcmms_subject_assignments ADD COLUMN IF NOT EXISTS investigation_status VARCHAR(100);
-        ALTER TABLE public.dcmms_subject_assignments ADD COLUMN IF NOT EXISTS investigation_notes TEXT;
-        ALTER TABLE public.dcmms_subject_assignments ADD COLUMN IF NOT EXISTS progress_details TEXT;
-        ALTER TABLE public.dcmms_subject_assignments ADD COLUMN IF NOT EXISTS committee_sent BOOLEAN DEFAULT FALSE;
-        ALTER TABLE public.dcmms_subject_assignments ADD COLUMN IF NOT EXISTS committee_sent_at TIMESTAMP WITH TIME ZONE;`
-      );
+      `);
     } catch (e) {}
 
     // 1. Upsert into dcmms_subject_assignments
@@ -2682,34 +2656,19 @@ export async function logAuditEventServer(
   action: string,
   entityType?: string,
   entityId?: string,
-  details?: Record<string, any>,
-  performedBy?: string
+  details?: any,
+  performedBy?: string,
+  email?: string
 ) {
   try {
-    await prisma.auditLog.create({
-      data: {
-        user_id: performedBy || undefined,
-        action,
-        table_name: entityType || null,
-        record_id: entityId || null,
-      },
-    });
-
-    try {
-      await prisma.dcmmsAuditLog.create({
-        data: {
-          user_id: performedBy || "system_user",
-          action,
-          entity_type: entityType || null,
-          entity_id: entityId || null,
-          details: details ? JSON.stringify(details) : null,
-        },
-      });
-    } catch (e) {
-      // Legacy table failure non-blocking
-    }
-
-    return serializeForServerAction({ success: true });
+    const id = `audit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const detailsStr = typeof details === "object" ? JSON.stringify(details) : (details || entityId || entityType || null);
+    await prisma.$executeRaw`
+      INSERT INTO public.dcmms_audit_logs (id, timestamp, user_id, username, email, action, details)
+      VALUES (${id}, NOW(), ${performedBy || null}, ${performedBy || entityType || 'System'}, ${email || null}, ${action}, ${detailsStr})
+      ON CONFLICT (id) DO NOTHING;
+    `;
+    return serializeForServerAction({ success: true, id });
   } catch (error: any) {
     console.error("Failed to log audit event to PostgreSQL:", error);
     return serializeForServerAction({ success: false, error: error?.message || "Failed to log audit event" });
@@ -2718,15 +2677,13 @@ export async function logAuditEventServer(
 
 export async function recordSessionServer(userId: string, role?: string) {
   try {
-    const session = await prisma.dcmmsSession.create({
-      data: {
-        user_id: userId,
-        role: role || "User",
-        login_time: new Date(),
-        is_active: true,
-      },
-    });
-    return serializeForServerAction({ success: true, data: session });
+    const sessionId = `sess-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    await prisma.$executeRaw`
+      INSERT INTO public.dcmms_sessions (id, user_id, username, email, login_time, status, ip_address)
+      VALUES (${sessionId}, ${userId}, ${role || 'User'}, ${userId}, NOW(), 'active', '127.0.0.1')
+      ON CONFLICT (id) DO NOTHING;
+    `;
+    return serializeForServerAction({ success: true, sessionId, data: { id: sessionId, user_id: userId, role } });
   } catch (error: any) {
     console.error("Failed to record session in PostgreSQL:", error);
     return serializeForServerAction({ success: false, error: error?.message || "Failed to record session" });
@@ -3248,13 +3205,15 @@ export async function checkLetterEditApprovalStatusServer(letter_id: string, ref
 }
 
 export async function resetOfficerPasswordServer(params: {
-  targetOfficerId: string;
+  targetOfficerId?: string;
+  officerId?: string;
   newPassword: string;
   adminId?: string;
   adminName?: string;
 }) {
   try {
-    const { targetOfficerId, newPassword, adminId, adminName } = params;
+    const targetOfficerId = params.targetOfficerId || params.officerId;
+    const { newPassword, adminId, adminName } = params;
     if (!targetOfficerId || !newPassword) {
       return serializeForServerAction({ success: false, error: "Target officer identifier and new password are required" });
     }
@@ -3422,27 +3381,34 @@ function parseSafeDate(val: any): Date | null {
 
 export async function saveAccusedOfficerServer(officerData: any) {
   try {
-    const {
-      ref_number,
-      accused_officers,
-      accused_officer_name,
-      address,
-      position,
-      date_of_birth,
-      nic_no,
-      appointment_date,
-      accused_school_name,
-      school_address,
-      province,
-      district,
-      zone,
-      classification_of_complaint_letter,
-      name_of_the_presenting_the_complain,
-      address_of_the_person_presenting_the_complaint,
-      subject_file_no,
-      future_action,
-      date_prepared_and_submitted_for_signature,
-    } = officerData;
+    const ref_number = (officerData.ref_number || officerData.refNumber || officerData.caseNo || officerData.case_no || "").trim();
+    const rawOfficers = officerData.accused_officers || officerData.concernedPersons || officerData.concerned_persons || officerData.persons;
+    const accused_officers = Array.isArray(rawOfficers) ? rawOfficers.map((o: any) => ({
+      accused_officer_name: o.accused_officer_name || o.fullName || o.name || "",
+      address: o.address || o.permanentAddress || "",
+      position: o.position || o.designation || "",
+      date_of_birth: o.date_of_birth || o.dob || null,
+      nic_no: o.nic_no || o.nic || "",
+      appointment_date: o.appointment_date || o.appointmentDate || null,
+    })) : undefined;
+
+    const accused_officer_name = officerData.accused_officer_name || officerData.fullName || officerData.name;
+    const address = officerData.address;
+    const position = officerData.position || officerData.designation;
+    const date_of_birth = officerData.date_of_birth || officerData.dob;
+    const nic_no = officerData.nic_no || officerData.nic;
+    const appointment_date = officerData.appointment_date || officerData.appointmentDate;
+    const accused_school_name = officerData.accused_school_name || officerData.instituteName || officerData.institute_name || officerData.school;
+    const school_address = officerData.school_address || officerData.instituteAddress;
+    const province = officerData.province;
+    const district = officerData.district;
+    const zone = officerData.zone;
+    const classification_of_complaint_letter = officerData.classification_of_complaint_letter || officerData.classification;
+    const name_of_the_presenting_the_complain = officerData.name_of_the_presenting_the_complain || officerData.complainantName || officerData.complainant_name;
+    const address_of_the_person_presenting_the_complaint = officerData.address_of_the_person_presenting_the_complaint || officerData.complainantAddress;
+    const subject_file_no = officerData.subject_file_no || officerData.subjectFileNo;
+    const future_action = officerData.future_action || officerData.futureAction || officerData.reportState;
+    const date_prepared_and_submitted_for_signature = officerData.date_prepared_and_submitted_for_signature || officerData.receivedDate;
 
     // 0. Ensure tables exist
     await prisma.$executeRawUnsafe(`
@@ -4901,19 +4867,22 @@ export async function saveCaseByDateExtensionServer(payload: {
   approval_status?: string;
 }) {
   try {
-    if (!payload || !payload.subject_file_no) {
+    const rawSubNo = payload?.subject_file_no || (payload as any)?.subjectFileNo || (payload as any)?.caseNo || (payload as any)?.case_no;
+    if (!rawSubNo) {
       return serializeForServerAction({ success: false, error: "subject_file_no is required" });
     }
 
-    const resolved = await resolveSubjectFileDetails(payload.subject_file_no);
+    const resolved = await resolveSubjectFileDetails(rawSubNo);
     const cleanRef = resolved.clean;
     const actualSubNo = resolved.subjectFileNo;
     const refNum = resolved.refNumber;
     const formId = resolved.formId;
-    const term = payload.extention_term || "First Extension (1st)";
-    const start = payload.start_date ? new Date(payload.start_date) : null;
-    const end = payload.end_date ? new Date(payload.end_date) : null;
-    const status = payload.approval_status || "Pending";
+    const term = payload.extention_term || (payload as any).extensionTerm || "First Extension (1st)";
+    const startDateRaw = payload.start_date || (payload as any).startDate;
+    const endDateRaw = payload.end_date || (payload as any).endDate;
+    const start = startDateRaw ? new Date(startDateRaw) : null;
+    const end = endDateRaw ? new Date(endDateRaw) : null;
+    const status = payload.approval_status || (payload as any).approvalStatus || "Pending";
     const now = new Date();
 
     try {
@@ -5041,18 +5010,35 @@ export async function updateCaseByDateExtensionApprovalServer(
     extention_term?: string;
     start_date?: string | null;
     end_date?: string | null;
-  }
+  } | string
 ) {
   try {
     if (!subjectFileNo) {
       return serializeForServerAction({ success: false, error: "subjectFileNo is required" });
     }
+
+    let actualStatus = approvalStatus || "Approved";
+    let actualDecDateStr = decisionDate;
+    let actualTerm = typeof extDetails === "object" ? extDetails?.extention_term : undefined;
+
+    // Detect if caller swapped (subjectFileNo, term, approvalStatus, decisionDate)
+    if (approvalStatus?.toLowerCase().includes("extension") || approvalStatus === "None") {
+      actualTerm = approvalStatus;
+      actualStatus = decisionDate || "Approved";
+      actualDecDateStr = typeof extDetails === "string" ? extDetails : null;
+    }
+
     const resolved = await resolveSubjectFileDetails(subjectFileNo);
     const cleanRef = resolved.clean;
     const actualSubNo = resolved.subjectFileNo;
     const refNum = resolved.refNumber;
     const formId = resolved.formId;
-    const decDate = decisionDate ? new Date(decisionDate) : new Date();
+
+    let decDate: Date = new Date();
+    if (actualDecDateStr) {
+      const parsed = new Date(actualDecDateStr);
+      if (!isNaN(parsed.getTime())) decDate = parsed;
+    }
     const now = new Date();
 
     try {
@@ -5091,21 +5077,22 @@ export async function updateCaseByDateExtensionApprovalServer(
     `;
 
     if (existing && existing.length > 0) {
+      const targetId = Number(existing[0].id);
       await prisma.$executeRaw`
         UPDATE public.case_by_date_extention
         SET 
           subject_file_no = ${actualSubNo},
           sub_file_no = ${actualSubNo},
           subject_officer_form_id = ${formId ? Number(formId) : null}::bigint,
-          approval_status = ${approvalStatus},
+          approval_status = ${actualStatus},
           decision_date = ${decDate},
           updated_at = ${now}
-        WHERE id = ${existing[0].id};
+        WHERE id = ${targetId}::bigint;
       `;
     } else {
-      const term = extDetails?.extention_term || "First Extension (1st)";
-      const start = extDetails?.start_date ? new Date(extDetails.start_date) : null;
-      const end = extDetails?.end_date ? new Date(extDetails.end_date) : null;
+      const term = actualTerm || "First Extension (1st)";
+      const start = typeof extDetails === "object" && extDetails?.start_date ? new Date(extDetails.start_date) : null;
+      const end = typeof extDetails === "object" && extDetails?.end_date ? new Date(extDetails.end_date) : null;
 
       await prisma.$executeRaw`
         INSERT INTO public.case_by_date_extention (
@@ -5218,19 +5205,40 @@ export async function saveCaseByAppointmentAndReportDueDateServer(payload: {
   appointment_letter_date?: string | null;
   report_due_date?: string | null;
   dates_submitted_by_subject?: boolean;
+  inquiry_type?: string | null;
+  appointment_date?: string | null;
+  due_date?: string | null;
+  title?: string | null;
+  approval_date?: string | null;
+  report_received_date?: string | null;
+  officers?: string | null;
+  recommendation?: string | null;
+  upcoming_action?: string | null;
 }) {
   try {
-    if (!payload.subject_file_no) {
+    const rawSubNo = payload.subject_file_no || (payload as any).subjectFileNo || (payload as any).caseNo || (payload as any).case_no;
+    if (!rawSubNo) {
       return serializeForServerAction({ success: false, error: "subject_file_no is required" });
     }
-    const resolved = await resolveSubjectFileDetails(payload.subject_file_no);
+    const resolved = await resolveSubjectFileDetails(rawSubNo);
     const cleanRef = resolved.clean;
     const actualSubNo = resolved.subjectFileNo;
     const refNum = resolved.refNumber;
     const formId = resolved.formId;
-    const apptDate = payload.appointment_letter_date ? new Date(payload.appointment_letter_date) : null;
-    const dueDate = payload.report_due_date ? new Date(payload.report_due_date) : null;
-    const isSubmitted = payload.dates_submitted_by_subject ?? true;
+    const apptLetterDateRaw = payload.appointment_letter_date || (payload as any).appointmentLetterDate;
+    const reportDueDateRaw = payload.report_due_date || (payload as any).reportDueDate;
+    const apptDate = apptLetterDateRaw ? new Date(apptLetterDateRaw) : null;
+    const dueDate = reportDueDateRaw ? new Date(reportDueDateRaw) : null;
+    const provApptDateRaw = payload.appointment_date || (payload as any).appointmentDate;
+    const provDueDateRaw = payload.due_date || (payload as any).dueDate;
+    const provApprDateRaw = payload.approval_date || (payload as any).approvalDate;
+    const provReportRecDateRaw = payload.report_received_date || (payload as any).reportReceivedDate;
+    const provApptDate = provApptDateRaw ? new Date(provApptDateRaw) : null;
+    const provDueDate = provDueDateRaw ? new Date(provDueDateRaw) : null;
+    const provApprDate = provApprDateRaw ? new Date(provApprDateRaw) : null;
+    const provReportRecDate = provReportRecDateRaw ? new Date(provReportRecDateRaw) : null;
+    const inqType = payload.inquiry_type || (payload as any).inquiryType || (provApptDate || provDueDate || payload.title ? "Province basic inquiry" : "Institutional basic inquiry");
+    const isSubmitted = payload.dates_submitted_by_subject ?? (payload as any).datesSubmittedBySubject ?? true;
     const now = new Date();
 
     try {
@@ -5252,6 +5260,15 @@ export async function saveCaseByAppointmentAndReportDueDateServer(payload: {
       await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_appointment_and_report_due_date ADD COLUMN IF NOT EXISTS appointment_letter_date DATE;`);
       await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_appointment_and_report_due_date ADD COLUMN IF NOT EXISTS report_due_date DATE;`);
       await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_appointment_and_report_due_date ADD COLUMN IF NOT EXISTS dates_submitted_by_subject BOOLEAN DEFAULT TRUE;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_appointment_and_report_due_date ADD COLUMN IF NOT EXISTS inquiry_type VARCHAR(100) DEFAULT 'Institutional basic inquiry';`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_appointment_and_report_due_date ADD COLUMN IF NOT EXISTS appointment_date DATE;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_appointment_and_report_due_date ADD COLUMN IF NOT EXISTS due_date DATE;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_appointment_and_report_due_date ADD COLUMN IF NOT EXISTS title VARCHAR(255);`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_appointment_and_report_due_date ADD COLUMN IF NOT EXISTS approval_date DATE;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_appointment_and_report_due_date ADD COLUMN IF NOT EXISTS report_received_date DATE;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_appointment_and_report_due_date ADD COLUMN IF NOT EXISTS officers TEXT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_appointment_and_report_due_date ADD COLUMN IF NOT EXISTS recommendation TEXT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_appointment_and_report_due_date ADD COLUMN IF NOT EXISTS upcoming_action VARCHAR(255);`);
     } catch (e) {}
 
     const existing: any[] = formId ? await prisma.$queryRaw`
@@ -5281,8 +5298,17 @@ export async function saveCaseByAppointmentAndReportDueDateServer(payload: {
           appointment_letter_date = ${apptDate},
           report_due_date = ${dueDate},
           dates_submitted_by_subject = ${isSubmitted},
+          inquiry_type = ${inqType},
+          appointment_date = ${provApptDate},
+          due_date = ${provDueDate},
+          title = ${payload.title || null},
+          approval_date = ${provApprDate},
+          report_received_date = ${provReportRecDate},
+          officers = ${payload.officers || null},
+          recommendation = ${payload.recommendation || null},
+          upcoming_action = ${payload.upcoming_action || null},
           updated_at = ${now}
-        WHERE id = ${existing[0].id};
+        WHERE id = ${existing[0].id}::uuid;
       `;
     } else {
       await prisma.$executeRaw`
@@ -5293,6 +5319,15 @@ export async function saveCaseByAppointmentAndReportDueDateServer(payload: {
           appointment_letter_date,
           report_due_date,
           dates_submitted_by_subject,
+          inquiry_type,
+          appointment_date,
+          due_date,
+          title,
+          approval_date,
+          report_received_date,
+          officers,
+          recommendation,
+          upcoming_action,
           created_at,
           updated_at
         ) VALUES (
@@ -5302,6 +5337,15 @@ export async function saveCaseByAppointmentAndReportDueDateServer(payload: {
           ${apptDate},
           ${dueDate},
           ${isSubmitted},
+          ${inqType},
+          ${provApptDate},
+          ${provDueDate},
+          ${payload.title || null},
+          ${provApprDate},
+          ${provReportRecDate},
+          ${payload.officers || null},
+          ${payload.recommendation || null},
+          ${payload.upcoming_action || null},
           ${now},
           ${now}
         );
@@ -5314,7 +5358,7 @@ export async function saveCaseByAppointmentAndReportDueDateServer(payload: {
         username: "Subject Officer",
         email: "subject_officer@moe.gov.lk",
         action: "Inquiry Dates Scheduled",
-        details: `Case #${actualSubNo}: Appointment letter date (${payload.appointment_letter_date || "N/A"}) & report due date (${payload.report_due_date || "N/A"}) saved.`,
+        details: `Case #${actualSubNo}: Inquiry (${inqType}) dates saved.`,
       });
     } catch (auditErr) {}
 
@@ -5355,6 +5399,15 @@ export async function getCaseByAppointmentAndReportDueDateServer(subjectFileNo: 
       await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_appointment_and_report_due_date ADD COLUMN IF NOT EXISTS appointment_letter_date DATE;`);
       await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_appointment_and_report_due_date ADD COLUMN IF NOT EXISTS report_due_date DATE;`);
       await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_appointment_and_report_due_date ADD COLUMN IF NOT EXISTS dates_submitted_by_subject BOOLEAN DEFAULT TRUE;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_appointment_and_report_due_date ADD COLUMN IF NOT EXISTS inquiry_type VARCHAR(100) DEFAULT 'Institutional basic inquiry';`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_appointment_and_report_due_date ADD COLUMN IF NOT EXISTS appointment_date DATE;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_appointment_and_report_due_date ADD COLUMN IF NOT EXISTS due_date DATE;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_appointment_and_report_due_date ADD COLUMN IF NOT EXISTS title VARCHAR(255);`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_appointment_and_report_due_date ADD COLUMN IF NOT EXISTS approval_date DATE;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_appointment_and_report_due_date ADD COLUMN IF NOT EXISTS report_received_date DATE;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_appointment_and_report_due_date ADD COLUMN IF NOT EXISTS officers TEXT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_appointment_and_report_due_date ADD COLUMN IF NOT EXISTS recommendation TEXT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.case_by_appointment_and_report_due_date ADD COLUMN IF NOT EXISTS upcoming_action VARCHAR(255);`);
     } catch (e) {}
 
     const records: any[] = formId ? await prisma.$queryRaw`
@@ -5365,6 +5418,15 @@ export async function getCaseByAppointmentAndReportDueDateServer(subjectFileNo: 
         subject_officer_form_id::text as subject_officer_form_id,
         appointment_letter_date,
         report_due_date,
+        appointment_date,
+        due_date,
+        inquiry_type,
+        title,
+        approval_date,
+        report_received_date,
+        officers,
+        recommendation,
+        upcoming_action,
         dates_submitted_by_subject,
         created_at,
         updated_at
@@ -5386,6 +5448,15 @@ export async function getCaseByAppointmentAndReportDueDateServer(subjectFileNo: 
         subject_officer_form_id::text as subject_officer_form_id,
         appointment_letter_date,
         report_due_date,
+        appointment_date,
+        due_date,
+        inquiry_type,
+        title,
+        approval_date,
+        report_received_date,
+        officers,
+        recommendation,
+        upcoming_action,
         dates_submitted_by_subject,
         created_at,
         updated_at
@@ -5400,6 +5471,199 @@ export async function getCaseByAppointmentAndReportDueDateServer(subjectFileNo: 
   } catch (error: any) {
     console.error("Error fetching case_by_appointment_and_report_due_date:", error);
     return serializeForServerAction({ success: false, error: error?.message, data: null });
+  }
+}
+
+export async function saveConductInquiryServer(payload: {
+  case_no: string;
+  inquiry_type: "Institutional basic inquiry" | "Province basic inquiry" | string;
+  // Institutional fields
+  chairman_name?: string | null;
+  chairman_email?: string | null;
+  committee_members?: any;
+  appointment_letter_date?: string | null;
+  report_due_date?: string | null;
+  extension_term?: string | null;
+  extension_start_date?: string | null;
+  extension_end_date?: string | null;
+  upcoming_action?: string | null;
+  // Province fields
+  appointment_date?: string | null;
+  due_date?: string | null;
+  title?: string | null;
+  approval_date?: string | null;
+  report_received_date?: string | null;
+  officers?: string | null;
+  // Common
+  recommendation?: string | null;
+}) {
+  try {
+    const rawCaseNo = payload.case_no || (payload as any).caseNo || (payload as any).refNumber || (payload as any).ref_number;
+    if (!rawCaseNo) {
+      return serializeForServerAction({ success: false, error: "case_no is required" });
+    }
+    const cleanCaseNo = String(rawCaseNo).trim();
+    const inqType = payload.inquiry_type || (payload as any).inquiryType || "Institutional basic inquiry";
+    const now = new Date();
+
+    const apptLetterDateRaw = payload.appointment_letter_date || (payload as any).appointmentLetterDate;
+    const reportDueDateRaw = payload.report_due_date || (payload as any).reportDueDate;
+    const extStartDateRaw = payload.extension_start_date || (payload as any).extensionStartDate;
+    const extEndDateRaw = payload.extension_end_date || (payload as any).extensionEndDate;
+    const apptLetterDate = apptLetterDateRaw ? new Date(apptLetterDateRaw) : null;
+    const reportDueDate = reportDueDateRaw ? new Date(reportDueDateRaw) : null;
+    const extStartDate = extStartDateRaw ? new Date(extStartDateRaw) : null;
+    const extEndDate = extEndDateRaw ? new Date(extEndDateRaw) : null;
+
+    const apptDateRaw = payload.appointment_date || (payload as any).appointmentDate;
+    const dueDateRaw = payload.due_date || (payload as any).dueDate;
+    const approvalDateRaw = payload.approval_date || (payload as any).approvalDate;
+    const reportRecDateRaw = payload.report_received_date || (payload as any).reportReceivedDate;
+    const apptDate = apptDateRaw ? new Date(apptDateRaw) : null;
+    const dueDate = dueDateRaw ? new Date(dueDateRaw) : null;
+    const approvalDate = approvalDateRaw ? new Date(approvalDateRaw) : null;
+    const reportRecDate = reportRecDateRaw ? new Date(reportRecDateRaw) : null;
+
+    const rawMembers = payload.committee_members || (payload as any).committeeMembers;
+    const membersJson = rawMembers ? JSON.stringify(rawMembers) : null;
+
+    const upcomingActionVal = payload.upcoming_action || (payload as any).upcomingAction || null;
+    const chairmanNameVal = payload.chairman_name || (payload as any).chairmanName || null;
+    const chairmanEmailVal = payload.chairman_email || (payload as any).chairmanEmail || null;
+    const extensionTermVal = payload.extension_term || (payload as any).extensionTerm || "None";
+    const titleVal = payload.title || (payload as any).title || null;
+    const officersVal = payload.officers || (payload as any).officers || null;
+    const recommendationVal = payload.recommendation || (payload as any).recommendation || null;
+
+    // 1. Upsert into conduct_inquiry_table
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS public.conduct_inquiry_table (
+          id BIGSERIAL PRIMARY KEY,
+          case_no VARCHAR(100) NOT NULL,
+          inquiry_type VARCHAR(100) NOT NULL DEFAULT 'Institutional basic inquiry',
+          chairman_name VARCHAR(255),
+          chairman_email VARCHAR(255),
+          committee_members JSONB,
+          appointment_letter_date DATE,
+          report_due_date DATE,
+          extension_term VARCHAR(50),
+          extension_start_date DATE,
+          extension_end_date DATE,
+          upcoming_action VARCHAR(255),
+          appointment_date DATE,
+          due_date DATE,
+          title VARCHAR(255),
+          approval_date DATE,
+          report_received_date DATE,
+          officers TEXT,
+          recommendation TEXT,
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+    } catch (e) {}
+
+    const existingInq: any[] = await prisma.$queryRaw`
+      SELECT id FROM public.conduct_inquiry_table
+      WHERE LOWER(case_no) = LOWER(${cleanCaseNo})
+      LIMIT 1;
+    `;
+
+    if (existingInq && existingInq.length > 0) {
+      await prisma.$executeRaw`
+        UPDATE public.conduct_inquiry_table
+        SET
+          inquiry_type = ${inqType},
+          chairman_name = ${chairmanNameVal},
+          chairman_email = ${chairmanEmailVal},
+          committee_members = ${membersJson}::jsonb,
+          appointment_letter_date = ${apptLetterDate},
+          report_due_date = ${reportDueDate},
+          extension_term = ${extensionTermVal},
+          extension_start_date = ${extStartDate},
+          extension_end_date = ${extEndDate},
+          upcoming_action = ${upcomingActionVal},
+          appointment_date = ${apptDate},
+          due_date = ${dueDate},
+          title = ${titleVal},
+          approval_date = ${approvalDate},
+          report_received_date = ${reportRecDate},
+          officers = ${officersVal},
+          recommendation = ${recommendationVal},
+          updated_at = ${now}
+        WHERE id = ${existingInq[0].id};
+      `;
+    } else {
+      await prisma.$executeRaw`
+        INSERT INTO public.conduct_inquiry_table (
+          case_no,
+          inquiry_type,
+          chairman_name,
+          chairman_email,
+          committee_members,
+          appointment_letter_date,
+          report_due_date,
+          extension_term,
+          extension_start_date,
+          extension_end_date,
+          upcoming_action,
+          appointment_date,
+          due_date,
+          title,
+          approval_date,
+          report_received_date,
+          officers,
+          recommendation,
+          created_at,
+          updated_at
+        ) VALUES (
+          ${cleanCaseNo},
+          ${inqType},
+          ${chairmanNameVal},
+          ${chairmanEmailVal},
+          ${membersJson}::jsonb,
+          ${apptLetterDate},
+          ${reportDueDate},
+          ${extensionTermVal},
+          ${extStartDate},
+          ${extEndDate},
+          ${upcomingActionVal},
+          ${apptDate},
+          ${dueDate},
+          ${titleVal},
+          ${approvalDate},
+          ${reportRecDate},
+          ${officersVal},
+          ${recommendationVal},
+          ${now},
+          ${now}
+        );
+      `;
+    }
+
+    // 2. Also save to case_by_appointment_and_report_due_date
+    await saveCaseByAppointmentAndReportDueDateServer({
+      subject_file_no: cleanCaseNo,
+      sub_file_no: cleanCaseNo,
+      inquiry_type: inqType,
+      appointment_letter_date: payload.appointment_letter_date || null,
+      report_due_date: payload.report_due_date || null,
+      appointment_date: payload.appointment_date || null,
+      due_date: payload.due_date || null,
+      title: payload.title || null,
+      approval_date: payload.approval_date || null,
+      report_received_date: payload.report_received_date || null,
+      officers: payload.officers || null,
+      recommendation: payload.recommendation || null,
+      upcoming_action: payload.upcoming_action || null,
+      dates_submitted_by_subject: true,
+    });
+
+    return serializeForServerAction({ success: true, message: "Conduct inquiry details saved successfully" });
+  } catch (error: any) {
+    console.error("Error in saveConductInquiryServer:", error);
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to save conduct inquiry" });
   }
 }
 
@@ -8257,9 +8521,23 @@ export async function getConductInquiryCaseDetailsServer(caseNo: string) {
       }
     } catch (e) {}
 
-    // 4. Appointment letter date & Report due date
+    // 4. Appointment letter date & Report due date & Province inquiry fields
     let appointmentLetterDate = "";
     let reportDueDate = "";
+    let appointmentDate = "";
+    let dueDate = "";
+    let inquiryType = "Institutional basic inquiry";
+    let inquiryTitle = "";
+    let approvalDate = "";
+    let reportReceivedDate = "";
+    let officers = "";
+    let inquiryRecommendation = "";
+
+    let extensionTerm = "None";
+    let extensionStartDate = "";
+    let extensionEndDate = "";
+    let upcomingAction = futureAction || "";
+
     try {
       const apptRes = await getCaseByAppointmentAndReportDueDateServer(cleanNo);
       if (apptRes && apptRes.success && apptRes.data) {
@@ -8269,13 +8547,34 @@ export async function getConductInquiryCaseDetailsServer(caseNo: string) {
         if (apptRes.data.report_due_date) {
           reportDueDate = String(apptRes.data.report_due_date).slice(0, 10);
         }
+        if (apptRes.data.appointment_date) {
+          appointmentDate = String(apptRes.data.appointment_date).slice(0, 10);
+        }
+        if (apptRes.data.due_date) {
+          dueDate = String(apptRes.data.due_date).slice(0, 10);
+        }
+        if (apptRes.data.inquiry_type) {
+          inquiryType = apptRes.data.inquiry_type;
+        }
+        if (apptRes.data.title) {
+          inquiryTitle = apptRes.data.title;
+        }
+        if (apptRes.data.approval_date) {
+          approvalDate = String(apptRes.data.approval_date).slice(0, 10);
+        }
+        if (apptRes.data.report_received_date) {
+          reportReceivedDate = String(apptRes.data.report_received_date).slice(0, 10);
+        }
+        if (apptRes.data.officers) {
+          officers = apptRes.data.officers;
+        }
+        if (apptRes.data.recommendation) {
+          inquiryRecommendation = apptRes.data.recommendation;
+        }
       }
     } catch (e) {}
 
     // 5. Date Extension
-    let extensionTerm = "None";
-    let extensionStartDate = "";
-    let extensionEndDate = "";
     try {
       const extRes = await getCaseByDateExtensionServer(cleanNo);
       if (extRes && extRes.success && extRes.data) {
@@ -8301,6 +8600,45 @@ export async function getConductInquiryCaseDetailsServer(caseNo: string) {
       }
     } catch (e) {}
 
+    // Check dedicated conduct_inquiry_table if present (takes precedence)
+    try {
+      const inqRows: any[] = await prisma.$queryRaw`
+        SELECT * FROM public.conduct_inquiry_table
+        WHERE LOWER(case_no) = LOWER(${cleanNo})
+        LIMIT 1;
+      `;
+      if (inqRows && inqRows.length > 0) {
+        const row = inqRows[0];
+        if (row.inquiry_type) inquiryType = row.inquiry_type;
+        if (row.chairman_name) chairmanName = row.chairman_name;
+        if (row.chairman_email) {
+          chairmanEmail = row.chairman_email;
+          chairmanId = row.chairman_email;
+        }
+        if (row.committee_members) {
+          try {
+            const parsed = typeof row.committee_members === "string" ? JSON.parse(row.committee_members) : row.committee_members;
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              membersList = parsed;
+            }
+          } catch (e) {}
+        }
+        if (row.appointment_letter_date) appointmentLetterDate = String(row.appointment_letter_date).slice(0, 10);
+        if (row.report_due_date) reportDueDate = String(row.report_due_date).slice(0, 10);
+        if (row.extension_term) extensionTerm = row.extension_term;
+        if (row.extension_start_date) extensionStartDate = String(row.extension_start_date).slice(0, 10);
+        if (row.extension_end_date) extensionEndDate = String(row.extension_end_date).slice(0, 10);
+        if (row.upcoming_action) upcomingAction = row.upcoming_action;
+        if (row.appointment_date) appointmentDate = String(row.appointment_date).slice(0, 10);
+        if (row.due_date) dueDate = String(row.due_date).slice(0, 10);
+        if (row.title) inquiryTitle = row.title;
+        if (row.approval_date) approvalDate = String(row.approval_date).slice(0, 10);
+        if (row.report_received_date) reportReceivedDate = String(row.report_received_date).slice(0, 10);
+        if (row.officers) officers = row.officers;
+        if (row.recommendation) inquiryRecommendation = row.recommendation;
+      }
+    } catch (e) {}
+
     // 6. Daily mail letter details for subject fallback
     if (!subjectMatter) {
       try {
@@ -8318,7 +8656,6 @@ export async function getConductInquiryCaseDetailsServer(caseNo: string) {
     }
 
     // 7. Upcoming Action from reply_letter_details_table or dcmms_subject
-    let upcomingAction = futureAction || "";
     try {
       const replyDetails = await prisma.$queryRaw<any[]>`
         SELECT upcoming_action FROM public.reply_letter_details_table
@@ -8356,6 +8693,8 @@ export async function getConductInquiryCaseDetailsServer(caseNo: string) {
         subject: subjectMatter || futureAction || `Disciplinary inspection inquiry regarding ${cleanNo}`,
         stage: "Conducting an Inquiry",
         priority: "medium",
+        inquiryType: inquiryType || "Institutional basic inquiry",
+        // Institutional basic inquiry
         chairmanName,
         chairmanEmail: chairmanEmail || chairmanId,
         chairmanId: chairmanEmail || chairmanId,
@@ -8365,8 +8704,16 @@ export async function getConductInquiryCaseDetailsServer(caseNo: string) {
         extensionTerm,
         extensionStartDate,
         extensionEndDate,
-        recommendation: futureAction ? `Observation: ${futureAction}` : "",
         upcomingAction: upcomingAction || "",
+        // Province basic inquiry
+        appointmentDate,
+        dueDate,
+        title: inquiryTitle,
+        approvalDate,
+        reportReceivedDate,
+        officers: officers || "",
+        // Common
+        recommendation: inquiryRecommendation || (futureAction ? `Observation: ${futureAction}` : ""),
       }
     });
   } catch (error: any) {

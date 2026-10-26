@@ -26,6 +26,7 @@ import {
   getMembersByCaseServer,
   getCommitteeOfficersWithSchoolsServer,
   saveReplyLetterDetailsServer,
+  saveConductInquiryServer,
 } from "@/lib/db-actions";
 import {
   ArrowLeft,
@@ -154,6 +155,8 @@ function ConductInquiryContent() {
     subject: string;
     stage: string;
     priority: string;
+    inquiryType: "Institutional basic inquiry" | "Province basic inquiry";
+    // Institutional basic inquiry
     chairmanName: string;
     chairmanEmail: string;
     chairmanId?: string;
@@ -163,8 +166,16 @@ function ConductInquiryContent() {
     extensionTerm: string;
     extensionStartDate: string;
     extensionEndDate: string;
-    recommendation: string;
     upcomingAction: string;
+    // Province basic inquiry
+    appointmentDate: string;
+    dueDate: string;
+    title: string;
+    approvalDate: string;
+    reportReceivedDate: string;
+    officers: string[];
+    // Common
+    recommendation: string;
   }>({
     caseNo: "",
     accusedName: "—",
@@ -173,6 +184,7 @@ function ConductInquiryContent() {
     subject: "—",
     stage: "Conducting an Inquiry",
     priority: "medium",
+    inquiryType: "Institutional basic inquiry",
     chairmanName: "",
     chairmanEmail: "",
     chairmanId: "",
@@ -182,9 +194,29 @@ function ConductInquiryContent() {
     extensionTerm: "None",
     extensionStartDate: "",
     extensionEndDate: "",
-    recommendation: "",
     upcomingAction: "",
+    appointmentDate: "",
+    dueDate: "",
+    title: "",
+    approvalDate: "",
+    reportReceivedDate: "",
+    officers: [],
+    recommendation: "",
   });
+
+  const [officerInput, setOfficerInput] = useState("");
+
+  const handleAddOfficer = () => {
+    const val = officerInput.trim();
+    if (!val) return;
+    if (!formState.officers.includes(val)) {
+      setFormState((prev) => ({
+        ...prev,
+        officers: [...prev.officers, val],
+      }));
+    }
+    setOfficerInput("");
+  };
 
   const [saving, setSaving] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
@@ -423,6 +455,7 @@ function ConductInquiryContent() {
       subject: foundCase?.subject && foundCase.subject !== "—" ? foundCase.subject : `Inquiry Case ${cleanCaseNo}`,
       stage: foundCase?.stage || "Conducting an Inquiry",
       priority: foundCase?.priority || "medium",
+      inquiryType: (asgn?.inquiryType || asgn?.inquiry_type || "Institutional basic inquiry") as any,
       chairmanName: committee.chairmanName || (foundCase?.chairman?.name || foundCase?.chairman?.fullName || ""),
       chairmanEmail: committee.chairmanEmail || (foundCase?.chairman?.email || ""),
       chairmanId: committee.chairmanEmail || (foundCase?.chairman?.email || ""),
@@ -432,8 +465,14 @@ function ConductInquiryContent() {
       extensionTerm: asgn?.extensionTerm || asgn?.extension_term || "None",
       extensionStartDate: formatToInputDate(asgn?.extensionStartDate || asgn?.extension_start_date),
       extensionEndDate: formatToInputDate(asgn?.extensionEndDate || asgn?.extension_end_date),
-      recommendation: asgn?.recommendation || asgn?.recommendationText || asgn?.notes || "",
       upcomingAction: asgn?.upcomingAction || asgn?.upcoming_action || foundCase?.upcomingAction || foundCase?.upcoming_action || "",
+      appointmentDate: formatToInputDate(asgn?.provAppointmentDate || asgn?.appointment_date),
+      dueDate: formatToInputDate(asgn?.provDueDate || asgn?.due_date),
+      title: asgn?.title || "",
+      approvalDate: formatToInputDate(asgn?.approvalDate || asgn?.approval_date),
+      reportReceivedDate: formatToInputDate(asgn?.reportReceivedDate || asgn?.report_received_date),
+      officers: Array.isArray(asgn?.officers) ? asgn.officers : (typeof asgn?.officers === "string" && asgn.officers.trim() ? asgn.officers.split(",").map((s: string) => s.trim()).filter(Boolean) : []),
+      recommendation: asgn?.recommendation || asgn?.recommendationText || asgn?.notes || "",
     });
 
     // Asynchronously fetch rich auto-fill details from PostgreSQL and Supabase
@@ -450,6 +489,7 @@ function ConductInquiryContent() {
           accusedDesignation: d.accusedDesignation || (prev.accusedDesignation !== "—" ? prev.accusedDesignation : "Educational Officer"),
           schoolName: d.schoolName || (prev.schoolName !== "—" ? prev.schoolName : "—"),
           subject: d.subject || (prev.subject !== "—" ? prev.subject : `Inquiry Case ${cleanCaseNo}`),
+          inquiryType: (d.inquiryType as any) || prev.inquiryType || "Institutional basic inquiry",
           chairmanName: d.chairmanName || prev.chairmanName,
           chairmanEmail: d.chairmanEmail || d.chairmanId || prev.chairmanEmail,
           chairmanId: d.chairmanEmail || d.chairmanId || prev.chairmanId,
@@ -459,8 +499,14 @@ function ConductInquiryContent() {
           extensionTerm: d.extensionTerm && d.extensionTerm !== "None" ? d.extensionTerm : prev.extensionTerm,
           extensionStartDate: formatToInputDate(d.extensionStartDate) || prev.extensionStartDate,
           extensionEndDate: formatToInputDate(d.extensionEndDate) || prev.extensionEndDate,
-          recommendation: d.recommendation || prev.recommendation,
           upcomingAction: d.upcomingAction || prev.upcomingAction || "",
+          appointmentDate: formatToInputDate(d.appointmentDate) || prev.appointmentDate,
+          dueDate: formatToInputDate(d.dueDate) || prev.dueDate,
+          title: d.title || prev.title,
+          approvalDate: formatToInputDate(d.approvalDate) || prev.approvalDate,
+          reportReceivedDate: formatToInputDate(d.reportReceivedDate) || prev.reportReceivedDate,
+          officers: Array.isArray(d.officers) ? d.officers : (typeof d.officers === "string" && d.officers.trim() ? d.officers.split(",").map((s: string) => s.trim()).filter(Boolean) : prev.officers),
+          recommendation: d.recommendation || prev.recommendation,
         }));
 
         // Supabase Fallback for members if server returned empty
@@ -577,13 +623,15 @@ function ConductInquiryContent() {
           idNo: m.email.trim() || undefined,
         }));
 
-      const apptDate = formState.appointmentLetterDate || null;
-      const dueDate = formState.reportDueDate || null;
-      const extTerm = formState.extensionTerm || "None";
-      const extStart = formState.extensionStartDate || null;
-      const extEnd = formState.extensionEndDate || null;
+      const isInqInstitutional = formState.inquiryType === "Institutional basic inquiry";
+      const apptDate = isInqInstitutional ? (formState.appointmentLetterDate || null) : (formState.appointmentDate || null);
+      const dueDate = isInqInstitutional ? (formState.reportDueDate || null) : (formState.dueDate || null);
+      const extTerm = isInqInstitutional ? (formState.extensionTerm || "None") : "None";
+      const extStart = isInqInstitutional ? (formState.extensionStartDate || null) : null;
+      const extEnd = isInqInstitutional ? (formState.extensionEndDate || null) : null;
       const recommendationText = formState.recommendation || "";
-      const upcomingAct = formState.upcomingAction || "";
+      const upcomingAct = isInqInstitutional ? (formState.upcomingAction || "") : "";
+      const officersText = formState.officers.join(", ");
 
       // 1. LocalStorage update
       if (typeof window !== "undefined") {
@@ -598,6 +646,8 @@ function ConductInquiryContent() {
             caseNo: caseNo,
             case_no: caseNo,
             subjectOfficerName: "Assigned Subject Officer",
+            inquiryType: formState.inquiryType,
+            inquiry_type: formState.inquiryType,
             chairman: chairmanObj,
             members: validMembers,
             appointmentDate: apptDate,
@@ -611,6 +661,13 @@ function ConductInquiryContent() {
             extension_start_date: extStart,
             extensionEndDate: extEnd,
             extension_end_date: extEnd,
+            // Province fields
+            provAppointmentDate: formState.appointmentDate || null,
+            provDueDate: formState.dueDate || null,
+            title: formState.title || "",
+            approvalDate: formState.approvalDate || null,
+            reportReceivedDate: formState.reportReceivedDate || null,
+            officers: formState.officers,
             recommendation: recommendationText,
             recommendationText: recommendationText,
             upcomingAction: upcomingAct,
@@ -633,6 +690,7 @@ function ConductInquiryContent() {
           let casesList = JSON.parse(storedCases);
           const cIdx = casesList.findIndex((c: any) => String(c.caseNo || c.refNo || "").trim().toLowerCase() === caseNo.trim().toLowerCase());
           if (cIdx >= 0) {
+            casesList[cIdx].inquiryType = formState.inquiryType;
             casesList[cIdx].appointmentDate = apptDate;
             casesList[cIdx].reportDueDate = dueDate;
             casesList[cIdx].targetDate = dueDate;
@@ -658,185 +716,268 @@ function ConductInquiryContent() {
         window.dispatchEvent(new Event("storage"));
       }
 
-      // 2. PostgreSQL Server Actions
+      // 2. Dedicated PostgreSQL Unified Server Action
+      try {
+        await saveConductInquiryServer({
+          case_no: caseNo,
+          inquiry_type: formState.inquiryType,
+          chairman_name: chairmanObj?.name || null,
+          chairman_email: chairmanObj?.email || null,
+          committee_members: validMembers,
+          appointment_letter_date: formState.appointmentLetterDate || null,
+          report_due_date: formState.reportDueDate || null,
+          extension_term: extTerm,
+          extension_start_date: extStart,
+          extension_end_date: extEnd,
+          upcoming_action: upcomingAct,
+          appointment_date: formState.appointmentDate || null,
+          due_date: formState.dueDate || null,
+          title: formState.title || null,
+          approval_date: formState.approvalDate || null,
+          report_received_date: formState.reportReceivedDate || null,
+          officers: officersText || null,
+          recommendation: recommendationText,
+        });
+      } catch (e) {}
+
+      // 2.1 Sync PostgreSQL Dates Table
       try {
         await saveCaseByAppointmentAndReportDueDateServer({
           subject_file_no: caseNo,
           sub_file_no: caseNo,
-          appointment_letter_date: apptDate,
-          report_due_date: dueDate,
+          inquiry_type: formState.inquiryType,
+          appointment_letter_date: formState.appointmentLetterDate || null,
+          report_due_date: formState.reportDueDate || null,
+          appointment_date: formState.appointmentDate || null,
+          due_date: formState.dueDate || null,
+          title: formState.title || null,
+          approval_date: formState.approvalDate || null,
+          report_received_date: formState.reportReceivedDate || null,
+          officers: officersText || null,
+          recommendation: recommendationText,
+          upcoming_action: upcomingAct || null,
           dates_submitted_by_subject: true,
         });
       } catch (e) {}
 
-      try {
-        await saveChairmanByCaseServer(caseNo, chairmanObj ? {
-          fullName: chairmanObj.name,
-          email: chairmanObj.email,
-          position: "Chairman",
-        } : null);
-      } catch (e) {}
-
-      try {
-        await saveMembersByCaseServer(
-          caseNo,
-          validMembers.map((m) => ({
-            fullName: m.fullName,
-            email: m.email,
-            position: "Member",
-          }))
-        );
-      } catch (e) {}
-
-      try {
-        await saveReplyLetterDetailsServer({
-          ref_number: caseNo,
-          upcoming_action: upcomingAct || null,
-          description: recommendationText || null,
-        });
-      } catch (e) {}
-
-      try {
-        if (extTerm && extTerm !== "None" && (extStart || extEnd)) {
-          await saveCaseByDateExtensionServer({
-            subject_file_no: caseNo,
-            sub_file_no: caseNo,
-            extention_term: extTerm,
-            start_date: extStart,
-            end_date: extEnd,
-            approval_status: "Pending",
-          });
-        } else if (extTerm === "None" && !extStart && !extEnd) {
-          await saveCaseByDateExtensionServer({
-            subject_file_no: caseNo,
-            sub_file_no: caseNo,
-            extention_term: "None",
-            start_date: null,
-            end_date: null,
-            approval_status: "None",
-          });
-        }
-      } catch (e) {}
-
-      // 3. Supabase Table Upsert
-      if (isSupabaseConfigured) {
+      if (isInqInstitutional) {
         try {
-          if (chairmanObj) {
-            let validEmail = null;
-            if (chairmanObj.email) {
-              const { data: commData } = await supabase
-                .from("commitee_table")
-                .select("email")
-                .ilike("email", chairmanObj.email.trim())
-                .maybeSingle();
-              if (commData) validEmail = commData.email;
-            }
-            await supabase.from("chairment_by_case").upsert({
-              ref_number: caseNo.trim(),
-              full_name: chairmanObj.name,
-              position: "Chairman",
-              email: validEmail,
-              updated_at: new Date().toISOString(),
-            }, { onConflict: "ref_number" });
-          } else {
-            await supabase.from("chairment_by_case").delete().eq("ref_number", caseNo.trim());
-          }
+          await saveChairmanByCaseServer(caseNo, chairmanObj ? {
+            fullName: chairmanObj.name,
+            email: chairmanObj.email,
+            position: "Chairman",
+          } : null);
         } catch (e) {}
 
-        // 3.2. Save Committee Members to Supabase members_by_case Table
         try {
-          await supabase.from("members_by_case").delete().eq("ref_number", caseNo.trim());
-          if (validMembers.length > 0) {
-            const memberRowsToInsert = [];
-            for (const m of validMembers) {
-              const fName = (m.fullName || m.name || "").trim();
-              if (!fName) continue;
-              let validEmail = m.email ? m.email.trim() : null;
-              if (validEmail) {
-                const { data: commData } = await supabase
-                  .from("commitee_table")
-                  .select("email")
-                  .ilike("email", validEmail)
-                  .maybeSingle();
-                if (commData?.email) validEmail = commData.email;
-              } else if (fName) {
-                const { data: commByName } = await supabase
-                  .from("commitee_table")
-                  .select("email")
-                  .ilike("full_name", fName)
-                  .maybeSingle();
-                if (commByName?.email) validEmail = commByName.email;
-              }
-
-              memberRowsToInsert.push({
-                ref_number: caseNo.trim(),
-                full_name: fName,
-                position: "Member",
-                email: validEmail,
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-              });
-            }
-
-            if (memberRowsToInsert.length > 0) {
-              await supabase.from("members_by_case").insert(memberRowsToInsert);
-            }
-          }
+          await saveMembersByCaseServer(
+            caseNo,
+            validMembers.map((m) => ({
+              fullName: m.fullName,
+              email: m.email,
+              position: "Member",
+            }))
+          );
         } catch (e) {}
 
-        // 3.3. Save Date Extension to Supabase case_by_date_extention Table
+        try {
+          await saveReplyLetterDetailsServer({
+            ref_number: caseNo,
+            upcoming_action: upcomingAct || null,
+            description: recommendationText || null,
+          });
+        } catch (e) {}
+
         try {
           if (extTerm && extTerm !== "None" && (extStart || extEnd)) {
-            const { data: existingExt } = await supabase
-              .from("case_by_date_extention")
-              .select("id")
-              .or(`subject_file_no.ilike.${caseNo.trim()},sub_file_no.ilike.${caseNo.trim()}`)
-              .limit(1)
-              .maybeSingle();
-
-            const extPayload: any = {
-              subject_file_no: caseNo.trim(),
-              sub_file_no: caseNo.trim(),
+            await saveCaseByDateExtensionServer({
+              subject_file_no: caseNo,
+              sub_file_no: caseNo,
               extention_term: extTerm,
               start_date: extStart,
               end_date: extEnd,
               approval_status: "Pending",
-              updated_at: new Date().toISOString(),
-            };
+            });
+          } else if (extTerm === "None" && !extStart && !extEnd) {
+            await saveCaseByDateExtensionServer({
+              subject_file_no: caseNo,
+              sub_file_no: caseNo,
+              extention_term: "None",
+              start_date: null,
+              end_date: null,
+              approval_status: "None",
+            });
+          }
+        } catch (e) {}
+      }
 
-            if (existingExt && existingExt.id) {
-              await supabase
-                .from("case_by_date_extention")
-                .update(extPayload)
-                .eq("id", existingExt.id);
+      // 3. Supabase Table Upsert
+      if (isSupabaseConfigured) {
+        // 3.0. Upsert to Supabase conduct_inquiry_table
+        try {
+          await supabase.from("conduct_inquiry_table").upsert({
+            case_no: caseNo.trim(),
+            inquiry_type: formState.inquiryType,
+            chairman_name: chairmanObj?.name || null,
+            chairman_email: chairmanObj?.email || null,
+            committee_members: validMembers,
+            appointment_letter_date: formState.appointmentLetterDate || null,
+            report_due_date: formState.reportDueDate || null,
+            extension_term: extTerm,
+            extension_start_date: extStart,
+            extension_end_date: extEnd,
+            upcoming_action: upcomingAct || null,
+            appointment_date: formState.appointmentDate || null,
+            due_date: formState.dueDate || null,
+            title: formState.title || null,
+            approval_date: formState.approvalDate || null,
+            report_received_date: formState.reportReceivedDate || null,
+            officers: officersText || null,
+            recommendation: recommendationText,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: "case_no" });
+        } catch (e) {}
+
+        // 3.1. Upsert to Supabase case_by_appointment_and_report_due_date
+        try {
+          await supabase.from("case_by_appointment_and_report_due_date").upsert({
+            subject_file_no: caseNo.trim(),
+            sub_file_no: caseNo.trim(),
+            inquiry_type: formState.inquiryType,
+            appointment_letter_date: formState.appointmentLetterDate || null,
+            report_due_date: formState.reportDueDate || null,
+            appointment_date: formState.appointmentDate || null,
+            due_date: formState.dueDate || null,
+            title: formState.title || null,
+            approval_date: formState.approvalDate || null,
+            report_received_date: formState.reportReceivedDate || null,
+            officers: officersText || null,
+            recommendation: recommendationText,
+            upcoming_action: upcomingAct || null,
+            dates_submitted_by_subject: true,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: "subject_file_no" });
+        } catch (e) {}
+
+        // 3.2. Institutional Committee tables on Supabase
+        if (isInqInstitutional) {
+          try {
+            if (chairmanObj) {
+              let validEmail = null;
+              if (chairmanObj.email) {
+                const { data: commData } = await supabase
+                  .from("commitee_table")
+                  .select("email")
+                  .ilike("email", chairmanObj.email.trim())
+                  .maybeSingle();
+                if (commData) validEmail = commData.email;
+              }
+              await supabase.from("chairment_by_case").upsert({
+                ref_number: caseNo.trim(),
+                full_name: chairmanObj.name,
+                position: "Chairman",
+                email: validEmail,
+                updated_at: new Date().toISOString(),
+              }, { onConflict: "ref_number" });
             } else {
-              extPayload.created_at = new Date().toISOString();
-              const { error: insErr } = await supabase
-                .from("case_by_date_extention")
-                .insert(extPayload);
-              if (insErr) {
-                await supabase.from("case_by_date_extention").insert({
-                  subject_file_no: caseNo.trim(),
-                  extention_term: extTerm,
-                  start_date: extStart,
-                  end_date: extEnd,
+              await supabase.from("chairment_by_case").delete().eq("ref_number", caseNo.trim());
+            }
+          } catch (e) {}
+
+          try {
+            await supabase.from("members_by_case").delete().eq("ref_number", caseNo.trim());
+            if (validMembers.length > 0) {
+              const memberRowsToInsert = [];
+              for (const m of validMembers) {
+                const fName = (m.fullName || m.name || "").trim();
+                if (!fName) continue;
+                let validEmail = m.email ? m.email.trim() : null;
+                if (validEmail) {
+                  const { data: commData } = await supabase
+                    .from("commitee_table")
+                    .select("email")
+                    .ilike("email", validEmail)
+                    .maybeSingle();
+                  if (commData?.email) validEmail = commData.email;
+                } else if (fName) {
+                  const { data: commByName } = await supabase
+                    .from("commitee_table")
+                    .select("email")
+                    .ilike("full_name", fName)
+                    .maybeSingle();
+                  if (commByName?.email) validEmail = commByName.email;
+                }
+
+                memberRowsToInsert.push({
+                  ref_number: caseNo.trim(),
+                  full_name: fName,
+                  position: "Member",
+                  email: validEmail,
                   created_at: new Date().toISOString(),
                   updated_at: new Date().toISOString(),
                 });
               }
+
+              if (memberRowsToInsert.length > 0) {
+                await supabase.from("members_by_case").insert(memberRowsToInsert);
+              }
             }
-          } else if (extTerm === "None" && !extStart && !extEnd) {
-            await supabase
-              .from("case_by_date_extention")
-              .delete()
-              .or(`subject_file_no.ilike.${caseNo.trim()},sub_file_no.ilike.${caseNo.trim()}`);
-          }
-        } catch (e) {}
+          } catch (e) {}
+
+          try {
+            if (extTerm && extTerm !== "None" && (extStart || extEnd)) {
+              const { data: existingExt } = await supabase
+                .from("case_by_date_extention")
+                .select("id")
+                .or(`subject_file_no.ilike.${caseNo.trim()},sub_file_no.ilike.${caseNo.trim()}`)
+                .limit(1)
+                .maybeSingle();
+
+              const extPayload: any = {
+                subject_file_no: caseNo.trim(),
+                sub_file_no: caseNo.trim(),
+                extention_term: extTerm,
+                start_date: extStart,
+                end_date: extEnd,
+                approval_status: "Pending",
+                updated_at: new Date().toISOString(),
+              };
+
+              if (existingExt && existingExt.id) {
+                await supabase
+                  .from("case_by_date_extention")
+                  .update(extPayload)
+                  .eq("id", existingExt.id);
+              } else {
+                extPayload.created_at = new Date().toISOString();
+                const { error: insErr } = await supabase
+                  .from("case_by_date_extention")
+                  .insert(extPayload);
+                if (insErr) {
+                  await supabase.from("case_by_date_extention").insert({
+                    subject_file_no: caseNo.trim(),
+                    extention_term: extTerm,
+                    start_date: extStart,
+                    end_date: extEnd,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                  });
+                }
+              }
+            } else if (extTerm === "None" && !extStart && !extEnd) {
+              await supabase
+                .from("case_by_date_extention")
+                .delete()
+                .or(`subject_file_no.ilike.${caseNo.trim()},sub_file_no.ilike.${caseNo.trim()}`);
+            }
+          } catch (e) {}
+        }
 
         try {
           await supabase.from("dcmms_subject_assignments").upsert({
             case_no: caseNo,
             subject_officer_name: "Assigned Subject Officer",
+            inquiry_type: formState.inquiryType,
             chairman: chairmanObj,
             members: validMembers,
             appointment_date: apptDate,
@@ -844,6 +985,10 @@ function ConductInquiryContent() {
             extension_term: extTerm,
             extension_start_date: extStart,
             extension_end_date: extEnd,
+            title: formState.title || null,
+            approval_date: formState.approvalDate || null,
+            report_received_date: formState.reportReceivedDate || null,
+            officers: officersText || null,
             recommendation: recommendationText,
             upcoming_action: upcomingAct,
             notes: recommendationText,
@@ -1166,109 +1311,103 @@ function ConductInquiryContent() {
                 </div>
               </div>
 
-              {/* SECTION 2: Inquiry Committee Details (From paper sketch: "Inquiry committee details.") */}
-              <div className="conduct-inquiry-section-card">
-                <div className="conduct-inquiry-section-header">
-                  <div className="conduct-inquiry-section-title">
-                    <UserCheck size={18} style={{ color: "#0284c7" }} />
-                    <span>{t("inquiryCommitteeDetails", "Inquiry Committee Details")}</span>
+              {/* INQUIRY COMMITTEE DETAILS & TYPE OF INQUIRY (PAPER SKETCH DESIGN) */}
+              <div className="ci-type-selector-banner">
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+                  <div>
+                    <div className="ci-subheading">
+                      <ShieldCheck size={20} style={{ color: "#0284c7" }} />
+                      <span>{t("inquiryCommitteeDetails", "Inquiry commitee details.")}</span>
+                    </div>
+                    <span style={{ fontSize: "12.5px", color: "#64748b" }}>
+                      {lang === "si" ? "පරීක්ෂණ වර්ගය තෝරා අදාළ කමිටු තොරතුරු සම්පූර්ණ කරන්න." : "Select inquiry type and provide designated committee details."}
+                    </span>
                   </div>
 
+                  {/* Dropdown matching the sketch: "type of inquiry" */}
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <label htmlFor="inquiryTypeSelect" style={{ fontSize: "13px", fontWeight: 700, color: "#1e293b" }}>
+                      {t("typeOfInquiry", "type of inquiry")} :
+                    </label>
+                    <select
+                      id="inquiryTypeSelect"
+                      className="ci-select"
+                      style={{ width: "auto", minWidth: "250px", padding: "8px 14px", fontWeight: 700, borderColor: "#0284c7" }}
+                      value={formState.inquiryType}
+                      onChange={(e) => setFormState((prev) => ({ ...prev, inquiryType: e.target.value as any }))}
+                    >
+                      <option value="Institutional basic inquiry">
+                        {t("institutionalBasicInquiry", "Institutional basic inquiry")}
+                      </option>
+                      <option value="Province basic inquiry">
+                        {t("provinceBasicInquiry", "Province basic inquiry")}
+                      </option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Quick Toggle Pills */}
+                <div className="ci-type-pills">
                   <button
                     type="button"
-                    onClick={() => {
-                      setFormState((prev) => ({
-                        ...prev,
-                        members: [...prev.members, { name: "", email: "", idNo: "" }],
-                      }));
-                    }}
-                    className="ci-btn-add-member"
-                    title="Add another committee member"
+                    onClick={() => setFormState((prev) => ({ ...prev, inquiryType: "Institutional basic inquiry" }))}
+                    className={`ci-type-pill ${formState.inquiryType === "Institutional basic inquiry" ? "active-institutional" : ""}`}
                   >
-                    <Plus size={15} />
-                    <span>{t("addMember", "Add Member (+)")}</span>
+                    <Building size={16} />
+                    <span>• {t("institutionalBasicInquiry", "Institutional basic inquiry")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormState((prev) => ({ ...prev, inquiryType: "Province basic inquiry" }))}
+                    className={`ci-type-pill ${formState.inquiryType === "Province basic inquiry" ? "active-province" : ""}`}
+                  >
+                    <Compass size={16} />
+                    <span>• {t("provinceBasicInquiry", "Province basic inquiry")}</span>
                   </button>
                 </div>
+              </div>
 
-                {/* Chairman details row */}
-                <div className="ci-grid-2" style={{ marginBottom: "20px" }}>
-                  <div className="ci-input-group">
-                    <label className="ci-label">
-                      <span>👑 {t("chairmanName", "Chairman Name")} :</span>
-                    </label>
-                    <input
-                      type="text"
-                      list="ci-chairman-datalist"
-                      className="ci-input"
-                      placeholder={lang === "si" ? "සභාපති නිලධාරීගේ නම ඇතුළත් කරන්න" : "Enter Chairman's full name"}
-                      value={formState.chairmanName}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        const matched = committeeOfficers.find((o) => o.fullName.toLowerCase().trim() === val.toLowerCase().trim());
-                        setFormState((prev) => ({
-                          ...prev,
-                          chairmanName: val,
-                          chairmanEmail: matched?.email ? matched.email : prev.chairmanEmail,
-                          chairmanId: matched?.email ? matched.email : prev.chairmanId,
-                        }));
-                      }}
-                    />
-                    <datalist id="ci-chairman-datalist">
-                      {committeeOfficers.map((o) => (
-                        <option key={o.id || o.fullName} value={o.fullName}>
-                          {o.position ? `${o.fullName} (${o.position})` : o.fullName} {o.email ? `- ${o.email}` : ""}
-                        </option>
-                      ))}
-                    </datalist>
+              {/* ============================================================
+                  CASE 1: IF SELECT THE INSTITUTIONAL BASIC INQUIRY (Sketch Left Box)
+                  ============================================================ */}
+              {formState.inquiryType === "Institutional basic inquiry" && (
+                <div className="ci-sketch-container institutional">
+                  <div className="ci-sketch-tag institutional">
+                    <Building size={14} />
+                    <span>{lang === "si" ? "ආයතනික මූලික පරීක්ෂණය (if select the institutional basic inquiry)" : "if select the institutional basic inquiry"}</span>
                   </div>
 
-                  <div className="ci-input-group">
-                    <label className="ci-label">
-                      <span>✉️ {t("chairmanEmail", "Chairman Email")} :</span>
-                    </label>
-                    <input
-                      type="email"
-                      className="ci-input"
-                      placeholder={lang === "si" ? "සභාපති විද්‍යුත් තැපෑල (chairman@moe.gov.lk)" : lang === "ta" ? "தலைவர் மின்னஞ்சல் (chairman@moe.gov.lk)" : "Enter Chairman's email (e.g. chairman@moe.gov.lk)"}
-                      value={formState.chairmanEmail}
-                      onChange={(e) =>
-                        setFormState((prev) => ({ ...prev, chairmanEmail: e.target.value, chairmanId: e.target.value }))
-                      }
-                    />
-                  </div>
-                </div>
-
-                {/* Dynamic Committee Members Rows */}
-                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                  <span style={{ fontSize: "13px", fontWeight: 700, color: "#64748b", marginBottom: "2px" }}>
-                    👥 {lang === "si" ? "කමිටු සාමාජිකයින් (Committee Members):" : "Committee Members:"}
-                  </span>
-
-                  {formState.members.map((member, mIdx) => (
-                    <div key={mIdx} className="ci-member-card">
-                      <div style={{ flex: 1 }}>
-                        <label className="ci-label" style={{ fontSize: "11.5px", marginBottom: "5px" }}>
-                          {t("memberName", "Member Name")} #{mIdx + 1} :
+                  {/* Chairman details row: chairman name & chairman email */}
+                  <div className="conduct-inquiry-section-card" style={{ marginBottom: "18px" }}>
+                    <div className="conduct-inquiry-section-header">
+                      <div className="conduct-inquiry-section-title">
+                        <UserCheck size={18} style={{ color: "#0284c7" }} />
+                        <span>👑 {lang === "si" ? "සභාපති විස්තර (Chairman Details)" : "Chairman Details"}</span>
+                      </div>
+                    </div>
+                    <div className="ci-grid-2">
+                      <div className="ci-input-group">
+                        <label className="ci-label">
+                          <span>{t("chairmanName", "chairman name")} :</span>
                         </label>
                         <input
                           type="text"
-                          list={`ci-member-datalist-${mIdx}`}
+                          list="ci-chairman-datalist"
                           className="ci-input"
-                          placeholder={lang === "si" ? `සාමාජික #${mIdx + 1} නම` : `Member #${mIdx + 1} full name`}
-                          value={member.name}
+                          placeholder={lang === "si" ? "සභාපති නිලධාරීගේ නම ඇතුළත් කරන්න" : "Enter Chairman's name"}
+                          value={formState.chairmanName}
                           onChange={(e) => {
                             const val = e.target.value;
                             const matched = committeeOfficers.find((o) => o.fullName.toLowerCase().trim() === val.toLowerCase().trim());
-                            const updated = [...formState.members];
-                            updated[mIdx].name = val;
-                            if (matched?.email) {
-                              updated[mIdx].email = matched.email;
-                              updated[mIdx].idNo = matched.email;
-                            }
-                            setFormState((prev) => ({ ...prev, members: updated }));
+                            setFormState((prev) => ({
+                              ...prev,
+                              chairmanName: val,
+                              chairmanEmail: matched?.email ? matched.email : prev.chairmanEmail,
+                              chairmanId: matched?.email ? matched.email : prev.chairmanId,
+                            }));
                           }}
                         />
-                        <datalist id={`ci-member-datalist-${mIdx}`}>
+                        <datalist id="ci-chairman-datalist">
                           {committeeOfficers.map((o) => (
                             <option key={o.id || o.fullName} value={o.fullName}>
                               {o.position ? `${o.fullName} (${o.position})` : o.fullName} {o.email ? `- ${o.email}` : ""}
@@ -1277,236 +1416,479 @@ function ConductInquiryContent() {
                         </datalist>
                       </div>
 
-                      <div style={{ flex: 1 }}>
-                        <label className="ci-label" style={{ fontSize: "11.5px", marginBottom: "5px" }}>
-                          ✉️ {t("memberEmail", "Member Email")} :
+                      <div className="ci-input-group">
+                        <label className="ci-label">
+                          <span>{t("chairmanEmail", "chairman email")} :</span>
                         </label>
                         <input
                           type="email"
                           className="ci-input"
-                          placeholder={lang === "si" ? "සාමාජික විද්‍යුත් තැපෑල (member@moe.gov.lk)" : lang === "ta" ? "உறுப்பினர் மின்னஞ்சல் (member@moe.gov.lk)" : "Enter Member's email (e.g. member@moe.gov.lk)"}
-                          value={member.email || member.idNo || ""}
-                          onChange={(e) => {
-                            const updated = [...formState.members];
-                            updated[mIdx].email = e.target.value;
-                            updated[mIdx].idNo = e.target.value;
-                            setFormState((prev) => ({ ...prev, members: updated }));
-                          }}
+                          placeholder={lang === "si" ? "සභාපති විද්‍යුත් තැපෑල (chairman@moe.gov.lk)" : "Enter Chairman's email"}
+                          value={formState.chairmanEmail}
+                          onChange={(e) =>
+                            setFormState((prev) => ({ ...prev, chairmanEmail: e.target.value, chairmanId: e.target.value }))
+                          }
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Committee member row: member name & member email */}
+                  <div className="conduct-inquiry-section-card" style={{ marginBottom: "18px" }}>
+                    <div className="conduct-inquiry-section-header">
+                      <div className="conduct-inquiry-section-title">
+                        <UserCheck size={18} style={{ color: "#0284c7" }} />
+                        <span>👥 {t("inquiryCommitteeDetails", "committee member")} :</span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormState((prev) => ({
+                            ...prev,
+                            members: [...prev.members, { name: "", email: "", idNo: "" }],
+                          }));
+                        }}
+                        className="ci-btn-add-member"
+                        title="Add another committee member"
+                      >
+                        <Plus size={15} />
+                        <span>{t("addMember", "Add Member (+)")}</span>
+                      </button>
+                    </div>
+
+                    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                      {formState.members.map((member, mIdx) => (
+                        <div key={mIdx} className="ci-member-card">
+                          <div style={{ flex: 1 }}>
+                            <label className="ci-label" style={{ fontSize: "11.5px", marginBottom: "5px" }}>
+                              {t("memberName", "member name")} #{mIdx + 1} :
+                            </label>
+                            <input
+                              type="text"
+                              list={`ci-member-datalist-${mIdx}`}
+                              className="ci-input"
+                              placeholder={lang === "si" ? `සාමාජික #${mIdx + 1} නම` : `member #${mIdx + 1} name`}
+                              value={member.name}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                const matched = committeeOfficers.find((o) => o.fullName.toLowerCase().trim() === val.toLowerCase().trim());
+                                const updated = [...formState.members];
+                                updated[mIdx].name = val;
+                                if (matched?.email) {
+                                  updated[mIdx].email = matched.email;
+                                  updated[mIdx].idNo = matched.email;
+                                }
+                                setFormState((prev) => ({ ...prev, members: updated }));
+                              }}
+                            />
+                            <datalist id={`ci-member-datalist-${mIdx}`}>
+                              {committeeOfficers.map((o) => (
+                                <option key={o.id || o.fullName} value={o.fullName}>
+                                  {o.position ? `${o.fullName} (${o.position})` : o.fullName} {o.email ? `- ${o.email}` : ""}
+                                </option>
+                              ))}
+                            </datalist>
+                          </div>
+
+                          <div style={{ flex: 1 }}>
+                            <label className="ci-label" style={{ fontSize: "11.5px", marginBottom: "5px" }}>
+                              {t("memberEmail", "member email")} :
+                            </label>
+                            <input
+                              type="email"
+                              className="ci-input"
+                              placeholder={lang === "si" ? "සාමාජික විද්‍යුත් තැපෑල (member@moe.gov.lk)" : "Enter member's email"}
+                              value={member.email || member.idNo || ""}
+                              onChange={(e) => {
+                                const updated = [...formState.members];
+                                updated[mIdx].email = e.target.value;
+                                updated[mIdx].idNo = e.target.value;
+                                setFormState((prev) => ({ ...prev, members: updated }));
+                              }}
+                            />
+                          </div>
+
+                          {formState.members.length > 1 && (
+                            <div style={{ alignSelf: "flex-end", marginBottom: "2px" }}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setFormState((prev) => ({
+                                    ...prev,
+                                    members: prev.members.filter((_, idx) => idx !== mIdx),
+                                  }));
+                                }}
+                                className="ci-btn-remove-member"
+                                title="Remove member"
+                              >
+                                <X size={18} />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Appointment date & Report due date: Appointment letter date & report due date */}
+                  <div className="conduct-inquiry-section-card" style={{ marginBottom: "18px" }}>
+                    <div className="conduct-inquiry-section-header">
+                      <div className="conduct-inquiry-section-title">
+                        <CalendarIcon size={18} style={{ color: "#0284c7" }} />
+                        <span>{t("appointmentLetterDateAndReportDueDate", "Appointment date & Report due date.")}</span>
+                      </div>
+                    </div>
+
+                    <div className="ci-grid-2">
+                      <div className="ci-input-group">
+                        <label className="ci-label">
+                          <span>📅 {t("appointmentLetterDate", "Appointment letter date")} :</span>
+                        </label>
+                        <input
+                          type="date"
+                          className="ci-input"
+                          value={formState.appointmentLetterDate}
+                          onChange={(e) =>
+                            setFormState((prev) => ({ ...prev, appointmentLetterDate: e.target.value }))
+                          }
                         />
                       </div>
 
-                      {formState.members.length > 1 && (
-                        <div style={{ alignSelf: "flex-end", marginBottom: "2px" }}>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setFormState((prev) => ({
-                                ...prev,
-                                members: prev.members.filter((_, idx) => idx !== mIdx),
-                              }));
-                            }}
-                            className="ci-btn-remove-member"
-                            title="Remove member"
-                          >
-                            <X size={18} />
-                          </button>
-                        </div>
-                      )}
+                      <div className="ci-input-group">
+                        <label className="ci-label">
+                          <span>🎯 {t("reportDueDate", "report due date")} :</span>
+                        </label>
+                        <input
+                          type="date"
+                          className="ci-input"
+                          value={formState.reportDueDate}
+                          onChange={(e) =>
+                            setFormState((prev) => ({ ...prev, reportDueDate: e.target.value }))
+                          }
+                        />
+                      </div>
                     </div>
-                  ))}
-                </div>
-              </div>
+                  </div>
 
-              {/* SECTION 3: Appointment Letter Date & Report Due Date (From paper sketch) */}
-              <div className="conduct-inquiry-section-card">
-                <div className="conduct-inquiry-section-header">
-                  <div className="conduct-inquiry-section-title">
-                    <CalendarIcon size={18} style={{ color: "#0284c7" }} />
-                    <span>{t("appointmentLetterDateAndReportDueDate", "Appointment Letter Date & Report Due Date")}</span>
+                  {/* Extention of days: extention term, start date, End date */}
+                  <div className="conduct-inquiry-section-card" style={{ marginBottom: "18px" }}>
+                    <div className="conduct-inquiry-section-header">
+                      <div className="conduct-inquiry-section-title">
+                        <Clock size={18} style={{ color: "#d97706" }} />
+                        <span>{t("extensionOfDays", "Extention of days.")}</span>
+                      </div>
+                    </div>
+
+                    <div className="ci-grid-3">
+                      <div className="ci-input-group">
+                        <label className="ci-label">
+                          <span>⏱ {t("extensionTerm", "extention term")} :</span>
+                        </label>
+                        <select
+                          className="ci-select"
+                          value={formState.extensionTerm}
+                          onChange={(e) =>
+                            setFormState((prev) => ({ ...prev, extensionTerm: e.target.value }))
+                          }
+                        >
+                          <option value="None">{lang === "si" ? "නැත (None)" : "None"}</option>
+                          <option value="1st Extension">{lang === "si" ? "1 වන දිගුව (1st Extension)" : "1st Extension"}</option>
+                          <option value="2nd Extension">{lang === "si" ? "2 වන දිගුව (2nd Extension)" : "2nd Extension"}</option>
+                          <option value="3rd Extension">{lang === "si" ? "3 වන දිගුව (3rd Extension)" : "3rd Extension"}</option>
+                          <option value="4th Extension">{lang === "si" ? "4 වන දිගුව (4th Extension)" : "4th Extension"}</option>
+                        </select>
+                      </div>
+
+                      <div className="ci-input-group">
+                        <label className="ci-label">
+                          <span>📅 {t("extensionStartDate", "start date")} :</span>
+                        </label>
+                        <input
+                          type="date"
+                          className="ci-input"
+                          value={formState.extensionStartDate}
+                          onChange={(e) =>
+                            setFormState((prev) => ({ ...prev, extensionStartDate: e.target.value }))
+                          }
+                        />
+                      </div>
+
+                      <div className="ci-input-group">
+                        <label className="ci-label">
+                          <span>📅 {t("extensionEndDate", "End date")} :</span>
+                        </label>
+                        <input
+                          type="date"
+                          className="ci-input"
+                          value={formState.extensionEndDate}
+                          onChange={(e) =>
+                            setFormState((prev) => ({ ...prev, extensionEndDate: e.target.value }))
+                          }
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Recommendation */}
+                  <div className="conduct-inquiry-section-card" style={{ marginBottom: "18px" }}>
+                    <div className="conduct-inquiry-section-header">
+                      <div className="conduct-inquiry-section-title">
+                        <Sparkles size={18} style={{ color: "#6366f1" }} />
+                        <span>{t("recommendation", "Reccommendation")} :</span>
+                      </div>
+                    </div>
+
+                    <div className="ci-input-group">
+                      <textarea
+                        rows={4}
+                        className="ci-textarea"
+                        placeholder={t("recommendationPlaceholder", "Enter detailed inquiry findings, observations, and recommendations...")}
+                        value={formState.recommendation}
+                        onChange={(e) =>
+                          setFormState((prev) => ({ ...prev, recommendation: e.target.value }))
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  {/* Upcoming actions to be taken */}
+                  <div className="conduct-inquiry-section-card">
+                    <div className="conduct-inquiry-section-header">
+                      <div className="conduct-inquiry-section-title">
+                        <Compass size={18} style={{ color: "#0284c7" }} />
+                        <span>{t("upcomingActions", "upcomming actions to be taken.")}</span>
+                      </div>
+                    </div>
+
+                    <div className="ci-input-group">
+                      <select
+                        id="upcomingActionsSelect"
+                        className="ci-select"
+                        value={formState.upcomingAction}
+                        onChange={(e) =>
+                          setFormState((prev) => ({ ...prev, upcomingAction: e.target.value }))
+                        }
+                        required
+                      >
+                        <option value="">
+                          {lang === "si" ? "ක්‍රියාමාර්ගයක් තෝරන්න..." : lang === "ta" ? "நடவடிக்கையைத் தேர்ந்தெடுக்கவும்..." : "Select upcoming action..."}
+                        </option>
+                        <option value="Initial investigation">
+                          {t("actionInitialInvestigation", "Initial investigation")}
+                        </option>
+                        <option value="Conduct an inspection">
+                          {t("actionConductInspection", "Conduct an inspection")}
+                        </option>
+                        <option value="Finalize the file according to the additional secretary's instruction">
+                          {t("actionFinalizeFileAccordingToSecretary", "Finalize the file according to the additional secretary's instruction")}
+                        </option>
+                        {formState.upcomingAction && ![
+                          "",
+                          "Initial investigation",
+                          "Conduct an inspection",
+                          "Finalize the file according to the additional secretary's instruction"
+                        ].includes(formState.upcomingAction) && (
+                          <option value={formState.upcomingAction}>
+                            {t(formState.upcomingAction, formState.upcomingAction)}
+                          </option>
+                        )}
+                      </select>
+                    </div>
                   </div>
                 </div>
+              )}
 
-                <div className="ci-grid-2">
-                  <div className="ci-input-group">
-                    <label className="ci-label">
-                      <span>📅 {t("appointmentLetterDate", "Appointment letter date")} :</span>
-                    </label>
-                    <input
-                      type="date"
-                      className="ci-input"
-                      value={formState.appointmentLetterDate}
-                      onChange={(e) =>
-                        setFormState((prev) => ({ ...prev, appointmentLetterDate: e.target.value }))
-                      }
-                    />
+              {/* ============================================================
+                  CASE 2: IF SELECT THE PROVINCE BASIC INQUIRY (Sketch Right Box)
+                  ============================================================ */}
+              {formState.inquiryType === "Province basic inquiry" && (
+                <div className="ci-sketch-container province">
+                  <div className="ci-sketch-tag province">
+                    <Compass size={14} />
+                    <span>{lang === "si" ? "පළාත් මූලික පරීක්ෂණය (if select the province basic inquiry)" : "if select the province basic inquiry"}</span>
                   </div>
 
-                  <div className="ci-input-group">
-                    <label className="ci-label">
-                      <span>🎯 {t("reportDueDate", "Report due date")} :</span>
-                    </label>
-                    <input
-                      type="date"
-                      className="ci-input"
-                      value={formState.reportDueDate}
-                      onChange={(e) =>
-                        setFormState((prev) => ({ ...prev, reportDueDate: e.target.value }))
-                      }
-                    />
-                  </div>
-                </div>
-              </div>
+                  {/* Row 1: Appointment date & Due date */}
+                  <div className="conduct-inquiry-section-card" style={{ marginBottom: "18px" }}>
+                    <div className="ci-grid-2">
+                      <div className="ci-input-group">
+                        <label className="ci-label">
+                          <span>📅 {t("appointmentDate", "Appointment date")} :</span>
+                        </label>
+                        <input
+                          type="date"
+                          className="ci-input"
+                          value={formState.appointmentDate}
+                          onChange={(e) => setFormState((prev) => ({ ...prev, appointmentDate: e.target.value }))}
+                        />
+                      </div>
 
-              {/* SECTION 4: Extension of Days (From paper sketch: "Extension of days.") */}
-              <div className="conduct-inquiry-section-card">
-                <div className="conduct-inquiry-section-header">
-                  <div className="conduct-inquiry-section-title">
-                    <Clock size={18} style={{ color: "#d97706" }} />
-                    <span>{t("extensionOfDays", "Extension of days")}</span>
-                  </div>
-                </div>
-
-                <div className="ci-grid-3">
-                  <div className="ci-input-group">
-                    <label className="ci-label">
-                      <span>⏱ {t("extensionTerm", "Extension term")} :</span>
-                    </label>
-                    <select
-                      className="ci-select"
-                      value={formState.extensionTerm}
-                      onChange={(e) =>
-                        setFormState((prev) => ({ ...prev, extensionTerm: e.target.value }))
-                      }
-                    >
-                      <option value="None">{lang === "si" ? "නැත (None)" : "None"}</option>
-                      <option value="1st Extension">{lang === "si" ? "1 වන දිගුව (1st Extension)" : "1st Extension"}</option>
-                      <option value="2nd Extension">{lang === "si" ? "2 වන දිගුව (2nd Extension)" : "2nd Extension"}</option>
-                      <option value="3rd Extension">{lang === "si" ? "3 වන දිගුව (3rd Extension)" : "3rd Extension"}</option>
-                      <option value="4th Extension">{lang === "si" ? "4 වන දිගුව (4th Extension)" : "4th Extension"}</option>
-                    </select>
+                      <div className="ci-input-group">
+                        <label className="ci-label">
+                          <span>🎯 {t("dueDate", "Due date")} :</span>
+                        </label>
+                        <input
+                          type="date"
+                          className="ci-input"
+                          value={formState.dueDate}
+                          onChange={(e) => setFormState((prev) => ({ ...prev, dueDate: e.target.value }))}
+                        />
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="ci-input-group">
-                    <label className="ci-label">
-                      <span>📅 {t("extensionStartDate", "Extension start date")} :</span>
-                    </label>
-                    <input
-                      type="date"
-                      className="ci-input"
-                      value={formState.extensionStartDate}
-                      onChange={(e) =>
-                        setFormState((prev) => ({ ...prev, extensionStartDate: e.target.value }))
-                      }
-                    />
+                  {/* Row 2: Title & Approval date */}
+                  <div className="conduct-inquiry-section-card" style={{ marginBottom: "18px" }}>
+                    <div className="ci-grid-2">
+                      <div className="ci-input-group">
+                        <label className="ci-label">
+                          <span>📝 {t("inquiryTitle", "Title")} :</span>
+                        </label>
+                        <input
+                          type="text"
+                          className="ci-input"
+                          placeholder={lang === "si" ? "පරීක්ෂණ මාතෘකාව ඇතුළත් කරන්න" : "Enter inquiry title"}
+                          value={formState.title}
+                          onChange={(e) => setFormState((prev) => ({ ...prev, title: e.target.value }))}
+                        />
+                      </div>
+
+                      <div className="ci-input-group">
+                        <label className="ci-label">
+                          <span>📅 {t("approvalDate", "Approval date")} :</span>
+                        </label>
+                        <input
+                          type="date"
+                          className="ci-input"
+                          value={formState.approvalDate}
+                          onChange={(e) => setFormState((prev) => ({ ...prev, approvalDate: e.target.value }))}
+                        />
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="ci-input-group">
-                    <label className="ci-label">
-                      <span>📅 {t("extensionEndDate", "Extension end date")} :</span>
-                    </label>
-                    <input
-                      type="date"
-                      className="ci-input"
-                      value={formState.extensionEndDate}
-                      onChange={(e) =>
-                        setFormState((prev) => ({ ...prev, extensionEndDate: e.target.value }))
-                      }
-                    />
+                  {/* Row 3: Report received date */}
+                  <div className="conduct-inquiry-section-card" style={{ marginBottom: "18px" }}>
+                    <div className="ci-input-group">
+                      <label className="ci-label">
+                        <span>📥 {t("reportReceivedDate", "Report received date")} :</span>
+                      </label>
+                      <input
+                        type="date"
+                        className="ci-input"
+                        value={formState.reportReceivedDate}
+                        onChange={(e) => setFormState((prev) => ({ ...prev, reportReceivedDate: e.target.value }))}
+                      />
+                    </div>
                   </div>
-                </div>
-              </div>
 
-              {/* SECTION 5: Recommendation (From paper sketch: "Recommendation.") */}
-              <div className="conduct-inquiry-section-card">
-                <div className="conduct-inquiry-section-header">
-                  <div className="conduct-inquiry-section-title">
-                    <Sparkles size={18} style={{ color: "#6366f1" }} />
-                    <span>{t("recommendation", "Recommendation")}</span>
-                  </div>
-                </div>
+                  {/* Row 4: Officers : [ input ] [+] */}
+                  <div className="conduct-inquiry-section-card" style={{ marginBottom: "18px" }}>
+                    <div className="conduct-inquiry-section-header">
+                      <div className="conduct-inquiry-section-title">
+                        <User size={18} style={{ color: "#0d9488" }} />
+                        <span>👮 {t("officers", "Officers")} :</span>
+                      </div>
+                    </div>
 
-                <div className="ci-input-group">
-                  <textarea
-                    rows={5}
-                    className="ci-textarea"
-                    placeholder={t("recommendationPlaceholder", "Enter detailed inquiry findings, observations, and recommendations...")}
-                    value={formState.recommendation}
-                    onChange={(e) =>
-                      setFormState((prev) => ({ ...prev, recommendation: e.target.value }))
-                    }
-                  />
-                </div>
-              </div>
+                    <div className="ci-officers-input-row">
+                      <input
+                        type="text"
+                        list="ci-province-officer-datalist"
+                        className="ci-input"
+                        placeholder={t("officerNamePlaceholder", "Enter or select officer name...")}
+                        value={officerInput}
+                        onChange={(e) => setOfficerInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleAddOfficer();
+                          }
+                        }}
+                      />
+                      <datalist id="ci-province-officer-datalist">
+                        {committeeOfficers.map((o) => (
+                          <option key={o.id || o.fullName} value={o.fullName}>
+                            {o.position ? `${o.fullName} (${o.position})` : o.fullName}
+                          </option>
+                        ))}
+                      </datalist>
 
-              {/* SECTION 6: Upcoming actions to be taken */}
-              <div className="conduct-inquiry-section-card">
-                <div className="conduct-inquiry-section-header">
-                  <div className="conduct-inquiry-section-title">
-                    <Compass size={18} style={{ color: "#0284c7" }} />
-                    <span>{t("upcomingActions", "Upcoming actions to be taken")}</span>
-                  </div>
-                </div>
+                      <button
+                        type="button"
+                        onClick={handleAddOfficer}
+                        className="ci-btn-add-officer"
+                        title="Add Officer (+)"
+                      >
+                        <Plus size={20} />
+                      </button>
+                    </div>
 
-                <div className="ci-input-group">
-                  <label htmlFor="upcomingActionsSelect" className="ci-label" style={{ fontWeight: 700, fontSize: "14px", color: "#1e293b", marginBottom: "4px" }}>
-                    <span>{t("upcomingActions", "Upcoming actions to be taken")} :</span> <span style={{ color: "#ef4444", fontWeight: 700 }}>*</span>
-                  </label>
-                  <select
-                    id="upcomingActionsSelect"
-                    className="ci-select"
-                    value={formState.upcomingAction}
-                    onChange={(e) =>
-                      setFormState((prev) => ({ ...prev, upcomingAction: e.target.value }))
-                    }
-                    required
-                  >
-                    <option value="">
-                      {lang === "si" ? "ක්‍රියාමාර්ගයක් තෝරන්න..." : lang === "ta" ? "நடவடிக்கையைத் தேர்ந்தெடுக்கவும்..." : "Select upcoming action..."}
-                    </option>
-                    <option value="Initial investigation">
-                      {t("actionInitialInvestigation", "Initial investigation")}
-                    </option>
-                    <option value="Conduct an inspection">
-                      {t("actionConductInspection", "Conduct an inspection")}
-                    </option>
-                    <option value="Finalize the file according to the additional secretary's instruction">
-                      {t("actionFinalizeFileAccordingToSecretary", "Finalize the file according to the additional secretary's instruction")}
-                    </option>
-                    {formState.upcomingAction && ![
-                      "",
-                      "Initial investigation",
-                      "Conduct an inspection",
-                      "Finalize the file according to the additional secretary's instruction"
-                    ].includes(formState.upcomingAction) && (
-                      <option value={formState.upcomingAction}>
-                        {t(formState.upcomingAction, formState.upcomingAction)}
-                      </option>
+                    {formState.officers.length > 0 && (
+                      <div className="ci-officers-chips-container">
+                        {formState.officers.map((officer, oIdx) => (
+                          <div key={oIdx} className="ci-officer-chip">
+                            <span>{officer}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFormState((prev) => ({
+                                  ...prev,
+                                  officers: prev.officers.filter((_, idx) => idx !== oIdx),
+                                }));
+                              }}
+                              title="Remove officer"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
                     )}
-                  </select>
+                  </div>
+
+                  {/* Row 5: Recommendation */}
+                  <div className="conduct-inquiry-section-card">
+                    <div className="conduct-inquiry-section-header">
+                      <div className="conduct-inquiry-section-title">
+                        <Sparkles size={18} style={{ color: "#0d9488" }} />
+                        <span>{t("recommendation", "Reccommendation")} :</span>
+                      </div>
+                    </div>
+
+                    <div className="ci-input-group">
+                      <textarea
+                        rows={4}
+                        className="ci-textarea"
+                        placeholder={t("recommendationPlaceholder", "Enter detailed inquiry findings, observations, and recommendations...")}
+                        value={formState.recommendation}
+                        onChange={(e) => setFormState((prev) => ({ ...prev, recommendation: e.target.value }))}
+                      />
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {/* Bottom Floating Action Bar */}
-              <div className="conduct-inquiry-bottom-bar">
-                <Link href="/subject?tab=conducting_inquiry" className="btn-back-inquiries">
-                  <ArrowLeft size={16} />
-                  <span>{lang === "si" ? "අවලංගු කර ආපසු යන්න" : "Cancel & Return"}</span>
-                </Link>
-
+              {/* ============================================================
+                  SUBMIT BUTTON (Matching paper sketch: "submit.")
+                  ============================================================ */}
+              <div className="conduct-inquiry-bottom-bar" style={{ justifyContent: "center" }}>
                 <button
                   type="button"
                   onClick={handleSave}
                   disabled={saving}
                   className="btn-save-inquiry-main"
+                  style={{ minWidth: "260px", padding: "14px 36px", fontSize: "16px", borderRadius: "12px" }}
                 >
                   {saving ? (
                     <>
-                      <Clock size={16} className="animate-spin" />
+                      <Clock size={18} className="animate-spin" />
                       <span>{lang === "si" ? "ඉදිරිපත් කරමින් පවතී..." : lang === "ta" ? "சமர்ப்பிக்கப்படுகிறது..." : "Submitting..."}</span>
                     </>
                   ) : (
                     <>
-                      <Send size={16} />
+                      <Send size={18} />
                       <span>{t("submitInquiryDetails", "Submit")}</span>
                     </>
                   )}

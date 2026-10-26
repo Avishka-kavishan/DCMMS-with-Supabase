@@ -27,7 +27,8 @@ import {
   getSubjectOfficerDashboardCasesServer,
   saveSubjectOfficerAssignmentServer,
   getDirectlyAssignedLettersServer,
-  saveReplyLetterDetailsServer
+  saveReplyLetterDetailsServer,
+  saveConductInquiryServer
 } from "@/lib/db-actions";
 
 import { CheckCircle, XCircle, FileText, Send, Clock, X, AlertCircle, ShieldCheck, Calendar as CalendarIcon, ChevronDown, ChevronUp, Bell, Eye, MoreHorizontal, Filter, Check, MailCheck, ClipboardList, Plus, Sparkles, Compass, ExternalLink, User, Building, ArrowRight, ShieldAlert, FileCheck, Layers, UserCheck, Scale } from "lucide-react";
@@ -3487,6 +3488,23 @@ function SubjectOfficerDashboardContent() {
       }
 
       // 3. PostgreSQL Server Actions
+      try {
+        await saveConductInquiryServer({
+          case_no: caseNo,
+          inquiry_type: "Institutional basic inquiry",
+          chairman_name: chairmanObj?.name || null,
+          chairman_email: chairmanObj?.email || null,
+          committee_members: validMembers,
+          appointment_letter_date: apptDate,
+          report_due_date: dueDate,
+          extension_term: extTerm,
+          extension_start_date: extStart,
+          extension_end_date: extEnd,
+          upcoming_action: upcomingAct,
+          recommendation: recommendationText,
+        });
+      } catch (e) {}
+
       try {
         await saveCaseByAppointmentAndReportDueDateServer({
           subject_file_no: caseNo,
@@ -9033,14 +9051,36 @@ function SubjectOfficerDashboardContent() {
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setConductInquiryModalOpen(false)}
-                style={{ background: "transparent", border: "none", color: "#ffffff", opacity: 0.85, cursor: "pointer", padding: "4px" }}
-                title="Close"
-              >
-                <X size={20} />
-              </button>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <Link
+                  href={`/subject/conduct-inquiry?caseNo=${encodeURIComponent(conductInquiryForm.caseNo || "")}`}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    backgroundColor: "rgba(255,255,255,0.2)",
+                    color: "#ffffff",
+                    textDecoration: "none",
+                    padding: "5px 12px",
+                    borderRadius: "8px",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                  }}
+                  title="Open Full Form Page"
+                >
+                  <ExternalLink size={14} />
+                  <span>Full Form Page</span>
+                </Link>
+
+                <button
+                  type="button"
+                  onClick={() => setConductInquiryModalOpen(false)}
+                  style={{ background: "transparent", border: "none", color: "#ffffff", opacity: 0.85, cursor: "pointer", padding: "4px" }}
+                  title="Close"
+                >
+                  <X size={20} />
+                </button>
+              </div>
             </div>
 
             {/* Modal Body */}

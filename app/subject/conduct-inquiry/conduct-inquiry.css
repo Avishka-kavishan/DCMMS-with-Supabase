@@ -345,3 +345,193 @@
   flex-wrap: wrap;
   gap: 14px;
 }
+
+/* ============================================================
+   PAPER SKETCH INQUIRY TYPE SELECTOR & CONTAINERS
+   ============================================================ */
+
+.ci-sketch-container {
+  border: 2px solid #0284c7;
+  border-radius: 20px;
+  padding: 24px;
+  background-color: #ffffff;
+  box-shadow: 0 10px 25px -5px rgba(2, 132, 199, 0.08), 0 8px 10px -6px rgba(2, 132, 199, 0.04);
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.ci-sketch-container.institutional {
+  border-color: #0284c7;
+  background: linear-gradient(180deg, #f0f9ff 0%, #ffffff 80px);
+}
+
+.ci-sketch-container.province {
+  border-color: #0d9488;
+  background: linear-gradient(180deg, #f0fdfa 0%, #ffffff 80px);
+}
+
+.ci-sketch-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 20px;
+}
+
+.ci-sketch-tag.institutional {
+  background-color: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
+}
+
+.ci-sketch-tag.province {
+  background-color: #ccfbf1;
+  color: #0f766e;
+  border: 1px solid #99f6e4;
+}
+
+.ci-type-selector-banner {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border: 1.5px solid #cbd5e1;
+  border-radius: 16px;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ci-type-pills {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ci-type-pill {
+  flex: 1;
+  min-width: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 18px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 2px solid #cbd5e1;
+  background-color: #ffffff;
+  color: #475569;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.ci-type-pill:hover {
+  border-color: #0284c7;
+  color: #0284c7;
+  background-color: #f0f9ff;
+}
+
+.ci-type-pill.active-institutional {
+  border-color: #0284c7;
+  background-color: #0284c7;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.28);
+}
+
+.ci-type-pill.active-province {
+  border-color: #0d9488;
+  background-color: #0d9488;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(13, 148, 136, 0.28);
+}
+
+/* Officers Input with [+] button */
+.ci-officers-input-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.ci-btn-add-officer {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #0d9488 0%, #0f766e 100%);
+  color: #ffffff;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(13, 148, 136, 0.25);
+}
+
+.ci-btn-add-officer:hover {
+  background: linear-gradient(135deg, #0f766e 0%, #115e59 100%);
+  transform: scale(1.04);
+}
+
+.ci-officers-chips-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 6px 0;
+}
+
+.ci-officer-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background-color: #f0fdfa;
+  border: 1px solid #99f6e4;
+  color: #0f766e;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 600;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.ci-officer-chip button {
+  background: transparent;
+  border: none;
+  color: #0f766e;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 0;
+  opacity: 0.75;
+  transition: opacity 0.15s;
+}
+
+.ci-officer-chip button:hover {
+  opacity: 1;
+  color: #dc2626;
+}
+
+.ci-subheading {
+  font-size: 16px;
+  font-weight: 800;
+  color: #1e293b;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
