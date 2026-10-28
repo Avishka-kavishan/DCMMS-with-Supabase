@@ -493,30 +493,36 @@
 }
 
 .priority-dot-indicator.dot-high {
-  background-color: #ef4444; /* Red color */
+  background-color: #b70303; /* Red color */
 }
 
 .priority-dot-indicator.dot-medium {
-  background-color: #f97316; /* Orange color */
+  background-color: #FFA836; /* Orange color */
 }
 
 .priority-dot-indicator.dot-low {
-  background-color: #22c55e; /* Green color */
+  background-color: #39FF14; /* Green color */
 }
 
-.priority-option-high {
-  color: #ef4444;
-  font-weight: 600;
+.priority-option-high,
+.field-select.priority-select-high,
+select.priority-select-high {
+  color: #b70303 !important;
+  font-weight: 700 !important;
 }
 
-.priority-option-medium {
-  color: #f97316;
-  font-weight: 600;
+.priority-option-medium,
+.field-select.priority-select-medium,
+select.priority-select-medium {
+  color: #FFA836 !important;
+  font-weight: 700 !important;
 }
 
-.priority-option-low {
-  color: #22c55e;
-  font-weight: 600;
+.priority-option-low,
+.field-select.priority-select-low,
+select.priority-select-low {
+  color: #39FF14 !important;
+  font-weight: 700 !important;
 }
 
 /* Searchable Select Dropdown Styles for Subject Officer Filter */

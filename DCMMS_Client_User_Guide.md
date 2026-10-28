@@ -220,10 +220,14 @@
 8. පොලිස් ස්ථාන (Police Stations)
 9. විදුහල්පතිවරුන් විසින් (By Principals)
 10. කලාප කාර්යාල විසින් (By Zonal Education Offices)
-11. අල්ලස් හෝ දූෂණ විමර්ශන කොමිෂන් සභාව (Bribery Commission - CIABOC)
-12. මානව හිමිකම් කොමිෂන් සභාව (Human Rights Commission)
-13. ආදි ශිෂ්‍ය සංගම් (Old Boys / Girls Associations)
-14. පළාත් දෙපාර්තමේන්තු / පළාත් අමාත්‍යාංශ (Provincial Education Depts)
+11. අධිකරණය මඟින් (By the court)
+12. අල්ලස් හෝ දූෂණ විමර්ශන කොමිෂන් සභාව (Bribery Commission - CIABOC)
+13. මානව හිමිකම් කොමිෂන් සභාව (Human Rights Commission)
+14. ආදි ශිෂ්‍ය සංගම් (Old Boys / Girls Associations)
+15. පළාත් දෙපාර්තමේන්තු / පළාත් අමාත්‍යාංශ (Provincial Education Depts)
+16. විනය කටයුතු (Disciplinary)
+17. විමර්ශන කටයුතු (Investigation)
+18. වෙනත් (Other)
 
 #### C. ලිපියේ සහ ආයතනයේ තොරතුරු:
 - **ලිපි අංකය (Letter No):** පද්ධතියෙන් ස්වයංක්‍රීයව ජනනය වේ (Auto-generated).

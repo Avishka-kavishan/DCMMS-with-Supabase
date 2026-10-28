@@ -887,7 +887,7 @@ function SubjectOfficerDashboardContent() {
 
       // 1. Live PostgreSQL Database Fetch for multi-device synchronization
       try {
-        const res = await getSubjectOfficerDashboardCasesServer(activeName);
+        const res = await getSubjectOfficerDashboardCasesServer(activeProfile || activeName);
         if (res && res.success && res.data) {
           if (Array.isArray(res.data.cases)) {
             setCases(res.data.cases);
@@ -988,13 +988,6 @@ function SubjectOfficerDashboardContent() {
               }
             });
 
-            if (refToReceivedDate.size === 0) {
-              casesList.forEach((c: any) => {
-                const targetCaseNo = c.caseNo || c.refNo;
-                if (targetCaseNo) refToReceivedDate.set(targetCaseNo, c.targetDate || c.assignedDate || new Date().toISOString().split("T")[0]);
-              });
-            }
-
             const finalRefNos = Array.from(refToReceivedDate.keys());
 
             // Check actions in localStorage
@@ -1010,21 +1003,13 @@ function SubjectOfficerDashboardContent() {
             // Filter cases matching finalRefNos or load casesList
             const existingCaseNos = new Set(casesList.map((c: any) => c.caseNo));
             let filtered = casesList
-              .filter((c: any) => finalRefNos.length === 0 || finalRefNos.includes(c.caseNo) || finalRefNos.includes(c.refNo))
+              .filter((c: any) => finalRefNos.includes(c.caseNo) || finalRefNos.includes(c.refNo))
               .map((c: any) => ({
                 ...c,
                 receivedDate: refToReceivedDate.get(c.caseNo) || c.assignedDate,
                 letterDate: refToLetterDate.get(c.caseNo) || c.letterDate || c.letter_date || refToReceivedDate.get(c.caseNo) || c.assignedDate,
                 isOld: c.isOld !== undefined ? c.isOld : (casesWithActions.has(c.caseNo) || c.status === "Closed" || c.status === "Pending"),
               }));
-
-            if (filtered.length === 0 && casesList.length > 0) {
-              filtered = casesList.map((c: any) => ({
-                ...c,
-                receivedDate: c.assignedDate || new Date().toISOString().split("T")[0],
-                letterDate: c.letterDate || c.assignedDate || new Date().toISOString().split("T")[0],
-              }));
-            }
 
             // Fallback for missing cases in localStorage
             finalRefNos.forEach((refNo) => {
@@ -1467,6 +1452,28 @@ function SubjectOfficerDashboardContent() {
   const [concernedOfficersMap, setConcernedOfficersMap] = useState<Record<string, any>>({});
   const [answerSearchQuery, setAnswerSearchQuery] = useState("");
 
+  // Assigned case numbers for the currently logged-in Subject Officer (used across all 8 tabs)
+  const myAssignedCaseNos = useMemo(() => {
+    const s = new Set<string>();
+    cases.forEach((c: any) => {
+      const c1 = String(c.caseNo || "").trim().toLowerCase();
+      const c2 = String(c.letterNo || "").trim().toLowerCase();
+      const c3 = String(c.refNo || "").trim().toLowerCase();
+      if (c1) s.add(c1);
+      if (c2) s.add(c2);
+      if (c3) s.add(c3);
+    });
+    assignedAnswerLetters.forEach((a: any) => {
+      const a1 = String(a.caseNo || "").trim().toLowerCase();
+      const a2 = String(a.letterNo || "").trim().toLowerCase();
+      const a3 = String(a.refNo || "").trim().toLowerCase();
+      if (a1) s.add(a1);
+      if (a2) s.add(a2);
+      if (a3) s.add(a3);
+    });
+    return s;
+  }, [cases, assignedAnswerLetters]);
+
   // Sync tab and search from URL search parameters if provided
   useEffect(() => {
     if (tabParam) {
@@ -1650,7 +1657,7 @@ function SubjectOfficerDashboardContent() {
     officerObservations: "",
   });
 
-  // Load Appeals from localStorage / seed defaults
+  // Load Appeals from localStorage
   useEffect(() => {
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("dcmms_appeals");
@@ -1663,61 +1670,7 @@ function SubjectOfficerDashboardContent() {
           }
         } catch (e) {}
       }
-      const defaultAppeals = [
-        {
-          id: "appeal-001",
-          caseNo: "ED/DISC/2025/112",
-          appealRef: "PSC/APP/2026/04",
-          appellantName: "කේ. ඩබ්ලිව්. පෙරේරා (K. W. Perera)",
-          appellantDesignation: "විදුහල්පති (Principal I)",
-          schoolName: "ධර්මරාජ විද්‍යාලය, මහනුවර",
-          appealAuthority: "psc",
-          appealGround: "වැඩ තහනම් කිරීමේ නියෝගයට එරෙහිව අභියාචනය (Appeal Against Interdiction Order)",
-          originalOrder: "අන්තර්වාර වැඩ තහනම් නියෝගය (Interdiction under Est. Code)",
-          submissionDate: "2026-01-18",
-          observationsDueDate: "2026-02-15",
-          priority: "high",
-          stageKey: "pending_review",
-          stage: "සමාලෝචනය වෙමින් පවතී",
-          officerObservations: "ආයතන සංග්‍රහයේ 48 වන පරිච්ඡේදය ප්‍රකාරව නිරීක්ෂණ සටහන සකස් කරමින් පවතී.",
-        },
-        {
-          id: "appeal-002",
-          caseNo: "ED/DISC/2025/089",
-          appealRef: "ESC/APP/2025/19",
-          appellantName: "එම්. ඒ. රත්නායක (M. A. Rathnayake)",
-          appellantDesignation: "ගුරු සේවය (SLTS I)",
-          schoolName: "රාජකීය විද්‍යාලය, කොළඹ",
-          appealAuthority: "esc",
-          appealGround: "අලාභ අයකර ගැනීමේ අධිභාර නියෝගය ලිහිල් කිරීම (Requesting Surcharge Revision)",
-          originalOrder: "රු. 145,000 ක අලාභ අධිභාරය",
-          submissionDate: "2025-12-05",
-          observationsDueDate: "2026-01-10",
-          priority: "medium",
-          stageKey: "observations_submitted",
-          stage: "නිරීක්ෂණ වාර්තාව ඉදිරිපත් කර ඇත",
-          officerObservations: "අමාත්‍යාංශ නිරීක්ෂණ වාර්තාව අධ්‍යාපන සේවා කමිටුව වෙත යොමු කරන ලදී.",
-        },
-        {
-          id: "appeal-003",
-          caseNo: "ED/DISC/2024/204",
-          appealRef: "AAT/APL/2025/33",
-          appellantName: "ඩී. එස්. බණ්ඩාර (D. S. Bandara)",
-          appellantDesignation: "නියෝජ්‍ය විදුහල්පති (Deputy Principal)",
-          schoolName: "මලියදේව විද්‍යාලය, කුරුණෑගල",
-          appealAuthority: "aat",
-          appealGround: "ශ්‍රේණිය පහත හෙළීමේ විනය නියෝගය සංශෝධනය (Appeal Against Reduction in Rank)",
-          originalOrder: "ශ්‍රේණිය පහත හෙළීම සහ වැටුප් වර්ධක අත්හිටුවීම",
-          submissionDate: "2025-10-22",
-          observationsDueDate: "2025-11-30",
-          priority: "low",
-          stageKey: "relief_granted",
-          stage: "සහන සලසා ඇත / නියෝගය සංශෝධිතයි",
-          officerObservations: "පරිපාලන අභියාචනා විනිශ්චය අධිකාරියේ තීරණය අනුව වැටුප් වර්ධක යළි ලබා දෙන ලදී.",
-        }
-      ];
-      setAppealsData(defaultAppeals);
-      localStorage.setItem("dcmms_appeals", JSON.stringify(defaultAppeals));
+      setAppealsData([]);
     }
   }, []);
 
@@ -1867,7 +1820,7 @@ function SubjectOfficerDashboardContent() {
 
     // 1. Live PostgreSQL Database Fetch for multi-device synchronization
     try {
-      const res = await getSubjectOfficerDashboardCasesServer(activeName);
+      const res = await getSubjectOfficerDashboardCasesServer(activeProfile || activeName);
       if (res && res.success && res.data && Array.isArray(res.data.assignments) && res.data.assignments.length > 0) {
         list = [...res.data.assignments];
       }
@@ -2176,44 +2129,16 @@ function SubjectOfficerDashboardContent() {
         if (!hasOfficersAssigned) return false;
 
         const officer = (a.subjectOfficerName || a.subject_officer_name || "").trim().toLowerCase();
+        const cleanCase = String(a.caseNo || a.case_no || "").trim().toLowerCase();
 
-        const isGenericOfficer =
-          !officer ||
-          officer === "subject officer" ||
-          officer === "විෂය නිලධාරී" ||
-          officer === "පවරන ලද විෂය භාර නිලධාරී" ||
-          officer === "assigned subject officer" ||
-          officer === "unassigned";
-
-        const isGenericActive =
-          !activeNameClean ||
-          activeNameClean === "subject officer" ||
-          activeNameClean === "විෂය නිලධාරී" ||
-          activeNameClean === "පවරන ලද විෂය භාර නිලධාරී" ||
-          activeNameClean === "assigned subject officer";
-
-        const hasExtensionDetails = !!(
-          a.extensionRequestedByAdmin ||
-          a.extension_requested_by_admin ||
-          a.extensionRequested ||
-          a.extensionStartDate ||
-          a.extension_start_date ||
-          a.extensionEndDate ||
-          a.extension_end_date ||
-          (a.extensionTerm && a.extensionTerm !== "None") ||
-          (a.extension_term && a.extension_term !== "None") ||
-          a.extensionApprovalStatus ||
-          a.extension_approval_status ||
-          (a.status && String(a.status).toLowerCase().includes("extension"))
-        );
-
-        if (hasExtensionDetails || isGenericOfficer || isGenericActive) return true;
-
-        return (
+        const isCaseAssigned = cleanCase && myAssignedCaseNos.has(cleanCase);
+        const isOfficerNameMatched = officer && activeNameClean && (
           officer === activeNameClean ||
           officer.includes(activeNameClean) ||
           activeNameClean.includes(officer)
         );
+
+        return isCaseAssigned || isOfficerNameMatched;
       });
 
       const mergedRelevant = relevant.map((a: any) => {
@@ -2965,9 +2890,25 @@ function SubjectOfficerDashboardContent() {
   // List of all completed investigation cases assigned to this subject officer
   const completedInvestigationCases = cases.filter((c) => isInvestigationCompleteForCase(c.caseNo));
 
+  // Only recommendations belonging to this subject officer (by assigned case number or officer name)
+  const officerRecommendations = useMemo(() => {
+    return recommendations.filter((r) => {
+      const cNoKey = (r.caseNo || r.letterNo || "").trim().toLowerCase();
+      if (cNoKey && myAssignedCaseNos.has(cNoKey)) return true;
+      if (r.subjectOfficerName || r.subject_officer_name) {
+        const oName = (r.subjectOfficerName || r.subject_officer_name || "").trim().toLowerCase();
+        const activeName = (profile?.full_name || "").trim().toLowerCase();
+        if (activeName && (oName === activeName || oName.includes(activeName) || activeName.includes(oName))) {
+          return true;
+        }
+      }
+      return false;
+    });
+  }, [recommendations, myAssignedCaseNos, profile]);
+
   // Completed cases awaiting recommendation submission
   const completedAwaitingRecCases = completedInvestigationCases.filter((c) => {
-    const rec = recommendations.find((r) => (r.caseNo || "").trim().toLowerCase() === (c.caseNo || "").trim().toLowerCase());
+    const rec = officerRecommendations.find((r) => (r.caseNo || "").trim().toLowerCase() === (c.caseNo || "").trim().toLowerCase());
     return !rec || rec.status !== "Submitted";
   });
 
@@ -2978,7 +2919,7 @@ function SubjectOfficerDashboardContent() {
     // Merge live cases & assignments & reply letters
     cases.forEach((c) => {
       const cNoKey = (c.caseNo || "").trim().toLowerCase();
-      if (!cNoKey) return;
+      if (!cNoKey || !myAssignedCaseNos.has(cNoKey)) return;
 
       const asgn = assignments.find((a: any) => (a.caseNo || a.case_no || "").trim().toLowerCase() === cNoKey);
       const committee = asgn ? parseCommitteeDetails(asgn) : null;
@@ -3079,10 +3020,10 @@ function SubjectOfficerDashboardContent() {
       }
     });
 
-    // Also add reply letters with upcoming_action: "Conduct an inspection" if not in cases yet
+    // Also add reply letters with upcoming_action: "Conduct an inspection" if not in cases yet (ONLY if assigned to this officer)
     replyLettersList.forEach((r: any) => {
       const rRef = (r.ref_number || r.file_no || "").trim().toLowerCase();
-      if (!rRef) return;
+      if (!rRef || !myAssignedCaseNos.has(rRef)) return;
       const isInspectionAction = r.upcoming_action && (
         String(r.upcoming_action).toLowerCase().includes("inspection") ||
         String(r.upcoming_action).toLowerCase().includes("inquiry") ||
@@ -3117,7 +3058,7 @@ function SubjectOfficerDashboardContent() {
     });
 
     return Array.from(inquiryMap.values());
-  }, [cases, assignments, replyLettersList, concernedOfficersMap]);
+  }, [cases, assignments, replyLettersList, concernedOfficersMap, myAssignedCaseNos]);
 
   // Filtered conducting inquiry cases
   const filteredInquiryCases = useMemo(() => {
@@ -3713,11 +3654,11 @@ function SubjectOfficerDashboardContent() {
   const disciplinaryInspectionCases = useMemo(() => {
     const inspectionMap = new Map<string, any>();
 
-    // 1. Process all recommendations (crucial driver for 'issuing_charge_sheet')
-    recommendations.forEach((rec) => {
+    // 1. Process all recommendations belonging to this officer
+    officerRecommendations.forEach((rec) => {
       const cNo = (rec.caseNo || "").trim();
       const cNoKey = cNo.toLowerCase();
-      if (!cNoKey) return;
+      if (!cNoKey || !myAssignedCaseNos.has(cNoKey)) return;
 
       // If agreed with PSC/ESC decision (or answers) and closed with Secretary approval, it is concluded, NOT pending in Proper Disciplinary Inspection
       const isPscAgreed = rec.agreeWithPscDecision === "yes" || rec.agree_with_psc_decision === "yes";
@@ -3810,7 +3751,7 @@ function SubjectOfficerDashboardContent() {
     // 2. Also ensure any cases in cases list with stageKey === 'charge_sheet' or 'disciplinary_inspection' or 'order_finalized' or 'psc_review' or 'disciplinary_active' or isProperDisciplinary are captured
     cases.forEach((c) => {
       const cNoKey = (c.caseNo || "").trim().toLowerCase();
-      if (!cNoKey || inspectionMap.has(cNoKey)) return;
+      if (!cNoKey || !myAssignedCaseNos.has(cNoKey) || inspectionMap.has(cNoKey)) return;
 
       if (
         c.stageKey === "charge_sheet" ||
@@ -3845,7 +3786,7 @@ function SubjectOfficerDashboardContent() {
     });
 
     return Array.from(inspectionMap.values());
-  }, [cases, recommendations]);
+  }, [cases, officerRecommendations, myAssignedCaseNos]);
 
   // Filtered proper disciplinary inspection cases
   const filteredInspectionCases = useMemo(() => {
@@ -3878,11 +3819,11 @@ function SubjectOfficerDashboardContent() {
   const issuingChargeSheetCases = useMemo(() => {
     const csMap = new Map<string, any>();
 
-    // 1. Process all recommendations
-    recommendations.forEach((rec) => {
+    // 1. Process all recommendations belonging to this officer
+    officerRecommendations.forEach((rec) => {
       const cNo = (rec.caseNo || rec.letterNo || "").trim();
       const cNoKey = cNo.toLowerCase();
-      if (!cNoKey) return;
+      if (!cNoKey || !myAssignedCaseNos.has(cNoKey)) return;
 
       const isChargeSheet =
         rec.category === "issuing_charge_sheet" ||
@@ -3923,7 +3864,7 @@ function SubjectOfficerDashboardContent() {
     // 2. Add cases from cases list with charge sheet markers
     cases.forEach((c) => {
       const cNoKey = (c.caseNo || "").trim().toLowerCase();
-      if (!cNoKey || csMap.has(cNoKey)) return;
+      if (!cNoKey || !myAssignedCaseNos.has(cNoKey) || csMap.has(cNoKey)) return;
 
       if (
         c.stageKey === "charge_sheet" ||
@@ -3957,7 +3898,7 @@ function SubjectOfficerDashboardContent() {
     });
 
     return Array.from(csMap.values());
-  }, [cases, recommendations, lang]);
+  }, [cases, officerRecommendations, lang, myAssignedCaseNos]);
 
   // Filtered Issuing Charge Sheet cases
   const filteredChargeSheetCases = useMemo(() => {
@@ -4002,11 +3943,11 @@ function SubjectOfficerDashboardContent() {
   const provincialInvestigationCases = useMemo(() => {
     const provMap = new Map<string, any>();
 
-    // 1. Add all direct database / Supabase provincial investigations
+    // 1. Add all direct database / Supabase provincial investigations (strictly assigned to this officer)
     provincialInvestigationsData.forEach((item) => {
       const cNo = (item.caseNo || item.subjectFileNo || "").trim();
       const cNoKey = cNo.toLowerCase();
-      if (!cNoKey) return;
+      if (!cNoKey || !myAssignedCaseNos.has(cNoKey)) return;
 
       const matchingCase = cases.find((c) => (c.caseNo || "").trim().toLowerCase() === cNoKey);
       const concernedOff = concernedOfficersMap[cNoKey] || {};
@@ -4038,7 +3979,7 @@ function SubjectOfficerDashboardContent() {
     // 2. Add cases from live cases list with provincial investigation markers
     cases.forEach((c) => {
       const cNoKey = (c.caseNo || "").trim().toLowerCase();
-      if (!cNoKey) return;
+      if (!cNoKey || !myAssignedCaseNos.has(cNoKey)) return;
 
       const isProvincialCase =
         c.status === "Provincial Basic Investigation" ||
@@ -4085,10 +4026,10 @@ function SubjectOfficerDashboardContent() {
       }
     });
 
-    // 3. Add reply letters with upcoming_action: provincial
+    // 3. Add reply letters with upcoming_action: provincial (strictly assigned to this officer)
     replyLettersList.forEach((r: any) => {
       const rRef = (r.ref_number || r.file_no || "").trim().toLowerCase();
-      if (!rRef) return;
+      if (!rRef || !myAssignedCaseNos.has(rRef)) return;
       const isProvAction = r.upcoming_action && (
         String(r.upcoming_action).toLowerCase().includes("provincial") ||
         String(r.upcoming_action).includes("පළාත්") ||
@@ -4121,7 +4062,7 @@ function SubjectOfficerDashboardContent() {
     });
 
     return Array.from(provMap.values());
-  }, [provincialInvestigationsData, cases, replyLettersList, concernedOfficersMap]);
+  }, [provincialInvestigationsData, cases, replyLettersList, concernedOfficersMap, myAssignedCaseNos]);
 
   // Filtered provincial basic investigation cases
   const filteredProvincialCases = useMemo(() => {
@@ -4155,25 +4096,31 @@ function SubjectOfficerDashboardContent() {
   const appealsCases = useMemo(() => {
     const map = new Map<string, any>();
 
-    // 1. Process custom/saved appeals
+    // 1. Process custom/saved appeals (strictly assigned to this officer)
     appealsData.forEach((a) => {
+      const caseNoKey = (a.caseNo || "").trim().toLowerCase();
+      const refKey = (a.appealRef || "").trim().toLowerCase();
+      if (!caseNoKey && !refKey) return;
+      if (!myAssignedCaseNos.has(caseNoKey) && !myAssignedCaseNos.has(refKey)) return;
       const key = (a.appealRef || a.caseNo || a.id || "").trim().toLowerCase();
       if (key) {
         map.set(key, { ...a });
       }
     });
 
-    // 2. Scan cases and assignedAnswerLetters for appeal letters / matters
+    // 2. Scan cases and assignedAnswerLetters for appeal letters / matters (strictly assigned to this officer)
     cases.forEach((c) => {
+      const cNoKey = (c.caseNo || "").trim().toLowerCase();
+      if (!cNoKey || !myAssignedCaseNos.has(cNoKey)) return;
+
       const isAppeal =
         (c as any).type?.toLowerCase?.() === "appeal" ||
         (c as any).nature?.toLowerCase?.() === "appeal" ||
         c.subject?.toLowerCase?.().includes("appeal") ||
         c.subject?.includes("අභියාචන");
       if (isAppeal) {
-        const key = (c.caseNo || "").trim().toLowerCase();
-        if (key && !map.has(key)) {
-          map.set(key, {
+        if (!map.has(cNoKey)) {
+          map.set(cNoKey, {
             id: c.id || `app-${c.caseNo}`,
             caseNo: c.caseNo,
             appealRef: `PSC/APP/${c.caseNo}`,
@@ -4195,14 +4142,16 @@ function SubjectOfficerDashboardContent() {
     });
 
     assignedAnswerLetters.forEach((l) => {
+      const lKey = (l.caseNo || l.id || "").trim().toLowerCase();
+      if (!lKey || !myAssignedCaseNos.has(lKey)) return;
+
       const isAppeal =
         l.letterTitle?.toLowerCase?.().includes("appeal") ||
         l.letterTitle?.includes("අභියාචන") ||
         l.status?.toLowerCase?.().includes("appeal");
       if (isAppeal) {
-        const key = (l.caseNo || l.id || "").trim().toLowerCase();
-        if (key && !map.has(key)) {
-          map.set(key, {
+        if (!map.has(lKey)) {
+          map.set(lKey, {
             id: l.id || `app-${l.caseNo}`,
             caseNo: l.caseNo,
             appealRef: `APP/LT/${l.caseNo}`,
@@ -4224,7 +4173,7 @@ function SubjectOfficerDashboardContent() {
     });
 
     return Array.from(map.values());
-  }, [appealsData, cases, assignedAnswerLetters, lang]);
+  }, [appealsData, cases, assignedAnswerLetters, lang, myAssignedCaseNos]);
 
   // Filtered appeals cases
   const filteredAppealsCases = useMemo(() => {
@@ -4361,8 +4310,8 @@ function SubjectOfficerDashboardContent() {
     showToast(lang === "si" ? "අභියාචනා තත්ත්වය යාවත්කාලීන කරන ලදී!" : "Appeal status updated successfully!");
   };
 
-  // Filter investigation recommendations list in real-time
-  const filteredRecommendations = recommendations.filter((item) => {
+  // Filter investigation recommendations list in real-time (strictly this officer's recommendations)
+  const filteredRecommendations = officerRecommendations.filter((item) => {
     const q = recSearchQuery.trim().toLowerCase();
     const matchesSearch =
       !q ||
@@ -4379,7 +4328,7 @@ function SubjectOfficerDashboardContent() {
     const matchesStatus =
       recStatusFilter === "all" ||
       item.status === recStatusFilter ||
-      (recStatusFilter === "Awaiting" && !recommendations.some(r => r.caseNo === item.caseNo && r.status === "Submitted"));
+      (recStatusFilter === "Awaiting" && !officerRecommendations.some(r => r.caseNo === item.caseNo && r.status === "Submitted"));
 
     return matchesSearch && matchesCategory && matchesUrgency && matchesStatus;
   });
@@ -4934,7 +4883,7 @@ function SubjectOfficerDashboardContent() {
                 }}>
                   {completedAwaitingRecCases.length}
                 </span>
-              ) : recommendations.length > 0 ? (
+              ) : officerRecommendations.length > 0 ? (
                 <span style={{
                   backgroundColor: activeTab === "recommendations" ? "#4f46e5" : "#94a3b8",
                   color: "#ffffff",
@@ -4945,7 +4894,7 @@ function SubjectOfficerDashboardContent() {
                   marginLeft: "4px",
                   transition: "all 0.2s ease"
                 }}>
-                  {recommendations.length}
+                  {officerRecommendations.length}
                 </span>
               ) : null}
             </button>
@@ -8427,7 +8376,7 @@ function SubjectOfficerDashboardContent() {
                   <div className="premium-card-bottom">
                     <div className="premium-card-value-area">
                       <span className="premium-card-value">
-                        {String(recommendations.filter(r => r.status === "Draft").length).padStart(2, "0")}
+                        {String(officerRecommendations.filter(r => r.status === "Draft").length).padStart(2, "0")}
                       </span>
                       <span className="premium-card-label">{lang === "si" ? "කෙටුම්පත්" : "drafts"}</span>
                     </div>
@@ -8444,7 +8393,7 @@ function SubjectOfficerDashboardContent() {
                   <div className="premium-card-bottom">
                     <div className="premium-card-value-area">
                       <span className="premium-card-value">
-                        {String(recommendations.filter(r => r.status === "Submitted" || r.status === "Approved").length).padStart(2, "0")}
+                        {String(officerRecommendations.filter(r => r.status === "Submitted" || r.status === "Approved").length).padStart(2, "0")}
                       </span>
                       <span className="premium-card-label">{lang === "si" ? "යොමු කළ" : "submitted"}</span>
                     </div>
@@ -8493,7 +8442,7 @@ function SubjectOfficerDashboardContent() {
                       </thead>
                       <tbody>
                         {completedInvestigationCases.map((c, idx) => {
-                          const rec = recommendations.find((r) => (r.caseNo || "").trim().toLowerCase() === (c.caseNo || "").trim().toLowerCase());
+                          const rec = officerRecommendations.find((r) => (r.caseNo || "").trim().toLowerCase() === (c.caseNo || "").trim().toLowerCase());
                           const isSubmitted = rec && (rec.status === "Submitted" || rec.status === "Approved");
                           const isDraft = rec && rec.status === "Draft";
 

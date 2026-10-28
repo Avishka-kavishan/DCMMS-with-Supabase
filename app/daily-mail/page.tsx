@@ -956,12 +956,16 @@ export default function DailyMailPage() {
                     value={priorityFilter}
                     onChange={(e: any) => setPriorityFilter(e.target.value)}
                     className="filter-priority-select"
+                    style={{
+                      color: priorityFilter === "high" ? "#ef4444" : priorityFilter === "medium" ? "#FFA836" : priorityFilter === "low" ? "#39FF14" : "inherit",
+                      fontWeight: priorityFilter !== "all" ? 700 : "normal"
+                    }}
                     aria-label={t("priority")}
                   >
-                    <option value="all">{t("allPriorities", "All Priorities")}</option>
-                    <option value="high">{t("priorityHigh")}</option>
-                    <option value="medium">{t("priorityMedium")}</option>
-                    <option value="low">{t("priorityLow")}</option>
+                    <option value="all" style={{ color: "#1e293b" }}>{t("allPriorities", "All Priorities")}</option>
+                    <option value="high" style={{ color: "#ef4444", fontWeight: 700, backgroundColor: "#ffffff" }}>{t("priorityHigh")}</option>
+                    <option value="medium" style={{ color: "#FFA836", fontWeight: 700, backgroundColor: "#ffffff" }}>{t("priorityMedium")}</option>
+                    <option value="low" style={{ color: "#39FF14", fontWeight: 700, backgroundColor: "#ffffff" }}>{t("priorityLow")}</option>
                   </select>
                 </div>
 

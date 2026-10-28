@@ -1049,33 +1049,126 @@ export async function saveDailyMailToNewTableServer(data: {
  * Direct PostgreSQL retrieval of all cases, assignments, and subsequent letters
  * for the Subject Officer Dashboard, ensuring real-time multi-device synchronization.
  */
-export async function getSubjectOfficerDashboardCasesServer(targetOfficerName?: string) {
+export async function getSubjectOfficerDashboardCasesServer(
+  targetOfficerParam?: string | { full_name?: string; name?: string; email?: string; employee_no?: string; role?: string; subject_type?: string } | null
+) {
   try {
-    const activeNameClean = (targetOfficerName || "").trim().toLowerCase();
+    let officerName = "";
+    let officerEmail = "";
+    let officerEmpNo = "";
+    let officerSubjType = "";
+
+    if (typeof targetOfficerParam === "object" && targetOfficerParam !== null) {
+      officerName = targetOfficerParam.full_name || targetOfficerParam.name || "";
+      officerEmail = targetOfficerParam.email || "";
+      officerEmpNo = targetOfficerParam.employee_no || "";
+      officerSubjType = targetOfficerParam.subject_type || "";
+    } else if (typeof targetOfficerParam === "string") {
+      officerName = targetOfficerParam;
+    }
+
+    const activeNameClean = (officerName || "").trim().toLowerCase();
+
+    // 0. Query register_officer_table to fetch full profile and all officers for disambiguation
+    let allOfficers: any[] = [];
+    try {
+      allOfficers = await prisma.$queryRaw`
+        SELECT id, employee_no, full_name, email, role, subject_type 
+        FROM public.register_officer_table;
+      `;
+    } catch (e) {}
+
+    let officerRecord: any = null;
+    if (activeNameClean) {
+      officerRecord = allOfficers.find((o: any) => {
+        const fn = (o.full_name || "").trim().toLowerCase();
+        const em = (o.email || "").trim().toLowerCase();
+        const en = (o.employee_no || "").trim().toLowerCase();
+        if (fn === activeNameClean || em === activeNameClean || en === activeNameClean) return true;
+        if (activeNameClean.length > 3 && (fn.includes(activeNameClean) || activeNameClean.includes(fn))) return true;
+        return false;
+      });
+    }
+
+    // Build this officer's valid identifiers/tokens
+    const targetTokens = new Set<string>();
+    if (officerRecord) {
+      if (officerRecord.full_name) targetTokens.add(officerRecord.full_name.trim().toLowerCase());
+      if (officerRecord.employee_no) targetTokens.add(officerRecord.employee_no.trim().toLowerCase());
+      if (officerRecord.email) targetTokens.add(officerRecord.email.trim().toLowerCase());
+      if (officerRecord.subject_type) {
+        const st = officerRecord.subject_type.trim().toLowerCase();
+        targetTokens.add(st);
+        const codeMatch = st.match(/^(\d{2})/);
+        if (codeMatch) {
+          targetTokens.add(`so-${codeMatch[1]}`);
+          targetTokens.add(`so ${codeMatch[1]}`);
+          targetTokens.add(`subject officer ${codeMatch[1]}`);
+          targetTokens.add(`subject officer - ${codeMatch[1]}`);
+        }
+      }
+    }
+    if (officerSubjType) {
+      targetTokens.add(officerSubjType.trim().toLowerCase());
+    }
+    if (officerEmpNo) {
+      targetTokens.add(officerEmpNo.trim().toLowerCase());
+    }
+    if (activeNameClean) {
+      targetTokens.add(activeNameClean);
+    }
+
+    // List of other officers to prevent false positives
+    const otherOfficers = allOfficers.filter(
+      (o: any) => o.id !== officerRecord?.id && (o.full_name || "").toLowerCase() !== activeNameClean
+    );
 
     const isOfficerMatched = (targetName?: string) => {
+      // If no officer was specified at all (e.g. called without param by admin/investigation overview), match all
       if (!activeNameClean) return true;
-      if (!targetName || typeof targetName !== "string" || !targetName.trim() || targetName === "null") return true;
+      if (!targetName || typeof targetName !== "string" || !targetName.trim() || targetName === "null" || targetName === "undefined") {
+        return false;
+      }
       const cleanTarget = targetName.trim().toLowerCase();
-      const isGenericTarget =
+
+      // Explicitly reject generic unassigned keywords for a specific officer
+      const isGeneric = 
         cleanTarget === "subject officer" ||
         cleanTarget === "විෂය නිලධාරී" ||
-        cleanTarget === "පවරන ලද විෂය භාර නිලධාරී" ||
-        cleanTarget === "assigned subject officer" ||
-        cleanTarget === "unassigned";
-      const isGenericActive =
-        activeNameClean === "subject officer" ||
-        activeNameClean === "විෂය නිලධාරී" ||
-        activeNameClean === "පවරන ලද විෂය භාර නිලධාරී" ||
-        activeNameClean === "assigned subject officer";
+        cleanTarget === "විෂය භාර නිලධාරී" ||
+        cleanTarget === "විෂයභාර නිලධාරී" ||
+        cleanTarget === "subject_officer" ||
+        cleanTarget === "unassigned" ||
+        cleanTarget === "null";
 
-      if (isGenericTarget || isGenericActive) return true;
+      if (isGeneric) {
+        return activeNameClean === "subject officer" || activeNameClean === "විෂය භාර නිලධාරී" || activeNameClean === "විෂය නිලධාරී";
+      }
 
-      return (
-        cleanTarget === activeNameClean ||
-        cleanTarget.includes(activeNameClean) ||
-        activeNameClean.includes(cleanTarget)
-      );
+      // Check if target strictly belongs to another officer
+      for (const other of otherOfficers) {
+        const otherFn = (other.full_name || "").trim().toLowerCase();
+        const otherEn = (other.employee_no || "").trim().toLowerCase();
+        if (otherFn && (cleanTarget === otherFn || cleanTarget.includes(otherFn))) {
+          if (!officerRecord?.full_name || !cleanTarget.includes(officerRecord.full_name.toLowerCase())) {
+            return false;
+          }
+        }
+        if (otherEn && otherEn.length >= 4 && cleanTarget.includes(otherEn)) {
+          if (!officerRecord?.employee_no || !cleanTarget.includes(officerRecord.employee_no.toLowerCase())) {
+            return false;
+          }
+        }
+      }
+
+      // Check matches against our tokens
+      for (const token of targetTokens) {
+        if (cleanTarget === token) return true;
+        if (cleanTarget.includes(token)) return true;
+        if (token.length > 5 && token.includes(cleanTarget) && cleanTarget.length > 15) return true;
+      }
+
+      return false;
     };
 
     // 1. Fetch Daily Mail Letters (from both daily_mail_letter_table and dcmms_daily_mail)
@@ -1216,8 +1309,8 @@ export async function getSubjectOfficerDashboardCasesServer(targetOfficerName?: 
       }
     });
     subjectCasesRaw.forEach((sc: any) => {
-      const sOfficer = sc.officer_name || sc.subject_officer_name || "";
-      if (sc.case_no && (isOfficerMatched(sc.officer_name) || isOfficerMatched(sc.subject_officer_name) || isOfficerMatched(sOfficer))) {
+      const sOfficer = sc.officer_name || "";
+      if (sc.case_no && sOfficer && isOfficerMatched(sOfficer)) {
         assignedCaseNosSet.add(String(sc.case_no).trim().toLowerCase());
       }
     });
@@ -1337,8 +1430,8 @@ export async function getSubjectOfficerDashboardCasesServer(targetOfficerName?: 
       }
     });
 
-    // Fallback: If no letters specifically matched this officer, include all non-answer unassigned/intake letters
-    if (refToReceivedDate.size === 0) {
+    // Fallback: ONLY when NO officer was specified (e.g. system overview / admin overview)
+    if (!activeNameClean && refToReceivedDate.size === 0) {
       deduplicatedLetters.forEach((l) => {
         if (l.ref_no && !checkIsAnswerLetter(l)) {
           refToReceivedDate.set(l.ref_no, l.received_date || new Date().toISOString().split("T")[0]);
@@ -1645,11 +1738,25 @@ export async function getSubjectOfficerDashboardCasesServer(targetOfficerName?: 
       }
     });
 
+    const officerAssignedCaseNos = new Set<string>();
+    mappedCases.forEach((c) => {
+      if (c.caseNo) officerAssignedCaseNos.add(String(c.caseNo).trim().toLowerCase());
+      if (c.letterNo) officerAssignedCaseNos.add(String(c.letterNo).trim().toLowerCase());
+    });
+    answerLettersList.forEach((a) => {
+      if (a.caseNo) officerAssignedCaseNos.add(String(a.caseNo).trim().toLowerCase());
+    });
+    assignedCaseNosSet.forEach((k) => officerAssignedCaseNos.add(k));
+
     const mappedAssignments: any[] = [];
     const seenAsgnCaseNos = new Set<string>();
     assignmentsRaw.forEach((a: any) => {
       const cNo = a.case_no || a.caseNo;
       const cleanKey = String(cNo || "").trim().toLowerCase();
+      const asgnOfficer = a.subject_officer_name || a.assigned_officers || "";
+      const isOfficerCase = cleanKey && (officerAssignedCaseNos.has(cleanKey) || isOfficerMatched(asgnOfficer));
+      if (!isOfficerCase) return;
+
       if (cleanKey && !seenAsgnCaseNos.has(cleanKey)) {
         seenAsgnCaseNos.add(cleanKey);
 
@@ -1744,6 +1851,11 @@ export async function getSubjectOfficerDashboardCasesServer(targetOfficerName?: 
       }
     });
 
+    const filteredReplyLetters = replyLettersRaw.filter((r: any) => {
+      const rRef = String(r.ref_number || r.file_no || "").trim().toLowerCase();
+      return rRef && officerAssignedCaseNos.has(rRef);
+    });
+
     const cMap: Record<string, any> = {};
     concernedOfficersRaw.forEach((co: any) => {
       if (co.case_no && !cMap[co.case_no.toLowerCase()]) {
@@ -1757,7 +1869,7 @@ export async function getSubjectOfficerDashboardCasesServer(targetOfficerName?: 
         cases: mappedCases,
         answerLetters: answerLettersList,
         assignments: mappedAssignments,
-        replyLetters: replyLettersRaw,
+        replyLetters: filteredReplyLetters,
         concernedOfficers: cMap,
       },
     });
@@ -3280,12 +3392,16 @@ export async function loginOfficerServer(emailOrEmpNo: string, passwordInput: st
   try {
     const input = (emailOrEmpNo || "").trim();
     const inputLower = input.toLowerCase();
+    const inputClean = inputLower.replace(/[^a-z0-9]/g, "");
 
     // Query register_officer_table in PostgreSQL
     const records: any[] = await prisma.$queryRaw`
       SELECT id, employee_no, full_name, email, password, role, is_active 
       FROM register_officer_table 
-      WHERE LOWER(email) = ${inputLower} OR employee_no = ${input}
+      WHERE LOWER(email) = ${inputLower} 
+         OR LOWER(employee_no) = ${inputLower}
+         OR employee_no = ${input}
+         OR regexp_replace(LOWER(employee_no), '[^a-z0-9]', '', 'g') = ${inputClean}
       LIMIT 1;
     `;
 
@@ -9762,8 +9878,23 @@ export async function getDirectlyAssignedLettersServer(
       } else if (activeRole.includes("subject")) {
         // Subject Officer: letters assigned to this subject officer
         if (activeName) {
-          if (actOfficer.includes(activeName) || activeName.includes(actOfficer) || addrTo.includes(activeName)) {
-            isMatch = true;
+          const isGeneric = 
+            activeName === "subject officer" ||
+            activeName === "විෂය නිලධාරී" ||
+            activeName === "විෂය භාර නිලධාරී" ||
+            activeName === "විෂයභාර නිලධාරී";
+          if (!isGeneric) {
+            if (
+              actOfficer === activeName ||
+              (actOfficer && actOfficer.includes(activeName)) ||
+              (activeName.length > 5 && actOfficer && activeName.includes(actOfficer)) ||
+              fwdTo === activeName ||
+              (fwdTo && fwdTo.includes(activeName)) ||
+              addrTo === activeName ||
+              (addrTo && addrTo.includes(activeName))
+            ) {
+              isMatch = true;
+            }
           }
         }
       } else if (activeRole.includes("investigation") && !activeRole.includes("secretary")) {

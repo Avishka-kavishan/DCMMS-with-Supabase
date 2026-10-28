@@ -1,0 +1,9 @@
+ALTER TABLE IF EXISTS "public"."investigations" ADD COLUMN IF NOT EXISTS "case_id" TEXT;
+ALTER TABLE IF EXISTS "public"."investigations" ADD COLUMN IF NOT EXISTS "investigation_no" TEXT;
+ALTER TABLE IF EXISTS "public"."provincial_investigations" ADD COLUMN IF NOT EXISTS "provincial_id" TEXT;
+ALTER TABLE IF EXISTS "public"."provincial_investigations" ADD COLUMN IF NOT EXISTS "recommendation" TEXT;
+ALTER TABLE IF EXISTS "public"."provincial_investigations" ADD COLUMN IF NOT EXISTS "appointment_date" TIMESTAMP(3);
+ALTER TABLE IF EXISTS "public"."provincial_investigations" ADD COLUMN IF NOT EXISTS "due_date" TIMESTAMP(3);
+ALTER TABLE IF EXISTS "public"."provincial_investigations" ADD COLUMN IF NOT EXISTS "report_received_date" TIMESTAMP(3);
+ALTER TABLE IF EXISTS "public"."provincial_investigations" ADD COLUMN IF NOT EXISTS "approved_date" TIMESTAMP(3);
+ALTER TABLE IF EXISTS "public"."provincial_investigations" ADD COLUMN IF NOT EXISTS "next_action" TEXT;

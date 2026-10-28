@@ -1190,11 +1190,11 @@
 }
 
 .dm-priority-text.priority-medium {
-  color: #ea580c;
+  color: #FFA836;
 }
 
 .dm-priority-text.priority-low {
-  color: #16a34a;
+  color: #39FF14;
 }
 
 .dm-priority-dot {
@@ -1210,13 +1210,13 @@
 }
 
 .dm-priority-dot.dot-medium {
-  background-color: #ea580c;
-  box-shadow: 0 0 6px rgba(234, 88, 12, 0.4);
+  background-color: #FFA836;
+  box-shadow: 0 0 6px rgba(255, 168, 54, 0.4);
 }
 
 .dm-priority-dot.dot-low {
-  background-color: #16a34a;
-  box-shadow: 0 0 6px rgba(22, 163, 74, 0.4);
+  background-color: #39FF14;
+  box-shadow: 0 0 6px rgba(57, 255, 20, 0.4);
 }
 
 .actions-cell {

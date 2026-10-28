@@ -1481,6 +1481,7 @@ function ViewLetterInner() {
                   <option value="Police Stations">{lang === "si" ? "පොලිස් ස්ථාන (Police Stations)" : "Police Stations"}</option>
                   <option value="By Principals">{lang === "si" ? "විදුහල්පතිවරුන් මඟින්" : "By Principals"}</option>
                   <option value="By Zonal Offices">{lang === "si" ? "කලාප කාර්යාල මඟින්" : "By Zonal Offices"}</option>
+                  <option value="By the court">{lang === "si" ? "අධිකරණය මඟින් (By the court)" : "By the court"}</option>
                   <option value="Bribery Commission">{lang === "si" ? "අල්ලස් හෝ දූෂණ කොමිසම" : "Bribery Commission"}</option>
                   <option value="Human Rights">{lang === "si" ? "මානව හිමිකම් (Human Rights)" : "Human Rights"}</option>
                   <option value="Old Boys Association">{lang === "si" ? "ආදි ශිෂ්‍ය සංගම්" : "Old Boys Association"}</option>
@@ -1661,7 +1662,7 @@ function ViewLetterInner() {
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                   <span style={{
                     width: "12px", height: "12px", borderRadius: "50%",
-                    backgroundColor: editPriority === "high" ? "#dc2626" : editPriority === "medium" ? "#f59e0b" : "#3b82f6",
+                    backgroundColor: editPriority === "high" ? "#dc2626" : editPriority === "medium" ? "#FFA836" : "#3b82f6",
                     flexShrink: 0,
                   }} />
                   <select
@@ -1674,7 +1675,7 @@ function ViewLetterInner() {
                       cursor: "pointer", fontFamily: "inherit",
                     }}
                   >
-                    <option value="high">{lang === "si" ? "දින 3ක් තුළ (හැකිලි වර්ණය - High Priority)" : "Within 3 days (High Priority)"}</option>
+                    <option value="high">{lang === "si" ? "දින 3ක් තුළ (තැඹිළි වර්ණය - High Priority)" : "Within 3 days (High Priority)"}</option>
                     <option value="medium">{lang === "si" ? "දින 7ක් තුළ (සාමාන්‍ය - Medium Priority)" : "Within 7 days (Medium Priority)"}</option>
                     <option value="low">{lang === "si" ? "සාමාන්‍ය (Low Priority)" : "Normal (Low Priority)"}</option>
                   </select>
@@ -2857,6 +2858,7 @@ function ViewLetterInner() {
                       <option value="Police Stations">Police Stations (පොලිස් ස්ථාන)</option>
                       <option value="By Principals">By Principals (විදුහල්පතිවරුන් විසින්)</option>
                       <option value="By Zonal Offices">By Zonal Offices (කලාප කාර්යාල මගින්)</option>
+                      <option value="By the court">By the court (අධිකරණය මඟින්)</option>
                       <option value="Bribery Commission">Bribery Commission (අල්ලස් හෝ දූෂණ කොමිසම)</option>
                       <option value="Human Rights">Human Rights (මානව හිමිකම් කොමිසම)</option>
                       <option value="Old Boys Association">Old Boys Association (ආදි ශිෂ්‍ය සංගම්)</option>

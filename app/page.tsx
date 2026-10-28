@@ -122,6 +122,21 @@ export default function Home() {
       if (emailLower === "admin@admin.com" && password === "admin123") {
         return { id: "sim-admin", full_name: "Administrator", role: "admin" as UserRole, email };
       }
+      // Check for 15 Subject Officers (so01 - so15 or so01@dcmms.gov.lk - so15@dcmms.gov.lk)
+      const soMatch = emailLower.match(/^(?:so|subject)?([0-1]?[0-9])(?:@dcmms\.gov\.lk)?$/);
+      if (soMatch && password === "123456") {
+        const num = parseInt(soMatch[1], 10);
+        if (num >= 1 && num <= 15) {
+          const numStr = String(num).padStart(2, "0");
+          return {
+            id: `officer-so-${numStr}`,
+            employee_no: `SO-${numStr}`,
+            full_name: `Subject Officer ${numStr}`,
+            role: "subject_officer" as UserRole,
+            email: `so${numStr}@dcmms.gov.lk`,
+          };
+        }
+      }
       // Check localStorage custom profiles if any match
       if (typeof window !== "undefined") {
         const stored = localStorage.getItem("dcmms_custom_profiles");

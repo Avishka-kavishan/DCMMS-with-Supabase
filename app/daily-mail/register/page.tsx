@@ -98,10 +98,14 @@ function RegisterComplaintForm() {
     { value: "Police Stations", labelKey: "classPolice" },
     { value: "By Principals", labelKey: "classByPrincipals" },
     { value: "By Zonal Offices", labelKey: "classByRegionalOffices" },
+    { value: "By the court", labelKey: "classByCourt" },
     { value: "Bribery Commission", labelKey: "classBriberyCorruption" },
     { value: "Human Rights", labelKey: "classHumanRights" },
     { value: "Old Boys Association", labelKey: "classOldStudentsAssoc" },
-    { value: "Provincial Departments/Ministries", labelKey: "classProvincialDept" }
+    { value: "Provincial Departments/Ministries", labelKey: "classProvincialDept" },
+    { value: "Disciplinary", labelKey: "classDisciplinary" },
+    { value: "Investigation", labelKey: "classInvestigation" },
+    { value: "Other", labelKey: "classOther" }
   ];
 
   // Accessibility & language state
@@ -2506,12 +2510,16 @@ function RegisterComplaintForm() {
                               disabled={isFieldDisabled}
                               value={formState.priority}
                               onChange={(e) => setFormState({ ...formState, priority: e.target.value as any })}
-                              className="field-select"
-                              style={isFieldDisabled ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
+                              className={`field-select priority-select-${formState.priority}`}
+                              style={{
+                                color: formState.priority === "high" ? "#ef4444" : formState.priority === "medium" ? "#FFA836" : "#39FF14",
+                                fontWeight: 700,
+                                ...(isFieldDisabled ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85 } : {})
+                              }}
                             >
-                              <option value="high" className="priority-option-high">{t("priorityHigh")}</option>
-                              <option value="medium" className="priority-option-medium">{t("priorityMedium")}</option>
-                              <option value="low" className="priority-option-low">{t("priorityLow")}</option>
+                              <option value="high" className="priority-option-high" style={{ color: "#ef4444", fontWeight: 700, backgroundColor: "#ffffff" }}>{t("priorityHigh")}</option>
+                              <option value="medium" className="priority-option-medium" style={{ color: "#FFA836", fontWeight: 700, backgroundColor: "#ffffff" }}>{t("priorityMedium")}</option>
+                              <option value="low" className="priority-option-low" style={{ color: "#39FF14", fontWeight: 700, backgroundColor: "#ffffff" }}>{t("priorityLow")}</option>
                             </select>
                             <div className="select-arrow-container">
                               <svg className="select-arrow-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">

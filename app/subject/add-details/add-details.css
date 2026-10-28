@@ -825,11 +825,11 @@
 }
 
 .priority-dot-indicator.dot-medium {
-  background-color: #eab308; /* Yellow/Amber color */
+  background-color: #FFA836; /* Orange color */
 }
 
 .priority-dot-indicator.dot-low {
-  background-color: #22c55e; /* Green color */
+  background-color: #39FF14; /* Green color */
 }
 
 .priority-option-high {
@@ -838,12 +838,12 @@
 }
 
 .priority-option-medium {
-  color: #eab308;
+  color: #FFA836;
   font-weight: 600;
 }
 
 .priority-option-low {
-  color: #22c55e;
+  color: #39FF14;
   font-weight: 600;
 }
 
