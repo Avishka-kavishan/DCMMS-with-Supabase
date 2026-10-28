@@ -53,6 +53,12 @@ const formatStepTaken = (step: string, t: any) => {
 const formatFutureAction = (key: string | null | undefined, t: any) => {
   if (!key) return t("statusCallingReports", "Calling reports from Principal/Zone/Province/Police");
   const map: Record<string, string> = {
+    statusPrincipalReports: t("statusPrincipalReports", "Principal Reports"),
+    statusRegionalReports: t("statusRegionalReports", "Regional Reports"),
+    statusProvincialReports: t("statusProvincialReports", "Provincial Reports"),
+    "Principal Reports": t("statusPrincipalReports", "Principal Reports"),
+    "Regional Reports": t("statusRegionalReports", "Regional Reports"),
+    "Provincial Reports": t("statusProvincialReports", "Provincial Reports"),
     statusCallingReports: t("statusCallingReports", "Calling reports from Principal/Zone/Province/Police"),
     statusCallingCourtReports: t("statusCallingCourtReports", "Calling court reports"),
     statusPreliminaryInvestigation: t("statusPreliminaryInvestigation", "Conducting preliminary investigations"),

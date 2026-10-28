@@ -28,10 +28,12 @@ import {
   saveSubjectOfficerAssignmentServer,
   getDirectlyAssignedLettersServer,
   saveReplyLetterDetailsServer,
-  saveConductInquiryServer
+  saveConductInquiryServer,
+  getLetterEditRequestsServer
 } from "@/lib/db-actions";
 
 import { CheckCircle, XCircle, FileText, Send, Clock, X, AlertCircle, ShieldCheck, Calendar as CalendarIcon, ChevronDown, ChevronUp, Bell, Eye, MoreHorizontal, Filter, Check, MailCheck, ClipboardList, Plus, Sparkles, Compass, ExternalLink, User, Building, ArrowRight, ShieldAlert, FileCheck, Layers, UserCheck, Scale } from "lucide-react";
+import { compareLettersLatestFirst, sortLettersLatestFirst } from "@/lib/letter-sort";
 
 interface Case {
   id: string;
@@ -783,11 +785,7 @@ function collectAnswerLetters(
     }
   });
 
-  return Array.from(uniqueMap.values()).sort((a, b) => {
-    const timeA = new Date(a.receivedDate || a.letterDate || 0).getTime();
-    const timeB = new Date(b.receivedDate || b.letterDate || 0).getTime();
-    return timeB - timeA;
-  });
+  return Array.from(uniqueMap.values()).sort(compareLettersLatestFirst);
 }
 
 function SubjectOfficerDashboardContent() {
@@ -875,6 +873,7 @@ function SubjectOfficerDashboardContent() {
 
   // Case management data state
   const [cases, setCases] = useState<Case[]>([]);
+  const [approvedEditRequests, setApprovedEditRequests] = useState<any[]>([]);
 
   // Load cases dynamically from database on mount or when profile is updated
   useEffect(() => {
@@ -890,10 +889,10 @@ function SubjectOfficerDashboardContent() {
         const res = await getSubjectOfficerDashboardCasesServer(activeProfile || activeName);
         if (res && res.success && res.data) {
           if (Array.isArray(res.data.cases)) {
-            setCases(res.data.cases);
+            setCases([...res.data.cases].sort(compareLettersLatestFirst));
           }
           if (Array.isArray(res.data.answerLetters)) {
-            setAssignedAnswerLetters(res.data.answerLetters);
+            setAssignedAnswerLetters([...res.data.answerLetters].sort(compareLettersLatestFirst));
           }
           if (Array.isArray(res.data.replyLetters)) {
             setReplyLettersList(res.data.replyLetters);
@@ -1034,16 +1033,7 @@ function SubjectOfficerDashboardContent() {
 
 
 
-            filtered.sort((a: any, b: any) => {
-              const timeA = new Date(a.createdAt || a.created_at || 0).getTime();
-              const timeB = new Date(b.createdAt || b.created_at || 0).getTime();
-              if (timeA !== timeB) {
-                return timeB - timeA;
-              }
-              const dateA = new Date(a.letterDate || a.receivedDate || a.assignedDate || 0).getTime();
-              const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).getTime();
-              return dateB - dateA;
-            });
+            filtered.sort(compareLettersLatestFirst);
 
             // Fetch reply letters from localStorage
             let fallbackReplyLetters: any[] = [];
@@ -1379,14 +1369,29 @@ function SubjectOfficerDashboardContent() {
       setProvincialInvestigationsData(provList);
     };
 
+    const fetchApprovedEditRequests = async () => {
+      try {
+        const res = await getLetterEditRequestsServer({ status: "Approved" });
+        if (res && res.success && Array.isArray(res.data)) {
+          setApprovedEditRequests(res.data);
+        } else {
+          setApprovedEditRequests([]);
+        }
+      } catch (err) {
+        console.warn("fetchApprovedEditRequests error:", err);
+      }
+    };
+
     fetchCases();
     fetchRecommendations();
     fetchProvincialInvestigations();
+    fetchApprovedEditRequests();
 
     const handleSyncAll = () => {
       fetchCases();
       fetchRecommendations();
       fetchProvincialInvestigations();
+      fetchApprovedEditRequests();
       if (typeof fetchAssignments === "function") {
         fetchAssignments();
       }
@@ -1400,6 +1405,7 @@ function SubjectOfficerDashboardContent() {
       .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subsequent_mails" }, handleSyncAll)
       .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_recommendations" }, handleSyncAll)
       .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_preliminary_investigations" }, handleSyncAll)
+      .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_letter_edit_requests" }, handleSyncAll)
       .subscribe();
 
     // Calm 30-second fallback polling for multi-device sync (instant updates handled by Realtime channels)
@@ -1414,7 +1420,8 @@ function SubjectOfficerDashboardContent() {
         e.key === "dcmms_recommendations" ||
         e.key === "dcmms_preliminary_investigations" ||
         e.key === "dcmms_provincial_investigations" ||
-        e.key === "dcmms_new_mail_current_case"
+        e.key === "dcmms_new_mail_current_case" ||
+        e.key === "dcmms_letter_edit_requests"
       ) {
         handleSyncAll();
       }
@@ -1432,6 +1439,7 @@ function SubjectOfficerDashboardContent() {
     window.addEventListener("dcmms_assignment_updated", handleSyncAll);
     window.addEventListener("dcmms_recommendation_updated", handleSyncAll);
     window.addEventListener("dcmms_provincial_updated", handleSyncAll);
+    window.addEventListener("dcmms_letter_edit_requests_updated", handleSyncAll);
 
     return () => {
       supabase.removeChannel(channel);
@@ -1442,6 +1450,7 @@ function SubjectOfficerDashboardContent() {
       window.removeEventListener("dcmms_assignment_updated", handleSyncAll);
       window.removeEventListener("dcmms_recommendation_updated", handleSyncAll);
       window.removeEventListener("dcmms_provincial_updated", handleSyncAll);
+      window.removeEventListener("dcmms_letter_edit_requests_updated", handleSyncAll);
     };
   }, [profile, t]);
 
@@ -1473,6 +1482,39 @@ function SubjectOfficerDashboardContent() {
     });
     return s;
   }, [cases, assignedAnswerLetters]);
+
+  // Filter approved letter edit requests specifically relevant to this Subject Officer
+  const myApprovedEditRequests = useMemo(() => {
+    if (!approvedEditRequests || approvedEditRequests.length === 0) return [];
+    const activeEmail = (profile?.email || "").trim().toLowerCase();
+    const activeName = (profile?.full_name || "").trim().toLowerCase();
+
+    return approvedEditRequests.filter((req: any) => {
+      const reqEmail = (req.requester_email || "").trim().toLowerCase();
+      const reqName = (req.requested_by || "").trim().toLowerCase();
+      const reqRef = (req.ref_no || req.letter_id || "").trim().toLowerCase();
+
+      // Match by requester email, requester name, or if the case is in the officer's assigned cases
+      const matchesUser =
+        (activeEmail && reqEmail === activeEmail) ||
+        (activeName && (reqName.includes(activeName) || activeName.includes(reqName)));
+      const matchesCase = reqRef && myAssignedCaseNos.has(reqRef);
+
+      return matchesUser || matchesCase;
+    });
+  }, [approvedEditRequests, profile, myAssignedCaseNos]);
+
+  // Set of case numbers that currently have approved single-use edit permissions active
+  const approvedEditCaseNos = useMemo(() => {
+    const set = new Set<string>();
+    myApprovedEditRequests.forEach((req: any) => {
+      const r1 = String(req.ref_no || "").trim().toLowerCase();
+      const r2 = String(req.letter_id || "").trim().toLowerCase();
+      if (r1) set.add(r1);
+      if (r2) set.add(r2);
+    });
+    return set;
+  }, [myApprovedEditRequests]);
 
   // Sync tab and search from URL search parameters if provided
   useEffect(() => {
@@ -2823,35 +2865,39 @@ function SubjectOfficerDashboardContent() {
   const pendingPct = totalCasesCount > 0 ? `+${Math.round((pendingCasesCount / totalCasesCount) * 100)}%` : "0%";
   const closedPct = totalCasesCount > 0 ? `+${Math.round((closedCasesCount / totalCasesCount) * 100)}%` : "0%";
 
-  // Filter cases list in real-time
-  const filteredCases = cases.filter((item) => {
-    const q = searchQuery.toLowerCase().trim();
-    const matchesSearch = !q ||
-      item.caseNo.toLowerCase().includes(q) ||
-      (item.letterNo || "").toLowerCase().includes(q) ||
-      (item.sender || "").toLowerCase().includes(q) ||
-      (item.instituteName || "").toLowerCase().includes(q) ||
-      (item.letterType || "").toLowerCase().includes(q) ||
-      (item.classification || "").toLowerCase().includes(q) ||
-      (item.directives || "").toLowerCase().includes(q) ||
-      (item.subject || "").toLowerCase().includes(q);
+  // Filter cases list in real-time (guaranteed latest letters first)
+  const filteredCases = useMemo(() => {
+    return cases.filter((item) => {
+      const q = searchQuery.toLowerCase().trim();
+      const matchesSearch = !q ||
+        item.caseNo.toLowerCase().includes(q) ||
+        (item.letterNo || "").toLowerCase().includes(q) ||
+        (item.sender || "").toLowerCase().includes(q) ||
+        (item.instituteName || "").toLowerCase().includes(q) ||
+        (item.letterType || "").toLowerCase().includes(q) ||
+        (item.classification || "").toLowerCase().includes(q) ||
+        (item.directives || "").toLowerCase().includes(q) ||
+        (item.subject || "").toLowerCase().includes(q);
 
-    const matchesPriority = priorityFilter === "all" || item.priority === priorityFilter;
+      const matchesPriority = priorityFilter === "all" || item.priority === priorityFilter;
 
-    return matchesSearch && matchesPriority;
-  });
+      return matchesSearch && matchesPriority;
+    }).sort(compareLettersLatestFirst);
+  }, [cases, searchQuery, priorityFilter]);
 
-  // Filter answer letters list in real-time
-  const filteredAnswerLetters = assignedAnswerLetters.filter((item) => {
-    if (!answerSearchQuery.trim()) return true;
-    const q = answerSearchQuery.toLowerCase();
-    return (
-      (item.caseNo && item.caseNo.toLowerCase().includes(q)) ||
-      (item.senderName && item.senderName.toLowerCase().includes(q)) ||
-      (item.subject && item.subject.toLowerCase().includes(q)) ||
-      (item.officerName && item.officerName.toLowerCase().includes(q))
-    );
-  });
+  // Filter answer letters list in real-time (guaranteed latest letters first)
+  const filteredAnswerLetters = useMemo(() => {
+    return assignedAnswerLetters.filter((item) => {
+      if (!answerSearchQuery.trim()) return true;
+      const q = answerSearchQuery.toLowerCase();
+      return (
+        (item.caseNo && item.caseNo.toLowerCase().includes(q)) ||
+        (item.senderName && item.senderName.toLowerCase().includes(q)) ||
+        (item.subject && item.subject.toLowerCase().includes(q)) ||
+        (item.officerName && item.officerName.toLowerCase().includes(q))
+      );
+    }).sort(compareLettersLatestFirst);
+  }, [assignedAnswerLetters, answerSearchQuery]);
 
   // Check if an investigation is completed for a case
   const isInvestigationCompleteForCase = (caseNo: string) => {
@@ -3057,7 +3103,7 @@ function SubjectOfficerDashboardContent() {
       }
     });
 
-    return Array.from(inquiryMap.values());
+    return Array.from(inquiryMap.values()).sort(compareLettersLatestFirst);
   }, [cases, assignments, replyLettersList, concernedOfficersMap, myAssignedCaseNos]);
 
   // Filtered conducting inquiry cases
@@ -3083,7 +3129,7 @@ function SubjectOfficerDashboardContent() {
         item.priority === inquiryPriorityFilter;
 
       return matchesSearch && matchesStage && matchesPriority;
-    });
+    }).sort(compareLettersLatestFirst);
   }, [conductingInquiryCases, inquirySearchQuery, inquiryStageFilter, inquiryPriorityFilter]);
 
   // ── Open Conduct an Inquiry Form Modal (Paper Sketch) ──
@@ -3785,7 +3831,7 @@ function SubjectOfficerDashboardContent() {
       }
     });
 
-    return Array.from(inspectionMap.values());
+    return Array.from(inspectionMap.values()).sort(compareLettersLatestFirst);
   }, [cases, officerRecommendations, myAssignedCaseNos]);
 
   // Filtered proper disciplinary inspection cases
@@ -3812,7 +3858,7 @@ function SubjectOfficerDashboardContent() {
         item.priority === inspectionPriorityFilter;
 
       return matchesSearch && matchesStage && matchesPriority;
-    });
+    }).sort(compareLettersLatestFirst);
   }, [disciplinaryInspectionCases, inspectionSearchQuery, inspectionStageFilter, inspectionPriorityFilter]);
 
   // ── Issuing Charge Sheet Case List ──
@@ -3897,7 +3943,7 @@ function SubjectOfficerDashboardContent() {
       }
     });
 
-    return Array.from(csMap.values());
+    return Array.from(csMap.values()).sort(compareLettersLatestFirst);
   }, [cases, officerRecommendations, lang, myAssignedCaseNos]);
 
   // Filtered Issuing Charge Sheet cases
@@ -3936,7 +3982,7 @@ function SubjectOfficerDashboardContent() {
         (chargeSheetResponseFilter === "pending" && !hasResponse);
 
       return matchesSearch && matchesSchedule && matchesAuthority && matchesPriority && matchesResponse;
-    });
+    }).sort(compareLettersLatestFirst);
   }, [issuingChargeSheetCases, chargeSheetSearchQuery, chargeSheetScheduleFilter, chargeSheetAuthorityFilter, chargeSheetPriorityFilter, chargeSheetResponseFilter]);
 
   // ── Provincial Basic Investigation Case List ──
@@ -4061,7 +4107,7 @@ function SubjectOfficerDashboardContent() {
       }
     });
 
-    return Array.from(provMap.values());
+    return Array.from(provMap.values()).sort(compareLettersLatestFirst);
   }, [provincialInvestigationsData, cases, replyLettersList, concernedOfficersMap, myAssignedCaseNos]);
 
   // Filtered provincial basic investigation cases
@@ -4089,7 +4135,7 @@ function SubjectOfficerDashboardContent() {
         item.priority === provincialPriorityFilter;
 
       return matchesSearch && matchesStage && matchesPriority;
-    });
+    }).sort(compareLettersLatestFirst);
   }, [provincialInvestigationCases, provincialSearchQuery, provincialStageFilter, provincialPriorityFilter]);
 
   // ── Appeals Case List ──
@@ -4172,7 +4218,7 @@ function SubjectOfficerDashboardContent() {
       }
     });
 
-    return Array.from(map.values());
+    return Array.from(map.values()).sort(compareLettersLatestFirst);
   }, [appealsData, cases, assignedAnswerLetters, lang, myAssignedCaseNos]);
 
   // Filtered appeals cases
@@ -4201,7 +4247,7 @@ function SubjectOfficerDashboardContent() {
         item.priority === appealPriorityFilter;
 
       return matchesSearch && matchesStage && matchesAuthority && matchesPriority;
-    });
+    }).sort(compareLettersLatestFirst);
   }, [appealsCases, appealSearchQuery, appealStageFilter, appealAuthorityFilter, appealPriorityFilter]);
 
   const handleSaveNewAppeal = (e?: React.FormEvent) => {
@@ -4311,27 +4357,29 @@ function SubjectOfficerDashboardContent() {
   };
 
   // Filter investigation recommendations list in real-time (strictly this officer's recommendations)
-  const filteredRecommendations = officerRecommendations.filter((item) => {
-    const q = recSearchQuery.trim().toLowerCase();
-    const matchesSearch =
-      !q ||
-      (item.caseNo && item.caseNo.toLowerCase().includes(q)) ||
-      (item.letterNo && item.letterNo.toLowerCase().includes(q)) ||
-      (item.title && item.title.toLowerCase().includes(q)) ||
-      (item.accusedName && item.accusedName.toLowerCase().includes(q)) ||
-      (item.schoolName && item.schoolName.toLowerCase().includes(q)) ||
-      (item.recommendationText && item.recommendationText.toLowerCase().includes(q)) ||
-      (item.disciplinaryAction && item.disciplinaryAction.toLowerCase().includes(q));
+  const filteredRecommendations = useMemo(() => {
+    return officerRecommendations.filter((item) => {
+      const q = recSearchQuery.trim().toLowerCase();
+      const matchesSearch =
+        !q ||
+        (item.caseNo && item.caseNo.toLowerCase().includes(q)) ||
+        (item.letterNo && item.letterNo.toLowerCase().includes(q)) ||
+        (item.title && item.title.toLowerCase().includes(q)) ||
+        (item.accusedName && item.accusedName.toLowerCase().includes(q)) ||
+        (item.schoolName && item.schoolName.toLowerCase().includes(q)) ||
+        (item.recommendationText && item.recommendationText.toLowerCase().includes(q)) ||
+        (item.disciplinaryAction && item.disciplinaryAction.toLowerCase().includes(q));
 
-    const matchesCategory = recCategoryFilter === "all" || item.category === recCategoryFilter;
-    const matchesUrgency = recUrgencyFilter === "all" || item.urgency === recUrgencyFilter;
-    const matchesStatus =
-      recStatusFilter === "all" ||
-      item.status === recStatusFilter ||
-      (recStatusFilter === "Awaiting" && !officerRecommendations.some(r => r.caseNo === item.caseNo && r.status === "Submitted"));
+      const matchesCategory = recCategoryFilter === "all" || item.category === recCategoryFilter;
+      const matchesUrgency = recUrgencyFilter === "all" || item.urgency === recUrgencyFilter;
+      const matchesStatus =
+        recStatusFilter === "all" ||
+        item.status === recStatusFilter ||
+        (recStatusFilter === "Awaiting" && !officerRecommendations.some(r => r.caseNo === item.caseNo && r.status === "Submitted"));
 
-    return matchesSearch && matchesCategory && matchesUrgency && matchesStatus;
-  });
+      return matchesSearch && matchesCategory && matchesUrgency && matchesStatus;
+    }).sort(compareLettersLatestFirst);
+  }, [officerRecommendations, recSearchQuery, recCategoryFilter, recUrgencyFilter, recStatusFilter]);
 
   const getCategoryLabel = (category: string) => {
     switch (category) {
@@ -4783,6 +4831,139 @@ function SubjectOfficerDashboardContent() {
                   </li>
                 ))}
               </ul>
+            </div>
+          )}
+
+          {/* ── Approved Letter Edit Permissions Alert Banner (1-Time Edit) ── */}
+          {myApprovedEditRequests.length > 0 && (
+            <div
+              className="approved-edits-banner"
+              style={{
+                backgroundColor: "#ecfdf5",
+                border: "1.5px solid #10b981",
+                borderRadius: "12px",
+                padding: "16px 20px",
+                marginTop: "16px",
+                marginBottom: "20px",
+                boxShadow: "0 4px 14px rgba(16, 185, 129, 0.12)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "flex-start", gap: "14px", flexWrap: "wrap", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: "12px", flex: 1, minWidth: "280px" }}>
+                  <div
+                    style={{
+                      backgroundColor: "#10b981",
+                      color: "#ffffff",
+                      borderRadius: "50%",
+                      width: "38px",
+                      height: "38px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexShrink: 0,
+                    }}
+                  >
+                    <ShieldCheck size={22} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginBottom: "4px" }}>
+                      <h4 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "#065f46" }}>
+                        {lang === "si"
+                          ? "ලිපි සංස්කරණය සඳහා තනි අවසරයක් අනුමත කර ඇත (Single-Use Edit Active)"
+                          : lang === "ta"
+                          ? "கடிதத்தை திருத்துவதற்கான அனுமதி வழங்கப்பட்டுள்ளது (1 முறை)"
+                          : "Single-Use Letter Edit Permission Approved (1-Time Edit Active)"}
+                      </h4>
+                      <span
+                        style={{
+                          backgroundColor: "#059669",
+                          color: "#ffffff",
+                          fontSize: "11px",
+                          padding: "2px 8px",
+                          borderRadius: "10px",
+                          fontWeight: 800,
+                        }}
+                      >
+                        {myApprovedEditRequests.length} {myApprovedEditRequests.length === 1 ? "LETTER" : "LETTERS"} READY
+                      </span>
+                    </div>
+                    <p style={{ margin: "0 0 12px 0", fontSize: "13px", color: "#047857", lineHeight: "1.5" }}>
+                      {lang === "si"
+                        ? "අතිරේක ලේකම්, ජ්‍යෙෂ්ඨ සහකාර ලේකම් හෝ විනය සහකාර ලේකම් විසින් පහත ලිපිය/ලිපි එක් වරක් සංස්කරණය කිරීමට අනුමත කර ඇත. සංස්කරණය කර නැවත ඉදිරිපත් (Submit) කළ පසු එය ස්වයංක්‍රීයව නැවත අගුළු වැටෙනු ඇත (Locked). තවදුරටත් සංශෝධන අවශ්‍ය නම් නැවත අනුමැතිය ඉල්ලා සිටිය හැක."
+                        : lang === "ta"
+                        ? "மேலதிக செயலாளர், சிரேஷ்ட உதவி செயலாளர் அல்லது ஒழுக்காற்று உதவி செயலாளரால் கடிதத்தை ஒரு முறை திருத்த ஒப்புதல் அளிக்கப்பட்டுள்ளது. சமர்ப்பித்த பிறகு மீண்டும் பூட்டப்படும்."
+                        : "The Additional Secretary, Senior Assistant Secretary, or Assistant Secretary Discipline Branch has approved a 1-time edit for the following letter(s). After submitting your changes, the letter will automatically lock back into View Only mode. If further corrections are required, you can request permission again."}
+                    </p>
+
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                      {myApprovedEditRequests.map((req: any) => (
+                        <div
+                          key={req.id}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            flexWrap: "wrap",
+                            gap: "10px",
+                            padding: "10px 14px",
+                            backgroundColor: "#ffffff",
+                            borderRadius: "8px",
+                            border: "1px solid #a7f3d0",
+                          }}
+                        >
+                          <div>
+                            <span style={{ fontWeight: 800, color: "#0f172a", fontSize: "14px" }}>
+                              {req.ref_no || req.letter_id}
+                            </span>
+                            {req.reason && (
+                              <span style={{ marginLeft: "10px", fontSize: "12px", color: "#475569" }}>
+                                ({lang === "si" ? "ඉල්ලුම් කළ හේතුව" : "Reason"}: {req.reason})
+                              </span>
+                            )}
+                            <div style={{ fontSize: "11px", color: "#059669", marginTop: "2px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                              <span>
+                                {lang === "si" ? "අනුමත කළ බලධාරියා" : "Approved by"}: <strong>{req.reviewed_by || "Discipline Authority"}</strong>
+                              </span>
+                              {req.reviewed_at && (
+                                <span style={{ color: "#64748b" }}>
+                                  • {formatRelativeTime(req.reviewed_at, lang)}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <Link
+                            href={`/subject/add-details?caseNo=${encodeURIComponent(req.ref_no || req.letter_id)}`}
+                            style={{
+                              backgroundColor: "#059669",
+                              color: "#ffffff",
+                              padding: "7px 16px",
+                              borderRadius: "6px",
+                              fontSize: "12px",
+                              fontWeight: 700,
+                              textDecoration: "none",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "6px",
+                              boxShadow: "0 2px 4px rgba(5, 150, 105, 0.25)",
+                              transition: "all 0.2s ease",
+                            }}
+                          >
+                            <Sparkles size={14} />
+                            <span>
+                              {lang === "si"
+                                ? "දැන් සංස්කරණය කරන්න (1x)"
+                                : lang === "ta"
+                                ? "இப்போது திருத்தவும் (1x)"
+                                : "Edit Letter Now (1-Time)"}
+                            </span>
+                          </Link>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -6023,35 +6204,66 @@ function SubjectOfficerDashboardContent() {
 
                           {/* 9. Actions */}
                           <td className="text-center actions-cell">
-                            <div style={{ display: "flex", flexDirection: "column", gap: "6px", alignItems: "center" }}>
-                              <Link
-                                href={`/subject/add-details?caseNo=${encodeURIComponent(item.caseNo)}${item.status === "assigned answer letter" || item.status === "Assigned Answer Letter" ? "&isAnswerLetter=true" : ""}`}
-                                className="add-details-link"
-                              >
-                                {t("addDetails")}
-                              </Link>
-                              <Link
-                                href={`/admin/view-letter?id=${encodeURIComponent(item.letterNo || item.caseNo)}`}
-                                style={{
-                                  fontSize: "11px",
-                                  fontWeight: 600,
-                                  color: "#4f46e5",
-                                  textDecoration: "none",
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: "3px",
-                                  padding: "3px 8px",
-                                  borderRadius: "4px",
-                                  backgroundColor: "#eef2ff",
-                                  border: "1px solid #e0e7ff",
-                                  transition: "all 0.15s ease",
-                                }}
-                                title={lang === "si" ? "ලිපි විස්තර සහ යොමු කිරීම් බලන්න" : "View Official Letter Details"}
-                              >
-                                <Eye size={11} />
-                                <span>{lang === "si" ? "ලිපිය බලන්න" : lang === "ta" ? "கடிதம் பார்க்க" : "View Letter"}</span>
-                              </Link>
-                            </div>
+                            {(() => {
+                              const isCaseEditApproved =
+                                approvedEditCaseNos.has(String(item.caseNo || "").trim().toLowerCase()) ||
+                                approvedEditCaseNos.has(String(item.letterNo || "").trim().toLowerCase());
+
+                              return (
+                                <div style={{ display: "flex", flexDirection: "column", gap: "6px", alignItems: "center" }}>
+                                  {isCaseEditApproved && (
+                                    <span
+                                      style={{
+                                        backgroundColor: "#ecfdf5",
+                                        color: "#059669",
+                                        border: "1px solid #10b981",
+                                        borderRadius: "12px",
+                                        padding: "2px 8px",
+                                        fontSize: "10px",
+                                        fontWeight: 800,
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        gap: "4px",
+                                      }}
+                                      title={lang === "si" ? "එක් වරක් සංස්කරණය කිරීමට අනුමැතිය ලැබී ඇත" : "Single-Use Edit Permission Approved"}
+                                    >
+                                      <Sparkles size={11} />
+                                      {lang === "si" ? "1x සංස්කරණය අනුමතයි" : "1x Edit Approved"}
+                                    </span>
+                                  )}
+                                  <Link
+                                    href={`/subject/add-details?caseNo=${encodeURIComponent(item.caseNo)}${item.status === "assigned answer letter" || item.status === "Assigned Answer Letter" ? "&isAnswerLetter=true" : ""}`}
+                                    className="add-details-link"
+                                    style={isCaseEditApproved ? { backgroundColor: "#059669", borderColor: "#047857", color: "#ffffff" } : undefined}
+                                  >
+                                    {isCaseEditApproved
+                                      ? (lang === "si" ? "සංස්කරණය කරන්න (1x)" : "Edit Details (1x)")
+                                      : t("addDetails")}
+                                  </Link>
+                                  <Link
+                                    href={`/admin/view-letter?id=${encodeURIComponent(item.letterNo || item.caseNo)}`}
+                                    style={{
+                                      fontSize: "11px",
+                                      fontWeight: 600,
+                                      color: "#4f46e5",
+                                      textDecoration: "none",
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: "3px",
+                                      padding: "3px 8px",
+                                      borderRadius: "4px",
+                                      backgroundColor: "#eef2ff",
+                                      border: "1px solid #e0e7ff",
+                                      transition: "all 0.15s ease",
+                                    }}
+                                    title={lang === "si" ? "ලිපි විස්තර සහ යොමු කිරීම් බලන්න" : "View Official Letter Details"}
+                                  >
+                                    <Eye size={11} />
+                                    <span>{lang === "si" ? "ලිපිය බලන්න" : lang === "ta" ? "கடிதம் பார்க்க" : "View Letter"}</span>
+                                  </Link>
+                                </div>
+                              );
+                            })()}
                           </td>
                         </tr>
                       );
@@ -6154,14 +6366,46 @@ function SubjectOfficerDashboardContent() {
                             </span>
                           </td>
                           <td className="text-center actions-cell">
-                            <Link
-                              href={`/subject/add-details?caseNo=${item.caseNo}&isAnswerLetter=true`}
-                              className="add-details-link"
-                            >
-                              {item.status === "Closed"
-                                ? (lang === "si" ? "විස්තර බලන්න" : "View Details")
-                                : t("addDetails", "Add Details / View Case")}
-                            </Link>
+                            {(() => {
+                              const isCaseEditApproved =
+                                approvedEditCaseNos.has(String(item.caseNo || "").trim().toLowerCase()) ||
+                                approvedEditCaseNos.has(String(item.letterNo || "").trim().toLowerCase());
+
+                              return (
+                                <div style={{ display: "flex", flexDirection: "column", gap: "6px", alignItems: "center" }}>
+                                  {isCaseEditApproved && (
+                                    <span
+                                      style={{
+                                        backgroundColor: "#ecfdf5",
+                                        color: "#059669",
+                                        border: "1px solid #10b981",
+                                        borderRadius: "12px",
+                                        padding: "2px 8px",
+                                        fontSize: "10px",
+                                        fontWeight: 800,
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        gap: "4px",
+                                      }}
+                                    >
+                                      <Sparkles size={11} />
+                                      {lang === "si" ? "1x සංස්කරණය අනුමතයි" : "1x Edit Approved"}
+                                    </span>
+                                  )}
+                                  <Link
+                                    href={`/subject/add-details?caseNo=${item.caseNo}&isAnswerLetter=true`}
+                                    className="add-details-link"
+                                    style={isCaseEditApproved ? { backgroundColor: "#059669", borderColor: "#047857", color: "#ffffff" } : undefined}
+                                  >
+                                    {isCaseEditApproved
+                                      ? (lang === "si" ? "සංස්කරණය කරන්න (1x)" : "Edit Details (1x)")
+                                      : item.status === "Closed"
+                                      ? (lang === "si" ? "විස්තර බලන්න" : "View Details")
+                                      : t("addDetails", "Add Details / View Case")}
+                                  </Link>
+                                </div>
+                              );
+                            })()}
                           </td>
                         </tr>
                       ))

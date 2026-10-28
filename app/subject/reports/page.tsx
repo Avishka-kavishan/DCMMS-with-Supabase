@@ -1182,7 +1182,7 @@ export default function SubjectOfficerReportsPage() {
                               {/* 4. ගනු ලබන ඉදිරි ක්‍රියාමාර්ග (Future Action Taken) */}
                               <td>
                                 <span style={{ color: "#1d4ed8", fontWeight: 700, fontSize: "13px" }}>
-                                  {letter.future_action || "—"}
+                                  {letter.future_action ? t(letter.future_action, letter.future_action) : "—"}
                                 </span>
                               </td>
 
@@ -1375,7 +1375,7 @@ export default function SubjectOfficerReportsPage() {
                                           </div>
                                           <div className="detail-field-item">
                                             <span className="detail-field-label">ගනු ලබන ඉදිරි ක්‍රියාමාර්ග (Future Action)</span>
-                                            <span className="detail-field-value highlight-action">{letter.future_action || "—"}</span>
+                                            <span className="detail-field-value highlight-action">{letter.future_action ? t(letter.future_action, letter.future_action) : "—"}</span>
                                           </div>
                                           <div className="detail-field-item">
                                             <span className="detail-field-label">අත්සනට ඉදිරිපත් කළ දිනය (Submission Date)</span>
@@ -1690,7 +1690,7 @@ export default function SubjectOfficerReportsPage() {
                             </div>
                             <div className="detail-field-item">
                               <span className="detail-field-label">{lang === "si" ? "ගනු ලබන ඉදිරි ක්‍රියාමාර්ග" : "Future Action Taken"}</span>
-                              <span className="detail-field-value highlight-action">{letter.future_action || "—"}</span>
+                              <span className="detail-field-value highlight-action">{letter.future_action ? t(letter.future_action, letter.future_action) : "—"}</span>
                             </div>
                             <div className="detail-field-item">
                               <span className="detail-field-label">{lang === "si" ? "අත්සනට ඉදිරිපත් කළ දිනය" : "Date Prepared & Submitted"}</span>
@@ -1963,7 +1963,7 @@ export default function SubjectOfficerReportsPage() {
                     </div>
                     <div className="detail-field-item">
                       <span className="detail-field-label">Future Action</span>
-                      <span className="detail-field-value highlight-action">{selectedLetter.future_action || "—"}</span>
+                      <span className="detail-field-value highlight-action">{selectedLetter.future_action ? t(selectedLetter.future_action, selectedLetter.future_action) : "—"}</span>
                     </div>
                     <div className="detail-field-item">
                       <span className="detail-field-label">Submission Date</span>

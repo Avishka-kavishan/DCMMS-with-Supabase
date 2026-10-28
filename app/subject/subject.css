@@ -621,6 +621,33 @@
   text-decoration: none !important;
 }
 
+/* View Details Link for Submitted Letters */
+.view-details-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background-color: #ecfdf5;
+  color: #047857 !important;
+  border: 1px solid #a7f3d0;
+  padding: 5px 14px;
+  border-radius: 9999px;
+  font-size: calc(12px * var(--font-scale, 1)) !important;
+  font-weight: 700 !important;
+  text-decoration: none !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 3px rgba(4, 120, 87, 0.1);
+}
+
+.view-details-link:hover {
+  background-color: #d1fae5 !important;
+  color: #065f46 !important;
+  border-color: #6ee7b7;
+  box-shadow: 0 3px 6px rgba(4, 120, 87, 0.18);
+  transform: translateY(-1px);
+  text-decoration: none !important;
+}
+
 /* ============================================================
    INVESTIGATION RECOMMENDATION TAB STYLES
    ============================================================ */

@@ -13,8 +13,21 @@ import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured, logAuditEvent } from "@/lib/supabase";
 import { getCurrentProfile, dashboardPath } from "@/lib/auth";
-import { CheckCircle, X, ShieldCheck, Users, UserCheck, CalendarClock, Calendar } from "lucide-react";
-import { getInstitutesServer, saveInstituteServer, saveAccusedOfficerServer, getAccusedOfficerByRefServer, saveReplyLetterDetailsServer, getReplyLetterDetailsByRefServer, saveSubjectDetailActionServer, assignLetterToInvestigationAdminServer, getSubjectOfficerAssignmentByCaseServer } from "@/lib/db-actions";
+import { CheckCircle, X, ShieldCheck, Users, UserCheck, CalendarClock, Calendar, Eye, Lock, Unlock, Printer, RefreshCw, Send, AlertTriangle, AlertCircle, FileText, CheckCircle2, Clock, Sparkles } from "lucide-react";
+import { 
+  getInstitutesServer, 
+  saveInstituteServer, 
+  saveAccusedOfficerServer, 
+  getAccusedOfficerByRefServer, 
+  saveReplyLetterDetailsServer, 
+  getReplyLetterDetailsByRefServer, 
+  saveSubjectDetailActionServer, 
+  assignLetterToInvestigationAdminServer, 
+  getSubjectOfficerAssignmentByCaseServer,
+  checkLetterEditApprovalStatusServer,
+  createLetterEditRequestServer,
+  consumeLetterEditApprovalServer
+} from "@/lib/db-actions";
 const formatStepTaken = (step: string, t: any) => {
   if (!step) return "";
   if (step.startsWith("[EduSecApproval:")) {
@@ -122,6 +135,26 @@ function CaseDetailsForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const caseNoParam = searchParams?.get("caseNo") || "CA/2026/01";
+  const isExplicitViewMode = searchParams?.get("mode") === "view" || searchParams?.get("viewOnly") === "true";
+  const [isCaseAlreadySubmitted, setIsCaseAlreadySubmitted] = useState<boolean>(isExplicitViewMode);
+
+  // ── Letter Edit Approval Request States (Single-use edit approved by Additional Sec / Snr Asst Sec / Asst Sec Discipline) ──
+  const [editRequest, setEditRequest] = useState<any>(null);
+  const [isEditApproved, setIsEditApproved] = useState<boolean>(false);
+  const [isEditPending, setIsEditPending] = useState<boolean>(false);
+  const [isEditUsed, setIsEditUsed] = useState<boolean>(false);
+  const [isLoadingEditStatus, setIsLoadingEditStatus] = useState<boolean>(false);
+
+  // Modal & form states for requesting permission
+  const [showRequestEditModal, setShowRequestEditModal] = useState<boolean>(false);
+  const [targetSecretary, setTargetSecretary] = useState<string>("All Discipline Branch Administrative Officers");
+  const [editReason, setEditReason] = useState<string>("");
+  const [isSubmittingEditRequest, setIsSubmittingEditRequest] = useState<boolean>(false);
+  const [actionFeedback, setActionFeedback] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
+  const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
+
+  // If approved for single-use edit, the form is UNLOCKED for the subject officer!
+  const isViewOnly = !isEditApproved && (isExplicitViewMode || isCaseAlreadySubmitted);
 
   // Accessibility & language state
   const [checkingAuth, setCheckingAuth] = useState(true);
@@ -331,6 +364,37 @@ function CaseDetailsForm() {
     }
 
     const optionMap: Record<string, string[]> = {
+      statusPrincipalReports: [
+        "statusprincipalreports",
+        "principal reports",
+        "principal report",
+        "calling principal reports",
+        "විදුහල්පති වාර්තා",
+        "විදුහල්පති වාර්තා කැදවීම",
+        "විදුහල්පති වාර්තා කැඳවීම",
+        "அதிபர் அறிக்கைகள்",
+      ],
+      statusRegionalReports: [
+        "statusregionalreports",
+        "regional reports",
+        "regional report",
+        "zonal reports",
+        "calling regional reports",
+        "කලාප වාර්තා",
+        "කලාප වාර්තා කැදවීම",
+        "කලාප වාර්තා කැඳවීම",
+        "வலய அறிக்கைகள்",
+      ],
+      statusProvincialReports: [
+        "statusprovincialreports",
+        "provincial reports",
+        "provincial report",
+        "calling provincial reports",
+        "පළාත් වාර්තා",
+        "පළාත් වාර්තා කැදවීම",
+        "පළාත් වාර්තා කැඳවීම",
+        "மாகாண அறிக்கைகள்",
+      ],
       statusCallingReports: [
         "statuscallingreports",
         "calling reports from principal/zone/province/police",
@@ -562,6 +626,9 @@ function CaseDetailsForm() {
       if (isSupabaseConfigured) {
         try {
           const profile = await getCurrentProfile();
+          if (profile) {
+            setCurrentUserProfile(profile);
+          }
           if (!profile || profile.role !== "subject_officer") {
             if (profile) {
               router.replace(dashboardPath(profile.role));
@@ -608,6 +675,9 @@ function CaseDetailsForm() {
                 regionProvince: data.region_province,
               });
               setPriority(data.priority || "medium");
+              if (data.status === "Closed" || data.status === "Closed File") {
+                setIsCaseAlreadySubmitted(true);
+              }
             }
           } catch (e) {
             console.error("Failed to fetch letter details from Supabase", e);
@@ -624,6 +694,9 @@ function CaseDetailsForm() {
               if (found) {
                 setLetterData(found);
                 setPriority(found.priority || "medium");
+                if (found.status === "Closed" || found.isProcessedAnswer) {
+                  setIsCaseAlreadySubmitted(true);
+                }
               }
             } catch (e) {
               console.error("Failed to parse letters from local storage", e);
@@ -759,6 +832,7 @@ function CaseDetailsForm() {
 
               // Pre-populate the form inputs with the most recent action details
               if (mapped.length > 0) {
+                setIsCaseAlreadySubmitted(true);
                 const latest = mapped[0];
                 setSubjectOfficer(latest.subjectOfficerName || "");
                 if (!isUserEditingReportStateRef.current) {
@@ -846,6 +920,9 @@ function CaseDetailsForm() {
           }
           if (pgRes && pgRes.success && pgRes.data) {
             const d = pgRes.data;
+            if (d.form_id || d.future_action || (Array.isArray(d.accused_officers) && d.accused_officers.length > 0) || d.reply_letter_details) {
+              setIsCaseAlreadySubmitted(true);
+            }
             const cleanVal = (val: string | null | undefined) => {
               if (!val) return "";
               const trimmed = String(val).trim();
@@ -881,6 +958,20 @@ function CaseDetailsForm() {
             }
             if (d.date_prepared_and_submitted_for_signature) {
               setReceivedDate(String(d.date_prepared_and_submitted_for_signature).split("T")[0]);
+            }
+            if (d.description) {
+              setComplaintMatter(cleanVal(d.description));
+            }
+            if (d.step_taken) {
+              const rawStep = String(d.step_taken);
+              if (rawStep.startsWith("[EduSecApproval:")) {
+                const isApproved = rawStep.includes("EduSecApproval:yes");
+                setEduSecretaryApproval(isApproved ? "yes" : "no");
+                const dateMatch = rawStep.match(/Date:([^\]\s]+)/);
+                setApprovalDate(dateMatch ? dateMatch[1] : "");
+              } else if (rawStep.trim()) {
+                setStepTaken(rawStep);
+              }
             }
 
             if (d.reply_letter_details) {
@@ -932,16 +1023,17 @@ function CaseDetailsForm() {
             }
 
             const sch = d.accused_school;
-            if (!isUserEditingSchoolRef.current && sch && sch.accused_school_name) {
-              const valName = cleanVal(sch.accused_school_name);
-              if (valName) setSchoolName(valName);
-              if (sch.address) {
-                const valAddr = cleanVal(sch.address);
-                if (valAddr) setSchoolAddress(valAddr);
-              }
-              if (sch.province) setSchoolProvince(cleanVal(sch.province));
-              if (sch.district) setSchoolDistrict(cleanVal(sch.district));
-              if (sch.zone) setSchoolZone(cleanVal(sch.zone));
+            const schName = cleanVal(d.school_name || sch?.accused_school_name);
+            if (!isUserEditingSchoolRef.current && schName) {
+              setSchoolName(schName);
+              const schAddr = cleanVal(d.school_address || sch?.address);
+              if (schAddr) setSchoolAddress(schAddr);
+              const schProv = cleanVal(d.school_province || sch?.province);
+              if (schProv) setSchoolProvince(schProv);
+              const schDist = cleanVal(d.school_district || sch?.district);
+              if (schDist) setSchoolDistrict(schDist);
+              const schZone = cleanVal(d.school_zone || sch?.zone);
+              if (schZone) setSchoolZone(schZone);
             }
           }
         } catch (pgErr) {
@@ -988,6 +1080,9 @@ function CaseDetailsForm() {
               setPreviousActions(foundActions);
 
               if (foundActions.length > 0) {
+                if (foundActions.some((a: any) => !a.isDraft)) {
+                  setIsCaseAlreadySubmitted(true);
+                }
                 const latest = foundActions[0];
                 setSubjectOfficer(latest.subjectOfficerName || "");
                 if (!isUserEditingReportStateRef.current) {
@@ -1001,6 +1096,37 @@ function CaseDetailsForm() {
                   }
                 }
                 setReceivedDate(latest.receivedDate || "2026-06-23");
+                
+                if (latest.fileName || latest.file_name) {
+                  const cleanFN = String(latest.fileName || latest.file_name).trim().toLowerCase();
+                  setFileName(cleanFN === "mail" ? "mail" : "discipline");
+                }
+                if (latest.description) {
+                  setComplaintMatter(String(latest.description).trim());
+                }
+                if (latest.classification) {
+                  setClassification(latest.classification === "anonymous" ? "anonymous" : "nominal");
+                }
+                if (latest.complainantName) {
+                  setComplainantName(String(latest.complainantName).trim());
+                }
+                if (latest.complainantAddress) {
+                  setComplainantAddress(String(latest.complainantAddress).trim());
+                }
+                if (!isUserEditingSchoolRef.current) {
+                  if (latest.schoolName) setSchoolName(String(latest.schoolName).trim());
+                  if (latest.schoolAddress) setSchoolAddress(String(latest.schoolAddress).trim());
+                  if (latest.schoolProvince) setSchoolProvince(String(latest.schoolProvince).trim());
+                  if (latest.schoolDistrict) setSchoolDistrict(String(latest.schoolDistrict).trim());
+                  if (latest.schoolZone) setSchoolZone(String(latest.schoolZone).trim());
+                }
+                if (latest.isConcerned) {
+                  setIsConcerned(latest.isConcerned);
+                }
+                if (Array.isArray(latest.concernedPersons) && latest.concernedPersons.length > 0) {
+                  setConcernedPersons(latest.concernedPersons);
+                  setIsConcerned("yes");
+                }
                 
                 const rawStep = latest.stepTaken || "";
                 if (rawStep.startsWith("[EduSecApproval:")) {
@@ -1064,6 +1190,48 @@ function CaseDetailsForm() {
               console.error("Failed to parse concerned officer from localStorage", e);
             }
           }
+
+          if (caseNoParam) {
+            try {
+              const cClean = String(caseNoParam).trim().toLowerCase();
+              const storedSubNos = localStorage.getItem("dcmms_submitted_case_nos");
+              if (storedSubNos) {
+                const arr = JSON.parse(storedSubNos);
+                if (Array.isArray(arr) && arr.map((s: string) => String(s).trim().toLowerCase()).includes(cClean)) {
+                  setIsCaseAlreadySubmitted(true);
+                }
+              }
+            } catch (e) {}
+          }
+        }
+      }
+
+      // Check letter edit approval status from Additional Secretary / Snr Asst Sec / Asst Sec Discipline
+      if (caseNoParam) {
+        try {
+          const approvalRes = await checkLetterEditApprovalStatusServer(caseNoParam, caseNoParam);
+          if (approvalRes && approvalRes.success) {
+            setEditRequest(approvalRes.latestRequest);
+            if (approvalRes.isApproved) {
+              setIsEditApproved(true);
+              setIsEditPending(false);
+              setIsEditUsed(false);
+            } else if (approvalRes.isPending) {
+              setIsEditApproved(false);
+              setIsEditPending(true);
+              setIsEditUsed(false);
+            } else if (approvalRes.isUsed) {
+              setIsEditApproved(false);
+              setIsEditPending(false);
+              setIsEditUsed(true);
+            } else {
+              setIsEditApproved(false);
+              setIsEditPending(false);
+              setIsEditUsed(false);
+            }
+          }
+        } catch (approvalErr) {
+          console.warn("Failed checking letter edit approval status:", approvalErr);
         }
       }
 
@@ -1081,6 +1249,7 @@ function CaseDetailsForm() {
         .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_daily_mail" }, verifyAndFetch)
         .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_subsequent_mails" }, verifyAndFetch)
         .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_concerned_officers" }, verifyAndFetch)
+        .on("postgres_changes", { event: "*", schema: "public", table: "dcmms_letter_edit_requests" }, verifyAndFetch)
         .subscribe();
     }
 
@@ -1104,6 +1273,117 @@ function CaseDetailsForm() {
   const handleLogout = (e: React.MouseEvent) => {
     e.preventDefault();
     router.push("/");
+  };
+
+  // ── Letter Edit Approval Helpers ──
+  const refreshApprovalStatus = async (targetRef?: string) => {
+    const refToUse = targetRef || refNo || caseNoParam;
+    if (!refToUse) return;
+    setIsLoadingEditStatus(true);
+    try {
+      const res = await checkLetterEditApprovalStatusServer(refToUse, refToUse);
+      if (res && res.success) {
+        setEditRequest(res.latestRequest);
+        if (res.isApproved) {
+          setIsEditApproved(true);
+          setIsEditPending(false);
+          setIsEditUsed(false);
+          setActionFeedback({
+            type: "success",
+            message: lang === "si"
+              ? "✓ සංස්කරණ අවසරය අනුමත කර ඇත! පෝරමය දැන් සංස්කරණය සඳහා විවෘතය (එක්වරක් පමණි)."
+              : "✓ Edit permission approved! Form is now unlocked for a single-use edit.",
+          });
+          setTimeout(() => setActionFeedback(null), 4000);
+        } else if (res.isPending) {
+          setIsEditApproved(false);
+          setIsEditPending(true);
+          setIsEditUsed(false);
+          setActionFeedback({
+            type: "info",
+            message: lang === "si"
+              ? "⏳ සංස්කරණ අවසර ඉල්ලීම තවමත් පරිපාලන අනුමැතිය අපේක්ෂාවෙන් පවතී."
+              : "⏳ Edit approval request is still pending review by the Secretary.",
+          });
+          setTimeout(() => setActionFeedback(null), 4000);
+        } else if (res.isUsed) {
+          setIsEditApproved(false);
+          setIsEditPending(false);
+          setIsEditUsed(true);
+        } else {
+          setIsEditApproved(false);
+          setIsEditPending(false);
+          setIsEditUsed(false);
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to refresh approval status:", e);
+    } finally {
+      setIsLoadingEditStatus(false);
+    }
+  };
+
+  const handleSendApprovalRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editReason.trim()) {
+      alert(lang === "si" ? "කරුණාකර සංස්කරණය කිරීමට හේතුව ඇතුළත් කරන්න." : "Please enter the reason for requesting edit permission.");
+      return;
+    }
+
+    const targetRef = refNo || caseNoParam;
+    if (!targetRef) {
+      alert("Case / Letter Reference Number is missing");
+      return;
+    }
+
+    try {
+      setIsSubmittingEditRequest(true);
+      const requesterName = currentUserProfile?.full_name || "Subject Officer";
+      const requesterEmail = currentUserProfile?.email || "";
+      const requesterRole = "Subject Officer";
+
+      const res = await createLetterEditRequestServer({
+        letter_id: targetRef,
+        ref_no: targetRef,
+        requested_by: requesterName,
+        requester_email: requesterEmail,
+        requester_role: requesterRole,
+        target_branch_admin: targetSecretary,
+        reason: editReason.trim(),
+      });
+
+      if (res && res.success) {
+        setEditRequest(res.data);
+        setIsEditPending(true);
+        setIsEditApproved(false);
+        setIsEditUsed(false);
+        setShowRequestEditModal(false);
+        setEditReason("");
+        setActionFeedback({
+          type: "success",
+          message: lang === "si"
+            ? `සංස්කරණ අවසර ඉල්ලීම ${targetSecretary} වෙත සාර්ථකව යවන ලදී. අනුමැතිය ලැබෙන තෙක් රැඳී සිටින්න.`
+            : `Edit approval request successfully sent to ${targetSecretary}. Please wait for approval.`,
+        });
+        setTimeout(() => setActionFeedback(null), 5000);
+      } else {
+        alert(res?.error || "Failed to submit edit request");
+      }
+    } catch (err: any) {
+      console.error("Error submitting edit request:", err);
+      alert("Error submitting request: " + (err?.message || "Server error"));
+    } finally {
+      setIsSubmittingEditRequest(false);
+    }
+  };
+
+  const handleCancelEditSession = () => {
+    setIsEditApproved(false);
+    setActionFeedback({
+      type: "info",
+      message: lang === "si" ? "සංස්කරණ සැසිය අවලංගු කර ලිපිය නැවත අගුළු දැමීය." : "Edit session closed. Letter remains locked.",
+    });
+    setTimeout(() => setActionFeedback(null), 3000);
   };
 
   const syncCalendar = async (apptDate: string) => {
@@ -1248,6 +1528,9 @@ function CaseDetailsForm() {
         name_of_the_presenting_the_complain: classification === "nominal" ? complainantName : "Anonymous",
         address_of_the_person_presenting_the_complaint: classification === "nominal" ? complainantAddress : "N/A",
         future_action: computedFutureAction,
+        description: complaintMatter || "",
+        step_taken: serializedStepTaken || null,
+        school_name: schoolName || "",
       };
 
       let res: any = null;
@@ -1566,8 +1849,32 @@ function CaseDetailsForm() {
         specialNotes,
         isDraft: isDraftMode,
         description: complaintMatter || "",
+        classification,
+        complainantName: classification === "nominal" ? complainantName : "Anonymous",
+        complainantAddress: classification === "nominal" ? complainantAddress : "N/A",
+        schoolName,
+        schoolAddress,
+        schoolProvince,
+        schoolDistrict,
+        schoolZone,
+        isConcerned,
+        concernedPersons: isConcerned === "yes" ? concernedPersons : [],
       });
       localStorage.setItem("dcmms_new_letter_current_case", JSON.stringify(cleanList));
+
+      if (!isDraftMode) {
+        try {
+          const storedSubNos = localStorage.getItem("dcmms_submitted_case_nos") || "[]";
+          let subNosArr: string[] = [];
+          try { subNosArr = JSON.parse(storedSubNos); } catch (e) {}
+          if (!Array.isArray(subNosArr)) subNosArr = [];
+          const cleanRef = String(refNo).trim().toLowerCase();
+          if (!subNosArr.map(s => String(s).trim().toLowerCase()).includes(cleanRef)) {
+            subNosArr.push(cleanRef);
+            localStorage.setItem("dcmms_submitted_case_nos", JSON.stringify(subNosArr));
+          }
+        } catch (e) {}
+      }
 
       // Save concerned officer list
       const storedConcerned = localStorage.getItem("dcmms_officer_concerned") || "{}";
@@ -1611,6 +1918,8 @@ function CaseDetailsForm() {
             fileName: fileName,
             file_name: fileName,
             isOld: isFinalizeFile ? true : (complaintAge === "old"),
+            isSubmitted: !isDraftMode,
+            hasSubjectDetails: !isDraftMode,
             assignedOfficer: isInstitutionalBasic ? invAdminDisplayName : c.assignedOfficer,
             officerName: isInstitutionalBasic ? invAdminDisplayName : c.officerName,
           };
@@ -1634,6 +1943,8 @@ function CaseDetailsForm() {
           assignedDate: receivedDate || new Date().toISOString().split("T")[0],
           receivedDate: receivedDate || new Date().toISOString().split("T")[0],
           isOld: isFinalizeFile ? true : (complaintAge === "old"),
+          isSubmitted: !isDraftMode,
+          hasSubjectDetails: !isDraftMode,
           assignedOfficer: isInstitutionalBasic ? invAdminDisplayName : (subjectOfficer || "Subject Officer"),
           officerName: isInstitutionalBasic ? invAdminDisplayName : (subjectOfficer || "Subject Officer"),
         });
@@ -1658,6 +1969,8 @@ function CaseDetailsForm() {
                 isProcessedAnswer: isAnswerLetter || isInspectionOrInquiry || isFinalizeFile,
                 upcomingAction: computedFutureAction,
                 status: localStatus,
+                isSubmitted: !isDraftMode,
+                hasSubjectDetails: !isDraftMode,
                 action_officer: isInstitutionalBasic ? invAdminDisplayName : l.action_officer,
                 officer_name: isInstitutionalBasic ? invAdminDisplayName : l.officer_name,
                 assigned_to: isInstitutionalBasic ? invAdminDisplayName : l.assigned_to,
@@ -1760,6 +2073,7 @@ function CaseDetailsForm() {
   // Submit case details form handler
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isViewOnly) return;
 
     if (concernedPersons[0]?.appointmentDate) {
       syncCalendar(concernedPersons[0].appointmentDate);
@@ -1801,6 +2115,36 @@ function CaseDetailsForm() {
     if (typeof window !== "undefined") {
       window.dispatchEvent(new Event("dcmms_assignment_updated"));
       window.dispatchEvent(new Event("dcmms_data_updated"));
+    }
+
+    // ── Enforce Single-Use Edit: Consume the approval ──
+    const wasEditSession = isEditApproved;
+    if (isEditApproved) {
+      try {
+        await consumeLetterEditApprovalServer({
+          requestId: editRequest?.id,
+          letter_id: refNo || caseNoParam,
+          ref_no: refNo || caseNoParam,
+          consumed_by: currentUserProfile?.full_name ? `${currentUserProfile.full_name} (Subject Officer)` : "Subject Officer",
+        });
+        setIsEditApproved(false);
+        setIsCaseAlreadySubmitted(true);
+        setIsEditUsed(true);
+      } catch (consumeErr) {
+        console.warn("Failed to consume edit approval:", consumeErr);
+      }
+    }
+
+    if (wasEditSession) {
+      alert(
+        lang === "si"
+          ? "ලිපි විස්තර සාර්ථකව සංශෝධනය කර සුරකින ලදී! ඔබගේ එක්වර සංස්කරණ අවසරය සම්පූර්ණ වී ලිපිය නැවත අගුළු වැටුණි. නැවත සංශෝධනයක් අවශ්‍ය නම් කරුණාකර නැවත අවසර ඉල්ලුම් කරන්න."
+          : lang === "ta"
+          ? "கடித விவரங்கள் வெற்றிகரமாக திருத்தப்பட்டு சேமிக்கப்பட்டன! உங்கள் ஒருமுறை திருத்தும் அனுமதி முடிவடைந்தது, கடிதம் மீண்டும் பூட்டப்பட்டது. மேலும் மாற்றங்கள் தேவைப்பட்டால் மீண்டும் அனுமதி கோரவும்."
+          : "Letter details successfully updated! Your single-use edit permission has now been completed and the letter is locked again. If wrong details were entered again, you can request permission again."
+      );
+      router.push("/subject");
+      return;
     }
 
     if (isPreliminaryInvestigation) {
@@ -2017,12 +2361,22 @@ function CaseDetailsForm() {
                 <div className="add-details-header-container">
                   <div className="add-details-header-left">
                     <h1 className="add-details-title">
-                      {isAnswerLetter
+                      {isViewOnly
+                        ? (isAnswerLetter
+                            ? (lang === "si" ? "පවරන ලද පිළිතුරු ලිපියේ ඇතුළත් කළ විස්තර (නැරඹීම පමණි)" : lang === "ta" ? "பதிலளிப்பு கடித விவரங்கள் (பார்வை மட்டும்)" : "Entered Details for Assigned Answer Letter (View Only)")
+                            : (lang === "si" ? "ඇතුළත් කළ විෂය විස්තර (නැරඹීම පමණි)" : lang === "ta" ? "உள்ளிடப்பட்ட விவரங்கள் (பார்வை மட்டும்)" : "Entered Subject Details (View Only)"))
+                        : isAnswerLetter
                         ? (lang === "si" ? "පවරන ලද පිළිතුරු ලිපිය සඳහා විස්තර එක් කරන්න" : lang === "ta" ? "பதிலளிப்பு கடிதத்திற்கான விவரங்களைச் சேர்க்கவும்" : "Add Details for Assigned Answer Letter")
                         : t("addSubjectDetailsTitle")}
                     </h1>
                     <p className="add-details-subtitle">
-                      {isAnswerLetter
+                      {isViewOnly
+                        ? (lang === "si"
+                            ? "මෙම ලිපිය සඳහා විෂය නිලධාරී විස්තර දැනටමත් ඉදිරිපත් කර ඇත (නැරඹීම පමණි)."
+                            : lang === "ta"
+                            ? "இந்த கடிதத்திற்கான விவரங்கள் ஏற்கனவே சமர்ப்பிக்கப்பட்டுள்ளன (பார்வை மட்டும்)."
+                            : "Subject officer details have been submitted for this case (View Only mode).")
+                        : isAnswerLetter
                         ? (lang === "si" ? "ලැබුණු පිළිතුරු ලිපියට අදාළ ක්‍රියාමාර්ග සහ තොරතුරු ඇතුළත් කරන්න." : "Enter actions and details related to the received answer letter.")
                         : t("addSubjectDetailsDesc")}
                     </p>
@@ -2040,28 +2394,227 @@ function CaseDetailsForm() {
                       </svg>
                       {t("backToHome")}
                     </Link>
-                    <button
-                      type="button"
-                      className="btn-action-draft-top"
-                      onClick={handleSaveDraft}
-                      title={t("saveAsDraft")}
-                      aria-label={t("saveAsDraft")}
-                    >
-                      <svg
-                        className="btn-action-icon"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth="2.5"
-                        width="20"
-                        height="20"
+                    {!isViewOnly && (
+                      <button
+                        type="button"
+                        className="btn-action-draft-top"
+                        onClick={handleSaveDraft}
+                        title={t("saveAsDraft")}
+                        aria-label={t("saveAsDraft")}
                       >
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V8l-4-4H8z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 20v-8M9 12h6" />
-                      </svg>
-                    </button>
+                        <svg
+                          className="btn-action-icon"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth="2.5"
+                          width="20"
+                          height="20"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V8l-4-4H8z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 20v-8M9 12h6" />
+                        </svg>
+                      </button>
+                    )}
                   </div>
                 </div>
+
+                {/* ── Action Feedback Toast / Alert ── */}
+                {actionFeedback && (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: "12px",
+                      padding: "12px 18px",
+                      borderRadius: "10px",
+                      marginBottom: "16px",
+                      fontSize: "13.5px",
+                      fontWeight: 600,
+                      backgroundColor: actionFeedback.type === "success" ? "#ecfdf5" : actionFeedback.type === "error" ? "#fef2f2" : "#eff6ff",
+                      border: `1.5px solid ${actionFeedback.type === "success" ? "#a7f3d0" : actionFeedback.type === "error" ? "#fecaca" : "#bfdbfe"}`,
+                      color: actionFeedback.type === "success" ? "#065f46" : actionFeedback.type === "error" ? "#991b1b" : "#1e40af",
+                      animation: "fadeInBanner 0.25s ease",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      {actionFeedback.type === "success" ? <CheckCircle2 size={18} /> : actionFeedback.type === "error" ? <AlertCircle size={18} /> : <Sparkles size={18} />}
+                      <span>{actionFeedback.message}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActionFeedback(null)}
+                      style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", padding: "2px" }}
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                )}
+
+                {/* ── Case 1: Edit Approved (Single-Use Edit Active) ── */}
+                {isCaseAlreadySubmitted && isEditApproved && (
+                  <div className="view-only-submitted-banner banner-state-approved">
+                    <div className="view-only-banner-icon">
+                      <Unlock size={22} />
+                    </div>
+                    <div className="view-only-banner-content">
+                      <div className="view-only-banner-title">
+                        {lang === "si"
+                          ? "✓ සංස්කරණ අවසරය අනුමත කර ඇත — එක්වර සංස්කරණය සක්‍රියයි"
+                          : lang === "ta"
+                          ? "✓ திருத்துவதற்கான அனுமதி அங்கீகரிக்கப்பட்டது — ஒருமுறை திருத்தம் செயலில் உள்ளது"
+                          : "✓ Edit Permission Approved — Form Unlocked (Single-Use Edit Active)"}
+                      </div>
+                      <p className="view-only-banner-desc">
+                        {lang === "si" ? (
+                          <>
+                            අනුමත කළ බලධාරියා: <strong>{editRequest?.reviewed_by || "අතිරේක ලේකම් / ජ්‍යෙෂ්ඨ සහකාර ලේකම් / සහකාර ලේකම් (විනය)"}</strong>
+                            {editRequest?.reviewer_comments ? ` ("${editRequest.reviewer_comments}")` : ""}.
+                            ඔබට මෙම ලිපිය <strong>එක් වරක් පමණක් (1 Time)</strong> සංස්කරණය කළ හැක. ඔබ සංශෝධන ඉදිරිපත් කළ පසු ලිපිය නැවත අගුළු වැටෙනු ඇත.
+                          </>
+                        ) : lang === "ta" ? (
+                          <>
+                            அங்கீகரித்த அதிகாரி: <strong>{editRequest?.reviewed_by || "கூடுதல் செயலாளர் / சிரேஷ்ட உதவிச் செயலாளர் / உதவிச் செயலாளர் (ஒழுக்கம்)"}</strong>.
+                            நீங்கள் இந்த கடிதத்தை <strong>ஒருமுறை மட்டுமே (1 Time)</strong> திருத்த முடியும். சமர்ப்பித்தவுடன் கடிதம் மீண்டும் பூட்டப்படும்.
+                          </>
+                        ) : (
+                          <>
+                            Approved by: <strong>{editRequest?.reviewed_by || "Additional Secretary / Senior Assistant Secretary / Assistant Secretary Discipline Branch"}</strong>
+                            {editRequest?.reviewer_comments ? ` ("${editRequest.reviewer_comments}")` : ""}.
+                            You are authorized to edit this submitted letter <strong>ONE TIME</strong>. Once you submit your changes, this permission will be completed and the letter will be locked again.
+                          </>
+                        )}
+                      </p>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+                      <button
+                        type="button"
+                        className="btn-relock-session"
+                        onClick={handleCancelEditSession}
+                        title={lang === "si" ? "සංස්කරණ සැසිය වසා ලිපිය නැවත අගුළු දමන්න" : "Close edit session and lock form"}
+                      >
+                        <Lock size={14} />
+                        <span>{lang === "si" ? "අගුළු දමන්න" : "Lock Form"}</span>
+                      </button>
+                      <div className="view-only-banner-badge banner-badge-approved">
+                        <Unlock size={14} />
+                        <span>{lang === "si" ? "එක්වර සංස්කරණය" : "1-Time Edit"}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Case 2: Edit Permission Requested (Pending Approval) ── */}
+                {isCaseAlreadySubmitted && isEditPending && (
+                  <div className="view-only-submitted-banner banner-state-pending">
+                    <div className="view-only-banner-icon">
+                      <Clock size={22} />
+                    </div>
+                    <div className="view-only-banner-content">
+                      <div className="view-only-banner-title">
+                        {lang === "si"
+                          ? "⏳ සංස්කරණ අවසර ඉල්ලීම යොමු කර ඇත — අනුමැතිය ලැබෙන තෙක් රැඳී සිටින්න"
+                          : lang === "ta"
+                          ? "⏳ திருத்துவதற்கான அனுமதி கோரப்பட்டுள்ளது — அங்கீகாரத்திற்காக காத்திருக்கிறது"
+                          : "⏳ Edit Permission Requested — Pending Approval"}
+                      </div>
+                      <p className="view-only-banner-desc">
+                        {lang === "si" ? (
+                          <>
+                            අනුමැතිය ඉල්ලුම් කළ බලධාරියා: <strong>{editRequest?.target_branch_admin || "අතිරේක ලේකම් / ජ්‍යෙෂ්ඨ සහකාර ලේකම් / සහකාර ලේකම් (විනය)"}</strong>
+                            {editRequest?.reason ? <> | හේතුව: <em>"{editRequest.reason}"</em></> : ""}.
+                            අතිරේක ලේකම්, ජ්‍යෙෂ්ඨ සහකාර ලේකම් හෝ සහකාර ලේකම් (විනය) විසින් අනුමත කළ පසු ඔබට එක් වරක් සංස්කරණය කිරීමට අවස්ථාව ලැබේ.
+                          </>
+                        ) : lang === "ta" ? (
+                          <>
+                            அங்கீகாரத்திற்காக கோரப்பட்ட அதிகாரி: <strong>{editRequest?.target_branch_admin || "கூடுதல் செயலாளர் / சிரேஷ்ட உதவிச் செயலாளர் / உதவிச் செயலாளர்"}</strong>
+                            {editRequest?.reason ? <> | காரணம்: <em>"{editRequest.reason}"</em></> : ""}.
+                            அங்கீகரிக்கப்பட்டதும் நீங்கள் ஒருமுறை திருத்த முடியும்.
+                          </>
+                        ) : (
+                          <>
+                            Requested authority: <strong>{editRequest?.target_branch_admin || "Additional Secretary / Senior Assistant Secretary / Assistant Secretary Discipline Branch"}</strong>
+                            {editRequest?.reason ? <> | Reason: <em>"{editRequest.reason}"</em></> : ""}.
+                            Awaiting approval from the Additional Secretary, Senior Assistant Secretary, or Assistant Secretary Discipline Branch.
+                          </>
+                        )}
+                      </p>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+                      <button
+                        type="button"
+                        className="btn-refresh-approval-status"
+                        onClick={() => refreshApprovalStatus()}
+                        disabled={isLoadingEditStatus}
+                        title={lang === "si" ? "අනුමැති තත්ත්වය නැවත පරීක්ෂා කරන්න" : "Check if approval has been granted"}
+                      >
+                        <RefreshCw size={13} style={{ animation: isLoadingEditStatus ? "spin 1s linear infinite" : "none" }} />
+                        <span>{lang === "si" ? "තත්ත්වය බලන්න" : "Check Status"}</span>
+                      </button>
+                      <div className="view-only-banner-badge banner-badge-pending">
+                        <Clock size={14} />
+                        <span>{lang === "si" ? "පොරොත්තු" : "Pending"}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Case 3: Locked in View-Only Mode (Can Request Edit Permission) ── */}
+                {isViewOnly && !isEditPending && (
+                  <div className="view-only-submitted-banner">
+                    <div className="view-only-banner-icon">
+                      <Lock size={22} />
+                    </div>
+                    <div className="view-only-banner-content">
+                      <div className="view-only-banner-title">
+                        {lang === "si"
+                          ? "ඉදිරිපත් කළ ලිපිය — නැරඹීම පමණි (View Only)"
+                          : lang === "ta"
+                          ? "சமர்ப்பிக்கப்பட்ட கடிதம் — பார்வை மட்டும் (View Only)"
+                          : "Submitted Letter — View Only Mode"}
+                      </div>
+                      <p className="view-only-banner-desc">
+                        {isEditUsed ? (
+                          lang === "si"
+                            ? "පෙර ලබා දුන් එක්වර සංස්කරණ අවසරය භාවිතා කර ඇත. ඔබ නැවත වැරදි තොරතුරු ඇතුළත් කර ඇත්නම්, පහත 'සංස්කරණ අවසර ඉල්ලුම් කරන්න' බොත්තම මඟින් නැවත අවසර ඉල්ලුම් කළ හැක."
+                            : lang === "ta"
+                            ? "முந்தைய ஒருமுறை திருத்தும் அனுமதி பயன்படுத்தப்பட்டு விட்டது. நீங்கள் மீண்டும் தவறான விவரங்களை உள்ளிட்டிருந்தால், கீழே உள்ள பொத்தானைப் பயன்படுத்தி மீண்டும் அனுமதி கோரலாம்."
+                            : "Previous single-use edit has been completed. If you entered wrong details again, you can request permission to edit again using the button below."
+                        ) : editRequest?.status === "Rejected" ? (
+                          lang === "si"
+                            ? `පෙර සංස්කරණ ඉල්ලීම ප්‍රතික්ෂේප කර ඇත (${editRequest?.reviewed_by || "පරිපාලක"}${editRequest?.reviewer_comments ? `: "${editRequest.reviewer_comments}"` : ""}). අවශ්‍ය නම් කරුණාකර නව අවසර ඉල්ලීමක් යොමු කරන්න.`
+                            : lang === "ta"
+                            ? `முந்தைய திருத்தும் கோரிக்கை நிராகரிக்கப்பட்டது (${editRequest?.reviewed_by || "நிர்வாகி"}). தேவைப்பட்டால் புதிய கோரிக்கையை சமர்ப்பிக்கவும்.`
+                            : `Previous edit request was rejected by ${editRequest?.reviewed_by || "Secretary"}${editRequest?.reviewer_comments ? `: "${editRequest.reviewer_comments}"` : ""}. You may request permission again if needed.`
+                        ) : (
+                          lang === "si"
+                            ? "මෙම ලිපිය සඳහා විෂය නිලධාරී විස්තර දැනටමත් ඉදිරිපත් කර ඇති බැවින් නැවත විස්තර සංශෝධනය කිරීමට අතිරේක ලේකම්, ජ්‍යෙෂ්ඨ සහකාර ලේකම් හෝ සහකාර ලේකම් (විනය) වෙතින් සංස්කරණ අවසරය ඉල්ලුම් කරන්න."
+                            : lang === "ta"
+                            ? "இந்த கடிதத்திற்கான விவரங்கள் ஏற்கனவே சமர்ப்பிக்கப்பட்டுள்ளன. திருத்தங்கள் செய்ய கூடுதல் செயலாளர், சிரேஷ்ட உதவிச் செயலாளர் அல்லது உதவிச் செயலாளரிடம் அனுமதி கோரலாம்."
+                            : "Subject officer details have already been submitted for this letter. To edit details, you must request permission from the Additional Secretary, Senior Assistant Secretary, or Assistant Secretary Discipline Branch."
+                        )}
+                      </p>
+                    </div>
+
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+                      <button
+                        type="button"
+                        className="btn-request-edit-perm"
+                        onClick={() => setShowRequestEditModal(true)}
+                        title={lang === "si" ? "සංස්කරණ අවසර ඉල්ලුම් කරන්න" : "Request permission to edit this submitted letter"}
+                      >
+                        <FileText size={15} />
+                        <span>{lang === "si" ? "සංස්කරණ අවසර ඉල්ලුම් කරන්න" : "Request Edit Permission"}</span>
+                      </button>
+
+                      <div className="view-only-banner-badge">
+                        <Eye size={14} />
+                        <span>{lang === "si" ? "කියවීම පමණි" : lang === "ta" ? "පார்வை மட்டும்" : "Read-Only"}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                  {letterData && (
                   <div className="current-case-details-card">
@@ -2333,7 +2886,7 @@ function CaseDetailsForm() {
 {isAnswerLetter ? (
                   /* ───────────────── Streamlined Case Details Form (Matching Handwritten Specification for Assigned Answer Letters) ───────────────── */
                   <>
-                    <div className="sketch-form-container">
+                    <div className={`sketch-form-container ${isViewOnly ? "form-view-only" : ""}`}>
                       {/* Row 1: File name (Left) & File No (Right) */}
                       <div className="sketch-form-row-2col">
                         {/* File Name Radio Group (Discipline / Mail) */}
@@ -2343,8 +2896,8 @@ function CaseDetailsForm() {
                           </label>
                           <div className="sketch-radio-row" role="radiogroup" aria-label={t("fileName", "File name")}>
                             <label
-                              className={`sketch-radio-pill ${fileName === "discipline" ? "active-discipline" : ""}`}
-                              onClick={() => setFileName("discipline")}
+                              className={`sketch-radio-pill ${fileName === "discipline" ? "active-discipline" : ""} ${isViewOnly ? "view-only-disabled" : ""}`}
+                              onClick={isViewOnly ? undefined : () => setFileName("discipline")}
                             >
                               <input
                                 type="radio"
@@ -2352,7 +2905,8 @@ function CaseDetailsForm() {
                                 id="fileNameDiscipline"
                                 value="discipline"
                                 checked={fileName === "discipline"}
-                                onChange={() => setFileName("discipline")}
+                                onChange={isViewOnly ? undefined : () => setFileName("discipline")}
+                                disabled={isViewOnly}
                                 className="sketch-radio-native"
                               />
                               <span className="sketch-radio-dot-outer">
@@ -2362,8 +2916,8 @@ function CaseDetailsForm() {
                             </label>
 
                             <label
-                              className={`sketch-radio-pill ${fileName === "mail" ? "active-mail" : ""}`}
-                              onClick={() => setFileName("mail")}
+                              className={`sketch-radio-pill ${fileName === "mail" ? "active-mail" : ""} ${isViewOnly ? "view-only-disabled" : ""}`}
+                              onClick={isViewOnly ? undefined : () => setFileName("mail")}
                             >
                               <input
                                 type="radio"
@@ -2371,7 +2925,8 @@ function CaseDetailsForm() {
                                 id="fileNameMail"
                                 value="mail"
                                 checked={fileName === "mail"}
-                                onChange={() => setFileName("mail")}
+                                onChange={isViewOnly ? undefined : () => setFileName("mail")}
+                                disabled={isViewOnly}
                                 className="sketch-radio-native"
                               />
                               <span className="sketch-radio-dot-outer">
@@ -2393,8 +2948,10 @@ function CaseDetailsForm() {
                             id="fileNoInput"
                             type="text"
                             required
+                            disabled={isViewOnly}
                             value={specialNotes || refNo}
                             onChange={(e) => {
+                              if (isViewOnly) return;
                               setSpecialNotes(e.target.value);
                               if (!refNo) setRefNo(e.target.value);
                             }}
@@ -2415,7 +2972,9 @@ function CaseDetailsForm() {
                             <select
                               id="upcomingActionsSelect"
                               value={reportState}
+                              disabled={isViewOnly}
                               onChange={(e) => {
+                                if (isViewOnly) return;
                                 isUserEditingReportStateRef.current = true;
                                 setReportState(e.target.value);
                               }}
@@ -2463,8 +3022,12 @@ function CaseDetailsForm() {
                               id="actionDateInput"
                               type="date"
                               required
+                              disabled={isViewOnly}
                               value={receivedDate}
-                              onChange={(e) => setReceivedDate(e.target.value)}
+                              onChange={(e) => {
+                                if (isViewOnly) return;
+                                setReceivedDate(e.target.value);
+                              }}
                               className="sketch-field-input sketch-date-input"
                             />
                             <svg className="sketch-date-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -2481,8 +3044,12 @@ function CaseDetailsForm() {
                         </label>
                         <textarea
                           id="complaintDescription"
+                          disabled={isViewOnly}
                           value={complaintMatter}
-                          onChange={(e) => setComplaintMatter(e.target.value)}
+                          onChange={(e) => {
+                            if (isViewOnly) return;
+                            setComplaintMatter(e.target.value);
+                          }}
                           className="sketch-field-textarea"
                           placeholder={lang === "si" ? "පැමිණිල්ල / ගොනුව පිළිබඳ විස්තර ඇතුළත් කරන්න..." : lang === "ta" ? "வழக்கு பற்றிய விவரங்களை உள்ளிடவும்..." : "Enter details and description regarding this case file..."}
                           rows={6}
@@ -2490,27 +3057,49 @@ function CaseDetailsForm() {
                       </div>
                     </div>
 
-                    {/* Action Buttons Row: Cancel and Submit */}
-                    <div className="sketch-form-actions">
-                      <button
-                        type="button"
-                        className="sketch-btn-cancel"
-                        onClick={() => router.push("/subject")}
-                      >
-                        {t("cancelBtn", "Cancel")}
-                      </button>
+                    {/* Action Buttons Row */}
+                    {isViewOnly ? (
+                      <div className="sketch-form-actions">
+                        <button
+                          type="button"
+                          className="sketch-btn-submit"
+                          onClick={() => router.push("/subject")}
+                        >
+                          {lang === "si" ? "ආපසු Dashboard වෙත" : lang === "ta" ? "டாஷ்போர்டுக்கு திரும்பு" : "Back to Dashboard"}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-print-summary"
+                          onClick={() => window.print()}
+                        >
+                          <Printer size={16} />
+                          <span>{lang === "si" ? "මුද්‍රණය කරන්න" : lang === "ta" ? "அச்சிடுக" : "Print Details"}</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="sketch-form-actions">
+                        <button
+                          type="button"
+                          className="sketch-btn-cancel"
+                          onClick={() => router.push("/subject")}
+                        >
+                          {t("cancelBtn", "Cancel")}
+                        </button>
 
-                      <button
-                        type="submit"
-                        className="sketch-btn-submit"
-                      >
-                        {t("submitBtn", "Submit")}
-                      </button>
-                    </div>
+                        <button
+                          type="submit"
+                          className="sketch-btn-submit"
+                        >
+                          {isEditApproved
+                            ? (lang === "si" ? "සංශෝධන ඉදිරිපත් කරන්න (1-Time Edit)" : "Submit Edited Details (1-Time Edit)")
+                            : t("submitBtn", "Submit")}
+                        </button>
+                      </div>
+                    )}
                   </>
                 ) : (
                   <>
-                    <div className="add-details-cards-grid">
+                    <div className={`add-details-cards-grid ${isViewOnly ? "form-view-only" : ""}`}>
                   {/* ───────────────── Left Card ("Complaint Information" Flowchart) ───────────────── */}
                   <div className="add-details-card">
                     <h2 className="card-title-header">
@@ -2536,20 +3125,22 @@ function CaseDetailsForm() {
                             <div className="radio-group-container" role="radiogroup" aria-label={t("fileName", "File name")} style={{ display: "flex", gap: "12px", alignItems: "center" }}>
                               <label
                                 className={`radio-option-item ${fileName === "discipline" ? "active" : ""}`}
+                                onClick={isViewOnly ? undefined : () => setFileName("discipline")}
                                 style={{
                                   display: "inline-flex",
                                   alignItems: "center",
                                   gap: "8px",
-                                  cursor: "pointer",
+                                  cursor: isViewOnly ? "default" : "pointer",
                                   padding: "9px 18px",
                                   borderRadius: "8px",
                                   border: fileName === "discipline" ? "1.5px solid #2563eb" : "1.5px solid #e2e8f0",
-                                  backgroundColor: fileName === "discipline" ? "#eff6ff" : "#ffffff",
+                                  backgroundColor: fileName === "discipline" ? "#eff6ff" : (isViewOnly ? "#f8fafc" : "#ffffff"),
                                   color: fileName === "discipline" ? "#1d4ed8" : "#334155",
                                   fontWeight: 600,
                                   fontSize: "14px",
                                   transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
-                                  userSelect: "none"
+                                  userSelect: "none",
+                                  opacity: isViewOnly && fileName !== "discipline" ? 0.6 : 1
                                 }}
                               >
                                 <input
@@ -2558,28 +3149,31 @@ function CaseDetailsForm() {
                                   id="fileNameDiscipline"
                                   value="discipline"
                                   checked={fileName === "discipline"}
-                                  onChange={() => setFileName("discipline")}
-                                  style={{ width: "18px", height: "18px", accentColor: "#2563eb", cursor: "pointer" }}
+                                  disabled={isViewOnly}
+                                  onChange={isViewOnly ? undefined : () => setFileName("discipline")}
+                                  style={{ width: "18px", height: "18px", accentColor: "#2563eb", cursor: isViewOnly ? "default" : "pointer" }}
                                 />
                                 <span>{t("discipline", "Discipline")}</span>
                               </label>
 
                               <label
                                 className={`radio-option-item ${fileName === "mail" ? "active" : ""}`}
+                                onClick={isViewOnly ? undefined : () => setFileName("mail")}
                                 style={{
                                   display: "inline-flex",
                                   alignItems: "center",
                                   gap: "8px",
-                                  cursor: "pointer",
+                                  cursor: isViewOnly ? "default" : "pointer",
                                   padding: "9px 18px",
                                   borderRadius: "8px",
                                   border: fileName === "mail" ? "1.5px solid #2563eb" : "1.5px solid #e2e8f0",
-                                  backgroundColor: fileName === "mail" ? "#eff6ff" : "#ffffff",
+                                  backgroundColor: fileName === "mail" ? "#eff6ff" : (isViewOnly ? "#f8fafc" : "#ffffff"),
                                   color: fileName === "mail" ? "#1d4ed8" : "#334155",
                                   fontWeight: 600,
                                   fontSize: "14px",
                                   transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
-                                  userSelect: "none"
+                                  userSelect: "none",
+                                  opacity: isViewOnly && fileName !== "mail" ? 0.6 : 1
                                 }}
                               >
                                 <input
@@ -2588,8 +3182,9 @@ function CaseDetailsForm() {
                                   id="fileNameMail"
                                   value="mail"
                                   checked={fileName === "mail"}
-                                  onChange={() => setFileName("mail")}
-                                  style={{ width: "18px", height: "18px", accentColor: "#2563eb", cursor: "pointer" }}
+                                  disabled={isViewOnly}
+                                  onChange={isViewOnly ? undefined : () => setFileName("mail")}
+                                  style={{ width: "18px", height: "18px", accentColor: "#2563eb", cursor: isViewOnly ? "default" : "pointer" }}
                                 />
                                 <span>{t("mail", "Mail")}</span>
                               </label>
@@ -2623,8 +3218,12 @@ function CaseDetailsForm() {
                               <input
                                 id="specialNotes"
                                 type="text"
+                                disabled={isViewOnly}
                                 value={specialNotes}
-                                onChange={(e) => setSpecialNotes(e.target.value)}
+                                onChange={(e) => {
+                                  if (isViewOnly) return;
+                                  setSpecialNotes(e.target.value);
+                                }}
                                 className="field-input"
                                 placeholder={fileName === "mail" ? "e.g. MAIL/FILE/102" : "e.g. SUB/FILE/102"}
                               />
@@ -2641,8 +3240,10 @@ function CaseDetailsForm() {
                               <div className="select-wrapper">
                                 <select
                                   id="reportState"
+                                  disabled={isViewOnly}
                                   value={(!isAnswerLetter && reportState === "Conduct an inspection") ? "statusInquiry" : reportState}
                                   onChange={(e) => {
+                                    if (isViewOnly) return;
                                     isUserEditingReportStateRef.current = true;
                                     setReportState(e.target.value);
                                   }}
@@ -2650,6 +3251,9 @@ function CaseDetailsForm() {
                                   required
                                 >
                                   <option value="">{t("Choose report state", "Select current status...")}</option>
+                                  <option value="statusPrincipalReports">{t("statusPrincipalReports", "Principal Reports")}</option>
+                                  <option value="statusRegionalReports">{t("statusRegionalReports", "Regional Reports")}</option>
+                                  <option value="statusProvincialReports">{t("statusProvincialReports", "Provincial Reports")}</option>
                                   <option value="statusCallingReports">{t("statusCallingReports")}</option>
                                   <option value="statusCallingCourtReports">{t("statusCallingCourtReports")}</option>
                                   <option value="statusPreliminaryInvestigation">{t("statusPreliminaryInvestigation")}</option>
@@ -2662,6 +3266,9 @@ function CaseDetailsForm() {
                                     ![
                                       "",
                                       "Conduct an inspection",
+                                      "statusPrincipalReports",
+                                      "statusRegionalReports",
+                                      "statusProvincialReports",
                                       "statusCallingReports",
                                       "statusCallingCourtReports",
                                       "statusPreliminaryInvestigation",
@@ -2693,8 +3300,12 @@ function CaseDetailsForm() {
                                 <input
                                   id="receivedDate"
                                   type="date"
+                                  disabled={isViewOnly}
                                   value={receivedDate}
-                                  onChange={(e) => setReceivedDate(e.target.value)}
+                                  onChange={(e) => {
+                                    if (isViewOnly) return;
+                                    setReceivedDate(e.target.value);
+                                  }}
                                   className="field-input input-with-right-icon"
                                 />
                                 <svg className="input-right-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -2714,12 +3325,14 @@ function CaseDetailsForm() {
                                     : t("preliminaryInvestigationType", "Select Preliminary Investigation Type")} <span className="required-star">*</span>
                                 </label>
                                 <div className="preliminary-checkbox-group" role="group" aria-label="Preliminary Investigation Type">
-                                  <label className={`checkbox-option-card ${preliminaryChecks.institutional ? "selected" : ""}`}>
+                                  <label className={`checkbox-option-card ${preliminaryChecks.institutional ? "selected" : ""}`} style={{ cursor: isViewOnly ? "default" : "pointer" }}>
                                     <input
                                       type="checkbox"
                                       id="chkInstitutionalInvestigation"
+                                      disabled={isViewOnly}
                                       checked={preliminaryChecks.institutional}
                                       onChange={() => {
+                                        if (isViewOnly) return;
                                         setPreliminaryChecks({ institutional: true, provincial: false });
                                       }}
                                       className="checkbox-option-input"
@@ -2740,12 +3353,14 @@ function CaseDetailsForm() {
                                     </span>
                                   </label>
 
-                                  <label className={`checkbox-option-card ${preliminaryChecks.provincial ? "selected" : ""}`}>
+                                  <label className={`checkbox-option-card ${preliminaryChecks.provincial ? "selected" : ""}`} style={{ cursor: isViewOnly ? "default" : "pointer" }}>
                                     <input
                                       type="checkbox"
                                       id="chkProvincialInvestigation"
+                                      disabled={isViewOnly}
                                       checked={preliminaryChecks.provincial}
                                       onChange={() => {
+                                        if (isViewOnly) return;
                                         setPreliminaryChecks({ institutional: false, provincial: true });
                                       }}
                                       className="checkbox-option-input"
@@ -2782,19 +3397,23 @@ function CaseDetailsForm() {
                           <div className="classification-toggle-group" role="radiogroup" aria-label="Complaint Classification">
                             <button
                               type="button"
+                              disabled={isViewOnly}
                               className={`toggle-btn ${classification === "nominal" ? "active" : ""}`}
-                              onClick={() => setClassification("nominal")}
+                              onClick={isViewOnly ? undefined : () => setClassification("nominal")}
                               aria-checked={classification === "nominal"}
                               role="radio"
+                              style={{ cursor: isViewOnly ? "default" : "pointer" }}
                             >
                               {t("nominalLabel", "Nominal")}
                             </button>
                             <button
                               type="button"
+                              disabled={isViewOnly}
                               className={`toggle-btn ${classification === "anonymous" ? "active" : ""}`}
-                              onClick={() => setClassification("anonymous")}
+                              onClick={isViewOnly ? undefined : () => setClassification("anonymous")}
                               aria-checked={classification === "anonymous"}
                               role="radio"
+                              style={{ cursor: isViewOnly ? "default" : "pointer" }}
                             >
                               {t("anonymousLabel", "Anonymous")}
                             </button>
@@ -2816,9 +3435,13 @@ function CaseDetailsForm() {
                                 <input
                                   id="complainantName"
                                   type="text"
-                                  required={classification === "nominal"}
+                                  disabled={isViewOnly}
+                                  required={!isViewOnly && classification === "nominal"}
                                   value={complainantName}
-                                  onChange={(e) => setComplainantName(e.target.value)}
+                                  onChange={(e) => {
+                                    if (isViewOnly) return;
+                                    setComplainantName(e.target.value);
+                                  }}
                                   className="field-input"
                                   placeholder="Enter name..."
                                 />
@@ -2830,8 +3453,12 @@ function CaseDetailsForm() {
                                 <input
                                   id="complainantAddress"
                                   type="text"
+                                  disabled={isViewOnly}
                                   value={complainantAddress}
-                                  onChange={(e) => setComplainantAddress(e.target.value)}
+                                  onChange={(e) => {
+                                    if (isViewOnly) return;
+                                    setComplainantAddress(e.target.value);
+                                  }}
                                   className="field-input"
                                   placeholder="Enter address..."
                                 />
@@ -2864,19 +3491,23 @@ function CaseDetailsForm() {
                           <div className="classification-toggle-group" role="radiogroup" aria-label="Concerned Person Toggle">
                             <button
                               type="button"
+                              disabled={isViewOnly}
                               className={`toggle-btn ${isConcerned === "yes" ? "active" : ""}`}
-                              onClick={() => setIsConcerned("yes")}
+                              onClick={isViewOnly ? undefined : () => setIsConcerned("yes")}
                               aria-checked={isConcerned === "yes"}
                               role="radio"
+                              style={{ cursor: isViewOnly ? "default" : "pointer" }}
                             >
                               {t("yesLabel", "Yes")}
                             </button>
                             <button
                               type="button"
+                              disabled={isViewOnly}
                               className={`toggle-btn ${isConcerned === "no" ? "active" : ""}`}
-                              onClick={() => setIsConcerned("no")}
+                              onClick={isViewOnly ? undefined : () => setIsConcerned("no")}
                               aria-checked={isConcerned === "no"}
                               role="radio"
+                              style={{ cursor: isViewOnly ? "default" : "pointer" }}
                             >
                               {t("noLabel", "No")}
                             </button>
@@ -2898,7 +3529,7 @@ function CaseDetailsForm() {
                                     <h3 className="step-section-title" style={{ margin: 0 }}>
                                       {t("personRelatedDetails", "Concerned Person Details")} {concernedPersons.length > 1 ? `#${index + 1}` : ""}
                                     </h3>
-                                    {concernedPersons.length > 1 && (
+                                    {!isViewOnly && concernedPersons.length > 1 && (
                                       <button
                                         type="button"
                                         onClick={() => handleRemovePerson(index)}
@@ -2934,9 +3565,13 @@ function CaseDetailsForm() {
                                       <input
                                         id={`officerName_${index}`}
                                         type="text"
-                                        required={isConcerned === "yes"}
+                                        disabled={isViewOnly}
+                                        required={!isViewOnly && isConcerned === "yes"}
                                         value={person.name}
-                                        onChange={(e) => handlePersonChange(index, "name", e.target.value)}
+                                        onChange={(e) => {
+                                          if (isViewOnly) return;
+                                          handlePersonChange(index, "name", e.target.value);
+                                        }}
                                         className="field-input"
                                         placeholder="Enter name..."
                                       />
@@ -2948,8 +3583,12 @@ function CaseDetailsForm() {
                                       <input
                                         id={`officerPosition_${index}`}
                                         type="text"
+                                        disabled={isViewOnly}
                                         value={person.position}
-                                        onChange={(e) => handlePersonChange(index, "position", e.target.value)}
+                                        onChange={(e) => {
+                                          if (isViewOnly) return;
+                                          handlePersonChange(index, "position", e.target.value);
+                                        }}
                                         className="field-input"
                                         placeholder="Enter position..."
                                       />
@@ -2962,8 +3601,12 @@ function CaseDetailsForm() {
                                       <input
                                         id={`officerDob_${index}`}
                                         type="date"
+                                        disabled={isViewOnly}
                                         value={person.dob}
-                                        onChange={(e) => handlePersonChange(index, "dob", e.target.value)}
+                                        onChange={(e) => {
+                                          if (isViewOnly) return;
+                                          handlePersonChange(index, "dob", e.target.value);
+                                        }}
                                         className="field-input"
                                       />
                                     </div>
@@ -2972,8 +3615,12 @@ function CaseDetailsForm() {
                                       <input
                                         id={`officerNic_${index}`}
                                         type="text"
+                                        disabled={isViewOnly}
                                         value={person.nic}
-                                        onChange={(e) => handlePersonChange(index, "nic", e.target.value)}
+                                        onChange={(e) => {
+                                          if (isViewOnly) return;
+                                          handlePersonChange(index, "nic", e.target.value);
+                                        }}
                                         className="field-input"
                                         placeholder="NIC number"
                                       />
@@ -2986,8 +3633,12 @@ function CaseDetailsForm() {
                                       <input
                                         id={`officerApptDate_${index}`}
                                         type="date"
+                                        disabled={isViewOnly}
                                         value={person.appointmentDate}
-                                        onChange={(e) => handlePersonChange(index, "appointmentDate", e.target.value)}
+                                        onChange={(e) => {
+                                          if (isViewOnly) return;
+                                          handlePersonChange(index, "appointmentDate", e.target.value);
+                                        }}
                                         className="field-input"
                                       />
                                     </div>
@@ -2996,8 +3647,12 @@ function CaseDetailsForm() {
                                       <input
                                         id={`officerAddress_${index}`}
                                         type="text"
+                                        disabled={isViewOnly}
                                         value={person.address}
-                                        onChange={(e) => handlePersonChange(index, "address", e.target.value)}
+                                        onChange={(e) => {
+                                          if (isViewOnly) return;
+                                          handlePersonChange(index, "address", e.target.value);
+                                        }}
                                         className="field-input"
                                         placeholder="Address"
                                       />
@@ -3007,33 +3662,35 @@ function CaseDetailsForm() {
                               ))}
 
                               {/* Plus Button to add another person */}
-                              <button
-                                type="button"
-                                onClick={handleAddPerson}
-                                style={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  gap: "8px",
-                                  padding: "10px 18px",
-                                  backgroundColor: "#eff6ff",
-                                  color: "#1d4ed8",
-                                  border: "1.5px dashed #93c5fd",
-                                  borderRadius: "8px",
-                                  fontWeight: 700,
-                                  fontSize: "14px",
-                                  cursor: "pointer",
-                                  transition: "all 0.2s ease",
-                                  marginTop: "4px"
-                                }}
-                              >
-                                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                                </svg>
-                                <span>
-                                  {lang === "si" ? "+ තවත් පුද්ගලයෙකු එක් කරන්න" : "+ Add Another Person"}
-                                </span>
-                              </button>
+                              {!isViewOnly && (
+                                <button
+                                  type="button"
+                                  onClick={handleAddPerson}
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    gap: "8px",
+                                    padding: "10px 18px",
+                                    backgroundColor: "#eff6ff",
+                                    color: "#1d4ed8",
+                                    border: "1.5px dashed #93c5fd",
+                                    borderRadius: "8px",
+                                    fontWeight: 700,
+                                    fontSize: "14px",
+                                    cursor: "pointer",
+                                    transition: "all 0.2s ease",
+                                    marginTop: "4px"
+                                  }}
+                                >
+                                  <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                                  </svg>
+                                  <span>
+                                    {lang === "si" ? "+ තවත් පුද්ගලයෙකු එක් කරන්න" : "+ Add Another Person"}
+                                  </span>
+                                </button>
+                              )}
                             </div>
                           )}
                         </div>
@@ -3052,10 +3709,15 @@ function CaseDetailsForm() {
                               <input
                                 id="schoolName"
                                 type="text"
-                                required
+                                required={!isViewOnly}
+                                disabled={isViewOnly}
                                 value={schoolName}
-                                onChange={(e) => handleSchoolNameChange(e.target.value)}
+                                onChange={(e) => {
+                                  if (isViewOnly) return;
+                                  handleSchoolNameChange(e.target.value);
+                                }}
                                 onFocus={() => {
+                                  if (isViewOnly) return;
                                   const query = schoolName.trim().toLowerCase();
                                   if (query.length > 0 && institutesList.length > 0) {
                                     const matches = institutesList
@@ -3074,7 +3736,7 @@ function CaseDetailsForm() {
                               />
 
                               {/* Autocomplete Dropdown List from institute_table */}
-                              {showInstituteDropdown && filteredInstitutes.length > 0 && (
+                              {!isViewOnly && showInstituteDropdown && filteredInstitutes.length > 0 && (
                                 <ul
                                   style={{
                                     position: "absolute",
@@ -3126,8 +3788,10 @@ function CaseDetailsForm() {
                               <input
                                 id="schoolAddress"
                                 type="text"
+                                disabled={isViewOnly}
                                 value={schoolAddress}
                                 onChange={(e) => {
+                                  if (isViewOnly) return;
                                   isUserEditingSchoolRef.current = true;
                                   setSchoolAddress(e.target.value);
                                 }}
@@ -3149,9 +3813,13 @@ function CaseDetailsForm() {
                             </label>
                             <textarea
                               id="complaintMatter"
-                              required
+                              required={!isViewOnly}
+                              disabled={isViewOnly}
                               value={complaintMatter}
-                              onChange={(e) => setComplaintMatter(e.target.value)}
+                              onChange={(e) => {
+                                if (isViewOnly) return;
+                                setComplaintMatter(e.target.value);
+                              }}
                               className="field-textarea"
                               placeholder="Enter details of the complaint matter..."
                               rows={4}
@@ -3170,19 +3838,23 @@ function CaseDetailsForm() {
                           <div className="classification-toggle-group" role="radiogroup" aria-label="Education Secretary Approval Toggle">
                             <button
                               type="button"
+                              disabled={isViewOnly}
                               className={`toggle-btn ${eduSecretaryApproval === "yes" ? "active" : ""}`}
-                              onClick={() => setEduSecretaryApproval("yes")}
+                              onClick={isViewOnly ? undefined : () => setEduSecretaryApproval("yes")}
                               aria-checked={eduSecretaryApproval === "yes"}
                               role="radio"
+                              style={{ cursor: isViewOnly ? "default" : "pointer" }}
                             >
                               {t("receivedLabel", "ලැබී ඇත")}
                             </button>
                             <button
                               type="button"
+                              disabled={isViewOnly}
                               className={`toggle-btn ${eduSecretaryApproval === "no" ? "active" : ""}`}
-                              onClick={() => setEduSecretaryApproval("no")}
+                              onClick={isViewOnly ? undefined : () => setEduSecretaryApproval("no")}
                               aria-checked={eduSecretaryApproval === "no"}
                               role="radio"
+                              style={{ cursor: isViewOnly ? "default" : "pointer" }}
                             >
                               {t("notReceivedLabel", "ලැබී නැත")}
                             </button>
@@ -3196,9 +3868,13 @@ function CaseDetailsForm() {
                               <input
                                 id="approvalDate"
                                 type="date"
-                                required={eduSecretaryApproval === "yes"}
+                                disabled={isViewOnly}
+                                required={!isViewOnly && eduSecretaryApproval === "yes"}
                                 value={approvalDate}
-                                onChange={(e) => setApprovalDate(e.target.value)}
+                                onChange={(e) => {
+                                  if (isViewOnly) return;
+                                  setApprovalDate(e.target.value);
+                                }}
                                 className="field-input"
                               />
                             </div>
@@ -3211,22 +3887,44 @@ function CaseDetailsForm() {
                 </div>
 
               {/* Action Buttons Row */}
-              <div className="add-details-form-actions">
-                <button
-                  type="button"
-                  className="btn-action-cancel"
-                  onClick={() => router.push("/subject")}
-                >
-                  {t("cancelBtn")}
-                </button>
+              {isViewOnly ? (
+                <div className="add-details-form-actions">
+                  <button
+                    type="button"
+                    className="btn-action-submit"
+                    onClick={() => router.push("/subject")}
+                  >
+                    {lang === "si" ? "ආපසු Dashboard වෙත" : lang === "ta" ? "டாஷ்போர்டுக்கு திரும்பு" : "Back to Dashboard"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-print-summary"
+                    onClick={() => window.print()}
+                  >
+                    <Printer size={16} />
+                    <span>{lang === "si" ? "මුද්‍රණය කරන්න" : lang === "ta" ? "அச்சிடுக" : "Print Details"}</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="add-details-form-actions">
+                  <button
+                    type="button"
+                    className="btn-action-cancel"
+                    onClick={() => router.push("/subject")}
+                  >
+                    {t("cancelBtn")}
+                  </button>
 
-                <button
-                  type="submit"
-                  className="btn-action-submit"
-                >
-                  {t("submitToPrelimBtn")}
-                </button>
-              </div>
+                  <button
+                    type="submit"
+                    className="btn-action-submit"
+                  >
+                    {isEditApproved
+                      ? (lang === "si" ? "සංශෝධන ඉදිරිපත් කරන්න (1-Time Edit)" : "Submit Edited Details (1-Time Edit)")
+                      : t("submitBtn", "Submit")}
+                  </button>
+                </div>
+              )}
                   </>
                 )}
             </form>
@@ -3237,6 +3935,154 @@ function CaseDetailsForm() {
           <SiteFooter />
         </main>
       </div>
+
+      {/* ── Request Letter Edit Permission Modal ── */}
+      {showRequestEditModal && (
+        <div className="request-edit-modal-backdrop" onClick={() => setShowRequestEditModal(false)}>
+          <div className="request-edit-modal-box" onClick={(e) => e.stopPropagation()}>
+            <div className="request-edit-modal-header">
+              <div className="request-edit-modal-title-wrap">
+                <div className="request-edit-modal-icon-badge">
+                  <ShieldCheck size={22} />
+                </div>
+                <div>
+                  <h3 className="request-edit-modal-title">
+                    {lang === "si" ? "ලිපිය සංස්කරණය කිරීමට අවසර ඉල්ලීම" : "Request Letter Edit Permission"}
+                  </h3>
+                  <p className="request-edit-modal-subtitle">
+                    {lang === "si"
+                      ? "අතිරේක ලේකම්, ජ්‍යෙෂ්ඨ සහකාර ලේකම් හෝ සහකාර ලේකම් (විනය) වෙතින් අනුමැතිය ලබාගන්න"
+                      : "Request approval from Additional Secretary, Senior Assistant Secretary, or Assistant Secretary Discipline Branch"}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="request-edit-modal-close"
+                onClick={() => setShowRequestEditModal(false)}
+                aria-label="Close"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSendApprovalRequest}>
+              <div className="request-edit-modal-body">
+                {/* Case / Letter Reference Card */}
+                <div className="request-edit-info-card">
+                  <div className="request-edit-info-item">
+                    <span className="request-edit-info-label">{lang === "si" ? "යොමු අංකය / නඩුව" : "Reference / Case No"}</span>
+                    <span className="request-edit-info-val">{refNo || caseNoParam}</span>
+                  </div>
+                  <div className="request-edit-info-item">
+                    <span className="request-edit-info-label">{lang === "si" ? "ඉල්ලුම් කරන නිලධාරී" : "Requested By"}</span>
+                    <span className="request-edit-info-val">{currentUserProfile?.full_name || "Subject Officer"}</span>
+                  </div>
+                </div>
+
+                {/* Policy Notice Box */}
+                <div className="request-edit-policy-box">
+                  <strong>ℹ️ {lang === "si" ? "එක්වර සංස්කරණ ප්‍රතිපත්තිය (Single-Use Edit):" : "One-Time Edit Policy:"}</strong>{" "}
+                  {lang === "si"
+                    ? "අනුමැතිය ලැබුණු පසු ඔබට මෙම ලිපිය එක් වරක් (1 time) සංස්කරණය කළ හැක. ඔබ විස්තර සංශෝධනය කර සුරකින විට අවසරය සම්පූර්ණ වී ලිපිය නැවත අගුළු වැටෙනු ඇත. නැවත වැරදි සිදුවුවහොත් නැවත අවසර ඉල්ලුම් කළ යුතුය."
+                    : "Once approved by the Secretary, you will be permitted to edit this letter ONE TIME. Saving changes will consume the permission and re-lock the letter. If wrong details are entered again, you must request permission again."}
+                </div>
+
+                {/* Target Approver Dropdown */}
+                <div className="request-edit-field-group">
+                  <label htmlFor="targetSecSelect" className="request-edit-field-label">
+                    {lang === "si" ? "අනුමැතිය ඉල්ලුම් කරන බලධාරියා" : "Approving Administrative Authority"}
+                  </label>
+                  <select
+                    id="targetSecSelect"
+                    className="request-edit-field-select"
+                    value={targetSecretary}
+                    onChange={(e) => setTargetSecretary(e.target.value)}
+                  >
+                    <option value="All Discipline Branch Administrative Officers">
+                      {lang === "si" ? "සියලු විනය අංශ මාණ්ඩලික නිලධාරීන් (All Administrative Secretaries)" : "All Discipline Branch Administrative Officers"}
+                    </option>
+                    <option value="Additional Secretary">
+                      {lang === "si" ? "අතිරේක ලේකම් (Additional Secretary)" : "Additional Secretary"}
+                    </option>
+                    <option value="Senior Assistant Secretary">
+                      {lang === "si" ? "නියෝජ්‍ය ලේකම් / ජ්‍යෙෂ්ඨ සහකාර ලේකම් (Senior Assistant Secretary)" : "Senior Assistant Secretary"}
+                    </option>
+                    <option value="Assistant Secretary Discipline Branch">
+                      {lang === "si" ? "සහකාර ලේකම් - විනය අංශය (Assistant Secretary Discipline Branch)" : "Assistant Secretary Discipline Branch"}
+                    </option>
+                  </select>
+                </div>
+
+                {/* Reason Textarea */}
+                <div className="request-edit-field-group">
+                  <label htmlFor="editReasonTextarea" className="request-edit-field-label">
+                    {lang === "si" ? "සංස්කරණය කිරීමට හේතුව (අනිවාර්යයි)" : "Reason for Edit Request (Required)"}
+                  </label>
+                  <textarea
+                    id="editReasonTextarea"
+                    className="request-edit-field-textarea"
+                    placeholder={
+                      lang === "si"
+                        ? "උදා: පාසල් තොරතුරු වැරදි ලෙස ඇතුළත් කර ඇත, නිවැරදි චූදිත නිලධාරී තොරතුරු ඇතුළත් කිරීමට අවශ්‍යයි..."
+                        : "e.g. Wrong school details entered, need to correct accused officer name/NIC, amend future action step..."
+                    }
+                    value={editReason}
+                    onChange={(e) => setEditReason(e.target.value)}
+                    rows={3}
+                    required
+                  />
+
+                  {/* Quick Reason Chips */}
+                  <div className="request-edit-chips-wrap">
+                    {[
+                      { si: "වැරදි පාසල් තොරතුරු", en: "Incorrect school details" },
+                      { si: "වැරදි චූදිත නිලධාරී තොරතුරු", en: "Incorrect accused officer info" },
+                      { si: "ඉදිරි ක්‍රියාමාර්ගය සංශෝධනය", en: "Amend future action step" },
+                      { si: "ගොනු අංකය / දිනය නිවැරදි කිරීම", en: "Correct file no or dates" },
+                    ].map((chip, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        className="request-edit-chip"
+                        onClick={() => {
+                          const text = lang === "si" ? chip.si : chip.en;
+                          setEditReason((prev) => (prev ? `${prev}, ${text}` : text));
+                        }}
+                      >
+                        + {lang === "si" ? chip.si : chip.en}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="request-edit-modal-footer">
+                <button
+                  type="button"
+                  className="btn-modal-cancel"
+                  onClick={() => setShowRequestEditModal(false)}
+                  disabled={isSubmittingEditRequest}
+                >
+                  {lang === "si" ? "අවලංගු කරන්න" : "Cancel"}
+                </button>
+                <button
+                  type="submit"
+                  className="btn-modal-submit-request"
+                  disabled={isSubmittingEditRequest || !editReason.trim()}
+                >
+                  <Send size={14} />
+                  <span>
+                    {isSubmittingEditRequest
+                      ? (lang === "si" ? "යවමින් පවතී..." : "Sending...")
+                      : (lang === "si" ? "අනුමැති ඉල්ලීම යවන්න" : "Send Permission Request")}
+                  </span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

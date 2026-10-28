@@ -23,6 +23,7 @@ import {
 import "./admin.css";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { signOut, getCurrentProfile, dashboardPath, getAddLetterButtonLabel } from "@/lib/auth";
+import { compareLettersLatestFirst } from "@/lib/letter-sort";
 import {
   getDailyMailRecordsServer,
   getLetterEditRequestsServer,
@@ -473,16 +474,21 @@ function AdminDashboardContent() {
 
   const handleApproveRequest = async (requestId: string, refNo: string) => {
     try {
-      const adminName = currentUserProfile?.full_name || "Branch Administrator";
+      const roleTitle = currentUserProfile?.role
+        ? getRoleDisplayName(currentUserProfile.role)
+        : "Additional Secretary / Branch Administrator";
+      const adminName = currentUserProfile?.full_name
+        ? `${currentUserProfile.full_name} (${roleTitle})`
+        : roleTitle;
       const res = await updateLetterEditRequestStatusServer({
         requestId,
         status: "Approved",
         reviewed_by: adminName,
-        reviewer_comments: "Approved via Admin Dashboard",
+        reviewer_comments: `Approved for single-use edit by ${roleTitle}`,
       });
       if (res && res.success) {
         setPendingEditRequests((prev) => prev.filter((r) => r.id !== requestId));
-        setToastMessage(`✓ Request for "${refNo}" approved. Officer can now edit the form.`);
+        setToastMessage(`✓ Request for "${refNo}" approved. Officer can now edit the letter one time.`);
         setShowToast(true);
         setTimeout(() => setShowToast(false), 4000);
       } else {
@@ -584,6 +590,7 @@ function AdminDashboardContent() {
               rawLetter: c,
             }));
 
+            mapped.sort(compareLettersLatestFirst);
             setAllMappedCases(mapped);
             setAllCases(mapped.map((m) => ({ type: m.type, status: m.status })));
             setRecentCases(mapped.slice(0, 10));
@@ -3272,8 +3279,14 @@ function AdminDashboardContent() {
                       <div>
                         <strong>{req.requested_by}</strong>
                         <div style={{ fontSize: "11px", color: "#64748b" }}>
-                          {req.requester_role || "Daily Mail Officer"} {req.requester_email ? `• ${req.requester_email}` : ""}
+                          <span style={{ fontWeight: 600, color: "#1e40af" }}>{req.requester_role || "Subject Officer"}</span>
+                          {req.requester_email ? ` • ${req.requester_email}` : ""}
                         </div>
+                        {req.target_branch_admin && (
+                          <div style={{ fontSize: "11px", color: "#92400e", marginTop: "2px" }}>
+                            🎯 {lang === "si" ? "ඉල්ලූ බලධාරියා:" : "Target:"} {req.target_branch_admin}
+                          </div>
+                        )}
                       </div>
                     </td>
                     <td>
@@ -3303,7 +3316,7 @@ function AdminDashboardContent() {
                           ✕ {lang === "si" ? "ප්‍රතික්ෂේප" : "Reject"}
                         </button>
                         <Link
-                          href={`/daily-mail/register?id=${encodeURIComponent(req.letter_id || req.ref_no)}`}
+                          href={req.requester_role === "Subject Officer" ? `/subject/add-details?caseNo=${encodeURIComponent(req.ref_no || req.letter_id)}` : `/daily-mail/register?id=${encodeURIComponent(req.letter_id || req.ref_no)}`}
                           style={{
                             display: "inline-flex",
                             alignItems: "center",
@@ -3318,7 +3331,7 @@ function AdminDashboardContent() {
                             textDecoration: "none"
                           }}
                         >
-                          👁 {lang === "si" ? "බලන්න" : "Review Form"}
+                          👁 {lang === "si" ? "ලිපිය බලන්න" : "Review Form"}
                         </Link>
                       </div>
                     </td>

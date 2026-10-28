@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { compareLettersLatestFirst } from "@/lib/letter-sort";
 
 function serializeForServerAction<T>(obj: T): any {
   if (obj === null || obj === undefined) return obj;
@@ -199,6 +200,7 @@ export async function getDailyMailRecordsServer() {
       console.warn("Could not query dcmms_daily_mail table:", e);
     }
 
+    combinedData.sort(compareLettersLatestFirst);
     return serializeForServerAction({ success: true, data: combinedData });
   } catch (error: any) {
     console.error("Error fetching daily mail records:", error);
@@ -1277,12 +1279,48 @@ export async function getSubjectOfficerDashboardCasesServer(
       `;
     } catch (e) {}
 
-    // 5. Fetch Details to see which cases have existing actions
+    // 5. Fetch Details to see which cases have existing actions / submitted details
     let detailsRaw: any[] = [];
     try {
-      detailsRaw = await prisma.$queryRaw`
-        SELECT ref_number as case_no FROM public.subject_officer_form_table;
+      const p1: any[] = await prisma.$queryRaw`
+        SELECT ref_number as case_no FROM public.subject_officer_form_table WHERE ref_number IS NOT NULL;
       `;
+      if (Array.isArray(p1)) detailsRaw.push(...p1);
+    } catch (e) {}
+
+    try {
+      const p1Sub: any[] = await prisma.$queryRaw`
+        SELECT subject_file_no as case_no FROM public.subject_officer_form_table WHERE subject_file_no IS NOT NULL;
+      `;
+      if (Array.isArray(p1Sub)) detailsRaw.push(...p1Sub);
+    } catch (e) {}
+
+    try {
+      const p2: any[] = await prisma.$queryRaw`
+        SELECT ref_number as case_no FROM public.reply_letter_details_table WHERE ref_number IS NOT NULL;
+      `;
+      if (Array.isArray(p2)) detailsRaw.push(...p2);
+    } catch (e) {}
+
+    try {
+      const p2File: any[] = await prisma.$queryRaw`
+        SELECT file_no as case_no FROM public.reply_letter_details_table WHERE file_no IS NOT NULL;
+      `;
+      if (Array.isArray(p2File)) detailsRaw.push(...p2File);
+    } catch (e) {}
+
+    try {
+      const p3: any[] = await prisma.$queryRaw`
+        SELECT case_no FROM public.dcmms_subject_details WHERE case_no IS NOT NULL;
+      `;
+      if (Array.isArray(p3)) detailsRaw.push(...p3);
+    } catch (e) {}
+
+    try {
+      const p4: any[] = await prisma.$queryRaw`
+        SELECT case_no FROM public.dcmms_concerned_officers WHERE case_no IS NOT NULL;
+      `;
+      if (Array.isArray(p4)) detailsRaw.push(...p4);
     } catch (e) {}
 
     // 6. Fetch Reply Letters
@@ -1348,7 +1386,9 @@ export async function getSubjectOfficerDashboardCasesServer(
       );
     };
 
-    const casesWithDetails = new Set(detailsRaw.map((d: any) => d.case_no));
+    const casesWithDetails = new Set(
+      detailsRaw.map((d: any) => String(d.case_no || "").trim().toLowerCase()).filter(Boolean)
+    );
     const refToReceivedDate = new Map<string, string>();
     const refToLetterDate = new Map<string, string>();
     const refToCreatedAt = new Map<string, string>();
@@ -1485,6 +1525,11 @@ export async function getSubjectOfficerDashboardCasesServer(
 
         const isClosed = item.status === "Closed" || finalizedCaseNos.includes(item.case_no.toLowerCase());
 
+        const isCaseSubmitted =
+          casesWithDetails.has(String(item.case_no || "").trim().toLowerCase()) ||
+          casesWithDetails.has(String(item.letter_no || "").trim().toLowerCase()) ||
+          isClosed;
+
         mappedCases.push({
           id: item.id || `case-${item.case_no}`,
           caseNo: item.case_no,
@@ -1502,7 +1547,9 @@ export async function getSubjectOfficerDashboardCasesServer(
           priority: resolvedPriority,
           status: isClosed ? "Closed" : (item.status || "In Progress"),
           upcomingAction: refToUpcomingAction.get(item.case_no.toLowerCase()) || "",
-          isOld: casesWithDetails.has(item.case_no) || isClosed || item.status === "Pending",
+          isOld: isCaseSubmitted || item.status === "Pending",
+          isSubmitted: isCaseSubmitted,
+          hasSubjectDetails: isCaseSubmitted,
         });
       }
     });
@@ -1516,6 +1563,10 @@ export async function getSubjectOfficerDashboardCasesServer(
         const resolvedPriority = (meta.priority || "medium").toLowerCase();
 
         const isClosed = finalizedCaseNos.includes(String(refNo).toLowerCase());
+        const isCaseSubmitted =
+          casesWithDetails.has(String(refNo || "").trim().toLowerCase()) ||
+          casesWithDetails.has(String(meta.letterNo || "").trim().toLowerCase()) ||
+          isClosed;
 
         mappedCases.push({
           id: `case-${refNo}`,
@@ -1534,19 +1585,14 @@ export async function getSubjectOfficerDashboardCasesServer(
           priority: resolvedPriority,
           status: isClosed ? "Closed" : "In Progress",
           upcomingAction: refToUpcomingAction.get(String(refNo).toLowerCase()) || "",
-          isOld: casesWithDetails.has(refNo) || isClosed,
+          isOld: isCaseSubmitted,
+          isSubmitted: isCaseSubmitted,
+          hasSubjectDetails: isCaseSubmitted,
         });
       }
     });
 
-    mappedCases.sort((a, b) => {
-      const timeA = new Date(a.createdAt || 0).getTime();
-      const timeB = new Date(b.createdAt || 0).getTime();
-      if (timeA !== timeB) return timeB - timeA;
-      const dateA = new Date(a.letterDate || a.receivedDate || a.assignedDate || 0).getTime();
-      const dateB = new Date(b.letterDate || b.receivedDate || b.assignedDate || 0).getTime();
-      return dateB - dateA;
-    });
+    mappedCases.sort(compareLettersLatestFirst);
 
     // Build answer letters list (Assigned Answer Letters / Reply Tab 2)
     const inquiryCaseNos = replyLettersRaw
@@ -1585,6 +1631,7 @@ export async function getSubjectOfficerDashboardCasesServer(
           const letterData = refToLetterData.get(cNoLower) || {};
           const rawSub = letterData.subject && letterData.subject !== "N/A" && letterData.subject !== "—" ? letterData.subject : "";
           const resolvedSub = rawSub || a.progress_details || (letterData.subject_category ? `Answer Letter (${letterData.subject_category})` : `Answer Letter (${cNo})`);
+          const isAnsSubmitted = casesWithDetails.has(cNoLower) || isClosed;
           answerLettersList.push({
             id: a.id || `asgn-${cNo}`,
             caseNo: cNo,
@@ -1598,6 +1645,8 @@ export async function getSubjectOfficerDashboardCasesServer(
             status: isClosed ? "Closed" : "Assigned Answer Letter",
             isAnswerLetter: true,
             nature: letterData.nature_of_letter || letterData.region_province || "Answer Letter",
+            isSubmitted: isAnsSubmitted,
+            hasSubjectDetails: isAnsSubmitted,
           });
         }
       }
@@ -1620,6 +1669,7 @@ export async function getSubjectOfficerDashboardCasesServer(
           const letterData = refToLetterData.get(cNoLower) || {};
           const rawSub = letterData.subject && letterData.subject !== "N/A" && letterData.subject !== "—" ? letterData.subject : "";
           const resolvedSub = rawSub || (sc.subject && sc.subject !== "N/A" && sc.subject !== "—" ? sc.subject : "") || (letterData.subject_category ? `Answer Letter (${letterData.subject_category})` : `Answer Letter (${cNo})`);
+          const isAnsSubmitted = casesWithDetails.has(cNoLower) || isClosed;
           answerLettersList.push({
             id: sc.id || `case-${cNo}`,
             caseNo: cNo,
@@ -1633,6 +1683,8 @@ export async function getSubjectOfficerDashboardCasesServer(
             status: isClosed ? "Closed" : "Assigned Answer Letter",
             isAnswerLetter: true,
             nature: letterData.nature_of_letter || letterData.region_province || "Answer Letter",
+            isSubmitted: isAnsSubmitted,
+            hasSubjectDetails: isAnsSubmitted,
           });
         }
       }
@@ -1651,6 +1703,7 @@ export async function getSubjectOfficerDashboardCasesServer(
           seenAnswerIds.add(itemKey);
           const rawSub = l.subject && l.subject !== "N/A" && l.subject !== "—" ? l.subject : "";
           const resolvedSub = rawSub || (l.subject_category ? `Answer Letter (${l.subject_category})` : `Answer Letter (${l.ref_no || l.letter_no})`);
+          const isAnsSubmitted = casesWithDetails.has(cleanRef) || isClosed;
           answerLettersList.push({
             id: l.id,
             caseNo: l.ref_no || l.letter_no || l.id,
@@ -1664,6 +1717,8 @@ export async function getSubjectOfficerDashboardCasesServer(
             status: isClosed ? "Closed" : "Assigned Answer Letter",
             isAnswerLetter: true,
             nature: l.nature_of_letter || l.region_province || "Answer Letter",
+            isSubmitted: isAnsSubmitted,
+            hasSubjectDetails: isAnsSubmitted,
           });
         }
       }
@@ -1681,6 +1736,7 @@ export async function getSubjectOfficerDashboardCasesServer(
         if (!seenAnswerIds.has(itemKey)) {
           seenAnswerIds.add(itemKey);
           const resolvedSub = m.letter_title || `Subsequent Answer Letter (${m.case_no})`;
+          const isAnsSubmitted = casesWithDetails.has(cleanRef) || isClosed;
           answerLettersList.push({
             id: m.id,
             caseNo: m.case_no,
@@ -1694,6 +1750,8 @@ export async function getSubjectOfficerDashboardCasesServer(
             status: isClosed ? "Closed" : "Assigned Answer Letter",
             isAnswerLetter: true,
             nature: "Answer Letter",
+            isSubmitted: isAnsSubmitted,
+            hasSubjectDetails: isAnsSubmitted,
           });
         }
       }
@@ -1863,6 +1921,9 @@ export async function getSubjectOfficerDashboardCasesServer(
       }
     });
 
+    mappedCases.sort(compareLettersLatestFirst);
+    answerLettersList.sort(compareLettersLatestFirst);
+
     return serializeForServerAction({
       success: true,
       data: {
@@ -1871,6 +1932,7 @@ export async function getSubjectOfficerDashboardCasesServer(
         assignments: mappedAssignments,
         replyLetters: filteredReplyLetters,
         concernedOfficers: cMap,
+        submittedCaseNos: Array.from(casesWithDetails),
       },
     });
   } catch (error: any) {
@@ -2598,7 +2660,7 @@ export async function getProvincialInvestigationsListServer() {
           sof.complainant_name as "sofComplainant",
           dml.letter_number as "letterNo",
           dml.subject_of_letter as "mailSubject",
-          dml.sender_name as "dmlSender",
+          dml.senders_party as "dmlSender",
           ao.accused_officer_name as "accusedName",
           ao.position as "accusedDesignation",
           sch.accused_school_name as "schoolName"
@@ -3281,7 +3343,14 @@ export async function updateLetterEditRequestStatusServer(payload: {
 export async function checkLetterEditApprovalStatusServer(letter_id: string, ref_no?: string) {
   try {
     if (!letter_id && !ref_no) {
-      return serializeForServerAction({ success: true, isApproved: false, latestRequest: null });
+      return serializeForServerAction({
+        success: true,
+        isApproved: false,
+        isPending: false,
+        isUsed: false,
+        isRejected: false,
+        latestRequest: null,
+      });
     }
 
     let rows: any[] = [];
@@ -3301,6 +3370,9 @@ export async function checkLetterEditApprovalStatusServer(letter_id: string, ref
       return serializeForServerAction({
         success: true,
         isApproved: req.status === "Approved",
+        isPending: req.status === "Pending",
+        isUsed: req.status === "Used",
+        isRejected: req.status === "Rejected",
         latestRequest: req,
       });
     }
@@ -3308,11 +3380,79 @@ export async function checkLetterEditApprovalStatusServer(letter_id: string, ref
     return serializeForServerAction({
       success: true,
       isApproved: false,
+      isPending: false,
+      isUsed: false,
+      isRejected: false,
       latestRequest: null,
     });
   } catch (error: any) {
     console.error("Error checking letter edit approval status:", error);
-    return serializeForServerAction({ success: false, isApproved: false, latestRequest: null });
+    return serializeForServerAction({
+      success: false,
+      isApproved: false,
+      isPending: false,
+      isUsed: false,
+      isRejected: false,
+      latestRequest: null,
+    });
+  }
+}
+
+/**
+ * Consume / Mark as Used a Letter Edit Approval Request
+ * Enforces one-time edit per approval: once the officer submits edits,
+ * the approval status transitions from "Approved" to "Used".
+ */
+export async function consumeLetterEditApprovalServer(payload: {
+  requestId?: string;
+  letter_id?: string;
+  ref_no?: string;
+  consumed_by?: string;
+}) {
+  try {
+    const { requestId, letter_id, ref_no, consumed_by = "Subject Officer" } = payload;
+    if (!requestId && !letter_id && !ref_no) {
+      return serializeForServerAction({ success: false, error: "Identifier required to consume edit permission" });
+    }
+
+    const targetRef = ref_no || letter_id || "";
+    const targetId = letter_id || ref_no || "";
+
+    try {
+      if (requestId) {
+        await prisma.$executeRaw`
+          UPDATE dcmms_letter_edit_requests
+          SET status = 'Used',
+              reviewer_comments = COALESCE(reviewer_comments, '') || ' [Single-use edit consumed by ' || ${consumed_by} || ' on ' || NOW() || ']'
+          WHERE id = ${requestId} AND status = 'Approved';
+        `;
+      } else {
+        await prisma.$executeRaw`
+          UPDATE dcmms_letter_edit_requests
+          SET status = 'Used',
+              reviewer_comments = COALESCE(reviewer_comments, '') || ' [Single-use edit consumed by ' || ${consumed_by} || ' on ' || NOW() || ']'
+          WHERE (letter_id = ${targetId} OR ref_no = ${targetRef})
+            AND status = 'Approved';
+        `;
+      }
+    } catch (pgErr) {
+      console.warn("PostgreSQL consume edit approval failed:", pgErr);
+    }
+
+    await logAuditEventServer(
+      "CONSUME_LETTER_EDIT_APPROVAL",
+      "dcmms_letter_edit_requests",
+      targetRef || requestId || "unknown",
+      { consumed_by, letter_id, ref_no, requestId }
+    );
+
+    return serializeForServerAction({
+      success: true,
+      message: "Letter edit approval successfully consumed (single-use completed)",
+    });
+  } catch (error: any) {
+    console.error("Error consuming letter edit approval:", error);
+    return serializeForServerAction({ success: false, error: error?.message || "Failed to consume edit approval" });
   }
 }
 
@@ -3577,6 +3717,12 @@ export async function saveAccusedOfficerServer(officerData: any) {
       await prisma.$executeRawUnsafe(`
         ALTER TABLE subject_officer_form_table ADD COLUMN IF NOT EXISTS file_name VARCHAR(100);
         ALTER TABLE subject_officer_form_table ADD COLUMN IF NOT EXISTS description TEXT;
+        ALTER TABLE subject_officer_form_table ADD COLUMN IF NOT EXISTS step_taken TEXT;
+        ALTER TABLE subject_officer_form_table ADD COLUMN IF NOT EXISTS school_name VARCHAR(255);
+        ALTER TABLE subject_officer_form_table ADD COLUMN IF NOT EXISTS school_address TEXT;
+        ALTER TABLE subject_officer_form_table ADD COLUMN IF NOT EXISTS school_province VARCHAR(100);
+        ALTER TABLE subject_officer_form_table ADD COLUMN IF NOT EXISTS school_district VARCHAR(100);
+        ALTER TABLE subject_officer_form_table ADD COLUMN IF NOT EXISTS school_zone VARCHAR(100);
       `);
     } catch (e) {}
 
@@ -3793,6 +3939,12 @@ export async function saveAccusedOfficerServer(officerData: any) {
       const prepDateVal = parseSafeDate(date_prepared_and_submitted_for_signature);
       const fileNameVal = officerData.file_name || officerData.fileName || "discipline";
       const descVal = officerData.description || officerData.complaint_matter || officerData.complaintMatter || null;
+      const stepTakenVal = officerData.step_taken || officerData.stepTaken || officerData.serializedStepTaken || null;
+      const schoolNameVal = officerData.accused_school_name || officerData.school_name || officerData.schoolName || officerData.instituteName || null;
+      const schoolAddressVal = officerData.school_address || officerData.schoolAddress || officerData.instituteAddress || null;
+      const schoolProvinceVal = officerData.school_province || officerData.schoolProvince || officerData.province || null;
+      const schoolDistrictVal = officerData.school_district || officerData.schoolDistrict || officerData.district || null;
+      const schoolZoneVal = officerData.school_zone || officerData.schoolZone || officerData.zone || null;
 
       const existingForms: any[] = await prisma.$queryRaw`
         SELECT id FROM subject_officer_form_table WHERE ref_number = ${refTrimmed} LIMIT 1;
@@ -3809,6 +3961,12 @@ export async function saveAccusedOfficerServer(officerData: any) {
                 file_name = COALESCE(${fileNameVal}, file_name),
                 future_action = COALESCE(${future_action || null}, future_action),
                 description = COALESCE(${descVal}, description),
+                step_taken = COALESCE(${stepTakenVal}, step_taken),
+                school_name = COALESCE(${schoolNameVal}, school_name),
+                school_address = COALESCE(${schoolAddressVal}, school_address),
+                school_province = COALESCE(${schoolProvinceVal}, school_province),
+                school_district = COALESCE(${schoolDistrictVal}, school_district),
+                school_zone = COALESCE(${schoolZoneVal}, school_zone),
                 date_prepared_and_submitted_for_signature = COALESCE(${prepDateVal}, date_prepared_and_submitted_for_signature),
                 classification_of_complaint_letter = COALESCE(${classification_of_complaint_letter || null}, classification_of_complaint_letter),
                 name_of_the_presenting_the_complain = COALESCE(${name_of_the_presenting_the_complain || null}, name_of_the_presenting_the_complain),
@@ -3824,6 +3982,12 @@ export async function saveAccusedOfficerServer(officerData: any) {
                 file_name = COALESCE(${fileNameVal}, file_name),
                 future_action = COALESCE(${future_action || null}, future_action),
                 description = COALESCE(${descVal}, description),
+                step_taken = COALESCE(${stepTakenVal}, step_taken),
+                school_name = COALESCE(${schoolNameVal}, school_name),
+                school_address = COALESCE(${schoolAddressVal}, school_address),
+                school_province = COALESCE(${schoolProvinceVal}, school_province),
+                school_district = COALESCE(${schoolDistrictVal}, school_district),
+                school_zone = COALESCE(${schoolZoneVal}, school_zone),
                 date_prepared_and_submitted_for_signature = COALESCE(${prepDateVal}, date_prepared_and_submitted_for_signature),
                 classification_of_complaint_letter = COALESCE(${classification_of_complaint_letter || null}, classification_of_complaint_letter),
                 name_of_the_presenting_the_complain = COALESCE(${name_of_the_presenting_the_complain || null}, name_of_the_presenting_the_complain),
@@ -3836,13 +4000,15 @@ export async function saveAccusedOfficerServer(officerData: any) {
         const insertedForm: any[] = await prisma.$queryRaw`
           INSERT INTO subject_officer_form_table (
             ref_number, daily_mail_letter_id, accused_officer_id, subject_file_no, file_name, future_action, description,
+            step_taken, school_name, school_address, school_province, school_district, school_zone,
             date_prepared_and_submitted_for_signature, classification_of_complaint_letter,
             name_of_the_presenting_the_complain, address_of_the_person_presenting_the_complaint
           )
           VALUES (
             ${refTrimmed}, ${dailyMailId ? Number(dailyMailId) : null}, ${primaryOfficerId ? primaryOfficerId : null}::uuid,
-            ${subject_file_no || null}, ${fileNameVal}, ${future_action || null}, ${descVal}, ${prepDateVal},
-            ${classification_of_complaint_letter || null}, ${name_of_the_presenting_the_complain || null},
+            ${subject_file_no || null}, ${fileNameVal}, ${future_action || null}, ${descVal},
+            ${stepTakenVal}, ${schoolNameVal}, ${schoolAddressVal}, ${schoolProvinceVal}, ${schoolDistrictVal}, ${schoolZoneVal},
+            ${prepDateVal}, ${classification_of_complaint_letter || null}, ${name_of_the_presenting_the_complain || null},
             ${address_of_the_person_presenting_the_complaint || null}
           )
           RETURNING id;
@@ -3956,12 +4122,33 @@ export async function getAccusedOfficerByRefServer(refNumber: string) {
     const refTrimmed = String(refNumber).trim();
 
     // 1. Query subject_officer_form_table by ref_number or subject_file_no
+    try {
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE subject_officer_form_table ADD COLUMN IF NOT EXISTS file_name VARCHAR(100);
+        ALTER TABLE subject_officer_form_table ADD COLUMN IF NOT EXISTS description TEXT;
+        ALTER TABLE subject_officer_form_table ADD COLUMN IF NOT EXISTS step_taken TEXT;
+        ALTER TABLE subject_officer_form_table ADD COLUMN IF NOT EXISTS school_name VARCHAR(255);
+        ALTER TABLE subject_officer_form_table ADD COLUMN IF NOT EXISTS school_address TEXT;
+        ALTER TABLE subject_officer_form_table ADD COLUMN IF NOT EXISTS school_province VARCHAR(100);
+        ALTER TABLE subject_officer_form_table ADD COLUMN IF NOT EXISTS school_district VARCHAR(100);
+        ALTER TABLE subject_officer_form_table ADD COLUMN IF NOT EXISTS school_zone VARCHAR(100);
+      `);
+    } catch (e) {}
+
     let forms: any[] = await prisma.$queryRaw`
       SELECT 
         sof.id as form_id,
         sof.ref_number,
         sof.subject_file_no,
+        sof.file_name,
         sof.future_action,
+        sof.description,
+        sof.step_taken,
+        sof.school_name,
+        sof.school_address,
+        sof.school_province,
+        sof.school_district,
+        sof.school_zone,
         sof.date_prepared_and_submitted_for_signature,
         sof.classification_of_complaint_letter,
         sof.name_of_the_presenting_the_complain,
@@ -3989,7 +4176,15 @@ export async function getAccusedOfficerByRefServer(refNumber: string) {
               sof.id as form_id,
               sof.ref_number,
               sof.subject_file_no,
+              sof.file_name,
               sof.future_action,
+              sof.description,
+              sof.step_taken,
+              sof.school_name,
+              sof.school_address,
+              sof.school_province,
+              sof.school_district,
+              sof.school_zone,
               sof.date_prepared_and_submitted_for_signature,
               sof.classification_of_complaint_letter,
               sof.name_of_the_presenting_the_complain,
@@ -4186,6 +4381,12 @@ export async function getAccusedOfficerByRefServer(refNumber: string) {
         file_name: form.file_name || replyDetails?.file_name || null,
         future_action: form.future_action || replyDetails?.upcoming_action || null,
         description: form.description || replyDetails?.description || null,
+        step_taken: form.step_taken || null,
+        school_name: form.school_name || schoolInfo?.accused_school_name || null,
+        school_address: form.school_address || schoolInfo?.address || null,
+        school_province: form.school_province || schoolInfo?.province || null,
+        school_district: form.school_district || schoolInfo?.district || null,
+        school_zone: form.school_zone || schoolInfo?.zone || null,
         date_prepared_and_submitted_for_signature: form.date_prepared_and_submitted_for_signature || replyDetails?.date || null,
         classification_of_complaint_letter: form.classification_of_complaint_letter,
         name_of_the_presenting_the_complain: form.name_of_the_presenting_the_complain,

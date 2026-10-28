@@ -25,6 +25,7 @@ import {
   getLetterEditRequestsServer,
   updateLetterEditRequestStatusServer,
   checkLetterEditApprovalStatusServer,
+  consumeLetterEditApprovalServer,
   getSeniorAssistantSecretaryOfficerServer,
   createOfficerNotificationServer,
 } from "@/lib/db-actions";
@@ -1444,6 +1445,22 @@ function RegisterComplaintForm() {
           }
         );
 
+        // If this edit was performed under an approved single-use permission, consume it now
+        if (editRequest && (editRequest.status === "Approved" || adminApproval?.approved)) {
+          try {
+            await consumeLetterEditApprovalServer({
+              requestId: editRequest.id,
+              letter_id: newLetter.id || formState.id,
+              ref_no: newLetter.refNo || formState.refNo,
+              consumed_by: currentUserProfile?.full_name || "Daily Mail Officer",
+            });
+            setAdminApproval(null);
+            setIsEditing(false);
+          } catch (cErr) {
+            console.warn("Failed to consume letter edit approval:", cErr);
+          }
+        }
+
         // success
         console.debug("Supabase upsert returned:", upserted);
 
@@ -1519,6 +1536,21 @@ function RegisterComplaintForm() {
         };
         const updatedAsgns = asgnsList.filter((a: any) => a.caseNo !== newLetter.refNo);
         localStorage.setItem("dcmms_subject_assignments", JSON.stringify([newAsgn, ...updatedAsgns]));
+      }
+
+      if (editRequest && (editRequest.status === "Approved" || adminApproval?.approved)) {
+        try {
+          await consumeLetterEditApprovalServer({
+            requestId: editRequest.id,
+            letter_id: newLetter.id || formState.id,
+            ref_no: newLetter.refNo || formState.refNo,
+            consumed_by: currentUserProfile?.full_name || "Daily Mail Officer",
+          });
+          setAdminApproval(null);
+          setIsEditing(false);
+        } catch (cErr) {
+          console.warn("Failed to consume letter edit approval fallback:", cErr);
+        }
       }
 
       localStorage.setItem("show_register_success", "true");

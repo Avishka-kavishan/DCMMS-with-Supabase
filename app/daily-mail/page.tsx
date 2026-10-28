@@ -13,6 +13,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { signOut, getCurrentProfile, getRoleDisplayName, UserProfile, dashboardPath, getAddLetterButtonLabel, normalizeRole } from "@/lib/auth";
 import { getDailyMailRecordsServer, getLetterEditRequestsServer } from "@/lib/db-actions";
+import { compareLettersLatestFirst } from "@/lib/letter-sort";
 import { exportToExcel } from "@/lib/export-excel";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
@@ -228,6 +229,7 @@ export default function DailyMailPage() {
               forwardedTo: db.forwarded_to || "",
               forwardReason: db.forward_reason || "",
             }));
+          mapped.sort(compareLettersLatestFirst);
           setLetters(mapped);
 
           if (typeof window !== "undefined") {
@@ -252,7 +254,8 @@ export default function DailyMailPage() {
         const stored = localStorage.getItem("dcmms_letters");
         if (stored) {
           try {
-            setLetters(JSON.parse(stored));
+            const parsed = JSON.parse(stored);
+            setLetters(Array.isArray(parsed) ? parsed.sort(compareLettersLatestFirst) : []);
           } catch (e) {
             console.error("Error parsing stored letters", e);
           }
@@ -415,7 +418,7 @@ export default function DailyMailPage() {
     }
 
     return matchesSearch && matchesPriority && matchesStatus && matchesCaseStatus;
-  });
+  }).sort(compareLettersLatestFirst);
 
   // Display 10 most recent filtered letters by default, or all if showAll is true
   const displayedLetters = showAll ? filteredLetters : filteredLetters.slice(0, 10);
