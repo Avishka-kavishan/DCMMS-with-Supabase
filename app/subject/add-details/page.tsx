@@ -135,8 +135,23 @@ function CaseDetailsForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const caseNoParam = searchParams?.get("caseNo") || "CA/2026/01";
-  const isExplicitViewMode = searchParams?.get("mode") === "view" || searchParams?.get("viewOnly") === "true";
-  const [isCaseAlreadySubmitted, setIsCaseAlreadySubmitted] = useState<boolean>(isExplicitViewMode);
+  const isExplicitViewMode = searchParams?.get("mode") === "view" || searchParams?.get("viewOnly") === "true" || searchParams?.get("isViewOnly") === "true";
+  const [isCaseAlreadySubmitted, setIsCaseAlreadySubmitted] = useState<boolean>(() => {
+    if (isExplicitViewMode) return true;
+    if (typeof window !== "undefined" && caseNoParam) {
+      try {
+        const stored = localStorage.getItem("dcmms_submitted_case_nos");
+        if (stored) {
+          const arr = JSON.parse(stored);
+          const cClean = String(caseNoParam).trim().toLowerCase();
+          if (Array.isArray(arr) && arr.some((s: string) => String(s).trim().toLowerCase() === cClean)) {
+            return true;
+          }
+        }
+      } catch {}
+    }
+    return false;
+  });
 
   // ── Letter Edit Approval Request States (Single-use edit approved by Additional Sec / Snr Asst Sec / Asst Sec Discipline) ──
   const [editRequest, setEditRequest] = useState<any>(null);
@@ -675,7 +690,8 @@ function CaseDetailsForm() {
                 regionProvince: data.region_province,
               });
               setPriority(data.priority || "medium");
-              if (data.status === "Closed" || data.status === "Closed File") {
+              const dSt = String(data.status || "").toLowerCase();
+              if (dSt === "closed" || dSt === "closed file" || dSt === "නිමා කල" || dSt === "නිමා කළ" || dSt === "finalized / closed" || dSt.includes("complete") || dSt.includes("concluded")) {
                 setIsCaseAlreadySubmitted(true);
               }
             }
@@ -694,7 +710,8 @@ function CaseDetailsForm() {
               if (found) {
                 setLetterData(found);
                 setPriority(found.priority || "medium");
-                if (found.status === "Closed" || found.isProcessedAnswer) {
+                const fSt = String(found.status || "").toLowerCase();
+                if (fSt === "closed" || fSt === "closed file" || fSt === "නිමා කල" || fSt === "නිමා කළ" || fSt.includes("complete") || found.isProcessedAnswer) {
                   setIsCaseAlreadySubmitted(true);
                 }
               }
@@ -784,6 +801,16 @@ function CaseDetailsForm() {
             if (officerText) setAssignedOfficersText(officerText);
             if (asgn.appointment_date || asgn.appointmentDate) setSubjectApptDate(asgn.appointment_date || asgn.appointmentDate);
             if (asgn.report_due_date || asgn.reportDueDate) setSubjectDueDate(asgn.report_due_date || asgn.reportDueDate);
+            if (
+              asgn.datesSubmittedBySubject ||
+              asgn.dates_submitted_by_subject ||
+              (asgn.appointment_date && asgn.report_due_date) ||
+              (asgn.appointmentDate && asgn.reportDueDate) ||
+              asgn.initial_investigation_complete ||
+              asgn.initialInvestigationComplete
+            ) {
+              setIsCaseAlreadySubmitted(true);
+            }
           }
         }
 
@@ -1868,11 +1895,15 @@ function CaseDetailsForm() {
           let subNosArr: string[] = [];
           try { subNosArr = JSON.parse(storedSubNos); } catch (e) {}
           if (!Array.isArray(subNosArr)) subNosArr = [];
-          const cleanRef = String(refNo).trim().toLowerCase();
-          if (!subNosArr.map(s => String(s).trim().toLowerCase()).includes(cleanRef)) {
+          const cleanRef = String(refNo || "").trim().toLowerCase();
+          const cleanParam = String(caseNoParam || "").trim().toLowerCase();
+          if (cleanRef && !subNosArr.map(s => String(s).trim().toLowerCase()).includes(cleanRef)) {
             subNosArr.push(cleanRef);
-            localStorage.setItem("dcmms_submitted_case_nos", JSON.stringify(subNosArr));
           }
+          if (cleanParam && !subNosArr.map(s => String(s).trim().toLowerCase()).includes(cleanParam)) {
+            subNosArr.push(cleanParam);
+          }
+          localStorage.setItem("dcmms_submitted_case_nos", JSON.stringify(subNosArr));
         } catch (e) {}
       }
 

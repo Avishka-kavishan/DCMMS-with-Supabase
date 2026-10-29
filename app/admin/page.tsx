@@ -22,7 +22,7 @@ import {
 } from "recharts";
 import "./admin.css";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
-import { signOut, getCurrentProfile, dashboardPath, getAddLetterButtonLabel } from "@/lib/auth";
+import { signOut, getCurrentProfile, dashboardPath, getAddLetterButtonLabel, getRoleDisplayName } from "@/lib/auth";
 import { compareLettersLatestFirst } from "@/lib/letter-sort";
 import {
   getDailyMailRecordsServer,
@@ -42,6 +42,8 @@ import {
   getOriginBadge,
   isAssignedBySeniorAssistantSecretary,
   isLetterForChiefClerk,
+  isLetterSubmittedBySenior,
+  getSeniorLetterStatusInfo,
 } from "@/lib/letter-hierarchy";
 import { SUBJECT_TYPE_OPTIONS, getSubjectTypeLabel } from "@/lib/subject-types";
 
@@ -323,6 +325,7 @@ function AdminDashboardContent() {
   const [seniorLettersSearch, setSeniorLettersSearch] = useState("");
   const [seniorLettersNewCount, setSeniorLettersNewCount] = useState(0);
   const [showSeniorNotifBell, setShowSeniorNotifBell] = useState(false);
+  const [seniorLettersSubmissionFilter, setSeniorLettersSubmissionFilter] = useState<"all" | "unsubmitted" | "submitted">("all");
 
   // Visualization Charts Slide Bar & Collapsible state
   const [isChartSlideBarOpen, setIsChartSlideBarOpen] = useState(false);
@@ -1337,7 +1340,12 @@ function AdminDashboardContent() {
             let seenIds: string[] = [];
             try { seenIds = JSON.parse(localStorage.getItem(seenKey) || "[]"); } catch {}
 
+            const seniorUnsubmittedCount = seniorSecLetters.filter((l: any) => !isLetterSubmittedBySenior(l)).length;
+            const seniorSubmittedCount = seniorSecLetters.filter((l: any) => isLetterSubmittedBySenior(l)).length;
+
             const filtered = seniorSecLetters.filter((l: any) => {
+              if (seniorLettersSubmissionFilter === "unsubmitted" && isLetterSubmittedBySenior(l)) return false;
+              if (seniorLettersSubmissionFilter === "submitted" && !isLetterSubmittedBySenior(l)) return false;
               if (!seniorLettersSearch.trim()) return true;
               const q = seniorLettersSearch.toLowerCase();
               return (
@@ -1350,126 +1358,308 @@ function AdminDashboardContent() {
             });
 
             return (
-              <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.84rem" }}>
-                  <thead>
-                    <tr style={{ background: "rgba(109, 40, 217, 0.08)" }}>
-                      <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 700, color: "#5b21b6", whiteSpace: "nowrap" }}>🆕</th>
-                      <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 700, color: "#5b21b6", whiteSpace: "nowrap" }}>{lang === "si" ? "ලිපි අංකය" : "Letter No."}</th>
-                      <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 700, color: "#5b21b6" }}>{lang === "si" ? "යවන ලද්දා" : "Sender"}</th>
-                      <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 700, color: "#5b21b6" }}>{lang === "si" ? "විෂය" : "Subject"}</th>
-                      <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 700, color: "#5b21b6", whiteSpace: "nowrap" }}>{lang === "si" ? "ලිපි වර්ගය" : "Type"}</th>
-                      <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 700, color: "#5b21b6", whiteSpace: "nowrap" }}>{lang === "si" ? "ලැබුණු දිනය" : "Received"}</th>
-                      <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 700, color: "#5b21b6", whiteSpace: "nowrap" }}>{lang === "si" ? "යොමු කළේ" : "Forwarded By"}</th>
-                      <th style={{ padding: "10px 14px", textAlign: "center", fontWeight: 700, color: "#5b21b6" }}>{lang === "si" ? "කාර්යය" : "Action"}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.length === 0 ? (
-                      <tr>
-                        <td colSpan={8} style={{ textAlign: "center", padding: "32px", color: "#9ca3af", fontSize: "0.9rem" }}>
-                          {seniorLettersSearch
-                            ? (lang === "si" ? "ගැළපෙන ලිපි සොයා නොගත්හ." : "No letters match your search.")
-                            : (lang === "si" ? "ලිපි කිසිවක් නැත." : "No letters forwarded yet.")}
-                        </td>
+              <>
+                {/* ── Submission Filter Tabs ── */}
+                <div style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "12px 24px",
+                  backgroundColor: "rgba(255, 255, 255, 0.85)",
+                  borderBottom: "1px solid #ede9fe",
+                  flexWrap: "wrap",
+                  gap: "10px",
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                    {/* All Tab */}
+                    <button
+                      type="button"
+                      onClick={() => setSeniorLettersSubmissionFilter("all")}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        padding: "6px 14px",
+                        borderRadius: "20px",
+                        border: seniorLettersSubmissionFilter === "all" ? "1.5px solid #7c3aed" : "1px solid #cbd5e1",
+                        backgroundColor: seniorLettersSubmissionFilter === "all" ? "#7c3aed" : "#ffffff",
+                        color: seniorLettersSubmissionFilter === "all" ? "#ffffff" : "#475569",
+                        fontWeight: seniorLettersSubmissionFilter === "all" ? 700 : 600,
+                        fontSize: "0.8rem",
+                        cursor: "pointer",
+                        transition: "all 0.15s ease",
+                      }}
+                    >
+                      <span>{lang === "si" ? "සියල්ල" : "All"}</span>
+                      <span style={{
+                        padding: "1px 7px",
+                        borderRadius: "10px",
+                        backgroundColor: seniorLettersSubmissionFilter === "all" ? "rgba(255,255,255,0.25)" : "#e2e8f0",
+                        color: seniorLettersSubmissionFilter === "all" ? "#ffffff" : "#475569",
+                        fontSize: "0.74rem",
+                        fontWeight: 700,
+                      }}>
+                        {seniorSecLetters.length}
+                      </span>
+                    </button>
+
+                    {/* Unsubmitted Tab */}
+                    <button
+                      type="button"
+                      onClick={() => setSeniorLettersSubmissionFilter("unsubmitted")}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        padding: "6px 14px",
+                        borderRadius: "20px",
+                        border: seniorLettersSubmissionFilter === "unsubmitted" ? "1.5px solid #d97706" : "1px solid #fde68a",
+                        backgroundColor: seniorLettersSubmissionFilter === "unsubmitted" ? "#d97706" : "#fffbeb",
+                        color: seniorLettersSubmissionFilter === "unsubmitted" ? "#ffffff" : "#b45309",
+                        fontWeight: seniorLettersSubmissionFilter === "unsubmitted" ? 700 : 600,
+                        fontSize: "0.8rem",
+                        cursor: "pointer",
+                        transition: "all 0.15s ease",
+                      }}
+                    >
+                      <AlertCircle size={13} style={{ color: seniorLettersSubmissionFilter === "unsubmitted" ? "#ffffff" : "#d97706" }} />
+                      <span>{lang === "si" ? "ඉදිරිපත් කිරීමට ඇති (පොරොත්තු)" : "Unsubmitted (Pending)"}</span>
+                      <span style={{
+                        padding: "1px 7px",
+                        borderRadius: "10px",
+                        backgroundColor: seniorLettersSubmissionFilter === "unsubmitted" ? "rgba(255,255,255,0.25)" : "#fef3c7",
+                        color: seniorLettersSubmissionFilter === "unsubmitted" ? "#ffffff" : "#92400e",
+                        fontSize: "0.74rem",
+                        fontWeight: 700,
+                      }}>
+                        {seniorUnsubmittedCount}
+                      </span>
+                    </button>
+
+                    {/* Submitted Tab */}
+                    <button
+                      type="button"
+                      onClick={() => setSeniorLettersSubmissionFilter("submitted")}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        padding: "6px 14px",
+                        borderRadius: "20px",
+                        border: seniorLettersSubmissionFilter === "submitted" ? "1.5px solid #059669" : "1px solid #a7f3d0",
+                        backgroundColor: seniorLettersSubmissionFilter === "submitted" ? "#059669" : "#ecfdf5",
+                        color: seniorLettersSubmissionFilter === "submitted" ? "#ffffff" : "#047857",
+                        fontWeight: seniorLettersSubmissionFilter === "submitted" ? 700 : 600,
+                        fontSize: "0.8rem",
+                        cursor: "pointer",
+                        transition: "all 0.15s ease",
+                      }}
+                    >
+                      <CheckCircle2 size={13} style={{ color: seniorLettersSubmissionFilter === "submitted" ? "#ffffff" : "#059669" }} />
+                      <span>{lang === "si" ? "ඉදිරිපත් කළ (යොමු වූ)" : "Submitted (Forwarded)"}</span>
+                      <span style={{
+                        padding: "1px 7px",
+                        borderRadius: "10px",
+                        backgroundColor: seniorLettersSubmissionFilter === "submitted" ? "rgba(255,255,255,0.25)" : "#d1fae5",
+                        color: seniorLettersSubmissionFilter === "submitted" ? "#ffffff" : "#065f46",
+                        fontSize: "0.74rem",
+                        fontWeight: 700,
+                      }}>
+                        {seniorSubmittedCount}
+                      </span>
+                    </button>
+                  </div>
+                  <div style={{ fontSize: "12px", color: "#6b7280", fontWeight: 500 }}>
+                    {lang === "si" ? `පෙන්වන්නේ ලිපි ${filtered.length} කි` : `Showing ${filtered.length} letters`}
+                  </div>
+                </div>
+
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.84rem" }}>
+                    <thead>
+                      <tr style={{ background: "rgba(109, 40, 217, 0.08)" }}>
+                        <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 700, color: "#5b21b6", whiteSpace: "nowrap" }}>🆕</th>
+                        <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 700, color: "#5b21b6", whiteSpace: "nowrap" }}>{lang === "si" ? "ලිපි අංකය" : "Letter No."}</th>
+                        <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 700, color: "#5b21b6" }}>{lang === "si" ? "යවන ලද්දා" : "Sender"}</th>
+                        <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 700, color: "#5b21b6" }}>{lang === "si" ? "විෂය" : "Subject"}</th>
+                        <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 700, color: "#5b21b6", whiteSpace: "nowrap" }}>{lang === "si" ? "ලිපි වර්ගය" : "Type"}</th>
+                        <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 700, color: "#5b21b6", whiteSpace: "nowrap" }}>{lang === "si" ? "ලැබුණු දිනය" : "Received"}</th>
+                        <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 700, color: "#5b21b6", whiteSpace: "nowrap" }}>{lang === "si" ? "යොමු කළේ" : "Forwarded By"}</th>
+                        <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 700, color: "#5b21b6", whiteSpace: "nowrap" }}>{lang === "si" ? "තත්ත්වය" : "Status"}</th>
+                        <th style={{ padding: "10px 14px", textAlign: "center", fontWeight: 700, color: "#5b21b6" }}>{lang === "si" ? "කාර්යය" : "Action"}</th>
                       </tr>
-                    ) : filtered.map((l: any, idx: number) => {
-                      const isNew = !seenIds.includes(l.id);
-                      const typeColor = l.type?.toLowerCase().includes("complaint") ? "#dc2626"
-                        : l.type?.toLowerCase().includes("notification") ? "#7c3aed"
-                        : "#0284c7";
-                      return (
-                        <tr key={l.id} style={{
-                          borderBottom: "1px solid #ede9fe",
-                          background: isNew ? "rgba(124,58,237,0.04)" : idx % 2 === 0 ? "#ffffff" : "rgba(245,243,255,0.5)",
-                          transition: "background 0.15s",
-                        }}
-                          onMouseEnter={e => (e.currentTarget.style.background = "rgba(124,58,237,0.08)")}
-                          onMouseLeave={e => (e.currentTarget.style.background = isNew ? "rgba(124,58,237,0.04)" : idx % 2 === 0 ? "#ffffff" : "rgba(245,243,255,0.5)")}
-                        >
-                          <td style={{ padding: "10px 14px", textAlign: "center" }}>
-                            {isNew && (
-                              <span style={{
-                                display: "inline-block",
-                                width: "9px", height: "9px",
-                                borderRadius: "50%",
-                                background: "#7c3aed",
-                                boxShadow: "0 0 0 3px rgba(124,58,237,0.2)",
-                              }} title="New" />
-                            )}
-                          </td>
-                          <td style={{ padding: "10px 14px", fontWeight: 700, color: "#4c1d95", whiteSpace: "nowrap" }}>
-                            {l.letterNo || l.refNo || "—"}
-                          </td>
-                          <td style={{ padding: "10px 14px", color: "#374151" }}>{l.sender}</td>
-                          <td style={{ padding: "10px 14px", color: "#374151", maxWidth: "220px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                            title={l.subject}>{l.subject || "—"}</td>
-                          <td style={{ padding: "10px 14px" }}>
-                            <span style={{
-                              padding: "2px 10px", borderRadius: "20px", fontSize: "0.75rem",
-                              fontWeight: 700, background: `${typeColor}15`, color: typeColor,
-                              border: `1px solid ${typeColor}30`,
-                              whiteSpace: "nowrap",
-                            }}>{l.type}</span>
-                          </td>
-                          <td style={{ padding: "10px 14px", color: "#6b7280", whiteSpace: "nowrap" }}>
-                            {l.receivedDate || l.letterDate || "—"}
-                          </td>
-                          <td style={{ padding: "10px 14px", color: "#6b7280", whiteSpace: "nowrap" }}>
-                            <span style={{
-                              display: "inline-flex", alignItems: "center", gap: "5px",
-                              padding: "2px 9px", borderRadius: "20px",
-                              background: "rgba(124,58,237,0.10)", color: "#5b21b6",
-                              fontSize: "0.76rem", fontWeight: 600,
-                            }}>
-                              🏛️ {
-                                // Format the role string into a readable label
-                                (() => {
-                                  const raw = (l.createdByRole || "additional_secretary");
-                                  return raw
-                                    .replace(/_/g, " ")
-                                    .replace(/\b\w/g, (c: string) => c.toUpperCase());
-                                })()
-                              }
-                            </span>
-                          </td>
-                          <td style={{ padding: "10px 14px", textAlign: "center" }}>
-                            <a
-                              href={`/admin/branch-selection?${new URLSearchParams({
-                                id: l.id || "",
-                                letterNo: l.letterNo || l.refNo || "",
-                                refNo: l.refNo || l.letterNo || "",
-                                sender: l.sender || "",
-                                subject: l.subject || "",
-                                type: l.type || "",
-                                receivedDate: l.receivedDate || l.letterDate || "",
-                                forwardReason: l.forwardReason || "",
-                                createdByName: l.createdByName || "",
-                              }).toString()}`}
-                              style={{
-                                display: "inline-block",
-                                padding: "5px 14px",
-                                borderRadius: "7px",
-                                background: "linear-gradient(135deg,#7c3aed,#6d28d9)",
-                                color: "#fff",
-                                fontWeight: 700,
-                                fontSize: "0.78rem",
-                                textDecoration: "none",
-                                boxShadow: "0 2px 6px rgba(124,58,237,0.25)",
-                                transition: "opacity 0.15s",
-                              }}
-                              onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
-                              onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
-                            >
-                              {lang === "si" ? "බලන්න" : "View"}
-                            </a>
+                    </thead>
+                    <tbody>
+                      {filtered.length === 0 ? (
+                        <tr>
+                          <td colSpan={9} style={{ textAlign: "center", padding: "32px", color: "#9ca3af", fontSize: "0.9rem" }}>
+                            {seniorLettersSearch
+                              ? (lang === "si" ? "ගැළපෙන ලිපි සොයා නොගත්හ." : "No letters match your search.")
+                              : (lang === "si" ? "ලිපි කිසිවක් නැත." : "No letters found.")}
                           </td>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                      ) : filtered.map((l: any, idx: number) => {
+                        const isNew = !seenIds.includes(l.id);
+                        const typeColor = l.type?.toLowerCase().includes("complaint") ? "#dc2626"
+                          : l.type?.toLowerCase().includes("notification") ? "#7c3aed"
+                          : "#0284c7";
+                        const sStatus = getSeniorLetterStatusInfo(l, lang);
+                        return (
+                          <tr key={l.id} style={{
+                            borderBottom: "1px solid #ede9fe",
+                            background: isNew ? "rgba(124,58,237,0.04)" : idx % 2 === 0 ? "#ffffff" : "rgba(245,243,255,0.5)",
+                            transition: "background 0.15s",
+                          }}
+                            onMouseEnter={e => (e.currentTarget.style.background = "rgba(124,58,237,0.08)")}
+                            onMouseLeave={e => (e.currentTarget.style.background = isNew ? "rgba(124,58,237,0.04)" : idx % 2 === 0 ? "#ffffff" : "rgba(245,243,255,0.5)")}
+                          >
+                            <td style={{ padding: "10px 14px", textAlign: "center" }}>
+                              {isNew && (
+                                <span style={{
+                                  display: "inline-block",
+                                  width: "9px", height: "9px",
+                                  borderRadius: "50%",
+                                  background: "#7c3aed",
+                                  boxShadow: "0 0 0 3px rgba(124,58,237,0.2)",
+                                }} title="New" />
+                              )}
+                            </td>
+                            <td style={{ padding: "10px 14px", fontWeight: 700, color: "#4c1d95", whiteSpace: "nowrap" }}>
+                              {l.letterNo || l.refNo || "—"}
+                            </td>
+                            <td style={{ padding: "10px 14px", color: "#374151" }}>{l.sender}</td>
+                            <td style={{ padding: "10px 14px", color: "#374151", maxWidth: "220px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                              title={l.subject}>{l.subject || "—"}</td>
+                            <td style={{ padding: "10px 14px" }}>
+                              <span style={{
+                                padding: "2px 10px", borderRadius: "20px", fontSize: "0.75rem",
+                                fontWeight: 700, background: `${typeColor}15`, color: typeColor,
+                                border: `1px solid ${typeColor}30`,
+                                whiteSpace: "nowrap",
+                              }}>{l.type}</span>
+                            </td>
+                            <td style={{ padding: "10px 14px", color: "#6b7280", whiteSpace: "nowrap" }}>
+                              {l.receivedDate || l.letterDate || "—"}
+                            </td>
+                            <td style={{ padding: "10px 14px", color: "#6b7280", whiteSpace: "nowrap" }}>
+                              <span style={{
+                                display: "inline-flex", alignItems: "center", gap: "5px",
+                                padding: "2px 9px", borderRadius: "20px",
+                                background: "rgba(124,58,237,0.10)", color: "#5b21b6",
+                                fontSize: "0.76rem", fontWeight: 600,
+                              }}>
+                                🏛️ {
+                                  // Format the role string into a readable label
+                                  (() => {
+                                    const raw = (l.createdByRole || "additional_secretary");
+                                    return raw
+                                      .replace(/_/g, " ")
+                                      .replace(/\b\w/g, (c: string) => c.toUpperCase());
+                                  })()
+                                }
+                              </span>
+                            </td>
+                            {/* Status badge: Submitted vs Unsubmitted */}
+                            <td style={{ padding: "10px 14px", whiteSpace: "nowrap" }}>
+                              <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                                <span style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "4px",
+                                  padding: "3px 9px",
+                                  borderRadius: "20px",
+                                  fontSize: "0.74rem",
+                                  fontWeight: 700,
+                                  backgroundColor: sStatus.badgeBg,
+                                  color: sStatus.badgeColor,
+                                  border: `1px solid ${sStatus.badgeBorder}`,
+                                  width: "fit-content",
+                                }}>
+                                  {sStatus.isSubmitted ? <CheckCircle2 size={11} /> : <AlertCircle size={11} />}
+                                  <span>{sStatus.badgeText}</span>
+                                </span>
+                                {sStatus.destination && (
+                                  <span style={{ fontSize: "0.71rem", color: "#047857", fontWeight: 600 }}>
+                                    ➔ {sStatus.destination}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td style={{ padding: "10px 14px", textAlign: "center", whiteSpace: "nowrap" }}>
+                              {sStatus.isSubmitted ? (
+                                <a
+                                  href={`/admin/branch-selection?${new URLSearchParams({
+                                    id: l.id || "",
+                                    letterNo: l.letterNo || l.refNo || "",
+                                    refNo: l.refNo || l.letterNo || "",
+                                    sender: l.sender || "",
+                                    subject: l.subject || "",
+                                    type: l.type || "",
+                                    receivedDate: l.receivedDate || l.letterDate || "",
+                                    forwardReason: l.forwardReason || "",
+                                    createdByName: l.createdByName || "",
+                                    priority: l.priority || "",
+                                  }).toString()}`}
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: "4px",
+                                    padding: "5px 12px",
+                                    borderRadius: "7px",
+                                    background: "#f1f5f9",
+                                    color: "#334155",
+                                    border: "1px solid #cbd5e1",
+                                    fontWeight: 600,
+                                    fontSize: "0.78rem",
+                                    textDecoration: "none",
+                                    transition: "all 0.15s",
+                                  }}
+                                  title={lang === "si" ? "ලිපිය සහ යොමු කිරීමේ විස්තර බලන්න" : "View letter and forward details"}
+                                >
+                                  ✓ {lang === "si" ? "බලන්න" : "View"}
+                                </a>
+                              ) : (
+                                <a
+                                  href={`/admin/branch-selection?${new URLSearchParams({
+                                    id: l.id || "",
+                                    letterNo: l.letterNo || l.refNo || "",
+                                    refNo: l.refNo || l.letterNo || "",
+                                    sender: l.sender || "",
+                                    subject: l.subject || "",
+                                    type: l.type || "",
+                                    receivedDate: l.receivedDate || l.letterDate || "",
+                                    forwardReason: l.forwardReason || "",
+                                    createdByName: l.createdByName || "",
+                                    priority: l.priority || "",
+                                  }).toString()}`}
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: "4px",
+                                    padding: "5px 14px",
+                                    borderRadius: "7px",
+                                    background: "linear-gradient(135deg,#7c3aed,#6d28d9)",
+                                    color: "#fff",
+                                    fontWeight: 700,
+                                    fontSize: "0.78rem",
+                                    textDecoration: "none",
+                                    boxShadow: "0 2px 6px rgba(124,58,237,0.25)",
+                                    transition: "opacity 0.15s",
+                                  }}
+                                  onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
+                                  onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
+                                >
+                                  {lang === "si" ? "යොමු කරන්න ➔" : "Forward ➔"}
+                                </a>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             );
           })()}
         </section>
@@ -1498,6 +1688,8 @@ function AdminDashboardContent() {
         const forwardedCount = baseLettersList.filter((l: any) => l.isForwarded).length;
         const pendingAssignmentCount = baseLettersList.filter((l: any) => !isLetterAssignedToSubject(l)).length;
         const assignedToSubjectCount = baseLettersList.filter((l: any) => isLetterAssignedToSubject(l)).length;
+        const seniorUnsubmittedAssignedCount = baseLettersList.filter((l: any) => !isLetterSubmittedBySenior(l)).length;
+        const seniorSubmittedAssignedCount = baseLettersList.filter((l: any) => isLetterSubmittedBySenior(l)).length;
 
         // Group letters for Additional Secretary view:
         // 1. Deputy Secretary / Senior Assistant Secretary
@@ -1576,8 +1768,13 @@ function AdminDashboardContent() {
               }
             }
 
-            if (assignedLettersFilter === "direct" && l.isForwarded) return false;
-            if (assignedLettersFilter === "forwarded" && !l.isForwarded) return false;
+            if (isSeniorAsstSec) {
+              if (assignedLettersFilter === "unsubmitted" && isLetterSubmittedBySenior(l)) return false;
+              if (assignedLettersFilter === "submitted" && !isLetterSubmittedBySenior(l)) return false;
+            } else {
+              if (assignedLettersFilter === "direct" && l.isForwarded) return false;
+              if (assignedLettersFilter === "forwarded" && !l.isForwarded) return false;
+            }
           }
 
           if (assignedLettersPriorityFilter !== "all") {
@@ -2038,6 +2235,48 @@ function AdminDashboardContent() {
                           </span>
                         </button>
                       </>
+                    ) : isSeniorAsstSec ? (
+                      <>
+                        {/* 1. Unsubmitted (Pending) Tab */}
+                        <button
+                          type="button"
+                          className={`assigned-letters-tab-btn ${assignedLettersFilter === "unsubmitted" ? "active" : ""}`}
+                          onClick={() => setAssignedLettersFilter("unsubmitted")}
+                        >
+                          <AlertCircle size={13} style={{ color: assignedLettersFilter === "unsubmitted" ? "#ffffff" : "#d97706" }} />
+                          <span>{lang === "si" ? "ඉදිරිපත් කිරීමට ඇති (පොරොත්තු)" : "Unsubmitted (Pending)"}</span>
+                          <span style={{
+                            padding: "1px 6px",
+                            borderRadius: "10px",
+                            backgroundColor: assignedLettersFilter === "unsubmitted" ? "#d97706" : "#fef3c7",
+                            color: assignedLettersFilter === "unsubmitted" ? "#ffffff" : "#92400e",
+                            fontSize: "11px",
+                            fontWeight: 700
+                          }}>
+                            {seniorUnsubmittedAssignedCount}
+                          </span>
+                        </button>
+
+                        {/* 2. Submitted (Forwarded) Tab */}
+                        <button
+                          type="button"
+                          className={`assigned-letters-tab-btn ${assignedLettersFilter === "submitted" ? "active" : ""}`}
+                          onClick={() => setAssignedLettersFilter("submitted")}
+                        >
+                          <CheckCircle2 size={13} style={{ color: assignedLettersFilter === "submitted" ? "#ffffff" : "#059669" }} />
+                          <span>{lang === "si" ? "ඉදිරිපත් කළ (යොමු වූ ලිපි)" : "Submitted (Forwarded)"}</span>
+                          <span style={{
+                            padding: "1px 6px",
+                            borderRadius: "10px",
+                            backgroundColor: assignedLettersFilter === "submitted" ? "#059669" : "#d1fae5",
+                            color: assignedLettersFilter === "submitted" ? "#ffffff" : "#065f46",
+                            fontSize: "11px",
+                            fontWeight: 700
+                          }}>
+                            {seniorSubmittedAssignedCount}
+                          </span>
+                        </button>
+                      </>
                     ) : (
                       <>
                         <button
@@ -2151,6 +2390,7 @@ function AdminDashboardContent() {
                         <th>{lang === "si" ? "ලිපි අංකය" : "Letter No"}</th>
                         <th>{isAddSec ? (lang === "si" ? "ලිපියේ ප්‍රභවය / යොමු කළ නිලධාරියා" : "Origin / Sender Officer") : isChiefClerk ? (lang === "si" ? "යොමු කළ ජ්‍යෙෂ්ඨ නිලධාරියා" : "Assigned By Senior Official") : (lang === "si" ? "ඇතුළත් කළ නිලධාරියා" : "Entered By")}</th>
                         {isChiefClerk && <th>{lang === "si" ? "විෂයභාර නිලධාරියා" : "Assigned Subject Officer"}</th>}
+                        {isSeniorAsstSec && <th>{lang === "si" ? "තත්ත්වය" : "Status"}</th>}
                         <th>{lang === "si" ? "ප්‍රමුඛතාව" : lang === "ta" ? "முன்னுரிமை" : "Priority"}</th>
                         <th>{lang === "si" ? "ලිපි වර්ගය" : "Letter Type"}</th>
                         <th>{lang === "si" ? "එවූ පාර්ශවය" : "Sender"}</th>
@@ -2162,7 +2402,7 @@ function AdminDashboardContent() {
                     <tbody>
                       {filteredList.length === 0 ? (
                         <tr>
-                          <td colSpan={isChiefClerk ? 9 : 8} style={{ textAlign: "center", padding: "36px 16px", color: "#64748b" }}>
+                          <td colSpan={isChiefClerk || isSeniorAsstSec ? 9 : 8} style={{ textAlign: "center", padding: "36px 16px", color: "#64748b" }}>
                             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px" }}>
                               <Search size={24} style={{ color: "#94a3b8" }} />
                               <span style={{ fontWeight: 600, fontSize: "14px", color: "#334155" }}>
@@ -2356,6 +2596,40 @@ function AdminDashboardContent() {
                                   )}
                                 </td>
                               )}
+                              {/* Status Column for Senior Assistant Secretary (Submitted vs Unsubmitted) */}
+                              {isSeniorAsstSec && (
+                                <td>
+                                  {(() => {
+                                    const sInfo = getSeniorLetterStatusInfo(l, lang);
+                                    return (
+                                      <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                                        <span style={{
+                                          display: "inline-flex",
+                                          alignItems: "center",
+                                          gap: "4px",
+                                          padding: "3px 8px",
+                                          borderRadius: "6px",
+                                          fontSize: "11px",
+                                          fontWeight: 700,
+                                          backgroundColor: sInfo.badgeBg,
+                                          color: sInfo.badgeColor,
+                                          border: `1px solid ${sInfo.badgeBorder}`,
+                                          width: "fit-content",
+                                          whiteSpace: "nowrap"
+                                        }}>
+                                          {sInfo.isSubmitted ? <CheckCircle2 size={12} /> : <AlertCircle size={12} />}
+                                          <span>{sInfo.badgeText}</span>
+                                        </span>
+                                        {sInfo.destination && (
+                                          <span style={{ fontSize: "10.5px", color: "#047857", fontWeight: 600 }}>
+                                            ➔ {sInfo.destination}
+                                          </span>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
+                                </td>
+                              )}
                               {/* Priority Column */}
                               <td>
                                 {(() => {
@@ -2453,37 +2727,73 @@ function AdminDashboardContent() {
                                     </button>
                                   )}
 
-                                  {/* View Details Link */}
+                                  {/* View Details / Forward to Branch Link */}
                                   {!isChiefClerk && (
-                                  <Link
-                                    href={`/admin/view-letter?id=${encodeURIComponent(l.letterNo || l.refNo)}`}
-                                    style={{
-                                      display: "inline-flex",
-                                      alignItems: "center",
-                                      gap: "6px",
-                                      backgroundColor: "#0f172a",
-                                      color: "#ffffff",
-                                      padding: "6px 12px",
-                                      borderRadius: "7px",
-                                      fontSize: "12px",
-                                      fontWeight: 600,
-                                      textDecoration: "none",
-                                      boxShadow: "0 1px 3px rgba(0, 0, 0, 0.1)",
-                                      transition: "all 0.15s ease",
-                                      whiteSpace: "nowrap"
-                                    }}
-                                    onMouseEnter={(e) => {
-                                      e.currentTarget.style.backgroundColor = "#2563eb";
-                                      e.currentTarget.style.boxShadow = "0 3px 8px rgba(37, 99, 235, 0.3)";
-                                    }}
-                                    onMouseLeave={(e) => {
-                                      e.currentTarget.style.backgroundColor = "#0f172a";
-                                      e.currentTarget.style.boxShadow = "0 1px 3px rgba(0, 0, 0, 0.1)";
-                                    }}
-                                  >
-                                    <span>{lang === "si" ? "විස්තර" : "View"}</span>
-                                    <ArrowRight size={13} />
-                                  </Link>
+                                    isSeniorAsstSec && !isLetterSubmittedBySenior(l) ? (
+                                      <a
+                                        href={`/admin/branch-selection?${new URLSearchParams({
+                                          id: l.id || "",
+                                          letterNo: l.letterNo || l.refNo || "",
+                                          refNo: l.refNo || l.letterNo || "",
+                                          sender: l.sender || "",
+                                          subject: l.subject || "",
+                                          type: l.type || "",
+                                          receivedDate: l.receivedDate || l.letterDate || "",
+                                          forwardReason: l.forwardReason || "",
+                                          createdByName: l.created_by_name || "",
+                                          priority: l.priority || "",
+                                        }).toString()}`}
+                                        style={{
+                                          display: "inline-flex",
+                                          alignItems: "center",
+                                          gap: "5px",
+                                          backgroundColor: "#7c3aed",
+                                          color: "#ffffff",
+                                          padding: "6px 12px",
+                                          borderRadius: "7px",
+                                          fontSize: "12px",
+                                          fontWeight: 700,
+                                          textDecoration: "none",
+                                          boxShadow: "0 2px 6px rgba(124,58,237,0.25)",
+                                          transition: "all 0.15s ease",
+                                          whiteSpace: "nowrap"
+                                        }}
+                                        onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.88")}
+                                        onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+                                      >
+                                        <span>{lang === "si" ? "යොමු කරන්න ➔" : "Forward ➔"}</span>
+                                      </a>
+                                    ) : (
+                                      <Link
+                                        href={`/admin/view-letter?id=${encodeURIComponent(l.letterNo || l.refNo)}`}
+                                        style={{
+                                          display: "inline-flex",
+                                          alignItems: "center",
+                                          gap: "6px",
+                                          backgroundColor: "#0f172a",
+                                          color: "#ffffff",
+                                          padding: "6px 12px",
+                                          borderRadius: "7px",
+                                          fontSize: "12px",
+                                          fontWeight: 600,
+                                          textDecoration: "none",
+                                          boxShadow: "0 1px 3px rgba(0, 0, 0, 0.1)",
+                                          transition: "all 0.15s ease",
+                                          whiteSpace: "nowrap"
+                                        }}
+                                        onMouseEnter={(e) => {
+                                          e.currentTarget.style.backgroundColor = "#2563eb";
+                                          e.currentTarget.style.boxShadow = "0 3px 8px rgba(37, 99, 235, 0.3)";
+                                        }}
+                                        onMouseLeave={(e) => {
+                                          e.currentTarget.style.backgroundColor = "#0f172a";
+                                          e.currentTarget.style.boxShadow = "0 1px 3px rgba(0, 0, 0, 0.1)";
+                                        }}
+                                      >
+                                        <span>{lang === "si" ? "විස්තර" : "View"}</span>
+                                        <ArrowRight size={13} />
+                                      </Link>
+                                    )
                                   )}
                                 </div>
                               </td>

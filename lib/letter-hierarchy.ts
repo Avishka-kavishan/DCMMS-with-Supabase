@@ -366,4 +366,111 @@ export function isLetterForChiefClerk(item: any, officerProfile?: any): boolean 
   return false;
 }
 
+/**
+ * Determines whether a letter assigned / forwarded to Senior Assistant Secretary has already been submitted/forwarded out
+ * (e.g. to Chief Clerk, Assistant Secretary of Discipline, Assistant Secretary of Investigations, or Subject Officer)
+ * or is still pending action/submission by Senior Assistant Secretary.
+ */
+export function isLetterSubmittedBySenior(l: any): boolean {
+  if (!l) return false;
+  const fwdReason = String(l.forward_reason || l.forwardReason || "").toLowerCase();
+  const fwdTo = String(l.forwarded_to || l.forwardedTo || "").toLowerCase();
+  const actOfficer = String(l.action_officer || l.actionOfficer || "").toLowerCase();
+  const status = String(l.status || "").toLowerCase();
+
+  // 1. Explicit reason check: forwarded by Senior Assistant Secretary
+  if (
+    fwdReason.includes("forwarded by senior") ||
+    fwdReason.includes("forwarded by deputy") ||
+    fwdReason.includes("forwarded by dharshana")
+  ) {
+    return true;
+  }
+
+  // 2. Destination check: targeted to branch, chief clerk, or subject officer
+  const isTargetedToBranch =
+    fwdTo.includes("chief") ||
+    fwdTo.includes("clerk") ||
+    fwdTo.includes("discipline") ||
+    fwdTo.includes("investigation") ||
+    fwdTo.includes("subject") ||
+    fwdTo.includes("upul") ||
+    fwdTo.includes("bandula") ||
+    fwdTo.includes("ranjith") ||
+    fwdTo.includes("ශාඛා ප්‍රධානී") ||
+    actOfficer.includes("chief") ||
+    actOfficer.includes("clerk") ||
+    actOfficer.includes("discipline") ||
+    actOfficer.includes("investigation") ||
+    actOfficer.includes("subject") ||
+    actOfficer.includes("upul") ||
+    actOfficer.includes("ශාඛා ප්‍රධානී");
+
+  const isStillWithSenior =
+    (fwdTo.includes("senior") || fwdTo.includes("dharshana") || fwdTo.includes("deputy")) &&
+    !fwdReason.includes("forwarded by senior");
+
+  if (isTargetedToBranch && !isStillWithSenior) {
+    return true;
+  }
+
+  // 3. Status progression check: has progressed past Senior Assistant Secretary
+  if (
+    status === "forwarded" ||
+    status === "under subject officer" ||
+    status === "assigned answer letter" ||
+    status === "closed" ||
+    status === "finalized"
+  ) {
+    if (!isStillWithSenior) return true;
+  }
+
+  return false;
+}
+
+/**
+ * Returns formatted badge information for Senior Assistant Secretary submission status
+ */
+export function getSeniorLetterStatusInfo(l: any, lang: string = "si") {
+  const isSubmitted = isLetterSubmittedBySenior(l);
+  const fwdTo = String(l.forwarded_to || l.forwardedTo || "");
+  const actOff = String(l.action_officer || l.actionOfficer || "");
+  const target = fwdTo || actOff;
+
+  let destLabel = "";
+  const targetLower = target.toLowerCase();
+  if (targetLower.includes("chief") || targetLower.includes("clerk") || targetLower.includes("ශාඛා")) {
+    destLabel = lang === "si" ? "ශාඛා ප්‍රධානී (විනය)" : lang === "ta" ? "முதன்மை எழுதுநர்" : "Chief Clerk";
+  } else if (targetLower.includes("discipline") || targetLower.includes("විනය") || targetLower.includes("bandula")) {
+    destLabel = lang === "si" ? "සහකාර ලේකම් (විනය)" : lang === "ta" ? "உதவிச் செயலாளர் (ஒழுக்கம்)" : "Asst. Sec (Discipline)";
+  } else if (targetLower.includes("investigation") || targetLower.includes("විමර්ශන") || targetLower.includes("ranjith")) {
+    destLabel = lang === "si" ? "සහකාර ලේකම් (විමර්ශන)" : lang === "ta" ? "உதவிச் செயலாளர் (விசாரணை)" : "Asst. Sec (Investigation)";
+  } else if (targetLower.includes("subject") || targetLower.includes("upul")) {
+    destLabel = lang === "si" ? "විෂයභාර නිලධාරී" : lang === "ta" ? "விடய அதிகாரி" : "Subject Officer";
+  } else if (target) {
+    destLabel = target.split("(")[0].trim();
+  }
+
+  if (isSubmitted) {
+    return {
+      isSubmitted: true,
+      badgeText: lang === "si" ? "ඉදිරිපත් කළා (යොමු වූ)" : lang === "ta" ? "சமர்ப்பிக்கப்பட்டது" : "Submitted / Forwarded",
+      destination: destLabel,
+      badgeBg: "#ecfdf5",
+      badgeColor: "#047857",
+      badgeBorder: "#a7f3d0",
+    };
+  }
+
+  return {
+    isSubmitted: false,
+    badgeText: lang === "si" ? "ඉදිරිපත් කිරීමට ඇත (පොරොත්තු)" : lang === "ta" ? "நிலுவையில் உள்ளது" : "Unsubmitted (Pending)",
+    destination: "",
+    badgeBg: "#fffbeb",
+    badgeColor: "#b45309",
+    badgeBorder: "#fde68a",
+  };
+}
+
+
 

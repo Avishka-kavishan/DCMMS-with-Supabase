@@ -42,6 +42,7 @@ model DailyMailLetterTable {
   document_name                   String?                   @db.VarChar(255)
   document_size                   BigInt?
   sent_branch                     String?                   @db.VarChar(255)
+  priority                        String?                   @db.VarChar(50)
   subject_officer_form_table      SubjectOfficerFormTable[]
 
   @@map("daily_mail_letter_table")

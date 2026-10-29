@@ -45,6 +45,7 @@ async function ensureDailyMailColumnsOnce() {
     `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS created_by_name VARCHAR(255)`,
     `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS created_by_role VARCHAR(255)`,
     `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS sent_branch VARCHAR(255)`,
+    `ALTER TABLE public.daily_mail_letter_table ADD COLUMN IF NOT EXISTS priority VARCHAR(50)`,
     `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS document_url TEXT`,
     `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS document_name VARCHAR(255)`,
     `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS addressed_to VARCHAR(255)`,
@@ -53,7 +54,8 @@ async function ensureDailyMailColumnsOnce() {
     `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS forward_reason TEXT`,
     `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS created_by_name VARCHAR(255)`,
     `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS created_by_role VARCHAR(255)`,
-    `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS sent_branch VARCHAR(255)`
+    `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS sent_branch VARCHAR(255)`,
+    `ALTER TABLE public.dcmms_daily_mail ADD COLUMN IF NOT EXISTS priority VARCHAR(50)`
   ];
   for (const sql of ensureCols) {
     try {
@@ -97,6 +99,7 @@ export async function getDailyMailRecordsServer() {
           created_by_role,
           region_province,
           sent_branch,
+          priority,
           created_at,
           updated_at
         FROM public.daily_mail_letter_table
@@ -123,7 +126,7 @@ export async function getDailyMailRecordsServer() {
             forward_reason: row.forward_reason || "",
             created_by_name: row.created_by_name || "",
             created_by_role: row.created_by_role || "",
-            priority: "normal",
+            priority: row.priority || "Normal",
             status: row.action_officer ? "assigned" : "registered",
             region_province: row.region_province || null,
             regionProvince: row.region_province || null,
@@ -157,6 +160,7 @@ export async function getDailyMailRecordsServer() {
           type,
           classification,
           action_officer,
+          priority,
           status,
           document_url,
           document_name,
@@ -180,6 +184,7 @@ export async function getDailyMailRecordsServer() {
             if (!idsSeen.has(key)) {
               combinedData.push({
                 ...rec,
+                priority: rec.priority || "Normal",
                 received_date: rec.received_date ? new Date(rec.received_date).toISOString().split("T")[0] : "",
                 submitted_date: rec.submitted_date ? new Date(rec.submitted_date).toISOString().split("T")[0] : "",
                 created_by_name: rec.created_by_name || "",
@@ -1389,6 +1394,11 @@ export async function getSubjectOfficerDashboardCasesServer(
     const casesWithDetails = new Set(
       detailsRaw.map((d: any) => String(d.case_no || "").trim().toLowerCase()).filter(Boolean)
     );
+    assignmentsRaw.forEach((a: any) => {
+      if (a.dates_submitted_by_subject || (a.appointment_date && a.report_due_date) || a.initial_investigation_complete) {
+        if (a.case_no) casesWithDetails.add(String(a.case_no).trim().toLowerCase());
+      }
+    });
     const refToReceivedDate = new Map<string, string>();
     const refToLetterDate = new Map<string, string>();
     const refToCreatedAt = new Map<string, string>();
@@ -1403,6 +1413,7 @@ export async function getSubjectOfficerDashboardCasesServer(
       addSecInstructions?: string;
       letterDate?: string;
       receivedDate?: string;
+      status?: string;
     }>();
 
     const registerMailMeta = (key: string, l: any) => {
@@ -1419,6 +1430,7 @@ export async function getSubjectOfficerDashboardCasesServer(
         addSecInstructions: l.add_sec_instructions || "",
         letterDate: l.letter_date || "",
         receivedDate: l.received_date || "",
+        status: l.status || "",
       };
       refToMailMeta.set(cleanKey, meta);
       refToMailMeta.set(cleanKey.toLowerCase(), meta);
@@ -1523,7 +1535,16 @@ export async function getSubjectOfficerDashboardCasesServer(
         const rawMetaPri = meta.priority && meta.priority.toLowerCase() !== "normal" ? meta.priority : "";
         const resolvedPriority = (rawMetaPri || rawItemPri || item.priority || meta.priority || "medium").toLowerCase();
 
-        const isClosed = item.status === "Closed" || finalizedCaseNos.includes(item.case_no.toLowerCase());
+        const itemStatusLower = String(item.status || "").toLowerCase();
+        const isClosed =
+          itemStatusLower === "closed" ||
+          itemStatusLower === "closed file" ||
+          itemStatusLower === "නිමා කල" ||
+          itemStatusLower === "නිමා කළ" ||
+          itemStatusLower === "finalized / closed" ||
+          itemStatusLower.includes("complete") ||
+          itemStatusLower.includes("concluded") ||
+          finalizedCaseNos.includes(String(item.case_no || "").toLowerCase());
 
         const isCaseSubmitted =
           casesWithDetails.has(String(item.case_no || "").trim().toLowerCase()) ||
@@ -1562,7 +1583,16 @@ export async function getSubjectOfficerDashboardCasesServer(
         const resolvedSubject = rawMetaSub || `Assigned Case (${refNo})`;
         const resolvedPriority = (meta.priority || "medium").toLowerCase();
 
-        const isClosed = finalizedCaseNos.includes(String(refNo).toLowerCase());
+        const metaStatusLower = String(meta.status || "").toLowerCase();
+        const isClosed =
+          metaStatusLower === "closed" ||
+          metaStatusLower === "closed file" ||
+          metaStatusLower === "නිමා කල" ||
+          metaStatusLower === "නිමා කළ" ||
+          metaStatusLower === "finalized / closed" ||
+          metaStatusLower.includes("complete") ||
+          metaStatusLower.includes("concluded") ||
+          finalizedCaseNos.includes(String(refNo).toLowerCase());
         const isCaseSubmitted =
           casesWithDetails.has(String(refNo || "").trim().toLowerCase()) ||
           casesWithDetails.has(String(meta.letterNo || "").trim().toLowerCase()) ||
@@ -1619,7 +1649,14 @@ export async function getSubjectOfficerDashboardCasesServer(
       const cNo = String(a.case_no || "").trim();
       const cNoLower = cNo.toLowerCase();
       const inInquiry = inquiryCaseNos.includes(cNoLower);
-      const isClosed = asgnStatus === "closed" || finalizedCaseNos.includes(cNoLower);
+      const isClosed =
+        asgnStatus === "closed" ||
+        asgnStatus === "closed file" ||
+        asgnStatus === "නිමා කල" ||
+        asgnStatus === "නිමා කළ" ||
+        asgnStatus.includes("complete") ||
+        asgnStatus.includes("concluded") ||
+        finalizedCaseNos.includes(cNoLower);
 
       const isAnsAssignment = asgnStatus.includes("answer") || asgnStatus.includes("reply") || asgnStatus.includes("පිළිතුරු");
 
@@ -1658,7 +1695,14 @@ export async function getSubjectOfficerDashboardCasesServer(
       const scOfficer = sc.officer_name || "";
       const cNo = String(sc.case_no || "").trim();
       const cNoLower = cNo.toLowerCase();
-      const isClosed = scStatus === "closed" || finalizedCaseNos.includes(cNoLower);
+      const isClosed =
+        scStatus === "closed" ||
+        scStatus === "closed file" ||
+        scStatus === "නිමා කල" ||
+        scStatus === "නිමා කළ" ||
+        scStatus.includes("complete") ||
+        scStatus.includes("concluded") ||
+        finalizedCaseNos.includes(cNoLower);
 
       const isAnsCase = scStatus.includes("answer") || scStatus.includes("reply");
 
@@ -1695,7 +1739,15 @@ export async function getSubjectOfficerDashboardCasesServer(
       const isAns = checkIsAnswerLetter(l);
       const cleanRef = String(l.ref_no || l.letter_no || "").trim().toLowerCase();
       const inInquiry = inquiryCaseNos.includes(cleanRef);
-      const isClosed = String(l.status || "").toLowerCase() === "closed" || finalizedCaseNos.includes(cleanRef);
+      const lStatus = String(l.status || "").toLowerCase();
+      const isClosed =
+        lStatus === "closed" ||
+        lStatus === "closed file" ||
+        lStatus === "නිමා කල" ||
+        lStatus === "නිමා කළ" ||
+        lStatus.includes("complete") ||
+        lStatus.includes("concluded") ||
+        finalizedCaseNos.includes(cleanRef);
 
       if ((isAns || inInquiry) && isLetterAssignedToOfficer(l)) {
         const itemKey = cleanRef;
@@ -1729,7 +1781,15 @@ export async function getSubjectOfficerDashboardCasesServer(
       const sOfficer = m.mail_officer_name || "";
       const cleanRef = String(m.case_no || "").trim().toLowerCase();
       const inInquiry = inquiryCaseNos.includes(cleanRef);
-      const isClosed = String(m.status || "").toLowerCase() === "closed" || finalizedCaseNos.includes(cleanRef);
+      const mStatus = String(m.status || "").toLowerCase();
+      const isClosed =
+        mStatus === "closed" ||
+        mStatus === "closed file" ||
+        mStatus === "නිමා කල" ||
+        mStatus === "නිමා කළ" ||
+        mStatus.includes("complete") ||
+        mStatus.includes("concluded") ||
+        finalizedCaseNos.includes(cleanRef);
 
       if ((isAns || inInquiry) && (isOfficerMatched(sOfficer) || (cleanRef && assignedCaseNosSet.has(cleanRef)))) {
         const itemKey = cleanRef;
@@ -10431,6 +10491,7 @@ export async function getLettersForwardedToSeniorServer() {
           subject,
           type,
           sender,
+          priority,
           action_officer,
           addressed_to,
           addressed_role,
@@ -10441,6 +10502,7 @@ export async function getLettersForwardedToSeniorServer() {
           received_date,
           submitted_date as letter_date,
           created_at,
+          status,
           'daily_mail' as source_table
         FROM public.dcmms_daily_mail
         WHERE
@@ -10474,6 +10536,7 @@ export async function getLettersForwardedToSeniorServer() {
           subject_of_letter as subject,
           nature_of_letter as type,
           senders_party as sender,
+          priority,
           action_officer,
           addressed_to,
           addressed_role,
@@ -10484,6 +10547,7 @@ export async function getLettersForwardedToSeniorServer() {
           date_received_by_add_secretary as received_date,
           date_letter_handover_discipline as letter_date,
           created_at,
+          'registered' as status,
           'registered' as source_table
         FROM public.daily_mail_letter_table
         WHERE
@@ -10522,6 +10586,7 @@ export async function getLettersForwardedToSeniorServer() {
         subject: l.subject || "",
         type: l.type || "Complaint",
         sender: l.sender || "N/A",
+        priority: l.priority || "Normal",
         receivedDate: l.received_date ? new Date(l.received_date).toISOString().split("T")[0] : "",
         letterDate: l.letter_date ? new Date(l.letter_date).toISOString().split("T")[0] : "",
         forwardReason: l.forward_reason || "",
@@ -10532,6 +10597,7 @@ export async function getLettersForwardedToSeniorServer() {
         createdByRole: l.created_by_role || "",
         forwardedBy: "Additional Secretary",
         actionOfficer: l.action_officer || "",
+        status: l.status || "assigned",
         sourceTable: l.source_table || "",
         createdAt: l.created_at ? new Date(l.created_at).toISOString() : new Date().toISOString(),
       });
@@ -10862,9 +10928,10 @@ export async function forwardLetterFromAdditionalSecretaryServer(params: {
   senderName?: string;
   senderRole?: string;
   addSecInstructions?: string;
+  priority?: string;
 }) {
   try {
-    const { letterId, letterNo, refNo, forwardToOfficerName, forwardToRole, forwardReason, senderName, senderRole, addSecInstructions } = params;
+    const { letterId, letterNo, refNo, forwardToOfficerName, forwardToRole, forwardReason, senderName, senderRole, addSecInstructions, priority } = params;
     const senderTitle = senderRole || "Additional Secretary";
     const finalReason = forwardReason || `Forwarded by ${senderTitle} to ${forwardToOfficerName} for review and necessary action`;
     const forwardedToStr = `${forwardToOfficerName} (${forwardToRole})`;
@@ -10872,6 +10939,18 @@ export async function forwardLetterFromAdditionalSecretaryServer(params: {
 
     if (!idKey) {
       return serializeForServerAction({ success: false, error: "No letter identifier provided" });
+    }
+
+    let cleanPriority: string | null = null;
+    if (priority && String(priority).trim()) {
+      const p = String(priority).trim().toLowerCase();
+      if (p.includes("high") || p.includes("urgent") || p.includes("today") || p.includes("අද")) {
+        cleanPriority = "High";
+      } else if (p.includes("low") || p.includes("14") || p.includes("21") || p.includes("අඩු")) {
+        cleanPriority = "Low";
+      } else {
+        cleanPriority = "Medium";
+      }
     }
 
     // 1. Update in daily_mail_letter_table
@@ -10885,11 +10964,12 @@ export async function forwardLetterFromAdditionalSecretaryServer(params: {
           addressed_role = $4,
           add_sec_forward_method = 'Forwarded to ' || $3,
           add_sec_instructions = CASE WHEN $8::text IS NOT NULL AND $8::text <> '' THEN $8::text ELSE add_sec_instructions END,
+          priority = CASE WHEN $9::text IS NOT NULL AND $9::text <> '' THEN $9::text ELSE priority END,
           updated_at = CURRENT_TIMESTAMP
         WHERE letter_number = $5 OR ref_number = $6 OR id::text = $7
            OR (TRIM(letter_number) != '' AND TRIM(letter_number) = TRIM($5))
            OR (TRIM(ref_number) != '' AND TRIM(ref_number) = TRIM($6))
-      `, forwardedToStr, finalReason, forwardToOfficerName, forwardToRole, letterNo || "", refNo || "", String(letterId || ""), addSecInstructions || null);
+      `, forwardedToStr, finalReason, forwardToOfficerName, forwardToRole, letterNo || "", refNo || "", String(letterId || ""), addSecInstructions || null, cleanPriority);
     } catch (err) {
       console.warn("Update warning in daily_mail_letter_table:", err);
     }
@@ -10906,16 +10986,44 @@ export async function forwardLetterFromAdditionalSecretaryServer(params: {
           status = 'forwarded',
           add_sec_forward_method = 'Forwarded to ' || $3,
           add_sec_instructions = CASE WHEN $8::text IS NOT NULL AND $8::text <> '' THEN $8::text ELSE add_sec_instructions END,
+          priority = CASE WHEN $9::text IS NOT NULL AND $9::text <> '' THEN $9::text ELSE priority END,
           updated_at = CURRENT_TIMESTAMP
         WHERE letter_no = $5 OR serial_no = $6 OR id::text = $7
            OR (TRIM(letter_no) != '' AND TRIM(letter_no) = TRIM($5))
            OR (TRIM(serial_no) != '' AND TRIM(serial_no) = TRIM($6))
-      `, forwardedToStr, finalReason, forwardToOfficerName, forwardToRole, letterNo || "", refNo || "", String(letterId || ""), addSecInstructions || null);
+      `, forwardedToStr, finalReason, forwardToOfficerName, forwardToRole, letterNo || "", refNo || "", String(letterId || ""), addSecInstructions || null, cleanPriority);
     } catch (err) {
       console.warn("Update warning in dcmms_daily_mail:", err);
     }
 
-    // 3. Create real-time notification for target officer
+    // 3. Update in dcmms_subject (if exists)
+    if (cleanPriority) {
+      try {
+        await prisma.$executeRawUnsafe(`
+          UPDATE public.dcmms_subject SET
+            priority = $2,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE case_no = $1 OR id = $1
+             OR case_no = $3 OR id = $3
+        `, letterNo || "", cleanPriority, refNo || "");
+      } catch (err) {
+        console.warn("Update warning in dcmms_subject:", err);
+      }
+    }
+
+    // 4. Update in letters table (if exists)
+    if (cleanPriority) {
+      try {
+        await prisma.$executeRawUnsafe(`
+          UPDATE public.letters SET
+            priority = $2
+          WHERE letter_number = $1 OR serial_number = $1 OR letter_id::text = $1
+             OR letter_number = $3 OR serial_number = $3
+        `, letterNo || "", cleanPriority, refNo || "");
+      } catch (err) {}
+    }
+
+    // 5. Create real-time notification for target officer
     try {
       await createOfficerNotificationServer({
         targetOfficerName: forwardToOfficerName,
@@ -10924,7 +11032,7 @@ export async function forwardLetterFromAdditionalSecretaryServer(params: {
         caseNo: refNo || letterNo || idKey,
         type: "secretary_letter_forwarded",
         title: `New Letter Forwarded by ${senderTitle}`,
-        message: `Letter ${letterNo || refNo || idKey} from "${senderName || "Sender"}" has been forwarded to you by ${senderTitle} with instructions: "${finalReason}".`,
+        message: `Letter ${letterNo || refNo || idKey} from "${senderName || "Sender"}"${cleanPriority ? ` [${cleanPriority} Priority]` : ""} has been forwarded to you by ${senderTitle} with instructions: "${finalReason}".`,
         senderName: senderTitle,
       });
     } catch (notifErr) {
@@ -10940,6 +11048,7 @@ export async function forwardLetterFromAdditionalSecretaryServer(params: {
         actionOfficer: forwardToOfficerName,
         addressedTo: forwardToOfficerName,
         addressedRole: forwardToRole,
+        priority: cleanPriority,
         isForwarded: true
       }
     });
@@ -11699,6 +11808,7 @@ export async function getLetterAndCaseDetailsByAnyRefServer(queryParam: string) 
         complainantName,
         complainantAddress,
         subject,
+        priority: letter?.priority || "Normal",
         subjectOfficerName: subjectOfficer,
         assignee: subjectOfficer,
         status: asgn?.status || "In Progress",
@@ -11742,7 +11852,9 @@ export async function getLetterAndCaseDetailsByAnyRefServer(queryParam: string) 
 // -------------------------------------------------------------
 // Subject Officer Reports: Categorized Letters (Discipline vs Mail)
 // -------------------------------------------------------------
-export async function getSubjectReportsCategorizedLettersServer() {
+export async function getSubjectReportsCategorizedLettersServer(
+  targetOfficerParam?: string | { full_name?: string; name?: string; email?: string; employee_no?: string; role?: string; subject_type?: string } | null
+) {
   try {
     try {
       await prisma.$executeRawUnsafe(`ALTER TABLE subject_officer_form_table ADD COLUMN IF NOT EXISTS file_name VARCHAR(100);`);
@@ -11750,6 +11862,201 @@ export async function getSubjectReportsCategorizedLettersServer() {
       await ensureReplyLetterDetailsTable();
     } catch (e) {
       console.warn("Table verification notice in getSubjectReportsCategorizedLettersServer:", e);
+    }
+
+    // 0. Extract officer credentials if specified to filter reports ONLY to this Subject Officer
+    let officerName = "";
+    let officerEmail = "";
+    let officerEmpNo = "";
+    let officerSubjType = "";
+    let officerRole = "";
+
+    if (typeof targetOfficerParam === "object" && targetOfficerParam !== null) {
+      officerName = targetOfficerParam.full_name || targetOfficerParam.name || "";
+      officerEmail = targetOfficerParam.email || "";
+      officerEmpNo = targetOfficerParam.employee_no || "";
+      officerSubjType = targetOfficerParam.subject_type || "";
+      officerRole = (targetOfficerParam.role || "").toLowerCase();
+    } else if (typeof targetOfficerParam === "string") {
+      officerName = targetOfficerParam;
+    }
+
+    const activeNameClean = (officerName || "").trim().toLowerCase();
+
+    // Query register_officer_table to fetch full profile and disambiguate against other officers
+    let allOfficers: any[] = [];
+    try {
+      allOfficers = await prisma.$queryRaw`
+        SELECT id, employee_no, full_name, email, role, subject_type 
+        FROM public.register_officer_table;
+      `;
+    } catch (e) {}
+
+    let officerRecord: any = null;
+    if (activeNameClean) {
+      officerRecord = allOfficers.find((o: any) => {
+        const fn = (o.full_name || "").trim().toLowerCase();
+        const em = (o.email || "").trim().toLowerCase();
+        const en = (o.employee_no || "").trim().toLowerCase();
+        if (fn === activeNameClean || em === activeNameClean || en === activeNameClean) return true;
+        if (activeNameClean.length > 3 && (fn.includes(activeNameClean) || activeNameClean.includes(fn))) return true;
+        return false;
+      });
+    }
+
+    const targetTokens = new Set<string>();
+    if (officerRecord) {
+      if (officerRecord.full_name) targetTokens.add(officerRecord.full_name.trim().toLowerCase());
+      if (officerRecord.employee_no) targetTokens.add(officerRecord.employee_no.trim().toLowerCase());
+      if (officerRecord.email) targetTokens.add(officerRecord.email.trim().toLowerCase());
+      if (officerRecord.subject_type) {
+        const st = officerRecord.subject_type.trim().toLowerCase();
+        targetTokens.add(st);
+        const codeMatch = st.match(/^(\d{2})/);
+        if (codeMatch) {
+          targetTokens.add(`so-${codeMatch[1]}`);
+          targetTokens.add(`so ${codeMatch[1]}`);
+          targetTokens.add(`subject officer ${codeMatch[1]}`);
+          targetTokens.add(`subject officer - ${codeMatch[1]}`);
+        }
+      }
+    }
+    if (officerSubjType) {
+      targetTokens.add(officerSubjType.trim().toLowerCase());
+      const cm = officerSubjType.trim().toLowerCase().match(/^(\d{2})/);
+      if (cm) {
+        targetTokens.add(`so-${cm[1]}`);
+        targetTokens.add(`so ${cm[1]}`);
+        targetTokens.add(`subject officer ${cm[1]}`);
+        targetTokens.add(`subject officer - ${cm[1]}`);
+      }
+    }
+    if (officerEmpNo) {
+      targetTokens.add(officerEmpNo.trim().toLowerCase());
+    }
+    if (activeNameClean) {
+      targetTokens.add(activeNameClean);
+    }
+
+    const otherOfficers = allOfficers.filter(
+      (o: any) => o.id !== officerRecord?.id && (o.full_name || "").toLowerCase() !== activeNameClean
+    );
+
+    const isOfficerMatched = (targetName?: string) => {
+      if (!activeNameClean) return true;
+      if (!targetName || typeof targetName !== "string" || !targetName.trim() || targetName === "null" || targetName === "undefined") {
+        return false;
+      }
+      const cleanTarget = targetName.trim().toLowerCase();
+
+      const isGeneric = 
+        cleanTarget === "subject officer" ||
+        cleanTarget === "විෂය නිලධාරී" ||
+        cleanTarget === "විෂය භාර නිලධාරී" ||
+        cleanTarget === "විෂයභාර නිලධාරී" ||
+        cleanTarget === "subject_officer" ||
+        cleanTarget === "unassigned" ||
+        cleanTarget === "null";
+
+      if (isGeneric) {
+        return activeNameClean === "subject officer" || activeNameClean === "විෂය භාර නිලධාරී" || activeNameClean === "විෂය නිලධාරී";
+      }
+
+      for (const other of otherOfficers) {
+        const otherFn = (other.full_name || "").trim().toLowerCase();
+        const otherEn = (other.employee_no || "").trim().toLowerCase();
+        if (otherFn && (cleanTarget === otherFn || cleanTarget.includes(otherFn))) {
+          if (!officerRecord?.full_name || !cleanTarget.includes(officerRecord.full_name.toLowerCase())) {
+            return false;
+          }
+        }
+        if (otherEn && otherEn.length >= 4 && cleanTarget.includes(otherEn)) {
+          if (!officerRecord?.employee_no || !cleanTarget.includes(officerRecord.employee_no.toLowerCase())) {
+            return false;
+          }
+        }
+      }
+
+      for (const token of targetTokens) {
+        if (cleanTarget === token) return true;
+        if (cleanTarget.includes(token)) return true;
+        if (token.length > 5 && token.includes(cleanTarget) && cleanTarget.length > 15) return true;
+      }
+
+      return false;
+    };
+
+    // Pre-build assigned case numbers specifically for this Subject Officer
+    const assignedCaseNosSet = new Set<string>();
+    const officerDailyMailIds = new Set<string>();
+
+    if (activeNameClean) {
+      // 1. Check dcmms_subject_assignments
+      try {
+        const asgns: any[] = await prisma.$queryRaw`
+          SELECT case_no, subject_officer_name, assigned_officers FROM public.dcmms_subject_assignments;
+        `;
+        asgns.forEach((a) => {
+          const asgnOfficer = a.subject_officer_name || a.assigned_officers || "";
+          if (a.case_no && isOfficerMatched(asgnOfficer)) {
+            assignedCaseNosSet.add(String(a.case_no).trim().toLowerCase());
+          }
+        });
+      } catch (e) {}
+
+      // 2. Check dcmms_subject
+      try {
+        const subCases: any[] = await prisma.$queryRaw`
+          SELECT case_no, officer_name FROM public.dcmms_subject;
+        `;
+        subCases.forEach((sc) => {
+          const sOfficer = sc.officer_name || "";
+          if (sc.case_no && sOfficer && isOfficerMatched(sOfficer)) {
+            assignedCaseNosSet.add(String(sc.case_no).trim().toLowerCase());
+          }
+        });
+      } catch (e) {}
+
+      // 3. Check dcmms_subsequent_mails
+      try {
+        const subsequent: any[] = await prisma.$queryRaw`
+          SELECT case_no, mail_officer_name FROM public.dcmms_subsequent_mails;
+        `;
+        subsequent.forEach((m) => {
+          if (m.case_no && isOfficerMatched(m.mail_officer_name)) {
+            assignedCaseNosSet.add(String(m.case_no).trim().toLowerCase());
+          }
+        });
+      } catch (e) {}
+
+      // 4. Fetch dashboard cases for this officer to ensure 100% parity with subject dashboard
+      try {
+        const dashRes = await getSubjectOfficerDashboardCasesServer(targetOfficerParam);
+        if (dashRes && dashRes.success && dashRes.data) {
+          (dashRes.data.cases || []).forEach((c: any) => {
+            if (c.caseNo) assignedCaseNosSet.add(String(c.caseNo).trim().toLowerCase());
+            if (c.refNo) assignedCaseNosSet.add(String(c.refNo).trim().toLowerCase());
+            if (c.letterNo) assignedCaseNosSet.add(String(c.letterNo).trim().toLowerCase());
+            if (c.id) assignedCaseNosSet.add(String(c.id).trim().toLowerCase());
+          });
+          (dashRes.data.answerLetters || []).forEach((a: any) => {
+            if (a.caseNo) assignedCaseNosSet.add(String(a.caseNo).trim().toLowerCase());
+            if (a.refNo) assignedCaseNosSet.add(String(a.refNo).trim().toLowerCase());
+            if (a.letterNo) assignedCaseNosSet.add(String(a.letterNo).trim().toLowerCase());
+            if (a.id) assignedCaseNosSet.add(String(a.id).trim().toLowerCase());
+          });
+          (dashRes.data.assignments || []).forEach((asgn: any) => {
+            if (asgn.caseNo) assignedCaseNosSet.add(String(asgn.caseNo).trim().toLowerCase());
+            if (asgn.case_no) assignedCaseNosSet.add(String(asgn.case_no).trim().toLowerCase());
+          });
+          (dashRes.data.replyLetters || []).forEach((r: any) => {
+            if (r.ref_number) assignedCaseNosSet.add(String(r.ref_number).trim().toLowerCase());
+            if (r.file_no) assignedCaseNosSet.add(String(r.file_no).trim().toLowerCase());
+          });
+        }
+      } catch (e) {
+        console.warn("Could not pre-fetch dashboard cases in reports:", e);
+      }
     }
 
     // 1. Fetch all subject_officer_form_table records
@@ -11860,6 +12167,18 @@ export async function getSubjectReportsCategorizedLettersServer() {
       if (k1 && !mailMap.has(k1)) mailMap.set(k1, m);
       if (k2 && !mailMap.has(k2)) mailMap.set(k2, m);
       if (k3 && !mailMap.has(`id-${k3}`)) mailMap.set(`id-${k3}`, m);
+
+      // Check if this daily mail letter is assigned to this officer
+      if (activeNameClean) {
+        const candidates = [m.action_officer, m.forwarded_to, m.addressed_to];
+        const isDirect = candidates.some((c) => c && isOfficerMatched(c));
+        const inAssigned = (k1 && assignedCaseNosSet.has(k1)) || (k2 && assignedCaseNosSet.has(k2));
+        if (isDirect || inAssigned) {
+          if (k1) assignedCaseNosSet.add(k1);
+          if (k2) assignedCaseNosSet.add(k2);
+          if (k3) officerDailyMailIds.add(k3);
+        }
+      }
     });
 
     // 4. Fetch all accused officers with schools via junction table
@@ -12047,17 +12366,50 @@ export async function getSubjectReportsCategorizedLettersServer() {
       };
     };
 
+    const isRecordAssignedToOfficer = (
+      refNo?: string | null,
+      fileNo?: string | null,
+      dailyMailId?: any,
+      mailMeta?: any
+    ): boolean => {
+      if (!activeNameClean) return true; // No officer filtering requested, return all
+
+      const r1 = String(refNo || "").trim().toLowerCase();
+      const r2 = String(fileNo || "").trim().toLowerCase();
+      const dmId = dailyMailId ? String(dailyMailId).trim() : "";
+
+      if (r1 && assignedCaseNosSet.has(r1)) return true;
+      if (r2 && assignedCaseNosSet.has(r2)) return true;
+      if (dmId && (officerDailyMailIds.has(dmId) || assignedCaseNosSet.has(dmId.toLowerCase()))) return true;
+
+      if (mailMeta) {
+        if (mailMeta.action_officer && isOfficerMatched(mailMeta.action_officer)) return true;
+        if (mailMeta.forwarded_to && isOfficerMatched(mailMeta.forwarded_to)) return true;
+        if (mailMeta.addressed_to && isOfficerMatched(mailMeta.addressed_to)) return true;
+        const mRef = String(mailMeta.ref_number || "").trim().toLowerCase();
+        const mLet = String(mailMeta.letter_number || "").trim().toLowerCase();
+        if (mRef && assignedCaseNosSet.has(mRef)) return true;
+        if (mLet && assignedCaseNosSet.has(mLet)) return true;
+      }
+
+      return false;
+    };
+
     // First process subject_officer_form_table rows
     formsRaw.forEach((f) => {
       const ref = String(f.ref_number || f.subject_file_no || f.form_id).trim();
       const refLower = ref.toLowerCase();
       if (seenRefs.has(refLower)) return;
-      seenRefs.add(refLower);
 
       const rMatch = replyByRef.get(refLower) || (f.subject_file_no ? replyByRef.get(String(f.subject_file_no).trim().toLowerCase()) : null);
       const mMatch = mailMap.get(refLower) || 
         (f.subject_file_no ? mailMap.get(String(f.subject_file_no).trim().toLowerCase()) : null) ||
         (f.daily_mail_letter_id ? mailMap.get(`id-${String(f.daily_mail_letter_id).trim()}`) : null);
+
+      if (!isRecordAssignedToOfficer(f.ref_number, f.subject_file_no, f.daily_mail_letter_id, mMatch)) {
+        return;
+      }
+      seenRefs.add(refLower);
 
       let resolvedFileName: "discipline" | "mail" = "discipline";
       const rawFN = String(f.file_name || rMatch?.file_name || "").trim().toLowerCase();
@@ -12129,9 +12481,13 @@ export async function getSubjectReportsCategorizedLettersServer() {
       const ref = String(r.ref_number || r.file_no || r.id).trim();
       const refLower = ref.toLowerCase();
       if (seenRefs.has(refLower)) return;
-      seenRefs.add(refLower);
 
       const mMatch = mailMap.get(refLower);
+      if (!isRecordAssignedToOfficer(r.ref_number, r.file_no, undefined, mMatch)) {
+        return;
+      }
+      seenRefs.add(refLower);
+
       let resolvedFileName: "discipline" | "mail" = "discipline";
       const rawFN = String(r.file_name || "").trim().toLowerCase();
       if (rawFN === "mail" || rawFN.includes("mail") || rawFN.includes("තැපැල්")) {
@@ -12193,6 +12549,10 @@ export async function getSubjectReportsCategorizedLettersServer() {
       const ref = String(m.ref_number || m.letter_number || m.id).trim();
       const refLower = ref.toLowerCase();
       if (seenRefs.has(refLower)) return;
+
+      if (!isRecordAssignedToOfficer(m.ref_number, m.letter_number, m.id, m)) {
+        return;
+      }
       seenRefs.add(refLower);
 
       const rawType = String(m.nature_of_letter || m.subject_category || "").toLowerCase();
@@ -12259,9 +12619,13 @@ export async function getSubjectReportsCategorizedLettersServer() {
     standaloneInquiryRefs.forEach((ref) => {
       const refLower = ref.toLowerCase();
       if (seenRefs.has(refLower)) return;
-      seenRefs.add(refLower);
 
       const mMatch = mailMap.get(refLower);
+      if (!isRecordAssignedToOfficer(ref, undefined, undefined, mMatch)) {
+        return;
+      }
+      seenRefs.add(refLower);
+
       const resolvedNature = String(mMatch?.nature_of_letter || mMatch?.type || "").trim();
       const inqDetail = buildInquiryDetails(refLower);
 

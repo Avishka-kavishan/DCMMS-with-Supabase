@@ -20,7 +20,6 @@ import {
   Search,
   Filter,
   Eye,
-  Edit3,
   Printer,
   RefreshCw,
   FileText,
@@ -146,24 +145,12 @@ export default function SubjectOfficerReportsPage() {
   // Detail Modal state
   const [selectedLetter, setSelectedLetter] = useState<LetterReportItem | null>(null);
 
-  // Load user profile
-  useEffect(() => {
-    const loadProfile = async () => {
-      try {
-        const prof = await getCurrentProfile();
-        setProfile(prof);
-      } catch (e) {
-        console.error("Error loading profile:", e);
-      }
-    };
-    loadProfile();
-  }, []);
-
   // Fetch report letters from PostgreSQL and merge with localStorage fallbacks
-  const fetchLetters = async () => {
+  const fetchLetters = async (activeProf?: UserProfile | null) => {
     try {
       setLoading(true);
-      const res = await getSubjectReportsCategorizedLettersServer();
+      const officer = activeProf !== undefined ? activeProf : profile;
+      const res = await getSubjectReportsCategorizedLettersServer(officer);
 
       let discList: LetterReportItem[] = [];
       let mailList: LetterReportItem[] = [];
@@ -191,6 +178,51 @@ export default function SubjectOfficerReportsPage() {
             ...mailList.map((m) => m.ref_number.toLowerCase()),
             ...inqList.map((i) => i.ref_number.toLowerCase()),
           ]);
+
+          // Filter local storage items so only this officer's cases are included
+          const officerAllowedRefs = new Set<string>();
+          discList.forEach((d) => {
+            if (d.ref_number) officerAllowedRefs.add(d.ref_number.toLowerCase());
+            if (d.subject_file_no) officerAllowedRefs.add(d.subject_file_no.toLowerCase());
+          });
+          mailList.forEach((m) => {
+            if (m.ref_number) officerAllowedRefs.add(m.ref_number.toLowerCase());
+            if (m.subject_file_no) officerAllowedRefs.add(m.subject_file_no.toLowerCase());
+          });
+          inqList.forEach((i) => {
+            if (i.ref_number) officerAllowedRefs.add(i.ref_number.toLowerCase());
+            if (i.subject_file_no) officerAllowedRefs.add(i.subject_file_no.toLowerCase());
+          });
+
+          const officerNameClean = (officer?.full_name || "").trim().toLowerCase();
+          const officerEmailClean = (officer?.email || "").trim().toLowerCase();
+          const officerEmpClean = (officer?.employee_no || "").trim().toLowerCase();
+
+          const isLocalItemAssignedToMe = (itemOrCase: any, cNo: string) => {
+            if (!officerNameClean) return true; // No officer filter
+            const cleanRef = cNo.toLowerCase();
+            if (officerAllowedRefs.has(cleanRef)) return true;
+
+            const candidateOfficers = [
+              itemOrCase.officerName,
+              itemOrCase.officer_name,
+              itemOrCase.actionOfficer,
+              itemOrCase.action_officer,
+              itemOrCase.assignedOfficer,
+              itemOrCase.subject_officer_name,
+              itemOrCase.subjectOfficerName,
+              itemOrCase.forwardedTo,
+              itemOrCase.forwarded_to,
+            ].map((x) => String(x || "").trim().toLowerCase()).filter(Boolean);
+
+            for (const cand of candidateOfficers) {
+              if (cand === officerNameClean || (officerNameClean.length > 3 && cand.includes(officerNameClean))) return true;
+              if (officerEmailClean && cand === officerEmailClean) return true;
+              if (officerEmpClean && cand === officerEmpClean) return true;
+            }
+
+            return false;
+          };
 
           const checkIsLocalInquiry = (actOrCase: any) => {
             const rawNature = String(
@@ -226,7 +258,7 @@ export default function SubjectOfficerReportsPage() {
           if (Array.isArray(localActions)) {
             localActions.forEach((act: any) => {
               const cNo = String(act.caseNo || "").trim();
-              if (cNo && !seenRefs.has(cNo.toLowerCase())) {
+              if (cNo && !seenRefs.has(cNo.toLowerCase()) && isLocalItemAssignedToMe(act, cNo)) {
                 seenRefs.add(cNo.toLowerCase());
                 const con = localConcernedMap[cNo] || {};
                 const firstPerson = con.persons && con.persons.length > 0 ? con.persons[0] : null;
@@ -287,7 +319,7 @@ export default function SubjectOfficerReportsPage() {
           if (Array.isArray(localCases)) {
             localCases.forEach((c: any) => {
               const cNo = String(c.caseNo || c.refNo || "").trim();
-              if (cNo && !seenRefs.has(cNo.toLowerCase())) {
+              if (cNo && !seenRefs.has(cNo.toLowerCase()) && isLocalItemAssignedToMe(c, cNo)) {
                 seenRefs.add(cNo.toLowerCase());
                 const rawFn = String(c.fileName || c.file_name || "discipline").toLowerCase();
                 const isMail = rawFn === "mail" || rawFn.includes("mail") || rawFn.includes("තැපැල්");
@@ -356,13 +388,33 @@ export default function SubjectOfficerReportsPage() {
     }
   };
 
+  // Load user profile and fetch categorized letters for this Subject Officer
   useEffect(() => {
-    fetchLetters();
+    let isMounted = true;
+    const init = async () => {
+      try {
+        setLoading(true);
+        const prof = await getCurrentProfile();
+        if (isMounted) {
+          setProfile(prof);
+          await fetchLetters(prof);
+        }
+      } catch (e) {
+        console.error("Error loading profile:", e);
+        if (isMounted) {
+          await fetchLetters(null);
+        }
+      }
+    };
+    init();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const handleRefresh = () => {
     setIsRefreshing(true);
-    fetchLetters();
+    fetchLetters(profile);
   };
 
   const changeLanguage = (lng: string) => {
@@ -573,13 +625,34 @@ export default function SubjectOfficerReportsPage() {
                 <h2 className="dashboard-main-title">
                   {lang === "si" ? "විෂය භාර නිලධාරී" : lang === "ta" ? "பாடப் பொறுப்பு அதிகாரி" : "Subject Officer"}
                 </h2>
-                <p className="dashboard-main-subtitle">
-                  {lang === "si"
-                    ? "වාර්තා සහ විශ්ලේෂණ සේවා අවකාශය"
-                    : lang === "ta"
-                    ? "அறிக்கைகள் மற்றும் பகுப்பாய்வு பணியிடம்"
-                    : "Reports & Analytics Workspace"}
-                </p>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", marginTop: "2px" }}>
+                  <p className="dashboard-main-subtitle" style={{ margin: 0 }}>
+                    {lang === "si"
+                      ? "වාර්තා සහ විශ්ලේෂණ සේවා අවකාශය"
+                      : lang === "ta"
+                      ? "அறிக்கைகள் மற்றும் பகுப்பாய்வு பணியிடம்"
+                      : "Reports & Analytics Workspace"}
+                    {profile?.full_name ? ` • ${profile.full_name}` : ""}
+                  </p>
+                  <span
+                    style={{
+                      fontSize: "11px",
+                      padding: "2px 8px",
+                      background: "#eff6ff",
+                      color: "#1d4ed8",
+                      borderRadius: "9999px",
+                      fontWeight: 600,
+                      border: "1px solid #bfdbfe",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px"
+                    }}
+                    title="Reports are in read-only view mode"
+                  >
+                    <Eye size={12} />
+                    <span>{lang === "si" ? "නැරඹීම පමණි (View Only)" : "View Only"}</span>
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -1117,7 +1190,7 @@ export default function SubjectOfficerReportsPage() {
                         <th>{lang === "si" ? "පාසල / ආයතනය" : "School / Institute"}</th>
                         <th>{lang === "si" ? "ලැබුණු දිනය" : "Received Date"}</th>
                         <th>{lang === "si" ? "තත්ත්වය" : "Status"}</th>
-                        <th style={{ textAlign: "right" }}>{lang === "si" ? "ක්‍රියාමාර්ග" : "Actions"}</th>
+                        <th style={{ textAlign: "center" }}>{lang === "si" ? "වාර්තාව බලන්න" : "View Report"}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1266,39 +1339,18 @@ export default function SubjectOfficerReportsPage() {
                                 </span>
                               </td>
 
-                              {/* 13. ක්‍රියාමාර්ග (Actions) */}
-                              <td style={{ textAlign: "right", whiteSpace: "nowrap" }} onClick={(e) => e.stopPropagation()}>
-                                <div style={{ display: "inline-flex", gap: "6px" }}>
-                                  <button
-                                    type="button"
-                                    className="btn-card-action btn-view-details"
-                                    style={{ padding: "4px 8px", fontSize: "12px" }}
-                                    onClick={() => setSelectedLetter(letter)}
-                                    title="View Full Details Modal"
-                                  >
-                                    <Eye size={13} />
-                                  </button>
-
-                                  <Link
-                                    href={`/subject/add-details?caseNo=${encodeURIComponent(letter.ref_number)}`}
-                                    className="btn-card-action btn-edit-case"
-                                    style={{ padding: "4px 8px", fontSize: "12px" }}
-                                    title="Open / Edit Case Details"
-                                  >
-                                    <Edit3 size={13} />
-                                  </Link>
-
-                                  {(activeTab === "inquiries" || letter.file_name === "inquiry" || Boolean(letter.inquiry_details)) && (
-                                    <Link
-                                      href={`/subject/disciplinary-inspection?caseNo=${encodeURIComponent(letter.ref_number)}`}
-                                      className="btn-card-action"
-                                      style={{ padding: "4px 8px", fontSize: "12px", background: "#fff7ed", color: "#c2410c", border: "1px solid #fed7aa" }}
-                                      title={lang === "si" ? "විනය පරීක්ෂණ විස්තර" : "Disciplinary Inspection"}
-                                    >
-                                      <Scale size={13} />
-                                    </Link>
-                                  )}
-                                </div>
+                              {/* 13. ක්‍රියාමාර්ග (View Report Details) */}
+                              <td style={{ textAlign: "center", whiteSpace: "nowrap" }} onClick={(e) => e.stopPropagation()}>
+                                <button
+                                  type="button"
+                                  className="btn-card-action btn-view-details"
+                                  style={{ padding: "5px 12px", fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "6px" }}
+                                  onClick={() => setSelectedLetter(letter)}
+                                  title={lang === "si" ? "වාර්තාවේ සම්පූර්ණ විස්තර බලන්න" : "View Full Report Details"}
+                                >
+                                  <Eye size={13} />
+                                  <span>{lang === "si" ? "බලන්න" : "View"}</span>
+                                </button>
                               </td>
                             </tr>
 
@@ -1323,30 +1375,12 @@ export default function SubjectOfficerReportsPage() {
                                         <button
                                           type="button"
                                           className="btn-card-action btn-view-details"
-                                          style={{ padding: "4px 10px", fontSize: "12px" }}
+                                          style={{ padding: "5px 12px", fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "6px" }}
                                           onClick={() => setSelectedLetter(letter)}
                                         >
-                                          <Eye size={12} />
-                                          <span>{lang === "si" ? "පොප්අප් එකෙන් බලන්න" : "Open Modal"}</span>
+                                          <Eye size={13} />
+                                          <span>{lang === "si" ? "සම්පූර්ණ වාර්තාව බලන්න" : "View Full Report"}</span>
                                         </button>
-                                        <Link
-                                          href={`/subject/add-details?caseNo=${encodeURIComponent(letter.ref_number)}`}
-                                          className="btn-card-action btn-edit-case"
-                                          style={{ padding: "4px 10px", fontSize: "12px" }}
-                                        >
-                                          <Edit3 size={12} />
-                                          <span>{lang === "si" ? "සංස්කරණය" : "Edit Case"}</span>
-                                        </Link>
-                                        {(activeTab === "inquiries" || letter.file_name === "inquiry" || Boolean(letter.inquiry_details)) && (
-                                          <Link
-                                            href={`/subject/disciplinary-inspection?caseNo=${encodeURIComponent(letter.ref_number)}`}
-                                            className="btn-card-action"
-                                            style={{ padding: "4px 10px", fontSize: "12px", background: "#fff7ed", color: "#c2410c", border: "1px solid #fed7aa" }}
-                                          >
-                                            <Scale size={12} />
-                                            <span>{lang === "si" ? "විනය පරීක්ෂණ" : "Inspection"}</span>
-                                          </Link>
-                                        )}
                                       </div>
                                     </div>
 
@@ -1520,24 +1554,6 @@ export default function SubjectOfficerReportsPage() {
                                               <span className="detail-field-value highlight-action" style={{ color: "#c2410c" }}>
                                                 {letter.inquiry_details?.disciplinary_order || "—"}
                                               </span>
-                                            </div>
-                                            <div style={{ marginTop: "8px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                                              <Link
-                                                href={`/subject/disciplinary-inspection?caseNo=${encodeURIComponent(letter.ref_number)}`}
-                                                className="btn-card-action"
-                                                style={{ fontSize: "11px", padding: "3px 8px", background: "#fff7ed", color: "#c2410c", border: "1px solid #fed7aa" }}
-                                              >
-                                                <Scale size={12} />
-                                                <span>{lang === "si" ? "විනය පරීක්ෂණ පිටුව" : "Disciplinary Inspection"}</span>
-                                              </Link>
-                                              <Link
-                                                href={`/subject/conduct-inquiry?caseNo=${encodeURIComponent(letter.ref_number)}`}
-                                                className="btn-card-action"
-                                                style={{ fontSize: "11px", padding: "3px 8px", background: "#fff7ed", color: "#c2410c", border: "1px solid #fed7aa" }}
-                                              >
-                                                <FileText size={12} />
-                                                <span>{lang === "si" ? "පරීක්ෂණ මෙහෙයවීම" : "Conduct Inquiry"}</span>
-                                              </Link>
                                             </div>
                                           </div>
                                         </div>
@@ -1856,29 +1872,11 @@ export default function SubjectOfficerReportsPage() {
                             type="button"
                             className="btn-card-action btn-view-details"
                             onClick={() => setSelectedLetter(letter)}
+                            style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
                           >
                             <Eye size={14} />
-                            <span>{lang === "si" ? "සම්පූර්ණ විස්තර බලන්න" : "View Full Details"}</span>
+                            <span>{lang === "si" ? "සම්පූර්ණ වාර්තාව බලන්න" : "View Full Report"}</span>
                           </button>
-
-                          <Link
-                            href={`/subject/add-details?caseNo=${encodeURIComponent(letter.ref_number)}`}
-                            className="btn-card-action btn-edit-case"
-                          >
-                            <Edit3 size={14} />
-                            <span>{lang === "si" ? "සංස්කරණය / විස්තර" : "Open / Edit"}</span>
-                          </Link>
-
-                          {isInquiry && (
-                            <Link
-                              href={`/subject/disciplinary-inspection?caseNo=${encodeURIComponent(letter.ref_number)}`}
-                              className="btn-card-action"
-                              style={{ background: "#fff7ed", color: "#c2410c", border: "1px solid #fed7aa", display: "inline-flex", alignItems: "center", gap: "5px" }}
-                            >
-                              <Scale size={14} />
-                              <span>{lang === "si" ? "පරීක්ෂණ" : "Inspection"}</span>
-                            </Link>
-                          )}
                         </div>
                       </div>
                     </article>
@@ -2137,27 +2135,13 @@ export default function SubjectOfficerReportsPage() {
                 onClick={() => window.print()}
               >
                 <Printer size={15} />
-                <span>{lang === "si" ? "මුද්‍රණය කරන්න" : "Print"}</span>
+                <span>{lang === "si" ? "මුද්‍රණය කරන්න" : "Print Report"}</span>
               </button>
 
-              <Link
-                href={`/subject/add-details?caseNo=${encodeURIComponent(selectedLetter.ref_number)}`}
-                className="btn-card-action btn-edit-case"
-              >
-                <Edit3 size={15} />
-                <span>{lang === "si" ? "සංස්කරණයට යන්න" : "Open in Add Details"}</span>
-              </Link>
-
-              {(selectedLetter.inquiry_details || selectedLetter.file_name === "inquiry") && (
-                <Link
-                  href={`/subject/disciplinary-inspection?caseNo=${encodeURIComponent(selectedLetter.ref_number)}`}
-                  className="btn-card-action"
-                  style={{ background: "#fff7ed", color: "#c2410c", border: "1px solid #fed7aa", display: "inline-flex", alignItems: "center", gap: "6px" }}
-                >
-                  <Scale size={15} />
-                  <span>{lang === "si" ? "විනය පරීක්ෂණ පිටුව" : "Disciplinary Inspection"}</span>
-                </Link>
-              )}
+              <span style={{ fontSize: "12px", color: "#64748b", fontStyle: "italic", margin: "0 auto 0 12px", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                <Eye size={13} />
+                <span>{lang === "si" ? "වාර්තා නැරඹුම් ප්‍රකාරය (නැරඹීම පමණි)" : "Read-only report view"}</span>
+              </span>
 
               <button
                 type="button"

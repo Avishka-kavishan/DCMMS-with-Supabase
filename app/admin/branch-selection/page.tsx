@@ -6,8 +6,12 @@ import { useTranslation } from "react-i18next";
 import "../../../i18n";
 import "../admin.css";
 import "../../dashboard-common.css";
-import { ArrowLeft, Send, CheckCircle2, AlertCircle } from "lucide-react";
-import { forwardLetterFromAdditionalSecretaryServer, getRegisterOfficersServer } from "@/lib/db-actions";
+import { ArrowLeft, CheckCircle2, AlertCircle } from "lucide-react";
+import {
+  forwardLetterFromAdditionalSecretaryServer,
+  getRegisterOfficersServer,
+  getLetterAndCaseDetailsByAnyRefServer,
+} from "@/lib/db-actions";
 
 const DEFAULT_BRANCH_OPTIONS = [
   {
@@ -18,20 +22,70 @@ const DEFAULT_BRANCH_OPTIONS = [
     officerName: "",
   },
   {
-    value: "chief_clerk_discipline",
-    label: "Chief Clerk - Discipline Branch",
-    labelSi: "ශාඛා ප්‍රධානී - විනය ශාඛාව (Chief Clerk - Discipline Branch)",
-    labelTa: "முதன்மை எழுதுநர் - ஒழுக்க கிளை (Chief Clerk - Discipline Branch)",
-    officerName: "Chief Clerk Officer (ශාඛා ප්‍රධානී)",
+    value: "assistant_secretary_discipline",
+    label: "Assistant Secretary Discipline Branch",
+    labelSi: "සහකාර ලේකම් - විනය ශාඛාව (Assistant Secretary Discipline Branch)",
+    labelTa: "உதவிச் செயலாளர் - ஒழுக்க கிளை (Assistant Secretary Discipline Branch)",
+    officerName: "Bandula Gunawardena",
   },
   {
-    value: "chief_clerk_investigation",
-    label: "Chief Clerk - Investigation Branch",
-    labelSi: "ශාඛා ප්‍රධානී - විමර්ශන ශාඛාව (Chief Clerk - Investigation Branch)",
-    labelTa: "முதன்மை எழுதுநர் - விசாரணை கிளை (Chief Clerk - Investigation Branch)",
-    officerName: "Chief Clerk - Investigation Branch",
+    value: "assistant_secretary_investigation",
+    label: "Assistant Secretary Investigation Branch",
+    labelSi: "සහකාර ලේකම් - විමර්ශන ශාඛාව (Assistant Secretary Investigation Branch)",
+    labelTa: "உதவிச் செயலாளர் - விசாரணை கிளை (Assistant Secretary Investigation Branch)",
+    officerName: "Ranjith Siyambalapitiya",
   },
 ];
+
+const PRIORITY_OPTIONS = [
+  {
+    value: "high",
+    label: "High Priority (Today)",
+    labelSi: "🔴 අදම (High Priority)",
+    labelTa: "🔴 இன்றே (High Priority)",
+    descSi: "කඩිනමින් ක්‍රියා කළ යුතු ලිපි (දින 1-3 තුළ)",
+    descTa: "உடனடி நடவடிக்கை தேவைப்படும் கடிதங்கள் (1-3 நாட்கள்)",
+    descEn: "Urgent letters requiring immediate review (Within 1-3 days)",
+    color: "#dc2626",
+    bg: "#fee2e2",
+    border: "#fca5a5",
+    dot: "#ef4444",
+  },
+  {
+    value: "medium",
+    label: "Medium Priority (Within 3 Days)",
+    labelSi: "🟠 දින 3ක් තුළ (Medium Priority)",
+    labelTa: "🟠 3 நாட்களுக்குள் (Medium Priority)",
+    descSi: "සාමාන්‍ය විමර්ශන ලිපි (දින 3-7 තුළ)",
+    descTa: "வழக்கமான விசாரணை கடிதங்கள் (3-7 நாட்கள்)",
+    descEn: "Standard inquiry and assignment letters (Within 3-7 days)",
+    color: "#d97706",
+    bg: "#fef3c7",
+    border: "#fcd34d",
+    dot: "#f59e0b",
+  },
+  {
+    value: "low",
+    label: "Low Priority (Within 14/21 Days)",
+    labelSi: "🟢 දින 14/21ක් තුළ (Low Priority)",
+    labelTa: "🟢 14/21 நாட்களுக்குள் (Low Priority)",
+    descSi: "දීර්ඝ කාලීන සමාලෝචන ලිපි (දින 14-21 තුළ)",
+    descTa: "பொதுவான அல்லது நீண்ட கால கடிதங்கள் (14-21 நாட்கள்)",
+    descEn: "Routine or long-term review letters (Within 14-21 days)",
+    color: "#16a34a",
+    bg: "#dcfce7",
+    border: "#86efac",
+    dot: "#22c55e",
+  },
+];
+
+function normalizePriorityKey(val: string | null | undefined): "high" | "medium" | "low" {
+  if (!val) return "medium";
+  const s = String(val).toLowerCase().trim();
+  if (s.includes("high") || s.includes("urgent") || s.includes("today") || s.includes("අද")) return "high";
+  if (s.includes("low") || s.includes("14") || s.includes("21") || s.includes("අඩු")) return "low";
+  return "medium";
+}
 
 function BranchSelectionInner() {
   const router = useRouter();
@@ -47,31 +101,63 @@ function BranchSelectionInner() {
   const type          = searchParams.get("type") || "";
   const receivedDate  = searchParams.get("receivedDate") || searchParams.get("letterDate") || "";
   const forwardReason = searchParams.get("forwardReason") || "";
+  const priorityParam = searchParams.get("priority") || "";
 
   const [mounted, setMounted] = useState(false);
   const [branchOptions, setBranchOptions] = useState(DEFAULT_BRANCH_OPTIONS);
+  const [selectedBranch, setSelectedBranch] = useState("");
+  const [selectedPriority, setSelectedPriority] = useState<"high" | "medium" | "low">(() =>
+    normalizePriorityKey(priorityParam)
+  );
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitStatus, setSubmitStatus] = useState("idle");
+  const [submitError, setSubmitError]   = useState("");
 
   useEffect(() => {
     setMounted(true);
-    // Dynamically load active officers to resolve current registered Chief Clerks
+
+    // If initial param had priority, apply it
+    if (priorityParam) {
+      setSelectedPriority(normalizePriorityKey(priorityParam));
+    } else if (letterNo || refNo || letterId) {
+      // Otherwise, load current priority from DB
+      getLetterAndCaseDetailsByAnyRefServer(letterNo || refNo || letterId).then((res) => {
+        if (res && res.success && res.data) {
+          const rawP = res.data.priority || res.data.rawLetter?.priority;
+          if (rawP) {
+            setSelectedPriority(normalizePriorityKey(rawP));
+          }
+        }
+      }).catch(() => {});
+    }
+
+    // Dynamically load active officers to resolve current registered Assistant Secretaries
     getRegisterOfficersServer().then((res) => {
       if (res && res.success && Array.isArray(res.data)) {
         const officers = res.data;
         setBranchOptions((prev) =>
           prev.map((opt) => {
-            if (opt.value === "chief_clerk_discipline") {
-              const matched = officers.find((o: any) =>
-                (o.role || "").toLowerCase().includes("chief") &&
-                !(o.role || "").toLowerCase().includes("investigation")
-              );
+            if (opt.value === "assistant_secretary_discipline" || opt.value === "chief_clerk_discipline") {
+              const matched = officers.find((o: any) => {
+                const r = (o.role || "").toLowerCase();
+                const n = (o.full_name || "").toLowerCase();
+                return (
+                  (r.includes("discipline") && (r.includes("assistant") || r.includes("secretary") || r.includes("admin") || r.includes("chief"))) ||
+                  n.includes("bandula")
+                );
+              });
               if (matched?.full_name) {
                 return { ...opt, officerName: matched.full_name };
               }
-            } else if (opt.value === "chief_clerk_investigation") {
-              const matched = officers.find((o: any) =>
-                (o.role || "").toLowerCase().includes("chief") &&
-                (o.role || "").toLowerCase().includes("investigation")
-              );
+            } else if (opt.value === "assistant_secretary_investigation" || opt.value === "chief_clerk_investigation") {
+              const matched = officers.find((o: any) => {
+                const r = (o.role || "").toLowerCase();
+                const n = (o.full_name || "").toLowerCase();
+                return (
+                  (r.includes("investigation") && (r.includes("assistant") || r.includes("secretary") || r.includes("admin") || r.includes("chief"))) ||
+                  n.includes("ranjith")
+                );
+              });
               if (matched?.full_name) {
                 return { ...opt, officerName: matched.full_name };
               }
@@ -81,12 +167,7 @@ function BranchSelectionInner() {
         );
       }
     }).catch(() => {});
-  }, []);
-
-  const [selectedBranch, setSelectedBranch] = useState("");
-  const [isSubmitting, setIsSubmitting]     = useState(false);
-  const [submitStatus, setSubmitStatus]     = useState("idle");
-  const [submitError, setSubmitError]       = useState("");
+  }, [priorityParam, letterNo, refNo, letterId]);
 
   const handleSubmit = async () => {
     if (!selectedBranch) return;
@@ -94,7 +175,9 @@ function BranchSelectionInner() {
     if (!option || !option.officerName) return;
     setIsSubmitting(true);
     setSubmitError("");
-    const forwardNote = `Forwarded by Senior Assistant Secretary to ${option.label} for review and action`;
+    const forwardNote = forwardReason || `Forwarded by Senior Assistant Secretary to ${option.label} for review and action`;
+    const finalPriority = selectedPriority === "high" ? "High" : selectedPriority === "low" ? "Low" : "Medium";
+
     try {
       const res = await forwardLetterFromAdditionalSecretaryServer({
         letterId:             letterId || undefined,
@@ -105,6 +188,7 @@ function BranchSelectionInner() {
         forwardReason:        forwardNote,
         senderName:           sender,
         senderRole:           "Senior Assistant Secretary",
+        priority:             finalPriority,
       });
       if (res && res.success) {
         setSubmitStatus("success");
@@ -141,6 +225,9 @@ function BranchSelectionInner() {
   const lDate   = lang === "si" ? "ලැබුණු දිනය"  : lang === "ta" ? "பெற்ற தேதி"   : "Received date";
   const lType   = lang === "si" ? "ලිපි වර්ගය"   : lang === "ta" ? "கடித வகை"     : "Type";
   const lSub    = lang === "si" ? "විෂය"          : lang === "ta" ? "விஷயம்"       : "Subject";
+  const lPri    = lang === "si" ? "ප්‍රමුඛතාව"    : lang === "ta" ? "முன்னுரிமை"   : "Priority";
+
+  const activePriorityOpt = PRIORITY_OPTIONS.find((o) => o.value === selectedPriority) || PRIORITY_OPTIONS[1];
 
   if (!mounted) return null;
 
@@ -163,9 +250,9 @@ function BranchSelectionInner() {
             <div>
               <strong>{lang === "si" ? "ලිපිය සාර්ථකව යොමු කරන ලදී!" : lang === "ta" ? "கடிதம் வெற்றிகரமாக அனுப்பப்பட்டது!" : "Letter forwarded successfully!"}</strong>
               <div className="bs-alert-sub">
-                {selectedBranch === "chief_clerk_investigation"
-                  ? (lang === "si" ? "ශාඛා ප්‍රධානී - විමර්ශන ශාඛාව පිටුවට ඔබව යොමු කරමින්..." : lang === "ta" ? "விசாரணை கிளை முதன்மை எழுதுநர் பக்கத்திற்கு செல்கிறீர்கள்..." : "Redirecting to Chief Clerk - Investigation Branch page...")
-                  : (lang === "si" ? "ශාඛා ප්‍රධානී - විනය ශාඛාව පිටුවට ඔබව යොමු කරමින්..." : lang === "ta" ? "முதன்மை எழுதுநர் - ஒழுக்க கிளை பக்கத்திற்கு செல்கிறீர்கள்..." : "Redirecting to Chief Clerk - Discipline Branch page...")}
+                {selectedBranch === "assistant_secretary_investigation" || selectedBranch === "chief_clerk_investigation" || selectedBranch.includes("investigation")
+                  ? (lang === "si" ? "සහකාර ලේකම් - විමර්ශන ශාඛාව පිටුවට ඔබව යොමු කරමින්..." : lang === "ta" ? "விசாரணைப் பிரிவு உதவிச் செயலாளர் பக்கத்திற்கு செல்கிறீர்கள்..." : "Redirecting to Assistant Secretary Investigation Branch page...")
+                  : (lang === "si" ? "සහකාර ලේකම් - විනය ශාඛාව පිටුවට ඔබව යොමු කරමින්..." : lang === "ta" ? "ஒழுக்காற்றுப் பிரிவு உதவிச் செயலாளர் பக்கத்திற்கு செல்கிறீர்கள்..." : "Redirecting to Assistant Secretary Discipline Branch page...")}
               </div>
             </div>
           </div>
@@ -201,6 +288,23 @@ function BranchSelectionInner() {
               <span className="bs-pfield-label">{lType} :</span>
               <span className="bs-pfield-value">{type || "—"}</span>
             </div>
+            <div className="bs-pfield">
+              <span className="bs-pfield-label">{lPri} :</span>
+              <span className="bs-pfield-value" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                <span
+                  style={{
+                    display: "inline-block",
+                    width: "8px",
+                    height: "8px",
+                    borderRadius: "50%",
+                    backgroundColor: activePriorityOpt.color,
+                  }}
+                />
+                <span style={{ color: activePriorityOpt.color, fontWeight: 700, fontSize: "0.85rem" }}>
+                  {lang === "si" ? activePriorityOpt.labelSi : lang === "ta" ? activePriorityOpt.labelTa : activePriorityOpt.label}
+                </span>
+              </span>
+            </div>
             <div className="bs-pfield bs-pfield-subject">
               <span className="bs-pfield-label">{lSub} :</span>
               <span className="bs-pfield-value">{subject || "—"}</span>
@@ -208,34 +312,69 @@ function BranchSelectionInner() {
           </div>
         </div>
 
-        {/* ── Branch dropdown section ── */}
-        <div className="bs-field">
-          <label htmlFor="branchSelect" className="bs-label">
-            {lang === "si" ? "ලිපිය සඳහා ශාඛාව තෝරන්න" : lang === "ta" ? "கடிதத்திற்கான கிளையை தேர்ந்தெடுக்கவும்" : "Select the branch for the letter"}
-          </label>
-          <div className="bs-select-wrap">
-            <select
-              id="branchSelect"
-              value={selectedBranch}
-              onChange={(e) => setSelectedBranch(e.target.value)}
-              className="bs-select"
-            >
-              {branchOptions.map((opt) => (
-                <option key={opt.value} value={opt.value} disabled={opt.value === ""}>
+        {/* ── Branch and Priority Row (Side by Side) ── */}
+        <div className="bs-form-row">
+          {/* Branch dropdown section (Left) */}
+          <div className="bs-field">
+            <label htmlFor="branchSelect" className="bs-label">
+              {lang === "si" ? "ලිපිය සඳහා ශාඛාව තෝරන්න" : lang === "ta" ? "கடிதத்திற்கான கிளையை தேர்ந்தெடுக்கவும்" : "Select the branch for the letter"}
+            </label>
+            <div className="bs-select-wrap">
+              <select
+                id="branchSelect"
+                value={selectedBranch}
+                onChange={(e) => setSelectedBranch(e.target.value)}
+                className="bs-select"
+              >
+                {branchOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value} disabled={opt.value === ""}>
+                    {lang === "si" ? opt.labelSi : lang === "ta" ? opt.labelTa : opt.label}
+                  </option>
+                ))}
+              </select>
+              <span className="bs-select-arrow">&#8964;</span>
+            </div>
+            {/* Hints */}
+            <ul className="bs-hints">
+              {branchOptions.filter((o) => o.value !== "").map((opt) => (
+                <li key={opt.value}>
                   {lang === "si" ? opt.labelSi : lang === "ta" ? opt.labelTa : opt.label}
-                </option>
+                </li>
               ))}
-            </select>
-            <span className="bs-select-arrow">&#8964;</span>
+            </ul>
           </div>
-          {/* Hints */}
-          <ul className="bs-hints">
-            {branchOptions.filter((o) => o.value !== "").map((opt) => (
-              <li key={opt.value}>
-                {lang === "si" ? opt.labelSi : lang === "ta" ? opt.labelTa : opt.label}
+
+          {/* Priority selection section (Right) */}
+          <div className="bs-field">
+            <label htmlFor="prioritySelect" className="bs-label">
+              {lang === "si" ? "ප්‍රමුඛතාවය තෝරන්න" : lang === "ta" ? "முன்னுரிமையைத் தேர்ந்தெடுக்கவும்" : "Select letter priority"}
+            </label>
+            <div className="bs-select-wrap">
+              <select
+                id="prioritySelect"
+                value={selectedPriority}
+                onChange={(e) => setSelectedPriority(e.target.value as any)}
+                className="bs-select"
+              >
+                {PRIORITY_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {lang === "si" ? opt.labelSi : lang === "ta" ? opt.labelTa : opt.label}
+                  </option>
+                ))}
+              </select>
+              <span className="bs-select-arrow">&#8964;</span>
+            </div>
+            {/* Priority Hints */}
+            <ul className="bs-hints">
+              <li>
+                {lang === "si"
+                  ? "අධි ප්‍රමුඛතා (High Priority) ලිපි සඳහා අදාළ නිලධාරියා වෙත කඩිනම් දැනුම්දීම් නිකුත් කෙරේ."
+                  : lang === "ta"
+                  ? "உயர் முன்னுரிமை (High Priority) கடிதங்களுக்கு சம்பந்தப்பட்ட அதிகாரிக்கு உடனடி அறிவிப்பு அனுப்பப்படும்."
+                  : "High Priority letters generate urgent alerts and top-of-list placement for the assigned branch officer."}
               </li>
-            ))}
-          </ul>
+            </ul>
+          </div>
         </div>
 
         {/* ── Buttons ── */}
@@ -247,7 +386,7 @@ function BranchSelectionInner() {
             onClick={() => router.back()}
             disabled={isSubmitting}
           >
-            {lang === "si" ? "අවලංගු කිරීම" : lang === "ta" ? "ரத்து செய்" : "Cancel."}
+            {lang === "si" ? "අවලංගු කිරීම" : lang === "ta" ? "ரத்து செய்" : "Cancel"}
           </button>
           <button
             id="branch-selection-submit"
@@ -334,10 +473,10 @@ function BranchSelectionInner() {
           grid-template-columns: 1fr 1fr 1fr;
           gap: 16px;
         }
-        /* Row 2: Type | Subject — type narrow, subject wide */
+        /* Row 2: Type | Priority | Subject */
         .bs-preview-row-2 {
           display: grid;
-          grid-template-columns: 180px 1fr;
+          grid-template-columns: 140px 220px 1fr;
           gap: 16px;
           border-top: 1px dashed #e5e7eb;
           padding-top: 12px;
@@ -358,14 +497,23 @@ function BranchSelectionInner() {
           word-break: break-word;
         }
 
+        /* ── Form Row: Side-by-side Branch & Priority ── */
+        .bs-form-row {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 24px;
+          align-items: flex-start;
+          width: 100%;
+        }
+
         /* ── Field ── */
-        .bs-field { display: flex; flex-direction: column; gap: 8px; }
+        .bs-field { display: flex; flex-direction: column; gap: 8px; width: 100%; }
         .bs-label {
           font-size: 0.875rem;
           font-weight: 600;
           color: #374151;
         }
-        .bs-select-wrap { position: relative; max-width: 600px; }
+        .bs-select-wrap { position: relative; width: 100%; }
         .bs-select {
           width: 100%;
           padding: 10px 40px 10px 14px;
@@ -438,6 +586,10 @@ function BranchSelectionInner() {
           color: #9ca3af !important;
           box-shadow: none !important;
           cursor: not-allowed !important;
+        }
+
+        @media (max-width: 768px) {
+          .bs-form-row { grid-template-columns: 1fr; gap: 18px; }
         }
 
         @media (max-width: 640px) {

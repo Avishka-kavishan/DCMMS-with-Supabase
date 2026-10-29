@@ -621,6 +621,31 @@
   text-decoration: none !important;
 }
 
+/* Submitted Letters Action Badge (Replaces Add Details Button) */
+.add-details-submitted-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  background-color: #ecfdf5 !important;
+  color: #047857 !important;
+  border: 1.5px solid #10b981 !important;
+  padding: 6px 14px !important;
+  border-radius: 9999px !important;
+  font-size: calc(12px * var(--font-scale, 1)) !important;
+  font-weight: 700 !important;
+  cursor: not-allowed !important;
+  pointer-events: none !important;
+  box-shadow: 0 1px 3px rgba(16, 185, 129, 0.12) !important;
+  transform: none !important;
+  text-decoration: none !important;
+}
+
+.add-details-submitted-btn span {
+  color: #047857 !important;
+  font-weight: 700 !important;
+}
+
 /* View Details Link for Submitted Letters */
 .view-details-link {
   display: inline-flex;

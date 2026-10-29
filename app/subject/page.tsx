@@ -60,6 +60,8 @@ interface Case {
   upcomingAction?: string;
   isProperDisciplinary?: boolean;
   disciplinaryCharge?: string;
+  isSubmitted?: boolean;
+  hasSubjectDetails?: boolean;
 }
 
 const formatToInputDate = (dateStr?: string | null): string => {
@@ -903,6 +905,9 @@ function SubjectOfficerDashboardContent() {
           if (Array.isArray(res.data.assignments)) {
             setAssignments(res.data.assignments);
           }
+          if (Array.isArray(res.data.submittedCaseNos)) {
+            setSubmittedCaseNos((prev) => Array.from(new Set([...prev, ...res.data.submittedCaseNos])));
+          }
 
           if (typeof window !== "undefined") {
             if (Array.isArray(res.data.cases) && res.data.cases.length === 0) {
@@ -1727,6 +1732,8 @@ function SubjectOfficerDashboardContent() {
   // Search & filter state
   const [searchQuery, setSearchQuery] = useState("");
   const [priorityFilter, setPriorityFilter] = useState<"all" | "high" | "medium" | "low">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "submitted" | "not_submitted">("all");
+  const [submittedCaseNos, setSubmittedCaseNos] = useState<string[]>([]);
 
   // Subject Officer Assignment Data Flow State & Handlers
   const [assignments, setAssignments] = useState<any[]>([]);
@@ -1759,8 +1766,81 @@ function SubjectOfficerDashboardContent() {
           setSeenNotifIds(JSON.parse(stored));
         }
       } catch (e) {}
+
+      const syncSubmittedFromStorage = () => {
+        if (typeof window === "undefined") return;
+        try {
+          const storedSubNos = localStorage.getItem("dcmms_submitted_case_nos");
+          if (storedSubNos) {
+            const parsed = JSON.parse(storedSubNos);
+            if (Array.isArray(parsed)) {
+              setSubmittedCaseNos((prev) => Array.from(new Set([...prev, ...parsed])));
+            }
+          }
+        } catch (e) {}
+      };
+
+      syncSubmittedFromStorage();
+      window.addEventListener("focus", syncSubmittedFromStorage);
+      window.addEventListener("storage", syncSubmittedFromStorage);
+      return () => {
+        window.removeEventListener("focus", syncSubmittedFromStorage);
+        window.removeEventListener("storage", syncSubmittedFromStorage);
+      };
     }
   }, []);
+
+  const submittedCaseNosSet = useMemo(() => {
+    const set = new Set<string>();
+    submittedCaseNos.forEach((x) => {
+      if (x) set.add(String(x).trim().toLowerCase());
+    });
+    return set;
+  }, [submittedCaseNos]);
+
+  const isCaseSubmitted = (item: Case): boolean => {
+    const cNo = String(item.caseNo || "").trim().toLowerCase();
+    const lNo = String(item.letterNo || "").trim().toLowerCase();
+
+    if (item.isSubmitted === true || item.hasSubjectDetails === true) return true;
+    const st = String(item.status || "").trim().toLowerCase();
+    if (
+      st === "closed" ||
+      st === "closed file" ||
+      st === "නිමා කල" ||
+      st === "නිමා කළ" ||
+      st === "finalized / closed" ||
+      st.includes("completed") ||
+      st.includes("concluded")
+    ) return true;
+
+    if (submittedCaseNosSet.has(cNo) || (lNo && submittedCaseNosSet.has(lNo))) return true;
+
+    const matchingAsgn = assignments.find((a: any) => {
+      const aCase = String(a.caseNo || a.case_no || "").trim().toLowerCase();
+      return aCase === cNo || (lNo && aCase === lNo);
+    });
+    if (matchingAsgn) {
+      if (matchingAsgn.datesSubmittedBySubject || matchingAsgn.dates_submitted_by_subject || (matchingAsgn.appointment_date && matchingAsgn.report_due_date)) {
+        return true;
+      }
+      const asgnSt = String(matchingAsgn.status || "").trim().toLowerCase();
+      if (
+        asgnSt === "closed" ||
+        asgnSt === "finalized / closed" ||
+        asgnSt === "නිමා කල" ||
+        asgnSt === "නිමා කළ" ||
+        asgnSt.includes("completed") ||
+        asgnSt.includes("concluded") ||
+        matchingAsgn.initialInvestigationComplete ||
+        matchingAsgn.initial_investigation_complete
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  };
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -1865,6 +1945,9 @@ function SubjectOfficerDashboardContent() {
       const res = await getSubjectOfficerDashboardCasesServer(activeProfile || activeName);
       if (res && res.success && res.data && Array.isArray(res.data.assignments) && res.data.assignments.length > 0) {
         list = [...res.data.assignments];
+        if (Array.isArray(res.data.submittedCaseNos)) {
+          setSubmittedCaseNos((prev) => Array.from(new Set([...prev, ...res.data.submittedCaseNos])));
+        }
       }
     } catch (pgErr) {
       console.warn("PostgreSQL fetchAssignments error:", pgErr);
@@ -2881,9 +2964,28 @@ function SubjectOfficerDashboardContent() {
 
       const matchesPriority = priorityFilter === "all" || item.priority === priorityFilter;
 
-      return matchesSearch && matchesPriority;
+      const submitted = isCaseSubmitted(item);
+
+      const matchesStatus =
+        statusFilter === "all" ||
+        (statusFilter === "submitted" && submitted) ||
+        (statusFilter === "not_submitted" && !submitted);
+
+      return matchesSearch && matchesPriority && matchesStatus;
     }).sort(compareLettersLatestFirst);
-  }, [cases, searchQuery, priorityFilter]);
+  }, [cases, searchQuery, priorityFilter, statusFilter, submittedCaseNosSet]);
+
+  // Real-time counts for letter status filter badges (Submitted vs Not Submitted)
+  const letterStatusCounts = useMemo(() => {
+    let submitted = 0;
+    let notSubmitted = 0;
+    cases.forEach((c) => {
+      const isSub = isCaseSubmitted(c);
+      if (isSub) submitted++;
+      else notSubmitted++;
+    });
+    return { submitted, notSubmitted, total: cases.length };
+  }, [cases, submittedCaseNosSet]);
 
   // Filter answer letters list in real-time (guaranteed latest letters first)
   const filteredAnswerLetters = useMemo(() => {
@@ -5984,6 +6086,21 @@ function SubjectOfficerDashboardContent() {
                   />
                 </div>
 
+                {/* Status Selection Filter (Submitted / Not Submitted) */}
+                <div className="filter-dropdown-wrapper">
+                  <select
+                    value={statusFilter}
+                    onChange={(e: any) => setStatusFilter(e.target.value)}
+                    className="filter-priority-select"
+                    aria-label="Status Filter"
+                    style={{ minWidth: "155px" }}
+                  >
+                    <option value="all">{lang === "si" ? "සියලු තත්ත්ව (All)" : "All Status"}</option>
+                    <option value="not_submitted">{lang === "si" ? `⏳ ඉදිරිපත් කර නැත (${letterStatusCounts.notSubmitted})` : `⏳ Not Submitted (${letterStatusCounts.notSubmitted})`}</option>
+                    <option value="submitted">{lang === "si" ? `✓ ඉදිරිපත් කළා (${letterStatusCounts.submitted})` : `✓ Submitted (${letterStatusCounts.submitted})`}</option>
+                  </select>
+                </div>
+
                 {/* Priority Selection Filter */}
                 <div className="filter-dropdown-wrapper">
                   <svg className="filter-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -6002,9 +6119,99 @@ function SubjectOfficerDashboardContent() {
                   </select>
                 </div>
 
-                <a href="#" className="view-all-reset-link" onClick={(e) => { e.preventDefault(); setSearchQuery(""); setPriorityFilter("all"); }}>
+                <a href="#" className="view-all-reset-link" onClick={(e) => { e.preventDefault(); setSearchQuery(""); setPriorityFilter("all"); setStatusFilter("all"); }}>
                   {t("viewAll")} <span className="arrow-span">→</span>
                 </a>
+              </div>
+            </div>
+
+            {/* Quick Status Filter Pills & Color Legend */}
+            <div style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: "10px",
+              padding: "10px 14px",
+              marginBottom: "12px",
+              backgroundColor: "#f8fafc",
+              border: "1px solid #e2e8f0",
+              borderRadius: "10px",
+              fontSize: "12px",
+            }}>
+              {/* Quick Filter Pills */}
+              <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "6px" }}>
+                <span style={{ fontWeight: 700, color: "#475569", marginRight: "2px" }}>
+                  {lang === "si" ? "පෙරහන:" : "Filter:"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("all")}
+                  style={{
+                    padding: "3px 10px",
+                    borderRadius: "20px",
+                    border: statusFilter === "all" ? "1px solid #0f172a" : "1px solid #cbd5e1",
+                    backgroundColor: statusFilter === "all" ? "#0f172a" : "#ffffff",
+                    color: statusFilter === "all" ? "#ffffff" : "#334155",
+                    fontWeight: statusFilter === "all" ? 700 : 500,
+                    cursor: "pointer",
+                    fontSize: "11.5px",
+                  }}
+                >
+                  {lang === "si" ? "සියල්ල" : "All"} ({letterStatusCounts.total})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("not_submitted")}
+                  style={{
+                    padding: "3px 10px",
+                    borderRadius: "20px",
+                    border: statusFilter === "not_submitted" ? "1.5px solid #d97706" : "1px solid #fde68a",
+                    backgroundColor: statusFilter === "not_submitted" ? "#fffbeb" : "#ffffff",
+                    color: "#b45309",
+                    fontWeight: statusFilter === "not_submitted" ? 700 : 500,
+                    cursor: "pointer",
+                    fontSize: "11.5px",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "4px",
+                  }}
+                >
+                  <Clock size={11} />
+                  {lang === "si" ? "ඉදිරිපත් කර නැත" : "Not Submitted"} ({letterStatusCounts.notSubmitted})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("submitted")}
+                  style={{
+                    padding: "3px 10px",
+                    borderRadius: "20px",
+                    border: statusFilter === "submitted" ? "1.5px solid #059669" : "1px solid #a7f3d0",
+                    backgroundColor: statusFilter === "submitted" ? "#ecfdf5" : "#ffffff",
+                    color: "#047857",
+                    fontWeight: statusFilter === "submitted" ? 700 : 500,
+                    cursor: "pointer",
+                    fontSize: "11.5px",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "4px",
+                  }}
+                >
+                  <CheckCircle size={11} />
+                  {lang === "si" ? "ඉදිරිපත් කළා" : "Submitted"} ({letterStatusCounts.submitted})
+                </button>
+              </div>
+
+              {/* Color Legend explanation */}
+              <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "14px", color: "#64748b", fontSize: "11.5px" }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}>
+                  <span style={{ width: "10px", height: "10px", borderRadius: "2px", backgroundColor: "#f59e0b", display: "inline-block" }} />
+                  <span style={{ fontWeight: 600, color: "#92400e" }}>{lang === "si" ? "තැඹිලි: විස්තර ඉදිරිපත් කර නැත" : "Amber: Not Submitted"}</span>
+                </span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}>
+                  <span style={{ width: "10px", height: "10px", borderRadius: "2px", backgroundColor: "#10b981", display: "inline-block" }} />
+                  <span style={{ fontWeight: 600, color: "#065f46" }}>{lang === "si" ? "කොළ: විස්තර ඉදිරිපත් කළා" : "Green: Submitted"}</span>
+                </span>
               </div>
             </div>
 
@@ -6031,10 +6238,25 @@ function SubjectOfficerDashboardContent() {
                         String(a.caseNo || a.case_no || "").trim().toLowerCase() === String(item.caseNo || "").trim().toLowerCase()
                       );
 
+                      const isSubmitted = isCaseSubmitted(item);
+
+                      // Color indicator logic for Submitted vs Not Submitted:
+                      // Green: Submitted / Details Completed
+                      // Amber: Not Submitted / Pending Details
+                      const leftBorderColor = isSubmitted ? "#10b981" : "#f59e0b";
+                      const rowBg = isSubmitted ? "#ffffff" : "#fffefb";
+
                       return (
-                        <tr key={item.id ? (item.id + "-" + idx) : ("case-" + (item.caseNo || idx) + "-" + idx)} className="letter-table-row">
-                          {/* 1. Case & Letter Number + Letter Type */}
-                          <td>
+                        <tr
+                          key={item.id ? (item.id + "-" + idx) : ("case-" + (item.caseNo || idx) + "-" + idx)}
+                          className={`letter-table-row ${isSubmitted ? "row-submitted" : "row-not-submitted"}`}
+                          style={{
+                            backgroundColor: rowBg,
+                            transition: "background-color 0.15s ease",
+                          }}
+                        >
+                          {/* 1. Case & Letter Number + Letter Type + Submission Color Badge */}
+                          <td style={{ borderLeft: `4px solid ${leftBorderColor}` }}>
                             <div className="font-semibold" style={{ color: "#1e1b4b", fontSize: "13.5px" }}>
                               {item.caseNo}
                             </div>
@@ -6043,7 +6265,9 @@ function SubjectOfficerDashboardContent() {
                                 {lang === "si" ? "ලිපි අංකය" : "Letter No"}: <span style={{ fontWeight: 600, color: "#334155" }}>{item.letterNo}</span>
                               </div>
                             )}
-                            <div style={{ marginTop: "4px" }}>
+
+                            {/* Color Badges: Type & Submitted/Not Submitted */}
+                            <div style={{ marginTop: "6px", display: "flex", flexWrap: "wrap", gap: "4px" }}>
                               <span style={{
                                 fontSize: "10.5px",
                                 fontWeight: 700,
@@ -6056,6 +6280,41 @@ function SubjectOfficerDashboardContent() {
                               }}>
                                 {item.letterType || "Complaint"}
                               </span>
+
+                              {/* Submitted / Not Submitted Indicator with Color */}
+                              {isSubmitted ? (
+                                <span style={{
+                                  fontSize: "10.5px",
+                                  fontWeight: 700,
+                                  padding: "2px 7px",
+                                  borderRadius: "10px",
+                                  backgroundColor: "#ecfdf5",
+                                  color: "#047857",
+                                  border: "1px solid #a7f3d0",
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "4px",
+                                }}>
+                                  <CheckCircle size={10} style={{ color: "#059669" }} />
+                                  {lang === "si" ? "ඉදිරිපත් කළා" : lang === "ta" ? "சமர்ப்பிக்கப்பட்டது" : "Submitted"}
+                                </span>
+                              ) : (
+                                <span style={{
+                                  fontSize: "10.5px",
+                                  fontWeight: 700,
+                                  padding: "2px 7px",
+                                  borderRadius: "10px",
+                                  backgroundColor: "#fffbeb",
+                                  color: "#b45309",
+                                  border: "1px solid #fde68a",
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "4px",
+                                }}>
+                                  <Clock size={10} style={{ color: "#d97706" }} />
+                                  {lang === "si" ? "ඉදිරිපත් කර නැත" : lang === "ta" ? "சமர்ப்பிக்கப்படவில்லை" : "Not Submitted"}
+                                </span>
+                              )}
                             </div>
                           </td>
 
@@ -6202,7 +6461,7 @@ function SubjectOfficerDashboardContent() {
                             </div>
                           </td>
 
-                          {/* 9. Actions */}
+                          {/* 9. Actions (Dynamic color & text for Submitted vs Not Submitted) */}
                           <td className="text-center actions-cell">
                             {(() => {
                               const isCaseEditApproved =
@@ -6231,36 +6490,101 @@ function SubjectOfficerDashboardContent() {
                                       {lang === "si" ? "1x සංස්කරණය අනුමතයි" : "1x Edit Approved"}
                                     </span>
                                   )}
-                                  <Link
-                                    href={`/subject/add-details?caseNo=${encodeURIComponent(item.caseNo)}${item.status === "assigned answer letter" || item.status === "Assigned Answer Letter" ? "&isAnswerLetter=true" : ""}`}
-                                    className="add-details-link"
-                                    style={isCaseEditApproved ? { backgroundColor: "#059669", borderColor: "#047857", color: "#ffffff" } : undefined}
-                                  >
-                                    {isCaseEditApproved
-                                      ? (lang === "si" ? "සංස්කරණය කරන්න (1x)" : "Edit Details (1x)")
-                                      : t("addDetails")}
-                                  </Link>
-                                  <Link
-                                    href={`/admin/view-letter?id=${encodeURIComponent(item.letterNo || item.caseNo)}`}
-                                    style={{
-                                      fontSize: "11px",
-                                      fontWeight: 600,
-                                      color: "#4f46e5",
-                                      textDecoration: "none",
-                                      display: "inline-flex",
-                                      alignItems: "center",
-                                      gap: "3px",
-                                      padding: "3px 8px",
-                                      borderRadius: "4px",
-                                      backgroundColor: "#eef2ff",
-                                      border: "1px solid #e0e7ff",
-                                      transition: "all 0.15s ease",
-                                    }}
-                                    title={lang === "si" ? "ලිපි විස්තර සහ යොමු කිරීම් බලන්න" : "View Official Letter Details"}
-                                  >
-                                    <Eye size={11} />
-                                    <span>{lang === "si" ? "ලිපිය බලන්න" : lang === "ta" ? "கடிதம் பார்க்க" : "View Letter"}</span>
-                                  </Link>
+
+                                  {/* Dynamic Action Button: Add Details (Blue) vs Disabled when Submitted (Green) */}
+                                  {isCaseEditApproved ? (
+                                    <Link
+                                      href={`/subject/add-details?caseNo=${encodeURIComponent(item.caseNo)}${item.status === "assigned answer letter" || item.status === "Assigned Answer Letter" ? "&isAnswerLetter=true" : ""}`}
+                                      className="add-details-link"
+                                      style={{
+                                        background: "linear-gradient(135deg, #059669 0%, #047857 100%)",
+                                        borderColor: "#047857",
+                                        color: "#ffffff",
+                                        fontWeight: 700,
+                                        boxShadow: "0 2px 5px rgba(5, 150, 105, 0.28)",
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        gap: "4px",
+                                      }}
+                                    >
+                                      <Sparkles size={12} style={{ color: "#ffffff" }} />
+                                      <span style={{ color: "#ffffff" }}>{lang === "si" ? "සංස්කරණය කරන්න (1x)" : "Edit Details (1x)"}</span>
+                                    </Link>
+                                  ) : isSubmitted ? (
+                                    <button
+                                      type="button"
+                                      disabled
+                                      className="add-details-submitted-btn"
+                                      style={{
+                                        backgroundColor: "#ecfdf5",
+                                        borderColor: "#10b981",
+                                        borderWidth: "1.5px",
+                                        borderStyle: "solid",
+                                        color: "#047857",
+                                        cursor: "not-allowed",
+                                        pointerEvents: "none",
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        gap: "6px",
+                                        padding: "6px 14px",
+                                        borderRadius: "9999px",
+                                        fontSize: "12px",
+                                        fontWeight: 700,
+                                        width: "100%",
+                                        boxSizing: "border-box",
+                                        boxShadow: "0 1px 3px rgba(16, 185, 129, 0.12)",
+                                      }}
+                                      title={lang === "si" ? "විස්තර දැනටමත් ඉදිරිපත් කර ඇත - නැවත එක් කළ නොහැක" : "Details already submitted - cannot add details"}
+                                    >
+                                      <CheckCircle size={14} style={{ color: "#059669", flexShrink: 0 }} />
+                                      <span style={{ color: "#047857", fontWeight: 700 }}>
+                                        {lang === "si" ? "විස්තර එක් කර ඇත" : lang === "ta" ? "விவரங்கள் சமர்ப்பிக்கப்பட்டது" : "Details Submitted"}
+                                      </span>
+                                    </button>
+                                  ) : (
+                                    <Link
+                                      href={`/subject/add-details?caseNo=${encodeURIComponent(item.caseNo)}${item.status === "assigned answer letter" || item.status === "Assigned Answer Letter" ? "&isAnswerLetter=true" : ""}`}
+                                      className="add-details-link"
+                                      style={{
+                                        background: "linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)",
+                                        borderColor: "#1d4ed8",
+                                        color: "#ffffff",
+                                        fontWeight: 700,
+                                        boxShadow: "0 2px 6px rgba(37, 99, 235, 0.28)",
+                                      }}
+                                    >
+                                      <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "#ffffff", fontWeight: 700 }}>
+                                        <Plus size={13} style={{ color: "#ffffff" }} />
+                                        {t("addDetails")}
+                                      </span>
+                                    </Link>
+                                  )}
+
+                                  {/* Secondary Link: View Submitted Details (Read-only) */}
+                                  {isSubmitted && !isCaseEditApproved && (
+                                    <Link
+                                      href={`/subject/add-details?caseNo=${encodeURIComponent(item.caseNo)}${item.status === "assigned answer letter" || item.status === "Assigned Answer Letter" ? "&isAnswerLetter=true" : ""}&isViewOnly=true`}
+                                      style={{
+                                        fontSize: "11px",
+                                        fontWeight: 600,
+                                        color: "#059669",
+                                        textDecoration: "none",
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        gap: "3px",
+                                        padding: "3px 8px",
+                                        borderRadius: "4px",
+                                        backgroundColor: "#ecfdf5",
+                                        border: "1px solid #a7f3d0",
+                                        transition: "all 0.15s ease",
+                                      }}
+                                      title={lang === "si" ? "ඉදිරිපත් කළ විස්තර බලන්න (කියවීමට පමණි)" : "View Submitted Details (Read Only)"}
+                                    >
+                                      <FileCheck size={11} />
+                                      <span>{lang === "si" ? "විස්තර බලන්න" : lang === "ta" ? "விவரங்கள் பார்க்க" : "View Details"}</span>
+                                    </Link>
+                                  )}
                                 </div>
                               );
                             })()}
@@ -6333,82 +6657,207 @@ function SubjectOfficerDashboardContent() {
                   </thead>
                   <tbody>
                     {filteredAnswerLetters.length > 0 ? (
-                      filteredAnswerLetters.map((item, idx) => (
-                        <tr key={item.id ? `${item.id}-${idx}` : `ans-${item.caseNo}-${idx}`} className="letter-table-row">
-                          <td className="font-semibold" style={{ color: "#1e1b4b" }}>{item.caseNo}</td>
-                          <td>
-                            <span style={{ fontWeight: 600, color: "#334155" }}>
-                              {item.senderName || "—"}
-                            </span>
-                          </td>
-                          <td className="subject-cell">{item.subject}</td>
-                          <td>{item.letterDate || "—"}</td>
-                          <td>{item.receivedDate || "—"}</td>
-                          <td>
-                            <span
-                              style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "6px",
-                                backgroundColor: item.status === "Closed" ? "#f1f5f9" : "#dcfce7",
-                                color: item.status === "Closed" ? "#475569" : "#15803d",
-                                padding: "4px 10px",
-                                borderRadius: "12px",
-                                fontSize: "12px",
-                                fontWeight: 700,
-                                border: item.status === "Closed" ? "1px solid #cbd5e1" : "1px solid #bbf7d0"
-                              }}
-                            >
-                              <CheckCircle size={13} />
-                              {item.status === "Closed"
-                                ? (lang === "si" ? "අවසන් කරන ලදි" : "Finalized / Closed")
-                                : (lang === "si" ? "පිළිතුරු ලිපිය" : "Answer Letter")}
-                            </span>
-                          </td>
-                          <td className="text-center actions-cell">
-                            {(() => {
-                              const isCaseEditApproved =
-                                approvedEditCaseNos.has(String(item.caseNo || "").trim().toLowerCase()) ||
-                                approvedEditCaseNos.has(String(item.letterNo || "").trim().toLowerCase());
+                      filteredAnswerLetters.map((item, idx) => {
+                        const isAnsSub = isCaseSubmitted(item as any);
+                        const leftBorderColor = isAnsSub ? "#10b981" : "#f59e0b";
+                        const rowBg = isAnsSub ? "#ffffff" : "#fffefb";
 
-                              return (
-                                <div style={{ display: "flex", flexDirection: "column", gap: "6px", alignItems: "center" }}>
-                                  {isCaseEditApproved && (
-                                    <span
-                                      style={{
-                                        backgroundColor: "#ecfdf5",
-                                        color: "#059669",
-                                        border: "1px solid #10b981",
-                                        borderRadius: "12px",
-                                        padding: "2px 8px",
-                                        fontSize: "10px",
-                                        fontWeight: 800,
-                                        display: "inline-flex",
-                                        alignItems: "center",
-                                        gap: "4px",
-                                      }}
-                                    >
-                                      <Sparkles size={11} />
-                                      {lang === "si" ? "1x සංස්කරණය අනුමතයි" : "1x Edit Approved"}
-                                    </span>
-                                  )}
-                                  <Link
-                                    href={`/subject/add-details?caseNo=${item.caseNo}&isAnswerLetter=true`}
-                                    className="add-details-link"
-                                    style={isCaseEditApproved ? { backgroundColor: "#059669", borderColor: "#047857", color: "#ffffff" } : undefined}
-                                  >
-                                    {isCaseEditApproved
-                                      ? (lang === "si" ? "සංස්කරණය කරන්න (1x)" : "Edit Details (1x)")
-                                      : item.status === "Closed"
-                                      ? (lang === "si" ? "විස්තර බලන්න" : "View Details")
-                                      : t("addDetails", "Add Details / View Case")}
-                                  </Link>
-                                </div>
-                              );
-                            })()}
-                          </td>
-                        </tr>
-                      ))
+                        return (
+                          <tr
+                            key={item.id ? `${item.id}-${idx}` : `ans-${item.caseNo}-${idx}`}
+                            className={`letter-table-row ${isAnsSub ? "row-submitted" : "row-not-submitted"}`}
+                            style={{
+                              backgroundColor: rowBg,
+                              transition: "background-color 0.15s ease",
+                            }}
+                          >
+                            <td className="font-semibold" style={{ color: "#1e1b4b", borderLeft: `4px solid ${leftBorderColor}` }}>
+                              <div>{item.caseNo}</div>
+                              <div style={{ marginTop: "4px", display: "flex", flexWrap: "wrap", gap: "4px" }}>
+                                {isAnsSub ? (
+                                  <span style={{
+                                    fontSize: "10px",
+                                    fontWeight: 700,
+                                    padding: "1px 6px",
+                                    borderRadius: "8px",
+                                    backgroundColor: "#ecfdf5",
+                                    color: "#047857",
+                                    border: "1px solid #a7f3d0",
+                                  }}>
+                                    ✓ {lang === "si" ? "ඉදිරිපත් කළා" : "Submitted"}
+                                  </span>
+                                ) : (
+                                  <span style={{
+                                    fontSize: "10px",
+                                    fontWeight: 700,
+                                    padding: "1px 6px",
+                                    borderRadius: "8px",
+                                    backgroundColor: "#fffbeb",
+                                    color: "#b45309",
+                                    border: "1px solid #fde68a",
+                                  }}>
+                                    ⏳ {lang === "si" ? "ඉදිරිපත් කර නැත" : "Not Submitted"}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td>
+                              <span style={{ fontWeight: 600, color: "#334155" }}>
+                                {item.senderName || "—"}
+                              </span>
+                            </td>
+                            <td className="subject-cell">{item.subject}</td>
+                            <td>{item.letterDate || "—"}</td>
+                            <td>{item.receivedDate || "—"}</td>
+                            <td>
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "6px",
+                                  backgroundColor: item.status === "Closed" ? "#f1f5f9" : "#dcfce7",
+                                  color: item.status === "Closed" ? "#475569" : "#15803d",
+                                  padding: "4px 10px",
+                                  borderRadius: "12px",
+                                  fontSize: "12px",
+                                  fontWeight: 700,
+                                  border: item.status === "Closed" ? "1px solid #cbd5e1" : "1px solid #bbf7d0"
+                                }}
+                              >
+                                <CheckCircle size={13} />
+                                {item.status === "Closed"
+                                  ? (lang === "si" ? "අවසන් කරන ලදි" : "Finalized / Closed")
+                                  : (lang === "si" ? "පිළිතුරු ලිපිය" : "Answer Letter")}
+                              </span>
+                            </td>
+                            <td className="text-center actions-cell">
+                              {(() => {
+                                const isCaseEditApproved =
+                                  approvedEditCaseNos.has(String(item.caseNo || "").trim().toLowerCase()) ||
+                                  approvedEditCaseNos.has(String(item.letterNo || "").trim().toLowerCase());
+
+                                return (
+                                  <div style={{ display: "flex", flexDirection: "column", gap: "6px", alignItems: "center" }}>
+                                    {isCaseEditApproved && (
+                                      <span
+                                        style={{
+                                          backgroundColor: "#ecfdf5",
+                                          color: "#059669",
+                                          border: "1px solid #10b981",
+                                          borderRadius: "12px",
+                                          padding: "2px 8px",
+                                          fontSize: "10px",
+                                          fontWeight: 800,
+                                          display: "inline-flex",
+                                          alignItems: "center",
+                                          gap: "4px",
+                                        }}
+                                      >
+                                        <Sparkles size={11} />
+                                        {lang === "si" ? "1x සංස්කරණය අනුමතයි" : "1x Edit Approved"}
+                                      </span>
+                                    )}
+                                    {/* Action Buttons: Add Details vs Disabled when Submitted (Green) */}
+                                    {isCaseEditApproved ? (
+                                      <Link
+                                        href={`/subject/add-details?caseNo=${encodeURIComponent(item.caseNo)}&isAnswerLetter=true`}
+                                        className="add-details-link"
+                                        style={{
+                                          background: "linear-gradient(135deg, #059669 0%, #047857 100%)",
+                                          borderColor: "#047857",
+                                          color: "#ffffff",
+                                          fontWeight: 700,
+                                          boxShadow: "0 2px 5px rgba(5, 150, 105, 0.28)",
+                                          display: "inline-flex",
+                                          alignItems: "center",
+                                          gap: "4px",
+                                        }}
+                                      >
+                                        <Sparkles size={12} style={{ color: "#ffffff" }} />
+                                        <span style={{ color: "#ffffff" }}>{lang === "si" ? "සංස්කරණය කරන්න (1x)" : "Edit Details (1x)"}</span>
+                                      </Link>
+                                    ) : isAnsSub ? (
+                                      <button
+                                        type="button"
+                                        disabled
+                                        className="add-details-submitted-btn"
+                                        style={{
+                                          backgroundColor: "#ecfdf5",
+                                          borderColor: "#10b981",
+                                          borderWidth: "1.5px",
+                                          borderStyle: "solid",
+                                          color: "#047857",
+                                          cursor: "not-allowed",
+                                          pointerEvents: "none",
+                                          display: "inline-flex",
+                                          alignItems: "center",
+                                          justifyContent: "center",
+                                          gap: "6px",
+                                          padding: "6px 14px",
+                                          borderRadius: "9999px",
+                                          fontSize: "12px",
+                                          fontWeight: 700,
+                                          width: "100%",
+                                          boxSizing: "border-box",
+                                          boxShadow: "0 1px 3px rgba(16, 185, 129, 0.12)",
+                                        }}
+                                        title={lang === "si" ? "විස්තර දැනටමත් ඉදිරිපත් කර ඇත - නැවත එක් කළ නොහැක" : "Details already submitted - cannot add details"}
+                                      >
+                                        <CheckCircle size={14} style={{ color: "#059669", flexShrink: 0 }} />
+                                        <span style={{ color: "#047857", fontWeight: 700 }}>
+                                          {lang === "si" ? "විස්තර එක් කර ඇත" : lang === "ta" ? "விவரங்கள் சமர்ப்பிக்கப்பட்டது" : "Details Submitted"}
+                                        </span>
+                                      </button>
+                                    ) : (
+                                      <Link
+                                        href={`/subject/add-details?caseNo=${encodeURIComponent(item.caseNo)}&isAnswerLetter=true`}
+                                        className="add-details-link"
+                                        style={{
+                                          background: "linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)",
+                                          borderColor: "#1d4ed8",
+                                          color: "#ffffff",
+                                          fontWeight: 700,
+                                          boxShadow: "0 2px 6px rgba(37, 99, 235, 0.28)",
+                                        }}
+                                      >
+                                        <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "#ffffff", fontWeight: 700 }}>
+                                          <Plus size={13} style={{ color: "#ffffff" }} />
+                                          {t("addDetails", "Add Details / View Case")}
+                                        </span>
+                                      </Link>
+                                    )}
+
+                                    {/* Secondary Links: View Submitted Details (Read-only) */}
+                                    {isAnsSub && !isCaseEditApproved && (
+                                      <Link
+                                        href={`/subject/add-details?caseNo=${encodeURIComponent(item.caseNo)}&isAnswerLetter=true&isViewOnly=true`}
+                                        style={{
+                                          fontSize: "11px",
+                                          fontWeight: 600,
+                                          color: "#059669",
+                                          textDecoration: "none",
+                                          display: "inline-flex",
+                                          alignItems: "center",
+                                          gap: "3px",
+                                          padding: "3px 8px",
+                                          borderRadius: "4px",
+                                          backgroundColor: "#ecfdf5",
+                                          border: "1px solid #a7f3d0",
+                                          transition: "all 0.15s ease",
+                                        }}
+                                        title={lang === "si" ? "ඉදිරිපත් කළ විස්තර බලන්න (කියවීමට පමණි)" : "View Submitted Details (Read Only)"}
+                                      >
+                                        <FileCheck size={11} />
+                                        <span>{lang === "si" ? "විස්තර බලන්න" : "View Details"}</span>
+                                      </Link>
+                                    )}
+                                  </div>
+                                );
+                              })()}
+                            </td>
+                          </tr>
+                        );
+                      })
                     ) : (
                       <tr>
                         <td colSpan={7} className="text-center py-5 text-muted" style={{ padding: "40px 20px" }}>

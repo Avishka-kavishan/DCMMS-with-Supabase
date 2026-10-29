@@ -361,6 +361,7 @@ function ViewLetterInner() {
         senderName: currentUser?.full_name ? `${currentUser.full_name} (Additional Secretary)` : "Additional Secretary",
         senderRole: "additional_secretary",
         addSecInstructions: instructions,
+        priority: editPriority,
       });
 
       if (res && res.success) {
