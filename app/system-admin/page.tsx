@@ -9,6 +9,7 @@ import {
   exportToExcel, 
   getActiveExcelPassword, 
   setActiveExcelPassword, 
+  syncExcelPasswordFromServer,
   DEFAULT_EXCEL_PASSWORD 
 } from "@/lib/export-excel";
 import { supabase } from "@/lib/supabase";
@@ -94,6 +95,9 @@ export default function SystemAdminDashboard() {
   useEffect(() => {
     setMounted(true);
     setCurrentExcelPassword(getActiveExcelPassword());
+    syncExcelPasswordFromServer().then((pwd) => {
+      if (pwd) setCurrentExcelPassword(pwd);
+    });
 
     const handlePwdChange = () => {
       setCurrentExcelPassword(getActiveExcelPassword());

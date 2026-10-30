@@ -25,7 +25,7 @@ export default function Home() {
 
   const lang = i18n.language;
 
-  // Check search params for forced logout notice
+  // Handle security logout notices & prevent auto-login
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
@@ -36,61 +36,18 @@ export default function Home() {
       } else if (params.get("reason") === "unauthorized") {
         setInfoMessage("You do not have access to that page. Please log in with appropriate credentials.");
       }
+
+      // Security requirement: Visiting the login page must never auto-log into an account.
+      // Clear residual credentials so explicit login is always required when opening the portal link.
+      localStorage.removeItem("dcmms_simulated_session");
+      localStorage.removeItem("dcmms_username");
+      localStorage.removeItem("dcmms_user_role");
+      localStorage.removeItem("dcmms_current_user");
+      localStorage.removeItem("dcmms_current_session_id");
+      localStorage.removeItem("dcmms_last_activity");
+      sessionStorage.removeItem("dcmms_login_redirect_count");
     }
   }, []);
-
-  // If already signed in, redirect to correct dashboard (unless arriving via logout/timeout)
-  useEffect(() => {
-    const checkRedirect = async () => {
-      if (typeof window !== "undefined") {
-        const params = new URLSearchParams(window.location.search);
-        if (params.get("reason") || params.get("logout")) {
-          // Explicitly clear session keys to prevent any redirect bounce
-          localStorage.removeItem("dcmms_simulated_session");
-          localStorage.removeItem("dcmms_username");
-          localStorage.removeItem("dcmms_user_role");
-          localStorage.removeItem("dcmms_current_user");
-          localStorage.removeItem("dcmms_current_session_id");
-          localStorage.removeItem("dcmms_last_activity");
-          return;
-        }
-
-        // Safeguard: detect rapid redirect bouncing (auto fresh loop)
-        const redirectCountKey = "dcmms_login_redirect_count";
-        const lastRedirectTime = parseInt(sessionStorage.getItem("dcmms_last_redirect_time") || "0", 10);
-        const now = Date.now();
-        let count = parseInt(sessionStorage.getItem(redirectCountKey) || "0", 10);
-        if (now - lastRedirectTime < 3000) {
-          count += 1;
-        } else {
-          count = 1;
-        }
-        sessionStorage.setItem("dcmms_last_redirect_time", now.toString());
-        sessionStorage.setItem(redirectCountKey, count.toString());
-
-        if (count > 3) {
-          console.warn("Redirect loop detected. Clearing session to stop loop.");
-          localStorage.removeItem("dcmms_simulated_session");
-          localStorage.removeItem("dcmms_username");
-          localStorage.removeItem("dcmms_user_role");
-          localStorage.removeItem("dcmms_current_user");
-          localStorage.removeItem("dcmms_current_session_id");
-          localStorage.removeItem("dcmms_last_activity");
-          sessionStorage.removeItem(redirectCountKey);
-          setInfoMessage("Session was reset to prevent a redirect loop. Please log in again.");
-          return;
-        }
-      }
-      const profile = await getCurrentProfile();
-      if (profile?.role) {
-        const target = dashboardPath(profile.role);
-        if (target && target !== "/" && target !== window.location.pathname) {
-          router.replace(target);
-        }
-      }
-    };
-    checkRedirect();
-  }, [router]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();

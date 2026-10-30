@@ -908,6 +908,9 @@ function SubjectOfficerDashboardContent() {
           if (Array.isArray(res.data.submittedCaseNos)) {
             setSubmittedCaseNos((prev) => Array.from(new Set([...prev, ...res.data.submittedCaseNos])));
           }
+          if (Array.isArray(res.data.submittedAnswerCaseNos)) {
+            setSubmittedAnswerCaseNos((prev) => Array.from(new Set([...prev, ...res.data.submittedAnswerCaseNos])));
+          }
 
           if (typeof window !== "undefined") {
             if (Array.isArray(res.data.cases) && res.data.cases.length === 0) {
@@ -1734,6 +1737,7 @@ function SubjectOfficerDashboardContent() {
   const [priorityFilter, setPriorityFilter] = useState<"all" | "high" | "medium" | "low">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "submitted" | "not_submitted">("all");
   const [submittedCaseNos, setSubmittedCaseNos] = useState<string[]>([]);
+  const [submittedAnswerCaseNos, setSubmittedAnswerCaseNos] = useState<string[]>([]);
 
   // Subject Officer Assignment Data Flow State & Handlers
   const [assignments, setAssignments] = useState<any[]>([]);
@@ -1777,6 +1781,13 @@ function SubjectOfficerDashboardContent() {
               setSubmittedCaseNos((prev) => Array.from(new Set([...prev, ...parsed])));
             }
           }
+          const storedAnsNos = localStorage.getItem("dcmms_submitted_answer_letters");
+          if (storedAnsNos) {
+            const parsed = JSON.parse(storedAnsNos);
+            if (Array.isArray(parsed)) {
+              setSubmittedAnswerCaseNos((prev) => Array.from(new Set([...prev, ...parsed])));
+            }
+          }
         } catch (e) {}
       };
 
@@ -1798,9 +1809,55 @@ function SubjectOfficerDashboardContent() {
     return set;
   }, [submittedCaseNos]);
 
+  const submittedAnswerCaseNosSet = useMemo(() => {
+    const set = new Set<string>();
+    submittedAnswerCaseNos.forEach((x) => {
+      if (x) set.add(String(x).trim().toLowerCase());
+    });
+    return set;
+  }, [submittedAnswerCaseNos]);
+
+  const isAnswerLetterSubmitted = (item: any): boolean => {
+    if (!item) return false;
+    const cNo = String(item.caseNo || item.case_no || "").trim().toLowerCase();
+    const lNo = String(item.letterNo || item.letter_no || "").trim().toLowerCase();
+
+    const st = String(item.status || "").trim().toLowerCase();
+    if (
+      st === "closed" ||
+      st === "closed file" ||
+      st === "නිමා කල" ||
+      st === "නිමා කළ" ||
+      st === "finalized / closed" ||
+      st.includes("completed") ||
+      st.includes("concluded")
+    ) return true;
+
+    // Check if reply_letter_details_table has an entry for this answer letter
+    const hasReplyDetail = replyLettersList.some((r: any) => {
+      const rRef = String(r.ref_number || r.refNo || "").trim().toLowerCase();
+      const rFile = String(r.file_no || r.fileNo || "").trim().toLowerCase();
+      const matches = (rRef && (rRef === cNo || rRef === lNo)) || (rFile && (rFile === cNo || rFile === lNo));
+      const hasAction = r.upcoming_action && String(r.upcoming_action).trim() && String(r.upcoming_action) !== "null" && String(r.upcoming_action) !== "statusInquiry";
+      const hasFileName = r.file_name && String(r.file_name).trim() && String(r.file_name) !== "null";
+      return matches && (hasAction || hasFileName);
+    });
+    if (hasReplyDetail) return true;
+
+    if (submittedAnswerCaseNosSet.has(cNo) || (lNo && submittedAnswerCaseNosSet.has(lNo))) return true;
+
+    if (item.isSubmitted === true && (item.isAnswerLetter || st.includes("answer"))) return true;
+
+    return false;
+  };
+
   const isCaseSubmitted = (item: Case): boolean => {
     const cNo = String(item.caseNo || "").trim().toLowerCase();
     const lNo = String(item.letterNo || "").trim().toLowerCase();
+
+    if (item.status === "assigned answer letter" || item.status === "Assigned Answer Letter" || item.letterType?.toLowerCase().includes("answer")) {
+      return isAnswerLetterSubmitted(item);
+    }
 
     if (item.isSubmitted === true || item.hasSubjectDetails === true) return true;
     const st = String(item.status || "").trim().toLowerCase();
@@ -2878,8 +2935,21 @@ function SubjectOfficerDashboardContent() {
   const closedCasesCount = cases.filter((c) => c.status === "Closed").length;
 
   // Helper to calculate case deadlines and reminders
-  const calculateReminder = (assignedDateStr: string, priority: "high" | "medium" | "low", status: string) => {
-    if (status === "Closed") return { text: "Completed", color: "gray", active: false };
+  const calculateReminder = (assignedDateStr: string, priority: "high" | "medium" | "low", status: string, isSubmitted?: boolean) => {
+    if (isSubmitted) return { text: "Completed", color: "gray", active: false };
+
+    const st = String(status || "").toLowerCase();
+    if (
+      st === "closed" ||
+      st === "closed file" ||
+      st === "නිමා කල" ||
+      st === "නිමා කළ" ||
+      st === "finalized / closed" ||
+      st.includes("completed") ||
+      st.includes("concluded")
+    ) {
+      return { text: "Completed", color: "gray", active: false };
+    }
 
     const assigned = new Date(assignedDateStr);
     const today = new Date();
@@ -2937,11 +3007,16 @@ function SubjectOfficerDashboardContent() {
     return { text: "No reminder", color: "gray", active: false };
   };
 
-  // Get active reminders
-  const activeReminders = cases.map(c => {
-    const reminderInfo = calculateReminder(c.receivedDate, c.priority, c.status);
-    return { ...c, reminderInfo };
-  }).filter(r => r.reminderInfo.active);
+  // Get active reminders (only for unsubmitted letters)
+  const activeReminders = useMemo(() => {
+    return cases
+      .filter((c) => !isCaseSubmitted(c))
+      .map((c) => {
+        const reminderInfo = calculateReminder(c.receivedDate || c.letterDate || c.assignedDate, c.priority, c.status, false);
+        return { ...c, reminderInfo };
+      })
+      .filter((r) => r.reminderInfo.active);
+  }, [cases, submittedCaseNosSet, assignments, replyLettersList, submittedAnswerCaseNosSet]);
 
   const totalPct = "100%";
   const inProgressPct = totalCasesCount > 0 ? `+${Math.round((inProgressCasesCount / totalCasesCount) * 100)}%` : "0%";
@@ -2986,6 +3061,11 @@ function SubjectOfficerDashboardContent() {
     });
     return { submitted, notSubmitted, total: cases.length };
   }, [cases, submittedCaseNosSet]);
+
+  // Real-time count of unsubmitted answer letters
+  const unsubmittedAnswerLettersCount = useMemo(() => {
+    return assignedAnswerLetters.filter((item) => !isAnswerLetterSubmitted(item)).length;
+  }, [assignedAnswerLetters, replyLettersList, submittedAnswerCaseNosSet]);
 
   // Filter answer letters list in real-time (guaranteed latest letters first)
   const filteredAnswerLetters = useMemo(() => {
@@ -5078,6 +5158,20 @@ function SubjectOfficerDashboardContent() {
             >
               <ClipboardList className="tab-icon" />
               <span>{lang === "si" ? "පවරන ලද පැමිණිලි ලේඛනය" : "Assigned Complaints / Cases"}</span>
+              {letterStatusCounts.notSubmitted > 0 && (
+                <span style={{
+                  backgroundColor: activeTab === "cases" ? "#2563eb" : "#94a3b8",
+                  color: "#ffffff",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  padding: "2px 8px",
+                  borderRadius: "12px",
+                  marginLeft: "4px",
+                  transition: "all 0.2s ease"
+                }}>
+                  {letterStatusCounts.notSubmitted}
+                </span>
+              )}
             </button>
             <button
               type="button"
@@ -5086,7 +5180,7 @@ function SubjectOfficerDashboardContent() {
             >
               <MailCheck className="tab-icon" />
               <span>{lang === "si" ? "පවරන ලද පිළිතුරු ලිපි" : "Assigned Answers letters"}</span>
-              {assignedAnswerLetters.length > 0 && (
+              {unsubmittedAnswerLettersCount > 0 && (
                 <span style={{
                   backgroundColor: activeTab === "answer_letters" ? "#4f46e5" : "#94a3b8",
                   color: "#ffffff",
@@ -5097,7 +5191,7 @@ function SubjectOfficerDashboardContent() {
                   marginLeft: "4px",
                   transition: "all 0.2s ease"
                 }}>
-                  {assignedAnswerLetters.length}
+                  {unsubmittedAnswerLettersCount}
                 </span>
               )}
             </button>
@@ -6436,8 +6530,9 @@ function SubjectOfficerDashboardContent() {
                               }}>
                                 {item.isOld ? t("oldCase", "Old Case") : t("newCase", "New Case")}
                               </span>
-                              {(() => {
-                                const rem = calculateReminder(item.letterDate || item.receivedDate || item.assignedDate, item.priority, item.status);
+                              {!isSubmitted && (() => {
+                                const rem = calculateReminder(item.letterDate || item.receivedDate || item.assignedDate, item.priority, item.status, isSubmitted);
+                                if (!rem || !rem.text || rem.text === "Completed" || rem.text === "No reminder") return null;
                                 let colorClass = "reminder-text-gray";
                                 let dotClass = "dot-gray";
                                 if (rem.color === "red") {
@@ -6658,7 +6753,7 @@ function SubjectOfficerDashboardContent() {
                   <tbody>
                     {filteredAnswerLetters.length > 0 ? (
                       filteredAnswerLetters.map((item, idx) => {
-                        const isAnsSub = isCaseSubmitted(item as any);
+                        const isAnsSub = isAnswerLetterSubmitted(item);
                         const leftBorderColor = isAnsSub ? "#10b981" : "#f59e0b";
                         const rowBg = isAnsSub ? "#ffffff" : "#fffefb";
 

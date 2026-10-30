@@ -25,6 +25,7 @@ import {
   exportToExcel, 
   getActiveExcelPassword, 
   setActiveExcelPassword, 
+  syncExcelPasswordFromServer,
   DEFAULT_EXCEL_PASSWORD 
 } from "@/lib/export-excel";
 import { getAuditLogs, logAuditEvent, AuditLog } from "@/lib/security";
@@ -75,6 +76,12 @@ export default function ExcelSecurityPage() {
         return;
       }
 
+      // Sync active password from PostgreSQL so all devices use the same key
+      try {
+        const syncedPwd = await syncExcelPasswordFromServer();
+        if (syncedPwd) setCurrentPassword(syncedPwd);
+      } catch (e) {}
+
       await loadAuditHistory();
     };
 
@@ -115,20 +122,46 @@ export default function ExcelSecurityPage() {
     if (typeof navigator !== "undefined" && navigator.clipboard) {
       navigator.clipboard.writeText(currentPassword);
       setCopied(true);
-      showToast(t("copied", "Password copied to clipboard!"));
+      showToast(t("copied", "Password copied to clipboard! Give this key to the officer to unlock Excel."), "success");
       setTimeout(() => setCopied(false), 2500);
     }
   };
 
   const handleGenerateRandomPassword = () => {
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
-    let gen = "DCMMS@";
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let gen = "KEY-";
     for (let i = 0; i < 6; i++) {
       gen += chars.charAt(Math.floor(Math.random() * chars.length));
     }
     setNewPassword(gen);
     setConfirmPassword(gen);
-    showToast("Generated a strong suggested password. Click 'Update Protection Password' to save.", "success");
+    showToast(`Generated random key: ${gen}. Click 'Update Protection Password' to apply it.`, "success");
+  };
+
+  const handleQuickRandomKey = async () => {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let gen = "KEY-";
+    for (let i = 0; i < 6; i++) {
+      gen += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setActiveExcelPassword(gen, adminName);
+    setCurrentPassword(gen);
+    setNewPassword(gen);
+    setConfirmPassword(gen);
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(gen);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 3000);
+    }
+    await logAuditEvent(
+      null,
+      adminName,
+      "",
+      "EXCEL_PASSWORD_UPDATED",
+      `System Admin ${adminName} generated random Excel protection key: ${gen}`
+    );
+    showToast(`New key generated & copied: ${gen}. Give this key to the officer to unlock and edit Excel.`, "success");
+    await loadAuditHistory();
   };
 
   const handleUpdatePassword = async (e: React.FormEvent) => {
@@ -474,12 +507,39 @@ export default function ExcelSecurityPage() {
                 </div>
               </div>
 
-              <div style={{ display: "flex", gap: 10, marginTop: 24, paddingTop: 18, borderTop: "1px solid #f1f5f9" }}>
+              <div style={{ display: "flex", gap: 10, marginTop: 24, paddingTop: 18, borderTop: "1px solid #f1f5f9", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={handleQuickRandomKey}
+                  style={{
+                    flex: 1,
+                    minWidth: "180px",
+                    padding: "10px 16px",
+                    background: "linear-gradient(135deg, #059669 0%, #047857 100%)",
+                    color: "#ffffff",
+                    border: "none",
+                    borderRadius: 8,
+                    fontSize: "0.85rem",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 6,
+                    boxShadow: "0 2px 6px rgba(5, 150, 105, 0.3)"
+                  }}
+                  title="Generate a new random key, apply to all exports across the system, and copy to clipboard"
+                >
+                  <Sparkles size={16} />
+                  <span>{lang === "si" ? "සසම්භාවී යතුරක් සාදා පිටපත් කරන්න" : "Generate & Copy Key"}</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={handleCopyPassword}
                   style={{
                     flex: 1,
+                    minWidth: "140px",
                     padding: "10px 16px",
                     background: "#1e3a8a",
                     color: "#ffffff",

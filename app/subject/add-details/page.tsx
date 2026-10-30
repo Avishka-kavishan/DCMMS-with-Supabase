@@ -136,11 +136,13 @@ function CaseDetailsForm() {
   const searchParams = useSearchParams();
   const caseNoParam = searchParams?.get("caseNo") || "CA/2026/01";
   const isExplicitViewMode = searchParams?.get("mode") === "view" || searchParams?.get("viewOnly") === "true" || searchParams?.get("isViewOnly") === "true";
+  const isInitialAnswerLetter = searchParams?.get("isAnswerLetter") === "true" || searchParams?.get("type") === "answer_letter";
   const [isCaseAlreadySubmitted, setIsCaseAlreadySubmitted] = useState<boolean>(() => {
     if (isExplicitViewMode) return true;
     if (typeof window !== "undefined" && caseNoParam) {
       try {
-        const stored = localStorage.getItem("dcmms_submitted_case_nos");
+        const key = isInitialAnswerLetter ? "dcmms_submitted_answer_letters" : "dcmms_submitted_case_nos";
+        const stored = localStorage.getItem(key);
         if (stored) {
           const arr = JSON.parse(stored);
           const cClean = String(caseNoParam).trim().toLowerCase();
@@ -801,15 +803,17 @@ function CaseDetailsForm() {
             if (officerText) setAssignedOfficersText(officerText);
             if (asgn.appointment_date || asgn.appointmentDate) setSubjectApptDate(asgn.appointment_date || asgn.appointmentDate);
             if (asgn.report_due_date || asgn.reportDueDate) setSubjectDueDate(asgn.report_due_date || asgn.reportDueDate);
-            if (
-              asgn.datesSubmittedBySubject ||
-              asgn.dates_submitted_by_subject ||
-              (asgn.appointment_date && asgn.report_due_date) ||
-              (asgn.appointmentDate && asgn.reportDueDate) ||
-              asgn.initial_investigation_complete ||
-              asgn.initialInvestigationComplete
-            ) {
-              setIsCaseAlreadySubmitted(true);
+            if (!isAnswerLetter) {
+              if (
+                (asgn.datesSubmittedBySubject && asgn.appointment_date && asgn.report_due_date) ||
+                (asgn.dates_submitted_by_subject && asgn.appointment_date && asgn.report_due_date) ||
+                (asgn.appointment_date && asgn.report_due_date) ||
+                (asgn.appointmentDate && asgn.reportDueDate) ||
+                asgn.initial_investigation_complete ||
+                asgn.initialInvestigationComplete
+              ) {
+                setIsCaseAlreadySubmitted(true);
+              }
             }
           }
         }
@@ -859,7 +863,9 @@ function CaseDetailsForm() {
 
               // Pre-populate the form inputs with the most recent action details
               if (mapped.length > 0) {
-                setIsCaseAlreadySubmitted(true);
+                if (!isAnswerLetter) {
+                  setIsCaseAlreadySubmitted(true);
+                }
                 const latest = mapped[0];
                 setSubjectOfficer(latest.subjectOfficerName || "");
                 if (!isUserEditingReportStateRef.current) {
@@ -947,8 +953,17 @@ function CaseDetailsForm() {
           }
           if (pgRes && pgRes.success && pgRes.data) {
             const d = pgRes.data;
-            if (d.form_id || d.future_action || (Array.isArray(d.accused_officers) && d.accused_officers.length > 0) || d.reply_letter_details) {
-              setIsCaseAlreadySubmitted(true);
+            if (isAnswerLetter) {
+              const rDetails = d.reply_letter_details;
+              const hasUpcomingAction = rDetails && rDetails.upcoming_action && String(rDetails.upcoming_action).trim() && String(rDetails.upcoming_action) !== "null" && String(rDetails.upcoming_action) !== "statusInquiry";
+              const hasFileDetails = rDetails && rDetails.file_name && rDetails.file_no;
+              if (hasUpcomingAction || hasFileDetails) {
+                setIsCaseAlreadySubmitted(true);
+              }
+            } else {
+              if (d.form_id || d.future_action || (Array.isArray(d.accused_officers) && d.accused_officers.length > 0) || d.reply_letter_details) {
+                setIsCaseAlreadySubmitted(true);
+              }
             }
             const cleanVal = (val: string | null | undefined) => {
               if (!val) return "";
@@ -1221,7 +1236,8 @@ function CaseDetailsForm() {
           if (caseNoParam) {
             try {
               const cClean = String(caseNoParam).trim().toLowerCase();
-              const storedSubNos = localStorage.getItem("dcmms_submitted_case_nos");
+              const storageKey = isAnswerLetter ? "dcmms_submitted_answer_letters" : "dcmms_submitted_case_nos";
+              const storedSubNos = localStorage.getItem(storageKey);
               if (storedSubNos) {
                 const arr = JSON.parse(storedSubNos);
                 if (Array.isArray(arr) && arr.map((s: string) => String(s).trim().toLowerCase()).includes(cClean)) {
@@ -1891,7 +1907,8 @@ function CaseDetailsForm() {
 
       if (!isDraftMode) {
         try {
-          const storedSubNos = localStorage.getItem("dcmms_submitted_case_nos") || "[]";
+          const storageKey = isAnswerLetter ? "dcmms_submitted_answer_letters" : "dcmms_submitted_case_nos";
+          const storedSubNos = localStorage.getItem(storageKey) || "[]";
           let subNosArr: string[] = [];
           try { subNosArr = JSON.parse(storedSubNos); } catch (e) {}
           if (!Array.isArray(subNosArr)) subNosArr = [];
@@ -1903,7 +1920,7 @@ function CaseDetailsForm() {
           if (cleanParam && !subNosArr.map(s => String(s).trim().toLowerCase()).includes(cleanParam)) {
             subNosArr.push(cleanParam);
           }
-          localStorage.setItem("dcmms_submitted_case_nos", JSON.stringify(subNosArr));
+          localStorage.setItem(storageKey, JSON.stringify(subNosArr));
         } catch (e) {}
       }
 

@@ -178,6 +178,8 @@ export interface ExportToExcelOptions {
 
 export const LOCAL_STORAGE_EXCEL_PASSWORD_KEY = "dcmms_excel_export_password";
 
+import { setExcelProtectionPasswordServer, getExcelProtectionPasswordServer } from "@/lib/db-actions";
+
 /** Default password used to lock exported sheets (configurable via NEXT_PUBLIC_EXCEL_EXPORT_PASSWORD) */
 export const DEFAULT_EXCEL_PASSWORD =
   process.env.NEXT_PUBLIC_EXCEL_EXPORT_PASSWORD || "DCMMS@Secure2026";
@@ -198,20 +200,38 @@ export function getActiveExcelPassword(): string {
 }
 
 /**
- * Updates the stored Excel export password in localStorage
+ * Synchronizes the active Excel protection key from PostgreSQL database to local storage
  */
-export function setActiveExcelPassword(newPassword: string): void {
+export async function syncExcelPasswordFromServer(): Promise<string> {
+  try {
+    const res = await getExcelProtectionPasswordServer();
+    if (res && res.success && res.password) {
+      if (typeof window !== "undefined") {
+        localStorage.setItem(LOCAL_STORAGE_EXCEL_PASSWORD_KEY, res.password);
+        window.dispatchEvent(new Event("dcmms_excel_password_changed"));
+      }
+      return res.password;
+    }
+  } catch (e) {}
+  return getActiveExcelPassword();
+}
+
+/**
+ * Updates the stored Excel export password in localStorage and syncs across devices via PostgreSQL
+ */
+export function setActiveExcelPassword(newPassword: string, updatedBy?: string): void {
+  const cleanPwd = (newPassword || DEFAULT_EXCEL_PASSWORD).trim();
   if (typeof window !== "undefined") {
     try {
-      if (!newPassword || newPassword.trim() === "" || newPassword.trim() === DEFAULT_EXCEL_PASSWORD) {
-        localStorage.removeItem(LOCAL_STORAGE_EXCEL_PASSWORD_KEY);
-      } else {
-        localStorage.setItem(LOCAL_STORAGE_EXCEL_PASSWORD_KEY, newPassword.trim());
-      }
-      // Dispatch custom storage event so all tabs/components update
+      localStorage.setItem(LOCAL_STORAGE_EXCEL_PASSWORD_KEY, cleanPwd);
       window.dispatchEvent(new Event("dcmms_excel_password_changed"));
     } catch (e) {}
   }
+
+  // Persist to PostgreSQL so all officers and workstations use this exact key
+  try {
+    setExcelProtectionPasswordServer(cleanPwd, updatedBy).catch(() => {});
+  } catch (e) {}
 }
 
 /**
@@ -293,21 +313,21 @@ export function exportToExcel(
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>
   </cellStyleXfs>
   <cellXfs count="4">
-    <!-- 0: Default Cell (Locked) -->
+    <!-- 0: Default Cell (Locked with Sheet Protection) -->
     <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyProtection="1">
       <protection locked="1"/>
     </xf>
-    <!-- 1: Header Cell (Navy, Bold White Text, Center) -->
+    <!-- 1: Header Cell (Navy, Bold White Text, Center, Locked) -->
     <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1" applyProtection="1">
       <alignment horizontal="center" vertical="center" wrapText="1"/>
       <protection locked="1"/>
     </xf>
-    <!-- 2: Standard Data Row (White, Left aligned) -->
+    <!-- 2: Standard Data Row (White, Left aligned, Locked) -->
     <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1" applyProtection="1">
       <alignment vertical="center"/>
       <protection locked="1"/>
     </xf>
-    <!-- 3: Striped Data Row (Subtle Gray, Left aligned) -->
+    <!-- 3: Striped Data Row (Subtle Gray, Left aligned, Locked) -->
     <xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1" applyProtection="1">
       <alignment vertical="center"/>
       <protection locked="1"/>
@@ -366,7 +386,8 @@ export function exportToExcel(
   });
   sheetDataXml += "</sheetData>";
 
-  // Sheet Protection Tag with hashed password & restricted permissions
+  // Sheet Protection Tag with standard OpenXML 16-bit hashed password & restricted permissions
+  // Locked by default to prevent unauthorized editing unless user unlocks with the key from System Admin
   const passHash = hashExcelPassword(password);
   const protectionXml = `<sheetProtection password="${passHash}" sheet="1" objects="1" scenarios="1" selectLockedCells="1" selectUnlockedCells="1" formatCells="0" formatColumns="0" formatRows="0" insertColumns="0" insertRows="0" insertHyperlinks="0" deleteColumns="0" deleteRows="0" sort="1" autoFilter="1"/>`;
 

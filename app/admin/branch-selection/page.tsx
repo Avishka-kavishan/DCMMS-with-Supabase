@@ -22,6 +22,13 @@ const DEFAULT_BRANCH_OPTIONS = [
     officerName: "",
   },
   {
+    value: "chief_clerk_discipline",
+    label: "Chief Clerk - Discipline Branch",
+    labelSi: "ශාඛා ප්‍රධානී - විනය ශාඛාව (Chief Clerk - Discipline Branch)",
+    labelTa: "முதன்மை எழுதுநர் - ஒழுக்க கிளை (Chief Clerk - Discipline Branch)",
+    officerName: "Chief Clerk Officer (ශාඛා ප්‍රධානී)",
+  },
+  {
     value: "assistant_secretary_discipline",
     label: "Assistant Secretary Discipline Branch",
     labelSi: "සහකාර ලේකම් - විනය ශාඛාව (Assistant Secretary Discipline Branch)",
@@ -137,12 +144,23 @@ function BranchSelectionInner() {
         const officers = res.data;
         setBranchOptions((prev) =>
           prev.map((opt) => {
-            if (opt.value === "assistant_secretary_discipline" || opt.value === "chief_clerk_discipline") {
+            if (opt.value === "chief_clerk_discipline") {
+              const matched = officers.find((o: any) => {
+                const r = (o.role || "").toLowerCase();
+                return (
+                  (r.includes("chief") || r.includes("clerk") || r.includes("ශාඛා")) &&
+                  !r.includes("investigation")
+                );
+              });
+              if (matched?.full_name) {
+                return { ...opt, officerName: matched.full_name };
+              }
+            } else if (opt.value === "assistant_secretary_discipline") {
               const matched = officers.find((o: any) => {
                 const r = (o.role || "").toLowerCase();
                 const n = (o.full_name || "").toLowerCase();
                 return (
-                  (r.includes("discipline") && (r.includes("assistant") || r.includes("secretary") || r.includes("admin") || r.includes("chief"))) ||
+                  (r.includes("discipline") && (r.includes("assistant") || r.includes("secretary") || r.includes("admin"))) ||
                   n.includes("bandula")
                 );
               });

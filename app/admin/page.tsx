@@ -35,7 +35,7 @@ import {
   assignLetterToSubjectOfficerServer,
   getRegisterOfficersServer,
 } from "@/lib/db-actions";
-import { exportToExcel } from "@/lib/export-excel";
+import { exportToExcel, syncExcelPasswordFromServer } from "@/lib/export-excel";
 import {
   LetterOriginGroup,
   getLetterOriginGroup,
@@ -44,6 +44,9 @@ import {
   isLetterForChiefClerk,
   isLetterSubmittedBySenior,
   getSeniorLetterStatusInfo,
+  isLetterSubmittedByDiscipline,
+  isLetterSubmittedGeneral,
+  getGeneralLetterStatusInfo,
 } from "@/lib/letter-hierarchy";
 import { SUBJECT_TYPE_OPTIONS, getSubjectTypeLabel } from "@/lib/subject-types";
 
@@ -225,6 +228,14 @@ function getLetterOfficerRole(letter: any, lang: string = "si"): string {
 }
 
 /** Format letter priority badge with dot indicator and localized label */
+function normalizePriorityKey(val: string | null | undefined): "high" | "medium" | "low" {
+  if (!val) return "medium";
+  const s = String(val).toLowerCase().trim();
+  if (s.includes("high") || s.includes("urgent") || s.includes("today") || s.includes("අද")) return "high";
+  if (s.includes("low") || s.includes("14") || s.includes("21") || s.includes("අඩු")) return "low";
+  return "medium";
+}
+
 function getLetterPriorityBadge(letter: any, currentLang: string = "si") {
   const rawP = String(letter?.priority || "Normal").toLowerCase().trim();
   const isHigh = rawP.includes("high") || rawP.includes("today") || rawP.includes("urgent") || rawP.includes("අද");
@@ -319,6 +330,16 @@ function AdminDashboardContent() {
   const [chiefAssignmentFilter, setChiefAssignmentFilter] = useState<"all" | "pending" | "assigned">("all");
   const [subjectOfficerSearchInModal, setSubjectOfficerSearchInModal] = useState<string>("");
 
+  // ── Forward Letter to Chief Clerk Modal State (Assistant Secretary Discipline Branch) ──
+  const [isForwardToChiefModalOpen, setIsForwardToChiefModalOpen] = useState(false);
+  const [forwardingToChiefLetter, setForwardingToChiefLetter] = useState<any | null>(null);
+  const [chiefClerksList, setChiefClerksList] = useState<any[]>([]);
+  const [selectedChiefClerkId, setSelectedChiefClerkId] = useState<string>("");
+  const [forwardToChiefPriority, setForwardToChiefPriority] = useState<"high" | "medium" | "low">("medium");
+  const [forwardToChiefInstructions, setForwardToChiefInstructions] = useState<string>("");
+  const [isSubmittingForwardToChief, setIsSubmittingForwardToChief] = useState(false);
+  const [chiefClerkSearchInModal, setChiefClerkSearchInModal] = useState<string>("");
+
   // ── Letters forwarded TO Senior Assistant Secretary BY Additional Secretary ──
   const [seniorSecLetters, setSeniorSecLetters] = useState<any[]>([]);
   const [isSeniorLettersMinimized, setIsSeniorLettersMinimized] = useState(false);
@@ -358,6 +379,7 @@ function AdminDashboardContent() {
   // ── Session guard & Data Loader ───────────────────────────────────────────
   useEffect(() => {
     setIsMounted(true);
+    syncExcelPasswordFromServer().catch(() => {});
     try {
       const sim = localStorage.getItem("dcmms_simulated_session");
       if (sim) {
@@ -455,6 +477,16 @@ function AdminDashboardContent() {
           }
         } catch (e) {
           console.warn("Failed to load subject officers in Admin:", e);
+        }
+
+        // Load registered Chief Clerks for forwarding modal
+        try {
+          const chiefsRes = await getRegisterOfficersServer("chief");
+          if (chiefsRes && chiefsRes.success && Array.isArray(chiefsRes.data)) {
+            setChiefClerksList(chiefsRes.data);
+          }
+        } catch (e) {
+          console.warn("Failed to load chief clerks in Admin:", e);
         }
       }
     });
@@ -688,14 +720,80 @@ function AdminDashboardContent() {
     return o.includes("dharshana") || o.includes("senanayake") || o.includes("senior assistant") || o.includes("deputy");
   };
 
+  // ── Chief Clerk Subject Officer Assignment Check Helper ───────────────────
+  const isLetterAssignedToSubject = React.useCallback((l: any) => {
+    if (!l) return false;
+    const act = (l.actionOfficer || l.action_officer || "").trim().toLowerCase();
+    const fwd = (l.forwardedTo || l.forwarded_to || "").trim().toLowerCase();
+    const role = (l.addressedRole || l.addressed_role || "").trim().toLowerCase();
+    const reason = (l.forwardReason || l.forward_reason || "").trim().toLowerCase();
+    const status = (l.status || "").trim().toLowerCase();
+
+    if (role === "subject officer" || role.includes("subject")) return true;
+    if (status.includes("subject")) return true;
+    if (reason.includes("assigned by chief clerk") || reason.includes("subject officer")) return true;
+    if (fwd.includes("subject")) return true;
+
+    if (subjectOfficersList.length > 0 && (act || fwd)) {
+      const match = subjectOfficersList.some((so: any) => {
+        const soName = (so.full_name || "").trim().toLowerCase();
+        return soName && (act.includes(soName) || soName.includes(act) || fwd.includes(soName));
+      });
+      if (match) return true;
+    }
+    return false;
+  }, [subjectOfficersList]);
+
   // Base list of cases for the current user role:
-  // For Chief Clerk, ONLY display cases assigned/routed to Chief Clerk
+  // For Chief Clerk, display strictly the letters assigned / forwarded to Chief Clerk
   const baseCases = React.useMemo(() => {
     if (isChiefClerk) {
-      return allMappedCases.filter((c) => isLetterForChiefClerk(c, effectiveChiefProfile));
+      const chiefLetters = directlyAssignedLetters.filter((l: any) =>
+        isLetterForChiefClerk(l, effectiveChiefProfile)
+      );
+      if (chiefLetters.length > 0) {
+        return chiefLetters.map((l: any): CaseRow => {
+          const caseNo = l.letterNo || l.refNo || l.letter_no || l.serial_no || String(l.id);
+          const isAssigned = isLetterAssignedToSubject(l);
+          const rawStatus = String(l.status || "").toLowerCase();
+          const status =
+            rawStatus === "closed"
+              ? "Closed"
+              : rawStatus.includes("investigation")
+              ? "Under Investigation"
+              : isAssigned
+              ? "Under Subject Officer"
+              : "Pending";
+
+          return {
+            id: String(l.id),
+            caseNo,
+            dateFiled:
+              l.receivedDate ||
+              l.received_date ||
+              l.letterDate ||
+              l.letter_date ||
+              (l.created_at ? String(l.created_at).slice(0, 10) : ""),
+            subject: l.subject || "N/A",
+            assignedTo:
+              l.actionOfficer ||
+              l.action_officer ||
+              l.forwardedTo ||
+              l.forwarded_to ||
+              "Unassigned",
+            priority: l.priority
+              ? String(l.priority).charAt(0).toUpperCase() + String(l.priority).slice(1)
+              : "Medium",
+            status,
+            type: mapType(l.subject || l.type || ""),
+            rawLetter: l,
+          };
+        });
+      }
+      return [];
     }
     return allMappedCases;
-  }, [allMappedCases, isChiefClerk, effectiveChiefProfile]);
+  }, [allMappedCases, isChiefClerk, effectiveChiefProfile, directlyAssignedLetters, isLetterAssignedToSubject]);
 
   // ── Derived stats ──────────────────────────────────────────────────────────
   const activeCases = React.useMemo(() => {
@@ -710,6 +808,7 @@ function AdminDashboardContent() {
   const underInvestigationCount = activeCases.filter((c) => c.status === "Under Investigation").length;
   const closedCount = activeCases.filter((c) => c.status === "Closed").length;
   const underSubjectOfficerCount = activeCases.filter((c) => c.status === "Under Subject Officer").length;
+  const chiefPendingCount = activeCases.filter((c) => c.status === "Pending").length;
 
   const pct = (n: number) =>
     totalCasesCount > 0 ? `${Math.round((n / totalCasesCount) * 100)}%` : "0%";
@@ -850,29 +949,6 @@ function AdminDashboardContent() {
   };
 
   // ── Chief Clerk Subject Officer Assignment Handlers ───────────────────────
-  const isLetterAssignedToSubject = (l: any) => {
-    if (!l) return false;
-    const act = (l.actionOfficer || l.action_officer || "").trim().toLowerCase();
-    const fwd = (l.forwardedTo || l.forwarded_to || "").trim().toLowerCase();
-    const role = (l.addressedRole || l.addressed_role || "").trim().toLowerCase();
-    const reason = (l.forwardReason || l.forward_reason || "").trim().toLowerCase();
-    const status = (l.status || "").trim().toLowerCase();
-
-    if (role === "subject officer" || role.includes("subject")) return true;
-    if (status.includes("subject")) return true;
-    if (reason.includes("assigned by chief clerk") || reason.includes("subject officer")) return true;
-    if (fwd.includes("subject")) return true;
-
-    if (subjectOfficersList.length > 0 && (act || fwd)) {
-      const match = subjectOfficersList.some((so: any) => {
-        const soName = (so.full_name || "").trim().toLowerCase();
-        return soName && (act.includes(soName) || soName.includes(act) || fwd.includes(soName));
-      });
-      if (match) return true;
-    }
-    return false;
-  };
-
   const getAssignedSubjectOfficer = (l: any) => {
     if (!l) return null;
     const act = (l.actionOfficer || l.action_officer || l.forwardedTo || l.forwarded_to || "").trim();
@@ -1042,6 +1118,137 @@ function AdminDashboardContent() {
     }
   };
 
+  // ── Forward to Chief Clerk Modal Handlers (Discipline Branch) ─────────────
+  const openForwardToChiefModal = (letter: any) => {
+    setForwardingToChiefLetter(letter);
+    setChiefClerkSearchInModal("");
+    const defaultPriority = normalizePriorityKey(letter.priority);
+    setForwardToChiefPriority(defaultPriority);
+    setForwardToChiefInstructions(
+      lang === "si"
+        ? "විෂයභාර නිලධාරීන්ට පැවරීම සඳහා විනය ශාඛා ප්‍රධානී වෙත යොමු කරමි."
+        : "Forwarded to Chief Clerk (Discipline Branch) for routing to Subject Officers."
+    );
+
+    const ensureChiefs = (list: any[]) => {
+      const discChief = list.find((c: any) =>
+        !String(c.role || "").toLowerCase().includes("investigation") &&
+        (String(c.role || "").toLowerCase().includes("chief") || String(c.role || "").toLowerCase().includes("discipline") || String(c.full_name || "").includes("ශාඛා"))
+      ) || list[0];
+      setSelectedChiefClerkId(discChief ? String(discChief.id) : "");
+    };
+
+    if (chiefClerksList.length === 0) {
+      getRegisterOfficersServer("chief").then((res) => {
+        if (res && res.success && Array.isArray(res.data) && res.data.length > 0) {
+          setChiefClerksList(res.data);
+          ensureChiefs(res.data);
+        } else {
+          const defaultChief = {
+            id: "default_chief_clerk",
+            full_name: "Chief Clerk Officer (ශාඛා ප්‍රධානී)",
+            role: "Chief Clerk (ශාඛා ප්‍රධානී)",
+            employee_no: "CC-2026-001",
+            is_active: true
+          };
+          setChiefClerksList([defaultChief]);
+          setSelectedChiefClerkId(defaultChief.id);
+        }
+      }).catch(() => {
+        const defaultChief = {
+          id: "default_chief_clerk",
+          full_name: "Chief Clerk Officer (ශාඛා ප්‍රධානී)",
+          role: "Chief Clerk (ශාඛා ප්‍රධානී)",
+          employee_no: "CC-2026-001",
+          is_active: true
+        };
+        setChiefClerksList([defaultChief]);
+        setSelectedChiefClerkId(defaultChief.id);
+      });
+    } else {
+      ensureChiefs(chiefClerksList);
+    }
+
+    setIsForwardToChiefModalOpen(true);
+  };
+
+  const handleForwardToChiefSubmit = async () => {
+    if (!forwardingToChiefLetter) return;
+    const selectedChief = chiefClerksList.find((c) => String(c.id) === String(selectedChiefClerkId)) ||
+      chiefClerksList[0] || {
+        full_name: "Chief Clerk Officer (ශාඛා ප්‍රධානී)",
+        role: "chief_clerk_discipline",
+        employee_no: "CC-2026-001"
+      };
+
+    setIsSubmittingForwardToChief(true);
+    const letterNoVal = forwardingToChiefLetter.letterNo || forwardingToChiefLetter.refNo || "";
+    const refNoVal = forwardingToChiefLetter.refNo || forwardingToChiefLetter.letterNo || "";
+    const cleanPriority = forwardToChiefPriority === "high" ? "High" : forwardToChiefPriority === "low" ? "Low" : "Medium";
+    const forwardReasonVal = forwardToChiefInstructions.trim() ||
+      `Forwarded by Assistant Secretary (Discipline) to ${selectedChief.full_name} for assignment to Subject Officers`;
+
+    try {
+      const res = await forwardLetterFromAdditionalSecretaryServer({
+        letterId: forwardingToChiefLetter.id,
+        letterNo: letterNoVal,
+        refNo: refNoVal,
+        forwardToOfficerName: selectedChief.full_name,
+        forwardToRole: "chief_clerk_discipline",
+        forwardReason: forwardReasonVal,
+        senderName: currentUserProfile?.full_name || "Assistant Secretary Discipline Branch",
+        senderRole: "assistant_secretary_discipline",
+        priority: cleanPriority,
+      });
+
+      if (res && res.success) {
+        setDirectlyAssignedLetters((prev) =>
+          prev.map((l) => {
+            const isMatch = (l.letterNo && l.letterNo === letterNoVal) ||
+                            (l.refNo && l.refNo === refNoVal) ||
+                            (l.id && l.id === forwardingToChiefLetter.id);
+            if (!isMatch) return l;
+            return {
+              ...l,
+              forwardedTo: `${selectedChief.full_name} (chief_clerk_discipline)`,
+              forwarded_to: `${selectedChief.full_name} (chief_clerk_discipline)`,
+              forwardReason: forwardReasonVal,
+              forward_reason: forwardReasonVal,
+              actionOfficer: selectedChief.full_name,
+              action_officer: selectedChief.full_name,
+              status: "forwarded",
+              priority: cleanPriority,
+              isForwarded: true,
+            };
+          })
+        );
+
+        setToastMessage(
+          lang === "si"
+            ? `ලිපිය සාර්ථකව ශාඛා ප්‍රධානී (${selectedChief.full_name}) වෙත යොමු කරන ලදී!`
+            : `Letter successfully forwarded to Chief Clerk (${selectedChief.full_name})!`
+        );
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 4500);
+
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("dcmms_data_updated"));
+          window.dispatchEvent(new CustomEvent("dcmms_assignment_updated"));
+          window.dispatchEvent(new CustomEvent("dcmms_notifications_updated"));
+        }
+
+        setIsForwardToChiefModalOpen(false);
+        setForwardingToChiefLetter(null);
+      } else {
+        alert(res?.error || "Failed to forward letter. Please try again.");
+      }
+    } catch (err: any) {
+      alert(err?.message || "An unexpected error occurred.");
+    } finally {
+      setIsSubmittingForwardToChief(false);
+    }
+  };
+
   // ── Render ─────────────────────────────────────────────────────────────────
   if (!isMounted) {
     return (
@@ -1063,6 +1270,12 @@ function AdminDashboardContent() {
           <p className="admin-dashboard-subtitle" suppressHydrationWarning>
             {isLoading
               ? t("loadingData", "Loading data…")
+              : isChiefClerk
+              ? (lang === "si"
+                  ? `නිලධාරීන් 5 · ආයතන 3 · මුළු ලිපි ${totalCasesCount}`
+                  : lang === "ta"
+                  ? `5 அதிகாரிகள் · 3 நிறுவனங்கள் · மொத்தம் ${totalCasesCount} கடிதங்கள்`
+                  : `5 officers · 3 institutes · ${totalCasesCount} total letters`)
               : t("adminSubtitle", "{{count}} total cases", { count: totalCasesCount })}
           </p>
         </div>
@@ -1094,9 +1307,19 @@ function AdminDashboardContent() {
               suppressHydrationWarning
             >
               <option value="All statuses">{t("allStatuses", "All statuses")}</option>
-              <option value="Under Investigation">{t("statusUnderInvestigation", "Under Investigation")}</option>
-              <option value="Closed">{t("statusClosed", "Closed")}</option>
-              <option value="Under Subject Officer">{t("statusUnderSubjectOfficer", "Under Subject Officer")}</option>
+              {isChiefClerk ? (
+                <>
+                  <option value="Pending">{lang === "si" ? "පවරන්නට නියමිත (පොරොත්තු)" : lang === "ta" ? "ஒதுக்கப்பட வேண்டியவை" : "Pending Assignment"}</option>
+                  <option value="Under Subject Officer">{lang === "si" ? "විෂයභාර නිලධාරීන්ට පවරන ලද" : lang === "ta" ? "விடய அதிகாரிகளுக்கு ஒதுக்கப்பட்டது" : "Assigned to Subject Officer"}</option>
+                  <option value="Closed">{t("statusClosed", "Closed")}</option>
+                </>
+              ) : (
+                <>
+                  <option value="Under Investigation">{t("statusUnderInvestigation", "Under Investigation")}</option>
+                  <option value="Closed">{t("statusClosed", "Closed")}</option>
+                  <option value="Under Subject Officer">{t("statusUnderSubjectOfficer", "Under Subject Officer")}</option>
+                </>
+              )}
             </select>
             <div className="admin-filter-icon"><ChevronDown /></div>
           </div>
@@ -1116,7 +1339,7 @@ function AdminDashboardContent() {
       {/* Stats Cards */}
       <div className="admin-stats-grid">
         <StatCard
-          title={t("totalCases", "TOTAL CASES")}
+          title={isChiefClerk ? (lang === "si" ? "මුළු ලිපි සංඛ්‍යාව" : lang === "ta" ? "மொத்த கடிதங்கள்" : "TOTAL LETTERS") : t("totalCases", "TOTAL CASES")}
           value={isLoading ? "…" : totalCasesCount.toString()}
           percentage="100%"
           icon={<Folder className="premium-card-icon" />}
@@ -1124,15 +1347,31 @@ function AdminDashboardContent() {
           sparklineD="M 5,22 Q 25,10 45,20 T 75,8 T 95,15"
         />
         <StatCard
-          title={t("underInvestigation", "UNDER INVESTIGATION")}
-          value={isLoading ? "…" : underInvestigationCount.toString()}
-          percentage={isLoading ? "…" : pct(underInvestigationCount)}
+          title={
+            isChiefClerk
+              ? (lang === "si" ? "පවරන්නට නියමිත" : lang === "ta" ? "ஒதுக்கப்பட வேண்டியவை" : "PENDING ASSIGNMENT")
+              : t("underInvestigation", "UNDER INVESTIGATION")
+          }
+          value={
+            isLoading
+              ? "…"
+              : (isChiefClerk ? chiefPendingCount.toString() : underInvestigationCount.toString())
+          }
+          percentage={
+            isLoading
+              ? "…"
+              : pct(isChiefClerk ? chiefPendingCount : underInvestigationCount)
+          }
           icon={<Search className="premium-card-icon" />}
           cardClass="inprogress-cases-card"
           sparklineD="M 5,20 Q 25,25 45,12 T 75,5 T 95,15"
         />
         <StatCard
-          title={t("underSubjectOfficer", "UNDER SUBJECT OFFICER")}
+          title={
+            isChiefClerk
+              ? (lang === "si" ? "විෂයභාර නිලධාරීන්ට පවරන ලද" : lang === "ta" ? "விடய அதிகாரிகளுக்கு ஒதுக்கப்பட்டது" : "ASSIGNED TO SUBJECT")
+              : t("underSubjectOfficer", "UNDER SUBJECT OFFICER")
+          }
           value={isLoading ? "…" : underSubjectOfficerCount.toString()}
           percentage={isLoading ? "…" : pct(underSubjectOfficerCount)}
           icon={<User className="premium-card-icon" />}
@@ -1168,8 +1407,8 @@ function AdminDashboardContent() {
                 <p className="admin-hero-subtitle" suppressHydrationWarning>
                   {isMounted && currentUserProfile?.role === "additional_secretary"
                     ? (lang === "si"
-                        ? "අතිරේක ලේකම් ලෙස නව පැමිණිලි සවිස්තරාත්මකව පද්ධතියට ලියාපදිංචි කර විනය ශාඛාවේ නිලධාරීන් වෙත යොමු කරන්න."
-                        : "As Additional Secretary, register full incoming complaints directly into the system.")
+                        ? "අතිරේක ලේකම් ලෙස නව පැමිණිලි සවිස්තරාත්මකව ලියාපදිංචි කරන්න. පෙර ලියාපදිංචි ලිපියකට පිළිතුරු ලිපියක් එක් කිරීමට පහත වගුවේ ලිපිය අසල ඇති '+ Reply' බොත්තම ඔබන්න."
+                        : "As Additional Secretary, register full incoming complaints directly. To add an answer letter for a previously entered letter, click the '+ Reply' button next to that letter below.")
                     : t("addNewLetterSubtitle", "Fill in the basic incoming letter details to register it into the system.")}
                 </p>
               </div>
@@ -1691,6 +1930,13 @@ function AdminDashboardContent() {
         const seniorUnsubmittedAssignedCount = baseLettersList.filter((l: any) => !isLetterSubmittedBySenior(l)).length;
         const seniorSubmittedAssignedCount = baseLettersList.filter((l: any) => isLetterSubmittedBySenior(l)).length;
 
+        // General submission checker for all officers (Discipline Branch, Senior Asst Sec, AddSec, etc.)
+        const checkIsLetterSubmitted = (l: any) => {
+          return isLetterSubmittedGeneral(l, currentUserProfile?.role, currentUserProfile?.full_name);
+        };
+        const unsubmittedCount = baseLettersList.filter((l: any) => !checkIsLetterSubmitted(l)).length;
+        const submittedCount = baseLettersList.filter((l: any) => checkIsLetterSubmitted(l)).length;
+
         // Group letters for Additional Secretary view:
         // 1. Deputy Secretary / Senior Assistant Secretary
         // 2. Assistant Secretary of Discipline
@@ -1714,10 +1960,12 @@ function AdminDashboardContent() {
             if (assignedLettersFilter === "asst_sec_discipline" && getLetterOriginGroup(l) !== "asst_sec_discipline") return false;
             if (assignedLettersFilter === "asst_sec_investigation" && getLetterOriginGroup(l) !== "asst_sec_investigation") return false;
             if (assignedLettersFilter === "direct_additional_sec" && getLetterOriginGroup(l) !== "direct_additional_sec") return false;
+            if (assignedLettersFilter === "unsubmitted" && checkIsLetterSubmitted(l)) return false;
+            if (assignedLettersFilter === "submitted" && !checkIsLetterSubmitted(l)) return false;
           } else {
-            // Safety guard for non-AddSec users: ensure letters displayed were entered by or assigned/forwarded to this officer
-            if (currentUserProfile?.full_name) {
-              const myName = currentUserProfile.full_name.toLowerCase().trim();
+            // Guard for Senior Assistant Secretary: exclude Additional Secretary letters not routed to Senior Asst Sec
+            if (isSeniorAsstSec) {
+              const myName = (currentUserProfile?.full_name || "").toLowerCase().trim();
               const actOfficer = (l.actionOfficer || l.action_officer || "").toLowerCase().trim();
               const fwdTo = (l.forwardedTo || l.forwarded_to || "").toLowerCase().trim();
               const addrTo = (l.addressedTo || l.addressed_to || "").toLowerCase().trim();
@@ -1725,56 +1973,38 @@ function AdminDashboardContent() {
               const creator = (l.created_by_name || "").toLowerCase().trim();
               const reason = (l.forwardReason || l.forward_reason || "").toLowerCase().trim();
 
-              if (isSeniorAsstSec) {
-                const matchesSenior =
-                  actOfficer.includes(myName) ||
-                  fwdTo.includes(myName) ||
-                  addrTo.includes(myName) ||
-                  creator.includes(myName) ||
-                  reason.includes(myName) ||
-                  actOfficer.includes("senior assistant") ||
-                  actOfficer.includes("senior_assistant") ||
-                  actOfficer.includes("deputy") ||
-                  actOfficer.includes("ජ්‍යෙෂ්ඨ සහකාර") ||
-                  fwdTo.includes("senior assistant") ||
-                  fwdTo.includes("senior_assistant") ||
-                  fwdTo.includes("deputy") ||
-                  fwdTo.includes("ජ්‍යෙෂ්ඨ සහකාර") ||
-                  addrTo.includes("senior assistant") ||
-                  addrTo.includes("deputy") ||
-                  addrRole.includes("senior") ||
-                  addrRole.includes("deputy") ||
-                  reason.includes("senior assistant") ||
-                  reason.includes("deputy") ||
-                  reason.includes("dharshana") ||
-                  creator.includes("dharshana");
+              const matchesSenior =
+                (myName && (actOfficer.includes(myName) || fwdTo.includes(myName) || addrTo.includes(myName) || creator.includes(myName) || reason.includes(myName))) ||
+                actOfficer.includes("senior assistant") ||
+                actOfficer.includes("senior_assistant") ||
+                actOfficer.includes("deputy") ||
+                actOfficer.includes("ජ්‍යෙෂ්ඨ සහකාර") ||
+                fwdTo.includes("senior assistant") ||
+                fwdTo.includes("senior_assistant") ||
+                fwdTo.includes("deputy") ||
+                fwdTo.includes("ජ්‍යෙෂ්ඨ සහකාර") ||
+                addrTo.includes("senior assistant") ||
+                addrTo.includes("deputy") ||
+                addrRole.includes("senior") ||
+                addrRole.includes("deputy") ||
+                reason.includes("senior assistant") ||
+                reason.includes("deputy") ||
+                reason.includes("dharshana") ||
+                creator.includes("dharshana");
 
-                // Exclude letters entered by Additional Secretary ONLY if they were NOT routed to Senior Asst Sec
-                const creatorRole = (l.created_by_role || l.createdByRole || "").toLowerCase().trim();
-                if (creatorRole.includes("additional") && !matchesSenior) {
-                  return false;
-                }
-                if (!matchesSenior) {
-                  return false;
-                }
-              } else {
-                const myTokens = myName.split(/\s+/).filter((w: string) => w.length > 2 && !["mr.", "mrs.", "miss", "dr."].includes(w));
-                const matchesCreator = creator.includes(myName) || myName.includes(creator) || (myTokens.length > 0 && myTokens.every((tk: string) => creator.includes(tk)));
-                const matchesReason = reason.includes(myName) || (myTokens.length > 0 && myTokens.every((tk: string) => reason.includes(tk)));
-                const matchesForward = fwdTo.includes(myName) || actOfficer.includes(myName);
-                if (!matchesCreator && !matchesReason && !matchesForward && (creator || reason)) {
-                  return false;
-                }
+              const creatorRole = (l.created_by_role || l.createdByRole || "").toLowerCase().trim();
+              if (creatorRole.includes("additional") && !matchesSenior) {
+                return false;
+              }
+              if (!matchesSenior) {
+                return false;
               }
             }
 
-            if (isSeniorAsstSec) {
-              if (assignedLettersFilter === "unsubmitted" && isLetterSubmittedBySenior(l)) return false;
-              if (assignedLettersFilter === "submitted" && !isLetterSubmittedBySenior(l)) return false;
-            } else {
-              if (assignedLettersFilter === "direct" && l.isForwarded) return false;
-              if (assignedLettersFilter === "forwarded" && !l.isForwarded) return false;
-            }
+            if (assignedLettersFilter === "unsubmitted" && checkIsLetterSubmitted(l)) return false;
+            if (assignedLettersFilter === "submitted" && !checkIsLetterSubmitted(l)) return false;
+            if (assignedLettersFilter === "direct" && l.isForwarded) return false;
+            if (assignedLettersFilter === "forwarded" && !l.isForwarded) return false;
           }
 
           if (assignedLettersPriorityFilter !== "all") {
@@ -1795,6 +2025,8 @@ function AdminDashboardContent() {
             const soType = (soOfficer?.subject_type || "").toLowerCase();
             const prioBadge = getLetterPriorityBadge(l, lang);
             const prioSearch = `${prioBadge.level} ${prioBadge.label} ${(l.priority || "")}`.toLowerCase();
+            const stInfo = getGeneralLetterStatusInfo(l, lang, currentUserProfile?.role, currentUserProfile?.full_name);
+            const statusSearch = `${stInfo.badgeText} ${stInfo.destination} ${stInfo.isSubmitted ? "submitted ඉදිරිපත් කළ" : "unsubmitted පොරොත්තු ඉදිරිපත් කිරීමට ඇති"}`.toLowerCase();
             return (
               lNo.includes(q) ||
               sender.includes(q) ||
@@ -1804,7 +2036,8 @@ function AdminDashboardContent() {
               subject.includes(q) ||
               soName.includes(q) ||
               soType.includes(q) ||
-              prioSearch.includes(q)
+              prioSearch.includes(q) ||
+              statusSearch.includes(q)
             );
           }
           return true;
@@ -1816,7 +2049,7 @@ function AdminDashboardContent() {
           ? (lang === "si" ? "අතිරේක ලේකම් වෙත පවරන ලද ලිපි" : "Assigned Letters to Additional Secretary")
           : isSeniorAsstSec
           ? (lang === "si" ? "ජ්‍යෙෂ්ඨ සහකාර ලේකම් වෙත පවරන ලද ලිපි" : "Assigned Letters to Senior Assistant Secretary")
-          : (lang === "si" ? "ඔබ විසින් ඇතුළත් කළ ලිපි" : "Letters Entered by You");
+          : (lang === "si" ? "ලැබී ඇති ලිපි" : lang === "ta" ? "பெறப்பட்ட கடிதங்கள்" : "Received Letters");
 
         const description = isChiefClerk
           ? (lang === "si"
@@ -1833,8 +2066,10 @@ function AdminDashboardContent() {
               ? "අතිරේක ලේකම් මඟින් ඔබ වෙත විමර්ශන සහ විනය ක්‍රියාමාර්ග සඳහා යොමු කරන ලද සියලුම ලිපි සහ පැමිණිලි."
               : "All letters and complaints forwarded to Senior Assistant Secretary by Additional Secretary for review and action.")
           : (lang === "si"
-              ? "ඔබ විසින් පද්ධතියට ඇතුළත් කර අතිරේක ලේකම් වෙත යොමු කරන ලද ලිපි."
-              : "Letters entered by you and forwarded to the Additional Secretary.");
+              ? "විනය ශාඛාව වෙත ලැබී ඇති සියලුම ලිපි සහ පැමිණිලි."
+              : lang === "ta"
+              ? "ஒழுக்கப் பிரிவுக்கு பெறப்பட்ட அனைத்து கடிதங்களும் முறைப்பாடுகளும்."
+              : "All letters and complaints received by the Discipline Branch.");
 
         return (
           <>
@@ -2178,7 +2413,7 @@ function AdminDashboardContent() {
                         <button
                           type="button"
                           className={`assigned-letters-tab-btn ${assignedLettersFilter === "direct_additional_sec" ? "active" : ""}`}
-                          onClick={() => setAssignedLettersFilter("direct_additional_sec")}
+                          onClick={() => setAssignedLettersFilter(assignedLettersFilter === "direct_additional_sec" ? "all" : "direct_additional_sec")}
                         >
                           <span>📬 {lang === "si" ? "අතිරේක ලේකම් වෙත පමණි" : "Only for Addl. Sec"}</span>
                           <span style={{
@@ -2192,6 +2427,46 @@ function AdminDashboardContent() {
                             {directAddSecLetters.length}
                           </span>
                         </button>
+
+                        {/* 5. Unsubmitted Tab for AddSec */}
+                        <button
+                          type="button"
+                          className={`assigned-letters-tab-btn ${assignedLettersFilter === "unsubmitted" ? "active" : ""}`}
+                          onClick={() => setAssignedLettersFilter(assignedLettersFilter === "unsubmitted" ? "all" : "unsubmitted")}
+                        >
+                          <AlertCircle size={13} style={{ color: assignedLettersFilter === "unsubmitted" ? "#ffffff" : "#d97706" }} />
+                          <span>{lang === "si" ? "ඉදිරිපත් කිරීමට ඇති (පොරොත්තු)" : "Unsubmitted (Pending)"}</span>
+                          <span style={{
+                            padding: "1px 6px",
+                            borderRadius: "10px",
+                            backgroundColor: assignedLettersFilter === "unsubmitted" ? "#d97706" : "#fef3c7",
+                            color: assignedLettersFilter === "unsubmitted" ? "#ffffff" : "#92400e",
+                            fontSize: "11px",
+                            fontWeight: 700
+                          }}>
+                            {unsubmittedCount}
+                          </span>
+                        </button>
+
+                        {/* 6. Submitted Tab for AddSec */}
+                        <button
+                          type="button"
+                          className={`assigned-letters-tab-btn ${assignedLettersFilter === "submitted" ? "active" : ""}`}
+                          onClick={() => setAssignedLettersFilter(assignedLettersFilter === "submitted" ? "all" : "submitted")}
+                        >
+                          <CheckCircle2 size={13} style={{ color: assignedLettersFilter === "submitted" ? "#ffffff" : "#059669" }} />
+                          <span>{lang === "si" ? "ඉදිරිපත් කළ (යොමු වූ ලිපි)" : "Submitted (Forwarded)"}</span>
+                          <span style={{
+                            padding: "1px 6px",
+                            borderRadius: "10px",
+                            backgroundColor: assignedLettersFilter === "submitted" ? "#059669" : "#d1fae5",
+                            color: assignedLettersFilter === "submitted" ? "#ffffff" : "#065f46",
+                            fontSize: "11px",
+                            fontWeight: 700
+                          }}>
+                            {submittedCount}
+                          </span>
+                        </button>
                       </>
                     ) : isChiefClerk ? (
                       <>
@@ -2199,7 +2474,7 @@ function AdminDashboardContent() {
                         <button
                           type="button"
                           className={`assigned-letters-tab-btn ${chiefAssignmentFilter === "pending" ? "active" : ""}`}
-                          onClick={() => setChiefAssignmentFilter("pending")}
+                          onClick={() => setChiefAssignmentFilter(chiefAssignmentFilter === "pending" ? "all" : "pending")}
                         >
                           <AlertCircle size={13} style={{ color: chiefAssignmentFilter === "pending" ? "#ffffff" : "#e11d48" }} />
                           <span>{lang === "si" ? "පවරන්නට නියමිත (පොරොත්තු)" : "Pending Assignment"}</span>
@@ -2219,7 +2494,7 @@ function AdminDashboardContent() {
                         <button
                           type="button"
                           className={`assigned-letters-tab-btn ${chiefAssignmentFilter === "assigned" ? "active" : ""}`}
-                          onClick={() => setChiefAssignmentFilter("assigned")}
+                          onClick={() => setChiefAssignmentFilter(chiefAssignmentFilter === "assigned" ? "all" : "assigned")}
                         >
                           <CheckCircle2 size={13} style={{ color: chiefAssignmentFilter === "assigned" ? "#ffffff" : "#059669" }} />
                           <span>{lang === "si" ? "විෂයභාර නිලධාරීන්ට පවරන ලද" : "Assigned"}</span>
@@ -2235,13 +2510,13 @@ function AdminDashboardContent() {
                           </span>
                         </button>
                       </>
-                    ) : isSeniorAsstSec ? (
+                    ) : (
                       <>
                         {/* 1. Unsubmitted (Pending) Tab */}
                         <button
                           type="button"
                           className={`assigned-letters-tab-btn ${assignedLettersFilter === "unsubmitted" ? "active" : ""}`}
-                          onClick={() => setAssignedLettersFilter("unsubmitted")}
+                          onClick={() => setAssignedLettersFilter(assignedLettersFilter === "unsubmitted" ? "all" : "unsubmitted")}
                         >
                           <AlertCircle size={13} style={{ color: assignedLettersFilter === "unsubmitted" ? "#ffffff" : "#d97706" }} />
                           <span>{lang === "si" ? "ඉදිරිපත් කිරීමට ඇති (පොරොත්තු)" : "Unsubmitted (Pending)"}</span>
@@ -2253,7 +2528,7 @@ function AdminDashboardContent() {
                             fontSize: "11px",
                             fontWeight: 700
                           }}>
-                            {seniorUnsubmittedAssignedCount}
+                            {unsubmittedCount}
                           </span>
                         </button>
 
@@ -2261,7 +2536,7 @@ function AdminDashboardContent() {
                         <button
                           type="button"
                           className={`assigned-letters-tab-btn ${assignedLettersFilter === "submitted" ? "active" : ""}`}
-                          onClick={() => setAssignedLettersFilter("submitted")}
+                          onClick={() => setAssignedLettersFilter(assignedLettersFilter === "submitted" ? "all" : "submitted")}
                         >
                           <CheckCircle2 size={13} style={{ color: assignedLettersFilter === "submitted" ? "#ffffff" : "#059669" }} />
                           <span>{lang === "si" ? "ඉදිරිපත් කළ (යොමු වූ ලිපි)" : "Submitted (Forwarded)"}</span>
@@ -2273,18 +2548,17 @@ function AdminDashboardContent() {
                             fontSize: "11px",
                             fontWeight: 700
                           }}>
-                            {seniorSubmittedAssignedCount}
+                            {submittedCount}
                           </span>
                         </button>
-                      </>
-                    ) : (
-                      <>
+
+                        {/* 3. Direct Received Tab */}
                         <button
                           type="button"
                           className={`assigned-letters-tab-btn ${assignedLettersFilter === "direct" ? "active" : ""}`}
-                          onClick={() => setAssignedLettersFilter("direct")}
+                          onClick={() => setAssignedLettersFilter(assignedLettersFilter === "direct" ? "all" : "direct")}
                         >
-                          <Mail size={13} style={{ color: assignedLettersFilter === "direct" ? "#2563eb" : "#64748b" }} />
+                          <Mail size={13} style={{ color: assignedLettersFilter === "direct" ? "#ffffff" : "#2563eb" }} />
                           <span>{lang === "si" ? "සෘජුව ලැබුණු" : "Direct Received"}</span>
                           <span style={{
                             padding: "1px 6px",
@@ -2298,12 +2572,13 @@ function AdminDashboardContent() {
                           </span>
                         </button>
 
+                        {/* 4. Forwarded Tab */}
                         <button
                           type="button"
                           className={`assigned-letters-tab-btn ${assignedLettersFilter === "forwarded" ? "active" : ""}`}
-                          onClick={() => setAssignedLettersFilter("forwarded")}
+                          onClick={() => setAssignedLettersFilter(assignedLettersFilter === "forwarded" ? "all" : "forwarded")}
                         >
-                          <Landmark size={13} style={{ color: assignedLettersFilter === "forwarded" ? "#059669" : "#64748b" }} />
+                          <Landmark size={13} style={{ color: assignedLettersFilter === "forwarded" ? "#ffffff" : "#059669" }} />
                           <span>{lang === "si" ? "යොමු වූ ලිපි" : "Forwarded"}</span>
                           <span style={{
                             padding: "1px 6px",
@@ -2390,7 +2665,7 @@ function AdminDashboardContent() {
                         <th>{lang === "si" ? "ලිපි අංකය" : "Letter No"}</th>
                         <th>{isAddSec ? (lang === "si" ? "ලිපියේ ප්‍රභවය / යොමු කළ නිලධාරියා" : "Origin / Sender Officer") : isChiefClerk ? (lang === "si" ? "යොමු කළ ජ්‍යෙෂ්ඨ නිලධාරියා" : "Assigned By Senior Official") : (lang === "si" ? "ඇතුළත් කළ නිලධාරියා" : "Entered By")}</th>
                         {isChiefClerk && <th>{lang === "si" ? "විෂයභාර නිලධාරියා" : "Assigned Subject Officer"}</th>}
-                        {isSeniorAsstSec && <th>{lang === "si" ? "තත්ත්වය" : "Status"}</th>}
+                        {!isChiefClerk && <th>{lang === "si" ? "තත්ත්වය" : "Status"}</th>}
                         <th>{lang === "si" ? "ප්‍රමුඛතාව" : lang === "ta" ? "முன்னுரிமை" : "Priority"}</th>
                         <th>{lang === "si" ? "ලිපි වර්ගය" : "Letter Type"}</th>
                         <th>{lang === "si" ? "එවූ පාර්ශවය" : "Sender"}</th>
@@ -2402,7 +2677,7 @@ function AdminDashboardContent() {
                     <tbody>
                       {filteredList.length === 0 ? (
                         <tr>
-                          <td colSpan={isChiefClerk || isSeniorAsstSec ? 9 : 8} style={{ textAlign: "center", padding: "36px 16px", color: "#64748b" }}>
+                          <td colSpan={10} style={{ textAlign: "center", padding: "36px 16px", color: "#64748b" }}>
                             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px" }}>
                               <Search size={24} style={{ color: "#94a3b8" }} />
                               <span style={{ fontWeight: 600, fontSize: "14px", color: "#334155" }}>
@@ -2454,7 +2729,7 @@ function AdminDashboardContent() {
                                 {isAddSec ? (
                                   <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
                                     <span
-                                      title={l.created_by_name || l.addressedTo || ""}
+                                      title={badge.label}
                                       style={{
                                         display: "inline-flex",
                                         alignItems: "center",
@@ -2473,23 +2748,33 @@ function AdminDashboardContent() {
                                       <span>{badge.icon}</span>
                                       <span>{badge.label}</span>
                                     </span>
-                                    {l.created_by_name && (
-                                      <span style={{ fontSize: "11px", color: "#64748b" }}>
-                                        {l.created_by_name}
-                                      </span>
-                                    )}
-                                    {isAlreadyForwarded && (
-                                      <span style={{
-                                        fontSize: "10.5px",
-                                        color: "#059669",
-                                        fontWeight: 600,
-                                        display: "inline-flex",
-                                        alignItems: "center",
-                                        gap: "3px"
-                                      }}>
-                                        ✓ {lang === "si" ? `යොමු විය: ${l.forwardedTo}` : `Fwd: ${l.forwardedTo}`}
-                                      </span>
-                                    )}
+                                    {(() => {
+                                      let senderText = "";
+                                      const cName = (l.created_by_name || "").trim();
+                                      const isSelfAddSec =
+                                        cName.toLowerCase().includes("nihal") ||
+                                        cName.toLowerCase().includes("additional secretary") ||
+                                        cName.toLowerCase().includes("අතිරේක ලේකම්");
+
+                                      if (originGroup === "deputy_secretary") {
+                                        senderText = (cName && !isSelfAddSec) ? cName : "Dharshana Senanayake (Senior Assistant Secretary)";
+                                      } else if (originGroup === "asst_sec_discipline") {
+                                        senderText = (cName && !isSelfAddSec) ? cName : "Bandula Gunawardena (Asst. Sec Discipline)";
+                                      } else if (originGroup === "asst_sec_investigation") {
+                                        senderText = (cName && !isSelfAddSec) ? cName : "Ranjith Siyambalapitiya (Asst. Sec Investigation)";
+                                      } else {
+                                        if (cName && !isSelfAddSec) {
+                                          senderText = cName;
+                                        } else {
+                                          senderText = lang === "si" ? "දෛනික තැපැල් අංශය" : lang === "ta" ? "தினசரி அஞ்சல் பிரிவு" : "Daily Mail Registry";
+                                        }
+                                      }
+                                      return (
+                                        <span style={{ fontSize: "11px", color: "#64748b", fontWeight: 500 }}>
+                                          {senderText}
+                                        </span>
+                                      );
+                                    })()}
                                   </div>
                                 ) : l.isForwarded ? (
                                   <span
@@ -2596,11 +2881,11 @@ function AdminDashboardContent() {
                                   )}
                                 </td>
                               )}
-                              {/* Status Column for Senior Assistant Secretary (Submitted vs Unsubmitted) */}
-                              {isSeniorAsstSec && (
+                              {/* Status Column for all officers (Submitted vs Unsubmitted) */}
+                              {!isChiefClerk && (
                                 <td>
                                   {(() => {
-                                    const sInfo = getSeniorLetterStatusInfo(l, lang);
+                                    const sInfo = getGeneralLetterStatusInfo(l, lang, currentUserProfile?.role, currentUserProfile?.full_name);
                                     return (
                                       <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
                                         <span style={{
@@ -2727,72 +3012,290 @@ function AdminDashboardContent() {
                                     </button>
                                   )}
 
-                                  {/* View Details / Forward to Branch Link */}
+                                  {/* View Details / Forward to Chief Clerk / Forward to Branch */}
                                   {!isChiefClerk && (
-                                    isSeniorAsstSec && !isLetterSubmittedBySenior(l) ? (
-                                      <a
-                                        href={`/admin/branch-selection?${new URLSearchParams({
-                                          id: l.id || "",
-                                          letterNo: l.letterNo || l.refNo || "",
-                                          refNo: l.refNo || l.letterNo || "",
-                                          sender: l.sender || "",
-                                          subject: l.subject || "",
-                                          type: l.type || "",
-                                          receivedDate: l.receivedDate || l.letterDate || "",
-                                          forwardReason: l.forwardReason || "",
-                                          createdByName: l.created_by_name || "",
-                                          priority: l.priority || "",
-                                        }).toString()}`}
-                                        style={{
-                                          display: "inline-flex",
-                                          alignItems: "center",
-                                          gap: "5px",
-                                          backgroundColor: "#7c3aed",
-                                          color: "#ffffff",
-                                          padding: "6px 12px",
-                                          borderRadius: "7px",
-                                          fontSize: "12px",
-                                          fontWeight: 700,
-                                          textDecoration: "none",
-                                          boxShadow: "0 2px 6px rgba(124,58,237,0.25)",
-                                          transition: "all 0.15s ease",
-                                          whiteSpace: "nowrap"
-                                        }}
-                                        onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.88")}
-                                        onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
-                                      >
-                                        <span>{lang === "si" ? "යොමු කරන්න ➔" : "Forward ➔"}</span>
-                                      </a>
+                                    isAddSec ? (
+                                      <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                                        <Link
+                                          href={`/daily-mail/register?caseNo=${encodeURIComponent(l.refNo || l.letterNo || l.id)}&subsequent=true&isAnswer=true`}
+                                          style={{
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            gap: "4px",
+                                            backgroundColor: "#ecfdf5",
+                                            color: "#047857",
+                                            border: "1px solid #a7f3d0",
+                                            padding: "6px 10px",
+                                            borderRadius: "7px",
+                                            fontSize: "12px",
+                                            fontWeight: 700,
+                                            textDecoration: "none",
+                                            transition: "all 0.15s ease",
+                                            whiteSpace: "nowrap"
+                                          }}
+                                          title={lang === "si" ? "මෙම ලිපිය සඳහා පිළිතුරු ලිපියක් එක් කරන්න" : "Add Answer / Reply Letter for this case"}
+                                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#d1fae5")}
+                                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#ecfdf5")}
+                                        >
+                                          <Plus size={13} strokeWidth={2.8} />
+                                          <span>{lang === "si" ? "පිළිතුරු ලිපියක්" : "+ Reply"}</span>
+                                        </Link>
+                                        {!checkIsLetterSubmitted(l) ? (
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setForwardingLetter(l);
+                                              setForwardReasonInput(l.forwardReason || l.forward_reason || "");
+                                              setIsForwardModalOpen(true);
+                                            }}
+                                            style={{
+                                              display: "inline-flex",
+                                              alignItems: "center",
+                                              gap: "5px",
+                                              backgroundColor: "#7c3aed",
+                                              color: "#ffffff",
+                                              padding: "6px 12px",
+                                              borderRadius: "7px",
+                                              fontSize: "12px",
+                                              fontWeight: 700,
+                                              border: "none",
+                                              cursor: "pointer",
+                                              boxShadow: "0 2px 6px rgba(124,58,237,0.25)",
+                                              transition: "all 0.15s ease",
+                                              whiteSpace: "nowrap"
+                                            }}
+                                            onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.88")}
+                                            onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+                                          >
+                                            <Send size={12} />
+                                            <span>{lang === "si" ? "යොමු කරන්න ➔" : "Forward ➔"}</span>
+                                          </button>
+                                        ) : null}
+                                        <Link
+                                          href={`/admin/view-letter?id=${encodeURIComponent(l.letterNo || l.refNo)}`}
+                                          style={{
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            gap: "6px",
+                                            backgroundColor: "#0f172a",
+                                            color: "#ffffff",
+                                            padding: "6px 12px",
+                                            borderRadius: "7px",
+                                            fontSize: "12px",
+                                            fontWeight: 600,
+                                            textDecoration: "none",
+                                            boxShadow: "0 1px 3px rgba(0, 0, 0, 0.1)",
+                                            transition: "all 0.15s ease",
+                                            whiteSpace: "nowrap"
+                                          }}
+                                          onMouseEnter={(e) => {
+                                            e.currentTarget.style.backgroundColor = "#2563eb";
+                                            e.currentTarget.style.boxShadow = "0 3px 8px rgba(37, 99, 235, 0.3)";
+                                          }}
+                                          onMouseLeave={(e) => {
+                                            e.currentTarget.style.backgroundColor = "#0f172a";
+                                            e.currentTarget.style.boxShadow = "0 1px 3px rgba(0, 0, 0, 0.1)";
+                                          }}
+                                        >
+                                          <span>{lang === "si" ? "විස්තර" : "View"}</span>
+                                          <ArrowRight size={13} />
+                                        </Link>
+                                      </div>
+                                    ) : isSeniorAsstSec ? (
+                                      !checkIsLetterSubmitted(l) ? (
+                                        <>
+                                          <a
+                                            href={`/admin/branch-selection?${new URLSearchParams({
+                                              id: l.id || "",
+                                              letterNo: l.letterNo || l.refNo || "",
+                                              refNo: l.refNo || l.letterNo || "",
+                                              sender: l.sender || "",
+                                              subject: l.subject || "",
+                                              type: l.type || "",
+                                              receivedDate: l.receivedDate || l.letterDate || "",
+                                              forwardReason: l.forwardReason || "",
+                                              createdByName: l.created_by_name || "",
+                                              priority: l.priority || "",
+                                            }).toString()}`}
+                                            style={{
+                                              display: "inline-flex",
+                                              alignItems: "center",
+                                              gap: "5px",
+                                              backgroundColor: "#7c3aed",
+                                              color: "#ffffff",
+                                              padding: "6px 12px",
+                                              borderRadius: "7px",
+                                              fontSize: "12px",
+                                              fontWeight: 700,
+                                              textDecoration: "none",
+                                              boxShadow: "0 2px 6px rgba(124,58,237,0.25)",
+                                              transition: "all 0.15s ease",
+                                              whiteSpace: "nowrap"
+                                            }}
+                                            onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.88")}
+                                            onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+                                          >
+                                            <span>{lang === "si" ? "යොමු කරන්න ➔" : "Forward ➔"}</span>
+                                          </a>
+                                          <Link
+                                            href={`/admin/view-letter?id=${encodeURIComponent(l.letterNo || l.refNo)}`}
+                                            style={{
+                                              display: "inline-flex",
+                                              alignItems: "center",
+                                              gap: "4px",
+                                              backgroundColor: "#f1f5f9",
+                                              color: "#334155",
+                                              padding: "6px 10px",
+                                              borderRadius: "7px",
+                                              fontSize: "12px",
+                                              fontWeight: 600,
+                                              textDecoration: "none",
+                                              border: "1px solid #cbd5e1",
+                                              transition: "all 0.15s ease",
+                                              whiteSpace: "nowrap"
+                                            }}
+                                            title={lang === "si" ? "ලිපි විස්තර බලන්න" : "View Letter Details"}
+                                          >
+                                            <span>{lang === "si" ? "විස්තර" : "View"}</span>
+                                          </Link>
+                                        </>
+                                      ) : (
+                                        <Link
+                                          href={`/admin/view-letter?id=${encodeURIComponent(l.letterNo || l.refNo)}`}
+                                          style={{
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            gap: "6px",
+                                            backgroundColor: "#0f172a",
+                                            color: "#ffffff",
+                                            padding: "6px 12px",
+                                            borderRadius: "7px",
+                                            fontSize: "12px",
+                                            fontWeight: 600,
+                                            textDecoration: "none",
+                                            boxShadow: "0 1px 3px rgba(0, 0, 0, 0.1)",
+                                            transition: "all 0.15s ease",
+                                            whiteSpace: "nowrap"
+                                          }}
+                                          onMouseEnter={(e) => {
+                                            e.currentTarget.style.backgroundColor = "#2563eb";
+                                            e.currentTarget.style.boxShadow = "0 3px 8px rgba(37, 99, 235, 0.3)";
+                                          }}
+                                          onMouseLeave={(e) => {
+                                            e.currentTarget.style.backgroundColor = "#0f172a";
+                                            e.currentTarget.style.boxShadow = "0 1px 3px rgba(0, 0, 0, 0.1)";
+                                          }}
+                                        >
+                                          <span>{lang === "si" ? "විස්තර" : "View"}</span>
+                                          <ArrowRight size={13} />
+                                        </Link>
+                                      )
                                     ) : (
-                                      <Link
-                                        href={`/admin/view-letter?id=${encodeURIComponent(l.letterNo || l.refNo)}`}
-                                        style={{
-                                          display: "inline-flex",
-                                          alignItems: "center",
-                                          gap: "6px",
-                                          backgroundColor: "#0f172a",
-                                          color: "#ffffff",
-                                          padding: "6px 12px",
-                                          borderRadius: "7px",
-                                          fontSize: "12px",
-                                          fontWeight: 600,
-                                          textDecoration: "none",
-                                          boxShadow: "0 1px 3px rgba(0, 0, 0, 0.1)",
-                                          transition: "all 0.15s ease",
-                                          whiteSpace: "nowrap"
-                                        }}
-                                        onMouseEnter={(e) => {
-                                          e.currentTarget.style.backgroundColor = "#2563eb";
-                                          e.currentTarget.style.boxShadow = "0 3px 8px rgba(37, 99, 235, 0.3)";
-                                        }}
-                                        onMouseLeave={(e) => {
-                                          e.currentTarget.style.backgroundColor = "#0f172a";
-                                          e.currentTarget.style.boxShadow = "0 1px 3px rgba(0, 0, 0, 0.1)";
-                                        }}
-                                      >
-                                        <span>{lang === "si" ? "විස්තර" : "View"}</span>
-                                        <ArrowRight size={13} />
-                                      </Link>
+                                      /* Assistant Secretary Discipline Branch and other officers */
+                                      !checkIsLetterSubmitted(l) ? (
+                                        <>
+                                          <button
+                                            type="button"
+                                            onClick={() => openForwardToChiefModal(l)}
+                                            style={{
+                                              display: "inline-flex",
+                                              alignItems: "center",
+                                              gap: "5px",
+                                              backgroundColor: "#7c3aed",
+                                              color: "#ffffff",
+                                              padding: "6px 12px",
+                                              borderRadius: "7px",
+                                              fontSize: "12px",
+                                              fontWeight: 700,
+                                              border: "none",
+                                              cursor: "pointer",
+                                              boxShadow: "0 2px 6px rgba(124,58,237,0.25)",
+                                              transition: "all 0.15s ease",
+                                              whiteSpace: "nowrap"
+                                            }}
+                                            onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.88")}
+                                            onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+                                          >
+                                            <Send size={12} />
+                                            <span>{lang === "si" ? "ශාඛා ප්‍රධානී වෙත යොමු කරන්න ➔" : lang === "ta" ? "முதன்மை எழுதுநருக்கு அனுப்புக ➔" : "Forward to Chief Clerk ➔"}</span>
+                                          </button>
+                                          <Link
+                                            href={`/admin/view-letter?id=${encodeURIComponent(l.letterNo || l.refNo)}`}
+                                            style={{
+                                              display: "inline-flex",
+                                              alignItems: "center",
+                                              gap: "4px",
+                                              backgroundColor: "#f1f5f9",
+                                              color: "#334155",
+                                              padding: "6px 10px",
+                                              borderRadius: "7px",
+                                              fontSize: "12px",
+                                              fontWeight: 600,
+                                              textDecoration: "none",
+                                              border: "1px solid #cbd5e1",
+                                              transition: "all 0.15s ease",
+                                              whiteSpace: "nowrap"
+                                            }}
+                                            title={lang === "si" ? "ලිපි විස්තර බලන්න" : "View Letter Details"}
+                                          >
+                                            <span>{lang === "si" ? "විස්තර" : "View"}</span>
+                                          </Link>
+                                        </>
+                                      ) : (
+                                        <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                                          <Link
+                                            href={`/admin/view-letter?id=${encodeURIComponent(l.letterNo || l.refNo)}`}
+                                            style={{
+                                              display: "inline-flex",
+                                              alignItems: "center",
+                                              gap: "6px",
+                                              backgroundColor: "#0f172a",
+                                              color: "#ffffff",
+                                              padding: "6px 12px",
+                                              borderRadius: "7px",
+                                              fontSize: "12px",
+                                              fontWeight: 600,
+                                              textDecoration: "none",
+                                              boxShadow: "0 1px 3px rgba(0, 0, 0, 0.1)",
+                                              transition: "all 0.15s ease",
+                                              whiteSpace: "nowrap"
+                                            }}
+                                            onMouseEnter={(e) => {
+                                              e.currentTarget.style.backgroundColor = "#2563eb";
+                                              e.currentTarget.style.boxShadow = "0 3px 8px rgba(37, 99, 235, 0.3)";
+                                            }}
+                                            onMouseLeave={(e) => {
+                                              e.currentTarget.style.backgroundColor = "#0f172a";
+                                              e.currentTarget.style.boxShadow = "0 1px 3px rgba(0, 0, 0, 0.1)";
+                                            }}
+                                          >
+                                            <span>{lang === "si" ? "විස්තර" : "View"}</span>
+                                            <ArrowRight size={13} />
+                                          </Link>
+                                          <button
+                                            type="button"
+                                            onClick={() => openForwardToChiefModal(l)}
+                                            style={{
+                                              display: "inline-flex",
+                                              alignItems: "center",
+                                              gap: "4px",
+                                              backgroundColor: "#f5f3ff",
+                                              color: "#7c3aed",
+                                              padding: "6px 10px",
+                                              borderRadius: "7px",
+                                              fontSize: "11px",
+                                              fontWeight: 600,
+                                              border: "1px solid #ddd6fe",
+                                              cursor: "pointer",
+                                              transition: "all 0.15s ease",
+                                              whiteSpace: "nowrap"
+                                            }}
+                                            title={lang === "si" ? "නැවත ශාඛා ප්‍රධානී වෙත යොමු කරන්න" : "Re-forward to Chief Clerk"}
+                                          >
+                                            <span>{lang === "si" ? "නැවත යොමු කරන්න" : "Re-forward"}</span>
+                                          </button>
+                                        </div>
+                                      )
                                     )
                                   )}
                                 </div>
@@ -3094,6 +3597,367 @@ function AdminDashboardContent() {
                             {isSubmittingForward
                               ? (lang === "si" ? "යොමු කරමින්..." : "Forwarding...")
                               : (lang === "si" ? "ලිපිය යොමු කරන්න" : "Confirm Forward")}
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Forward Letter to Chief Clerk Modal for Discipline Branch ── */}
+                {isForwardToChiefModalOpen && forwardingToChiefLetter && (
+                  <div style={{
+                    position: "fixed",
+                    inset: 0,
+                    backgroundColor: "rgba(15, 23, 42, 0.72)",
+                    backdropFilter: "blur(6px)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    zIndex: 99999,
+                    padding: "16px",
+                  }}>
+                    <div style={{
+                      backgroundColor: "#ffffff",
+                      borderRadius: "16px",
+                      maxWidth: "600px",
+                      width: "100%",
+                      padding: "26px",
+                      boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.35)",
+                      border: "1px solid #e2e8f0",
+                      maxHeight: "92vh",
+                      overflowY: "auto"
+                    }}>
+                      {/* Modal Header */}
+                      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "18px", borderBottom: "1px solid #f1f5f9", paddingBottom: "14px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          <div style={{
+                            width: "42px",
+                            height: "42px",
+                            borderRadius: "12px",
+                            backgroundColor: "#f5f3ff",
+                            color: "#7c3aed",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            border: "1px solid #ddd6fe"
+                          }}>
+                            <Send size={20} />
+                          </div>
+                          <div>
+                            <h3 style={{ margin: 0, fontSize: "17px", fontWeight: 800, color: "#0f172a" }}>
+                              {lang === "si" ? "ශාඛා ප්‍රධානී වෙත ලිපිය යොමු කිරීම" : lang === "ta" ? "முதன்மை எழுதுநருக்கு கடிதத்தை அனுப்புதல்" : "Forward Letter to Chief Clerk"}
+                            </h3>
+                            <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#64748b" }}>
+                              {lang === "si"
+                                ? "විනය ශාඛාවේ ලිපි විෂයභාර නිලධාරීන්ට පැවරීම සඳහා ශාඛා ප්‍රධානී වෙත යොමු කරන්න."
+                                : "Forward Discipline Branch letter to Chief Clerk for assignment to Subject Officers."}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => { setIsForwardToChiefModalOpen(false); setForwardingToChiefLetter(null); }}
+                          style={{
+                            background: "#f1f5f9",
+                            border: "none",
+                            borderRadius: "8px",
+                            width: "32px",
+                            height: "32px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            cursor: "pointer",
+                            color: "#64748b"
+                          }}
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+
+                      {/* Letter Summary Card */}
+                      <div style={{
+                        backgroundColor: "#f8fafc",
+                        borderRadius: "10px",
+                        padding: "14px",
+                        border: "1px solid #e2e8f0",
+                        marginBottom: "16px"
+                      }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+                          <span style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>
+                            {lang === "si" ? "ලිපි අංකය" : "Letter No"}:
+                          </span>
+                          <span style={{ fontSize: "13px", fontWeight: 700, color: "#7c3aed", fontFamily: "monospace" }}>
+                            {forwardingToChiefLetter.letterNo || forwardingToChiefLetter.refNo}
+                          </span>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+                          <span style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>
+                            {lang === "si" ? "එවූ පාර්ශවය" : "Sender"}:
+                          </span>
+                          <span style={{ fontSize: "12.5px", fontWeight: 600, color: "#334155" }}>
+                            {forwardingToChiefLetter.sender || "—"}
+                          </span>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                          <span style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>
+                            {lang === "si" ? "ප්‍රමුඛතාව" : "Priority"}:
+                          </span>
+                          {(() => {
+                            const pBadge = getLetterPriorityBadge(forwardingToChiefLetter, lang);
+                            return (
+                              <span style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "5px",
+                                padding: "2px 8px",
+                                borderRadius: "10px",
+                                fontSize: "11px",
+                                fontWeight: 700,
+                                backgroundColor: pBadge.bg,
+                                color: pBadge.color,
+                                border: `1px solid ${pBadge.border}`
+                              }}>
+                                <span style={{ width: "6px", height: "6px", borderRadius: "50%", backgroundColor: pBadge.dot }} />
+                                {pBadge.label}
+                              </span>
+                            );
+                          })()}
+                        </div>
+                        {forwardingToChiefLetter.subject && (
+                          <div style={{ marginTop: "4px", paddingTop: "6px", borderTop: "1px dashed #cbd5e1" }}>
+                            <span style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>
+                              {lang === "si" ? "විෂය" : "Subject"}:
+                            </span>
+                            <p style={{ margin: "2px 0 0", fontSize: "12.5px", color: "#1e293b", fontWeight: 500 }}>
+                              {forwardingToChiefLetter.subject}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Chief Clerk View & Selection */}
+                      <div style={{ marginBottom: "16px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                          <label style={{ fontSize: "13px", fontWeight: 700, color: "#0f172a" }}>
+                            {lang === "si" ? "ශාඛා ප්‍රධානී තෝරන්න (Select Chief Clerk):" : "Select Chief Clerk:"}
+                          </label>
+                          <span style={{ fontSize: "11px", color: "#64748b", fontWeight: 500 }}>
+                            {chiefClerksList.length} {lang === "si" ? "නිලධාරීන්" : "officers"}
+                          </span>
+                        </div>
+
+                        {/* Search Chief Clerk if multiple */}
+                        {chiefClerksList.length > 3 && (
+                          <input
+                            type="text"
+                            placeholder={lang === "si" ? "ශාඛා ප්‍රධානී සොයන්න..." : "Search chief clerk..."}
+                            value={chiefClerkSearchInModal}
+                            onChange={(e) => setChiefClerkSearchInModal(e.target.value)}
+                            style={{
+                              width: "100%",
+                              borderRadius: "8px",
+                              border: "1px solid #cbd5e1",
+                              padding: "7px 10px",
+                              fontSize: "12px",
+                              marginBottom: "8px",
+                              outline: "none"
+                            }}
+                          />
+                        )}
+
+                        {/* Chief Clerk Cards */}
+                        <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "200px", overflowY: "auto" }}>
+                          {chiefClerksList
+                            .filter((c: any) => {
+                              if (!chiefClerkSearchInModal.trim()) return true;
+                              const q = chiefClerkSearchInModal.toLowerCase();
+                              return (
+                                (c.full_name || "").toLowerCase().includes(q) ||
+                                (c.employee_no || "").toLowerCase().includes(q) ||
+                                (c.role || "").toLowerCase().includes(q)
+                              );
+                            })
+                            .map((chief: any) => {
+                              const isSelected = String(chief.id) === String(selectedChiefClerkId) ||
+                                (!selectedChiefClerkId && !String(chief.role || "").toLowerCase().includes("investigation"));
+                              const isDisciplineChief = !String(chief.role || "").toLowerCase().includes("investigation");
+
+                              return (
+                                <div
+                                  key={chief.id || chief.employee_no}
+                                  onClick={() => setSelectedChiefClerkId(String(chief.id))}
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "space-between",
+                                    padding: "10px 14px",
+                                    borderRadius: "10px",
+                                    border: isSelected ? "2px solid #7c3aed" : "1.5px solid #e2e8f0",
+                                    backgroundColor: isSelected ? "#f5f3ff" : "#ffffff",
+                                    cursor: "pointer",
+                                    transition: "all 0.15s ease",
+                                    boxShadow: isSelected ? "0 2px 8px rgba(124, 58, 237, 0.12)" : "none"
+                                  }}
+                                >
+                                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                    <div style={{
+                                      width: "36px",
+                                      height: "36px",
+                                      borderRadius: "10px",
+                                      backgroundColor: isSelected ? "#7c3aed" : "#f1f5f9",
+                                      color: isSelected ? "#ffffff" : "#475569",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      fontSize: "16px",
+                                      fontWeight: 700
+                                    }}>
+                                      🏛️
+                                    </div>
+                                    <div>
+                                      <div style={{ fontSize: "13px", fontWeight: 700, color: "#0f172a" }}>
+                                        {chief.full_name}
+                                      </div>
+                                      <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "2px" }}>
+                                        <span style={{
+                                          fontSize: "10.5px",
+                                          padding: "1px 6px",
+                                          borderRadius: "6px",
+                                          backgroundColor: isDisciplineChief ? "#ecfdf5" : "#e0f2fe",
+                                          color: isDisciplineChief ? "#047857" : "#0284c7",
+                                          fontWeight: 600
+                                        }}>
+                                          {isDisciplineChief
+                                            ? (lang === "si" ? "විනය ශාඛාව (Discipline)" : "Discipline Branch")
+                                            : (lang === "si" ? "විමර්ශන ශාඛාව (Investigation)" : "Investigation Branch")}
+                                        </span>
+                                        {chief.employee_no && (
+                                          <span style={{ fontSize: "11px", color: "#64748b", fontFamily: "monospace" }}>
+                                            {chief.employee_no}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div style={{
+                                    width: "20px",
+                                    height: "20px",
+                                    borderRadius: "50%",
+                                    border: isSelected ? "6px solid #7c3aed" : "2px solid #cbd5e1",
+                                    backgroundColor: "#ffffff",
+                                    transition: "all 0.15s ease"
+                                  }} />
+                                </div>
+                              );
+                            })}
+                        </div>
+                      </div>
+
+                      {/* Priority Selection */}
+                      <div style={{ marginBottom: "16px" }}>
+                        <label style={{ display: "block", fontSize: "13px", fontWeight: 700, color: "#0f172a", marginBottom: "6px" }}>
+                          {lang === "si" ? "ලිපියේ ප්‍රමුඛතාව (Priority):" : "Letter Priority:"}
+                        </label>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
+                          {[
+                            { key: "high", labelSi: "🔴 අදම (High)", labelEn: "High (Today)", bg: "#fee2e2", border: "#fca5a5", color: "#dc2626" },
+                            { key: "medium", labelSi: "🟠 දින 3ක් තුළ (Med)", labelEn: "Medium (3 Days)", bg: "#fef3c7", border: "#fcd34d", color: "#d97706" },
+                            { key: "low", labelSi: "🟢 දින 14/21ක් (Low)", labelEn: "Low (14/21 Days)", bg: "#dcfce7", border: "#86efac", color: "#16a34a" },
+                          ].map((p) => {
+                            const isPSelected = forwardToChiefPriority === p.key;
+                            return (
+                              <button
+                                key={p.key}
+                                type="button"
+                                onClick={() => setForwardToChiefPriority(p.key as any)}
+                                style={{
+                                  padding: "8px 10px",
+                                  borderRadius: "8px",
+                                  border: isPSelected ? `2px solid ${p.color}` : "1.5px solid #e2e8f0",
+                                  backgroundColor: isPSelected ? p.bg : "#ffffff",
+                                  color: isPSelected ? p.color : "#475569",
+                                  fontWeight: 700,
+                                  fontSize: "11.5px",
+                                  cursor: "pointer",
+                                  textAlign: "center",
+                                  transition: "all 0.15s ease"
+                                }}
+                              >
+                                {lang === "si" ? p.labelSi : p.labelEn}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Instructions / Forward Notes */}
+                      <div style={{ marginBottom: "20px" }}>
+                        <label style={{ display: "block", fontSize: "13px", fontWeight: 700, color: "#0f172a", marginBottom: "6px" }}>
+                          {lang === "si" ? "යොමු කිරීමේ සටහන / උපදෙස් (Instructions / Notes):" : "Forwarding Instructions / Notes:"}
+                        </label>
+                        <textarea
+                          rows={2}
+                          value={forwardToChiefInstructions}
+                          onChange={(e) => setForwardToChiefInstructions(e.target.value)}
+                          placeholder={lang === "si" ? "ශාඛා ප්‍රධානී වෙත අවශ්‍ය උපදෙස් ඇතුළත් කරන්න..." : "Enter forwarding instructions for Chief Clerk..."}
+                          style={{
+                            width: "100%",
+                            padding: "9px 12px",
+                            borderRadius: "8px",
+                            border: "1px solid #cbd5e1",
+                            fontSize: "12.5px",
+                            resize: "vertical",
+                            outline: "none",
+                            fontFamily: "inherit"
+                          }}
+                        />
+                      </div>
+
+                      {/* Modal Footer Actions */}
+                      <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+                        <button
+                          type="button"
+                          onClick={() => { setIsForwardToChiefModalOpen(false); setForwardingToChiefLetter(null); }}
+                          disabled={isSubmittingForwardToChief}
+                          style={{
+                            padding: "8px 16px",
+                            borderRadius: "8px",
+                            border: "1px solid #cbd5e1",
+                            backgroundColor: "#f8fafc",
+                            color: "#475569",
+                            fontWeight: 600,
+                            fontSize: "13px",
+                            cursor: "pointer"
+                          }}
+                        >
+                          {lang === "si" ? "අවලංගු කරන්න" : "Cancel"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleForwardToChiefSubmit}
+                          disabled={isSubmittingForwardToChief}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "7px",
+                            padding: "8px 18px",
+                            borderRadius: "8px",
+                            border: "none",
+                            backgroundColor: isSubmittingForwardToChief ? "#94a3b8" : "#7c3aed",
+                            color: "#ffffff",
+                            fontWeight: 700,
+                            fontSize: "13px",
+                            cursor: isSubmittingForwardToChief ? "not-allowed" : "pointer",
+                            boxShadow: "0 2px 6px rgba(124, 58, 237, 0.3)",
+                            transition: "all 0.15s ease"
+                          }}
+                        >
+                          <Send size={14} />
+                          <span>
+                            {isSubmittingForwardToChief
+                              ? (lang === "si" ? "යොමු කරමින් පවතී..." : "Forwarding...")
+                              : (lang === "si" ? "ශාඛා ප්‍රධානී වෙත යොමු කරන්න" : "Submit Forward to Chief Clerk")}
                           </span>
                         </button>
                       </div>
@@ -4062,12 +4926,37 @@ function AdminDashboardContent() {
                       </span>
                     </td>
                     <td className="admin-table-cell-center">
-                      <Link
-                        href={`/admin/view-case?caseNo=${encodeURIComponent(item.caseNo)}`}
-                        className="add-details-link"
-                      >
-                        {t("view", "View")}
-                      </Link>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+                        <Link
+                          href={`/admin/view-case?caseNo=${encodeURIComponent(item.caseNo)}`}
+                          className="add-details-link"
+                        >
+                          {t("view", "View")}
+                        </Link>
+                        {isMounted && (currentUserProfile?.role === "additional_secretary" || currentUserProfile?.role === "admin") && (
+                          <Link
+                            href={`/daily-mail/register?caseNo=${encodeURIComponent(item.caseNo)}&subsequent=true&isAnswer=true`}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "3px",
+                              padding: "4px 8px",
+                              borderRadius: "6px",
+                              backgroundColor: "#ecfdf5",
+                              color: "#059669",
+                              border: "1px solid #a7f3d0",
+                              fontSize: "11px",
+                              fontWeight: 700,
+                              textDecoration: "none",
+                              whiteSpace: "nowrap"
+                            }}
+                            title={lang === "si" ? "මෙම පැමිණිල්ල සඳහා පිළිතුරු ලිපියක් එක් කරන්න" : "Add Answer Letter for this case"}
+                          >
+                            <Plus size={11} strokeWidth={2.5} />
+                            <span>{lang === "si" ? "පිළිතුරු" : "Reply"}</span>
+                          </Link>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -4128,15 +5017,25 @@ function AdminDashboardContent() {
           {/* Quick Metrics Summary */}
           <div className="admin-charts-slidebar-metrics">
             <div className="admin-slidebar-metric-card" style={{ borderLeft: "3px solid #1e3a8a" }}>
-              <div className="admin-slidebar-metric-label">{t("totalCases", "Total Cases")}</div>
+              <div className="admin-slidebar-metric-label">{isChiefClerk ? (lang === "si" ? "මුළු ලිපි සංඛ්‍යාව" : lang === "ta" ? "மொத்த கடிதங்கள்" : "Total Letters") : t("totalCases", "Total Cases")}</div>
               <div className="admin-slidebar-metric-val">{totalCasesCount}</div>
             </div>
             <div className="admin-slidebar-metric-card" style={{ borderLeft: "3px solid #ea580c" }}>
-              <div className="admin-slidebar-metric-label">{t("underInvestigation", "In Investigation")}</div>
-              <div className="admin-slidebar-metric-val">{underInvestigationCount}</div>
+              <div className="admin-slidebar-metric-label">
+                {isChiefClerk
+                  ? (lang === "si" ? "පවරන්නට නියමිත" : lang === "ta" ? "ஒதுக்கப்பட வேண்டியவை" : "Pending Assignment")
+                  : t("underInvestigation", "In Investigation")}
+              </div>
+              <div className="admin-slidebar-metric-val">
+                {isChiefClerk ? chiefPendingCount : underInvestigationCount}
+              </div>
             </div>
             <div className="admin-slidebar-metric-card" style={{ borderLeft: "3px solid #d97706" }}>
-              <div className="admin-slidebar-metric-label">{t("underSubjectOfficer", "Subject Officer")}</div>
+              <div className="admin-slidebar-metric-label">
+                {isChiefClerk
+                  ? (lang === "si" ? "විෂයභාර නිලධාරීන්ට පවරන ලද" : lang === "ta" ? "விடய அதிகாரிகளுக்கு ஒதுக்கப்பட்டது" : "Assigned to Subject")
+                  : t("underSubjectOfficer", "Subject Officer")}
+              </div>
               <div className="admin-slidebar-metric-val">{underSubjectOfficerCount}</div>
             </div>
             <div className="admin-slidebar-metric-card" style={{ borderLeft: "3px solid #16a34a" }}>

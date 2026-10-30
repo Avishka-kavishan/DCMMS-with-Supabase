@@ -47,6 +47,7 @@ import {
   Lock,
   ShieldAlert,
   UserCheck,
+  Plus,
 } from "lucide-react";
 
 const fmt = (d?: any): string => {
@@ -868,6 +869,28 @@ function ViewLetterInner() {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+          {isAddSecUser && (
+            <Link
+              href={`/daily-mail/register?caseNo=${encodeURIComponent(letter?.serial_no || letter?.refNo || letter?.letter_no || letter?.letterNo || letterNo)}&subsequent=true&isAnswer=true`}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: "7px",
+                padding: "8px 16px", borderRadius: "8px",
+                background: "linear-gradient(135deg, #059669 0%, #047857 100%)",
+                border: "none", color: "#ffffff",
+                fontWeight: 700, fontSize: "12.5px", textDecoration: "none",
+                boxShadow: "0 2px 6px rgba(5, 150, 105, 0.25)",
+                transition: "all 0.15s ease",
+                whiteSpace: "nowrap"
+              }}
+              title={lang === "si" ? "මෙම ලිපිය සඳහා පිළිතුරු ලිපියක් එක් කරන්න" : "Add Answer Letter for this case"}
+              onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.9")}
+              onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+            >
+              <Plus size={15} strokeWidth={2.5} />
+              <span>{lang === "si" ? "පිළිතුරු ලිපියක් එක් කරන්න" : "Add Answer Letter"}</span>
+            </Link>
+          )}
+
           {isAddSecUser && (
             <button
               type="button"

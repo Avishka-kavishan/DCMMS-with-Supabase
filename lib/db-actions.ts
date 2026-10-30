@@ -587,7 +587,7 @@ export async function saveDailyMailToNewTableServer(data: {
         extension_end_date DATE,
         extension_requested_by_admin BOOLEAN DEFAULT FALSE,
         extension_approval_status VARCHAR(100),
-        dates_submitted_by_subject BOOLEAN DEFAULT TRUE,
+        dates_submitted_by_subject BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       )`,
@@ -1336,6 +1336,16 @@ export async function getSubjectOfficerDashboardCasesServer(
       `;
     } catch (e) {}
 
+    const submittedAnswerCaseNos = new Set<string>();
+    replyLettersRaw.forEach((r: any) => {
+      const hasAction = r.upcoming_action && String(r.upcoming_action).trim() && String(r.upcoming_action) !== "null" && String(r.upcoming_action) !== "statusInquiry";
+      const hasFile = r.file_no && String(r.file_no).trim() && String(r.file_no) !== "null";
+      if (hasAction || (hasFile && r.file_name)) {
+        if (r.ref_number) submittedAnswerCaseNos.add(String(r.ref_number).trim().toLowerCase());
+        if (r.file_no) submittedAnswerCaseNos.add(String(r.file_no).trim().toLowerCase());
+      }
+    });
+
     // 7. Fetch Concerned Officers
     let concernedOfficersRaw: any[] = [];
     try {
@@ -1395,7 +1405,7 @@ export async function getSubjectOfficerDashboardCasesServer(
       detailsRaw.map((d: any) => String(d.case_no || "").trim().toLowerCase()).filter(Boolean)
     );
     assignmentsRaw.forEach((a: any) => {
-      if (a.dates_submitted_by_subject || (a.appointment_date && a.report_due_date) || a.initial_investigation_complete) {
+      if ((a.dates_submitted_by_subject && a.appointment_date && a.report_due_date) || a.initial_investigation_complete) {
         if (a.case_no) casesWithDetails.add(String(a.case_no).trim().toLowerCase());
       }
     });
@@ -1668,7 +1678,7 @@ export async function getSubjectOfficerDashboardCasesServer(
           const letterData = refToLetterData.get(cNoLower) || {};
           const rawSub = letterData.subject && letterData.subject !== "N/A" && letterData.subject !== "—" ? letterData.subject : "";
           const resolvedSub = rawSub || a.progress_details || (letterData.subject_category ? `Answer Letter (${letterData.subject_category})` : `Answer Letter (${cNo})`);
-          const isAnsSubmitted = casesWithDetails.has(cNoLower) || isClosed;
+          const isAnsSubmitted = submittedAnswerCaseNos.has(cNoLower) || isClosed;
           answerLettersList.push({
             id: a.id || `asgn-${cNo}`,
             caseNo: cNo,
@@ -1713,7 +1723,7 @@ export async function getSubjectOfficerDashboardCasesServer(
           const letterData = refToLetterData.get(cNoLower) || {};
           const rawSub = letterData.subject && letterData.subject !== "N/A" && letterData.subject !== "—" ? letterData.subject : "";
           const resolvedSub = rawSub || (sc.subject && sc.subject !== "N/A" && sc.subject !== "—" ? sc.subject : "") || (letterData.subject_category ? `Answer Letter (${letterData.subject_category})` : `Answer Letter (${cNo})`);
-          const isAnsSubmitted = casesWithDetails.has(cNoLower) || isClosed;
+          const isAnsSubmitted = submittedAnswerCaseNos.has(cNoLower) || isClosed;
           answerLettersList.push({
             id: sc.id || `case-${cNo}`,
             caseNo: cNo,
@@ -1755,7 +1765,7 @@ export async function getSubjectOfficerDashboardCasesServer(
           seenAnswerIds.add(itemKey);
           const rawSub = l.subject && l.subject !== "N/A" && l.subject !== "—" ? l.subject : "";
           const resolvedSub = rawSub || (l.subject_category ? `Answer Letter (${l.subject_category})` : `Answer Letter (${l.ref_no || l.letter_no})`);
-          const isAnsSubmitted = casesWithDetails.has(cleanRef) || isClosed;
+          const isAnsSubmitted = submittedAnswerCaseNos.has(cleanRef) || isClosed;
           answerLettersList.push({
             id: l.id,
             caseNo: l.ref_no || l.letter_no || l.id,
@@ -1796,7 +1806,7 @@ export async function getSubjectOfficerDashboardCasesServer(
         if (!seenAnswerIds.has(itemKey)) {
           seenAnswerIds.add(itemKey);
           const resolvedSub = m.letter_title || `Subsequent Answer Letter (${m.case_no})`;
-          const isAnsSubmitted = casesWithDetails.has(cleanRef) || isClosed;
+          const isAnsSubmitted = submittedAnswerCaseNos.has(cleanRef) || isClosed;
           answerLettersList.push({
             id: m.id,
             caseNo: m.case_no,
@@ -1949,8 +1959,8 @@ export async function getSubjectOfficerDashboardCasesServer(
           extension_approval_status: a.extension_approval_status || null,
           extensionDecisionDate: a.extension_decision_date ? new Date(a.extension_decision_date).toISOString().split("T")[0] : null,
           extension_decision_date: a.extension_decision_date ? new Date(a.extension_decision_date).toISOString().split("T")[0] : null,
-          datesSubmittedBySubject: !!(a.dates_submitted_by_subject || (a.appointment_date && a.report_due_date)),
-          dates_submitted_by_subject: !!(a.dates_submitted_by_subject || (a.appointment_date && a.report_due_date)),
+          datesSubmittedBySubject: !!(a.dates_submitted_by_subject && a.appointment_date && a.report_due_date),
+          dates_submitted_by_subject: !!(a.dates_submitted_by_subject && a.appointment_date && a.report_due_date),
           reportSubmitDate: a.report_submit_date ? new Date(a.report_submit_date).toISOString().split("T")[0] : null,
           report_submit_date: a.report_submit_date ? new Date(a.report_submit_date).toISOString().split("T")[0] : null,
           reportContent: a.report_content || "",
@@ -1993,6 +2003,7 @@ export async function getSubjectOfficerDashboardCasesServer(
         replyLetters: filteredReplyLetters,
         concernedOfficers: cMap,
         submittedCaseNos: Array.from(casesWithDetails),
+        submittedAnswerCaseNos: Array.from(submittedAnswerCaseNos),
       },
     });
   } catch (error: any) {
@@ -2097,7 +2108,7 @@ export async function saveSubjectOfficerAssignmentServer(payload: {
     const extReqByAdmin = payload.extension_requested_by_admin !== undefined ? payload.extension_requested_by_admin : (payload.extensionRequestedByAdmin !== undefined ? payload.extensionRequestedByAdmin : null);
     const initComplete = payload.initial_investigation_complete !== undefined ? payload.initial_investigation_complete : (payload.initialInvestigationComplete !== undefined ? payload.initialInvestigationComplete : null);
     const initCompletedAt = payload.initial_investigation_completed_at || payload.initialInvestigationCompletedAt || null;
-    const datesSubmitted = payload.dates_submitted_by_subject !== undefined ? payload.dates_submitted_by_subject : (payload.datesSubmittedBySubject !== undefined ? payload.datesSubmittedBySubject : (apptDate && reportDueDate ? true : null));
+    const datesSubmitted = payload.dates_submitted_by_subject !== undefined ? payload.dates_submitted_by_subject : (payload.datesSubmittedBySubject !== undefined ? payload.datesSubmittedBySubject : (apptDate && reportDueDate ? true : false));
 
     const isCommSent = payload.committee_sent !== undefined 
       ? !!payload.committee_sent 
@@ -2140,7 +2151,7 @@ export async function saveSubjectOfficerAssignmentServer(payload: {
           extension_requested_by_admin BOOLEAN DEFAULT FALSE,
           extension_approval_status VARCHAR(100),
           extension_decision_date DATE,
-          dates_submitted_by_subject BOOLEAN DEFAULT TRUE,
+          dates_submitted_by_subject BOOLEAN DEFAULT FALSE,
           report_submit_date DATE,
           report_content TEXT,
           investigation_file_no VARCHAR(255),
@@ -2173,7 +2184,7 @@ export async function saveSubjectOfficerAssignmentServer(payload: {
         COALESCE($12, FALSE), $13::timestamptz,
         $14, $15::date, $16::date,
         COALESCE($17, FALSE), $18, $19::date,
-        COALESCE($20, TRUE), $21::date, $22,
+        COALESCE($20, FALSE), $21::date, $22,
         $23, $24, $25, $26,
         COALESCE($27, FALSE), $28::timestamptz,
         CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
@@ -4115,7 +4126,7 @@ export async function saveAccusedOfficerServer(officerData: any) {
         }
       }
 
-      // 6. Ensure and synchronize with reply_letter_details_table
+      // 6. Synchronize with reply_letter_details_table only if an existing reply record exists
       try {
         await ensureReplyLetterDetailsTable();
         const existingReply: any[] = await prisma.$queryRaw`
@@ -4125,35 +4136,13 @@ export async function saveAccusedOfficerServer(officerData: any) {
           await prisma.$executeRaw`
             UPDATE public.reply_letter_details_table
             SET
-              file_name = ${fileNameVal},
-              file_no = ${subject_file_no || null},
-              upcoming_action = ${future_action || null},
-              date = ${prepDateVal},
-              description = ${descVal},
+              file_name = COALESCE(${fileNameVal}, file_name),
+              file_no = COALESCE(${subject_file_no || null}, file_no),
+              upcoming_action = COALESCE(${future_action || null}, upcoming_action),
+              date = COALESCE(${prepDateVal}, date),
+              description = COALESCE(${descVal}, description),
               updated_at = NOW()
             WHERE id = ${existingReply[0].id};
-          `;
-        } else {
-          await prisma.$executeRaw`
-            INSERT INTO public.reply_letter_details_table (
-              ref_number,
-              file_name,
-              file_no,
-              upcoming_action,
-              date,
-              description,
-              created_at,
-              updated_at
-            ) VALUES (
-              ${refTrimmed},
-              ${fileNameVal},
-              ${subject_file_no || null},
-              ${future_action || null},
-              ${prepDateVal},
-              ${descVal},
-              NOW(),
-              NOW()
-            );
           `;
         }
       } catch (replySyncErr) {
@@ -5627,7 +5616,7 @@ export async function saveCaseByAppointmentAndReportDueDateServer(payload: {
           subject_officer_form_id BIGINT,
           appointment_letter_date DATE,
           report_due_date DATE,
-          dates_submitted_by_subject BOOLEAN DEFAULT TRUE,
+          dates_submitted_by_subject BOOLEAN DEFAULT FALSE,
           created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         );
@@ -5766,7 +5755,7 @@ export async function getCaseByAppointmentAndReportDueDateServer(subjectFileNo: 
           subject_officer_form_id BIGINT,
           appointment_letter_date DATE,
           report_due_date DATE,
-          dates_submitted_by_subject BOOLEAN DEFAULT TRUE,
+          dates_submitted_by_subject BOOLEAN DEFAULT FALSE,
           created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         );
@@ -10125,6 +10114,7 @@ export async function getDirectlyAssignedLettersServer(
       const createdByName = (l.created_by_name || "").trim().toLowerCase();
       const createdByRole = (l.created_by_role || "").trim().toLowerCase();
       const fwdReason = (l.forward_reason || "").trim().toLowerCase();
+      const sentBranch = (l.sent_branch || l.sentBranch || "").trim().toLowerCase();
 
       let isMatch = false;
 
@@ -10328,12 +10318,12 @@ export async function getDirectlyAssignedLettersServer(
 
           // 5. Branch role match: letter was addressed or forwarded to this branch
           if (!isMatch && activeRole) {
-            const isDiscipline = activeRole.includes("discipline");
+            const isDiscipline = activeRole.includes("discipline") || activeRole.includes("branch") || activeRole === "branch_admin";
             const isInvestigation = activeRole.includes("investigation");
 
-            if (isDiscipline && (createdByRole.includes("discipline") || addrRole.includes("discipline") || fwdReason.includes("discipline") || fwdTo.includes("discipline") || actOfficer.includes("bandula") || addrTo.includes("bandula"))) {
+            if (isDiscipline && (sentBranch.includes("discipline") || createdByRole.includes("discipline") || addrRole.includes("discipline") || fwdReason.includes("discipline") || fwdTo.includes("discipline") || actOfficer.includes("bandula") || addrTo.includes("bandula"))) {
               isMatch = true;
-            } else if (isInvestigation && (createdByRole.includes("investigation") || addrRole.includes("investigation") || fwdReason.includes("investigation") || fwdTo.includes("investigation") || actOfficer.includes("ranjith") || addrTo.includes("ranjith"))) {
+            } else if (isInvestigation && (sentBranch.includes("investigation") || createdByRole.includes("investigation") || addrRole.includes("investigation") || fwdReason.includes("investigation") || fwdTo.includes("investigation") || actOfficer.includes("ranjith") || addrTo.includes("ranjith"))) {
               isMatch = true;
             }
           }
@@ -12740,6 +12730,82 @@ export async function getSubjectReportsCategorizedLettersServer(
       disciplinaryInquiries: [],
       inquiryLetters: [],
       totalCount: 0
+    });
+  }
+}
+
+/**
+ * System Settings & Excel Protection Password Management
+ */
+let systemSettingsTableEnsured = false;
+async function ensureSystemSettingsTableOnce() {
+  if (systemSettingsTableEnsured) return;
+  systemSettingsTableEnsured = true;
+  try {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS public.dcmms_system_settings (
+        setting_key VARCHAR(100) PRIMARY KEY,
+        setting_value TEXT NOT NULL,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_by VARCHAR(255)
+      );
+    `);
+  } catch (e) {
+    console.warn("Could not ensure dcmms_system_settings table:", e);
+  }
+}
+
+export async function getExcelProtectionPasswordServer() {
+  try {
+    await ensureSystemSettingsTableOnce();
+    const rows: any[] = await prisma.$queryRaw`
+      SELECT setting_value FROM public.dcmms_system_settings
+      WHERE setting_key = 'excel_protection_password'
+      LIMIT 1;
+    `;
+    if (rows && rows.length > 0 && rows[0].setting_value) {
+      return serializeForServerAction({
+        success: true,
+        password: String(rows[0].setting_value).trim(),
+      });
+    }
+    return serializeForServerAction({
+      success: true,
+      password: "DCMMS@Secure2026",
+    });
+  } catch (err: any) {
+    return serializeForServerAction({
+      success: true,
+      password: "DCMMS@Secure2026",
+    });
+  }
+}
+
+export async function setExcelProtectionPasswordServer(newPassword: string, updatedBy?: string) {
+  try {
+    await ensureSystemSettingsTableOnce();
+    const cleanPwd = (newPassword || "DCMMS@Secure2026").trim();
+    const user = updatedBy || "System Admin";
+
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO public.dcmms_system_settings (setting_key, setting_value, updated_at, updated_by)
+      VALUES ('excel_protection_password', $1, NOW(), $2)
+      ON CONFLICT (setting_key)
+      DO UPDATE SET
+        setting_value = EXCLUDED.setting_value,
+        updated_at = NOW(),
+        updated_by = EXCLUDED.updated_by;
+    `, cleanPwd, user);
+
+    return serializeForServerAction({
+      success: true,
+      password: cleanPwd,
+    });
+  } catch (err: any) {
+    console.error("Error setting excel protection password:", err);
+    return serializeForServerAction({
+      success: false,
+      error: err?.message || "Failed to update excel protection password",
     });
   }
 }

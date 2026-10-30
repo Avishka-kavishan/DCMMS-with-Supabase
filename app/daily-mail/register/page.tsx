@@ -591,6 +591,7 @@ function RegisterComplaintForm() {
     const id = searchParams.get("id");
     const caseNo = searchParams.get("caseNo");
     const subsequent = searchParams.get("subsequent") === "true";
+    const isAnswerParam = searchParams.get("isAnswer") === "true";
 
     // Auto-calculate next letterNo (අනු අංකය) in format "YYYY/M/D/1" (e.g. "2026/10/9/1") if this is a new letter/entry (not edit mode)
     if (!id) {
@@ -653,6 +654,7 @@ function RegisterComplaintForm() {
             setFormState((prev) => ({
               ...prev,
               letterNo: nextRes.nextLetterNo,
+              receivedDate: prev.receivedDate || targetDate,
             }));
             return;
           }
@@ -664,6 +666,7 @@ function RegisterComplaintForm() {
         setFormState((prev) => ({
           ...prev,
           letterNo: nextNo,
+          receivedDate: prev.receivedDate || targetDate,
         }));
       };
 
@@ -672,13 +675,44 @@ function RegisterComplaintForm() {
 
     if (subsequent && caseNo) {
       setIsSubsequentMode(true);
+      const todayDate = new Date().toISOString().split("T")[0];
       setFormState((prev) => ({
         ...prev,
         refNo: caseNo,
+        receivedDate: prev.receivedDate || todayDate,
+        ...(isAnswerParam ? { isAnswerLetter: "true", regionProvince: "Answer Letter" } : {}),
       }));
 
       const fetchCurrentCase = async () => {
         let currentOfficerName = "";
+
+        // 1. Fetch from PostgreSQL server action first (primary data store in DCMMS)
+        try {
+          const pgRes = await getDailyMailRecordsServer();
+          if (pgRes && pgRes.success && Array.isArray(pgRes.data) && pgRes.data.length > 0) {
+            const cNoClean = caseNo.trim().toLowerCase();
+            const originalMail = pgRes.data.find((item: any) => {
+              const r1 = String(item.refNo || item.serial_no || item.letterNo || item.letter_no || item.id || "").trim().toLowerCase();
+              return r1 === cNoClean;
+            });
+            if (originalMail) {
+              currentOfficerName = originalMail.action_officer || originalMail.officer_name || originalMail.officerName || originalMail.forwarded_to || "";
+              setCurrentCaseDetails({
+                letterNo: originalMail.letter_no || originalMail.letterNo || "—",
+                officerName: currentOfficerName || "—",
+                refNo: originalMail.serial_no || originalMail.refNo || caseNo,
+                priority: originalMail.priority || "medium",
+                receivedDate: originalMail.received_date || originalMail.receivedDate || "—",
+                letterType: originalMail.type || originalMail.letterType || "—",
+              });
+              if (currentOfficerName && currentOfficerName !== "—") {
+                setFormState((prev) => ({ ...prev, officerName: currentOfficerName }));
+              }
+            }
+          }
+        } catch (e) {
+          console.error("Failed to load current case details from PostgreSQL server action", e);
+        }
 
         if (isSupabaseConfigured) {
           try {
@@ -1253,7 +1287,11 @@ function RegisterComplaintForm() {
 
           localStorage.setItem("show_register_success", "true");
           if (typeof window !== "undefined") window.dispatchEvent(new Event("dcmms_data_updated"));
-          router.push("/daily-mail");
+          if (currentUserProfile?.role === "additional_secretary" || currentUserProfile?.role === "admin") {
+            router.push("/admin");
+          } else {
+            router.push("/daily-mail");
+          }
           return;
         } catch (err: any) {
           console.error("Failed to save subsequent mail to Supabase", err);
@@ -2351,7 +2389,7 @@ function RegisterComplaintForm() {
                                 disabled={isFieldDisabled}
                                 value="true"
                                 checked={String(formState.isAnswerLetter) === "true"}
-                                onChange={() => setFormState((prev) => ({ ...prev, isAnswerLetter: "true" }))}
+                                onChange={() => setFormState((prev) => ({ ...prev, isAnswerLetter: "true", regionProvince: prev.regionProvince === "Answer Letter" ? prev.regionProvince : "Answer Letter" }))}
                                 style={{ width: "18px", height: "18px", accentColor: "#0e162f", cursor: isFieldDisabled ? "not-allowed" : "pointer" }}
                               />
                               <span style={{ fontWeight: 700, color: "#0e162f", fontSize: "13px" }}>{t("yes", "Yes")}</span>
@@ -2511,61 +2549,20 @@ function RegisterComplaintForm() {
                             id="receivedDate"
                             type="date"
                             required
-                            disabled={isFieldDisabled || isSubsequentMode}
-                            readOnly={isFieldDisabled || isSubsequentMode}
+                            disabled={isFieldDisabled}
+                            readOnly={isFieldDisabled}
                             value={formState.receivedDate}
                             onChange={(e) => handleReceivedDateChange(e.target.value)}
                             className="field-input"
-                            style={(isFieldDisabled || isSubsequentMode) ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
+                            style={isFieldDisabled ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85, fontWeight: 600 } : {}}
                           />
                         </div>
                       </div>
 
-
-
                     </div>
                   </div>
 
-                  {/* ── Card 4: Priority (ප්‍රමුඛතාව) ── */}
-                  <div className="register-step-card">
-                    <h3 className="register-step-title">{t("priority", "Priority")}</h3>
-                    <div className="register-step-grid">
-
-                      {/* Priority */}
-                      <div className="form-field-group">
-                        <label htmlFor="priority" className="field-label">{t("priority")}</label>
-                        <div className="priority-select-wrapper">
-                          <span className={`priority-dot-indicator dot-${formState.priority}`} />
-                          <div className="select-wrapper" style={{ flex: 1 }}>
-                            <select
-                              id="priority"
-                              disabled={isFieldDisabled}
-                              value={formState.priority}
-                              onChange={(e) => setFormState({ ...formState, priority: e.target.value as any })}
-                              className={`field-select priority-select-${formState.priority}`}
-                              style={{
-                                color: formState.priority === "high" ? "#ef4444" : formState.priority === "medium" ? "#FFA836" : "#39FF14",
-                                fontWeight: 700,
-                                ...(isFieldDisabled ? { backgroundColor: "#f8fafc", cursor: "not-allowed", opacity: 0.85 } : {})
-                              }}
-                            >
-                              <option value="high" className="priority-option-high" style={{ color: "#ef4444", fontWeight: 700, backgroundColor: "#ffffff" }}>{t("priorityHigh")}</option>
-                              <option value="medium" className="priority-option-medium" style={{ color: "#FFA836", fontWeight: 700, backgroundColor: "#ffffff" }}>{t("priorityMedium")}</option>
-                              <option value="low" className="priority-option-low" style={{ color: "#39FF14", fontWeight: 700, backgroundColor: "#ffffff" }}>{t("priorityLow")}</option>
-                            </select>
-                            <div className="select-arrow-container">
-                              <svg className="select-arrow-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                              </svg>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                    </div>
-                  </div>
-
-                  {/* ── Card 5: PDF Document Attachment (ලිපි ගොනුව / ஆவண இணைப்பு) ── */}
+                  {/* ── Card 4: PDF Document Attachment (ලිපි ගොනුව / ஆவண இணைப்பு) ── */}
                   <div className="register-step-card" style={{ border: "1.5px dashed #93c5fd", backgroundColor: "#f8fafc" }}>
                     <h3 className="register-step-title" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                       <svg style={{ width: "20px", height: "20px", color: "#2563eb" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">

@@ -45,57 +45,72 @@ export const KEY_ADMINISTRATIVE_OFFICERS: OfficerOption[] = [
 
 /**
  * Categorize letter provenance for Additional Secretary into the 3 key sending officers + Direct
+ * Letters are accurately categorized based on WHO SENT/FORWARDED the letter to the Additional Secretary,
+ * NOT who the Additional Secretary forwarded the letter TO.
  */
 export function getLetterOriginGroup(l: any): LetterOriginGroup {
   if (!l) return "direct_additional_sec";
   const roleRaw = (l.created_by_role || l.createdByRole || "").toLowerCase().trim();
   const creator = (l.created_by_name || "").toLowerCase().trim();
-  const addrRole = (l.addressedRole || l.addressed_role || "").toLowerCase().trim();
-  const addrTo = (l.addressedTo || l.addressed_to || "").toLowerCase().trim();
   const fwdReason = (l.forward_reason || l.forwardReason || "").toLowerCase().trim();
+  const fwdDirection = (l.forward_direction || l.forwardDirection || "").toLowerCase().trim();
+  const isSelfAddSec = creator.includes("nihal") || roleRaw.includes("additional");
 
-  // 1. Deputy Secretary / Senior Assistant Secretary
-  if (
-    roleRaw.includes("deputy") ||
-    roleRaw.includes("senior") ||
-    roleRaw === "senior_assistant_secretary" ||
-    roleRaw === "deputy_secretary" ||
-    creator.includes("dharshana") ||
-    creator.includes("deputy") ||
-    creator.includes("senior assistant") ||
-    creator.includes("ජ්‍යෙෂ්ඨ") ||
-    creator.includes("නියෝජ්‍ය") ||
-    fwdReason.includes("senior assistant") ||
-    fwdReason.includes("deputy") ||
-    fwdReason.includes("dharshana") ||
-    (l.isForwarded && (addrRole.includes("senior") || addrRole.includes("deputy") || addrTo.includes("dharshana")))
-  ) {
+  // If the letter was registered by/for Additional Secretary or Daily Mail without incoming forward to Addl Sec:
+  if (isSelfAddSec && fwdDirection !== "from_senior_to_add_sec" && !fwdReason.includes("to additional secretary")) {
+    return "direct_additional_sec";
+  }
+
+  // 1. Deputy Secretary / Senior Assistant Secretary (Sent / Forwarded BY them to Addl Sec)
+  const isCreatedByDeputy =
+    (roleRaw.includes("deputy") || roleRaw.includes("senior") || roleRaw === "senior_assistant_secretary" || roleRaw === "deputy_secretary" || creator.includes("dharshana")) &&
+    !roleRaw.includes("additional");
+
+  const isFwdByDeputy =
+    fwdDirection === "from_senior_to_add_sec" ||
+    (fwdReason.includes("forwarded by") &&
+      (fwdReason.includes("senior assistant") || fwdReason.includes("deputy") || fwdReason.includes("dharshana")) &&
+      (fwdReason.includes("to additional") || fwdReason.includes("to addl") || fwdDirection === "from_senior_to_add_sec") &&
+      !fwdReason.includes("forwarded by additional") &&
+      !fwdReason.includes("forwarded by addl"));
+
+  if (isCreatedByDeputy || isFwdByDeputy) {
     return "deputy_secretary";
   }
 
-  // 2. Assistant Secretary of Discipline
-  if (
-    roleRaw.includes("discipline") ||
-    creator.includes("bandula") ||
-    (creator.includes("discipline") && (creator.includes("assistant") || creator.includes("secretary"))) ||
-    fwdReason.includes("discipline") ||
-    (l.isForwarded && (addrRole.includes("discipline") || addrTo.includes("bandula")))
-  ) {
+  // 2. Assistant Secretary of Discipline (Sent / Forwarded BY them to Addl Sec)
+  const isCreatedByDiscipline =
+    (creator.includes("bandula") ||
+      (roleRaw.includes("discipline") && roleRaw.includes("assistant") && !roleRaw.includes("chief") && !roleRaw.includes("clerk"))) &&
+    !roleRaw.includes("additional");
+
+  const isFwdByDiscipline =
+    fwdReason.includes("forwarded by") &&
+    (fwdReason.includes("assistant secretary (discipline") || fwdReason.includes("bandula")) &&
+    (fwdReason.includes("to additional") || fwdReason.includes("to addl")) &&
+    !fwdReason.includes("forwarded by additional");
+
+  if (isCreatedByDiscipline || isFwdByDiscipline) {
     return "asst_sec_discipline";
   }
 
-  // 3. Assistant Secretary of Investigations
-  if (
-    (roleRaw.includes("investigation") && (roleRaw.includes("assistant") || roleRaw.includes("sec") || !roleRaw.includes("officer"))) ||
-    creator.includes("ranjith") ||
-    (creator.includes("investigation") && (creator.includes("assistant") || creator.includes("secretary"))) ||
-    fwdReason.includes("investigation") ||
-    (l.isForwarded && (addrRole.includes("investigation") || addrTo.includes("ranjith")))
-  ) {
+  // 3. Assistant Secretary of Investigations (Sent / Forwarded BY them to Addl Sec)
+  const isCreatedByInvestigation =
+    (creator.includes("ranjith") ||
+      (roleRaw.includes("investigation") && roleRaw.includes("assistant") && !roleRaw.includes("chief") && !roleRaw.includes("clerk"))) &&
+    !roleRaw.includes("additional");
+
+  const isFwdByInvestigation =
+    fwdReason.includes("forwarded by") &&
+    (fwdReason.includes("assistant secretary (investigation") || fwdReason.includes("ranjith")) &&
+    (fwdReason.includes("to additional") || fwdReason.includes("to addl")) &&
+    !fwdReason.includes("forwarded by additional");
+
+  if (isCreatedByInvestigation || isFwdByInvestigation) {
     return "asst_sec_investigation";
   }
 
-  // 4. Meant directly for Additional Secretary
+  // 4. Meant directly for Additional Secretary (from Daily Mail / Post / Hand Registry)
   return "direct_additional_sec";
 }
 
@@ -346,19 +361,26 @@ export function isLetterForChiefClerk(item: any, officerProfile?: any): boolean 
       assignedTo.includes("subject") ||
       forwardedTo.includes("subject") ||
       assignedTo.includes("upul") ||
-      forwardedTo.includes("upul") ||
-      status.includes("subject") ||
-      status.includes("answer");
+      forwardedTo.includes("upul");
 
     const hasDisciplineContext =
+      forwardReason.includes("chief clerk") ||
+      forwardReason.includes("ශාඛා ප්‍රධානී") ||
+      forwardReason.includes("assigned by chief clerk") ||
       forwardReason.includes("discipline") ||
       forwardReason.includes("disciplinary") ||
       forwardReason.includes("විනය") ||
-      forwardReason.includes("senior assistant") ||
-      forwardReason.includes("additional secretary") ||
-      Boolean(raw.date_letter_handover_discipline || item.letter_date || item.received_date);
+      Boolean(raw.date_letter_handover_discipline);
 
-    if (isDisciplineSubjectOfficer && hasDisciplineContext) {
+    // Exclude if routed exclusively to another branch or directly to Additional Secretary
+    const isExclusivelyOther =
+      (forwardedTo.includes("investigation") && !forwardedTo.includes("discipline")) ||
+      ((forwardedTo.includes("additional") || assignedTo.includes("additional")) &&
+        !forwardReason.includes("chief clerk") &&
+        !forwardReason.includes("ශාඛා ප්‍රධානී") &&
+        !forwardReason.includes("discipline"));
+
+    if (isDisciplineSubjectOfficer && hasDisciplineContext && !isExclusivelyOther) {
       return true;
     }
   }
@@ -464,7 +486,161 @@ export function getSeniorLetterStatusInfo(l: any, lang: string = "si") {
 
   return {
     isSubmitted: false,
-    badgeText: lang === "si" ? "ඉදිරිපත් කිරීමට ඇත (පොරොත්තු)" : lang === "ta" ? "நிலுவையில் உள்ளது" : "Unsubmitted (Pending)",
+    badgeText: lang === "si" ? "ඉදිරිපත් කිරීමට ඇති (පොරොත්තු)" : lang === "ta" ? "நிலுவையில் உள்ளது" : "Unsubmitted (Pending)",
+    destination: "",
+    badgeBg: "#fffbeb",
+    badgeColor: "#b45309",
+    badgeBorder: "#fde68a",
+  };
+}
+
+/**
+ * Determines whether a letter assigned / forwarded to Assistant Secretary Discipline Branch
+ * has already been submitted/forwarded out (specifically to Chief Clerk or Subject Officer)
+ * or is still pending action/submission.
+ */
+export function isLetterSubmittedByDiscipline(l: any): boolean {
+  if (!l) return false;
+  const fwdReason = String(l.forward_reason || l.forwardReason || "").toLowerCase();
+  const fwdTo = String(l.forwarded_to || l.forwardedTo || "").toLowerCase();
+  const actOfficer = String(l.action_officer || l.actionOfficer || "").toLowerCase();
+  const addrTo = String(l.addressed_to || l.addressedTo || "").toLowerCase();
+  const addrRole = String(l.addressed_role || l.addressedRole || "").toLowerCase();
+  const status = String(l.status || "").toLowerCase();
+
+  // 1. Explicit reason: forwarded by Assistant Secretary Discipline / Bandula or forwarded to Chief Clerk
+  if (
+    fwdReason.includes("forwarded to chief clerk") ||
+    fwdReason.includes("forwarded to chief") ||
+    fwdReason.includes("ශාඛා ප්‍රධානී වෙත යොමු") ||
+    fwdReason.includes("ශාඛා ප්‍රධානී") ||
+    fwdReason.includes("forwarded by assistant secretary (discipline)") ||
+    fwdReason.includes("forwarded by assistant secretary discipline") ||
+    fwdReason.includes("forwarded by bandula") ||
+    fwdReason.includes("assigned by chief clerk")
+  ) {
+    return true;
+  }
+
+  // 2. Has been targeted to Chief Clerk or Subject Officer
+  const isTargetedToChiefOrSubject =
+    fwdTo.includes("chief") ||
+    fwdTo.includes("clerk") ||
+    fwdTo.includes("ශාඛා ප්‍රධානී") ||
+    fwdTo.includes("subject") ||
+    fwdTo.includes("upul") ||
+    fwdTo.includes("so-") ||
+    actOfficer.includes("chief") ||
+    actOfficer.includes("clerk") ||
+    actOfficer.includes("ශාඛා ප්‍රධානී") ||
+    actOfficer.includes("subject") ||
+    actOfficer.includes("upul") ||
+    addrTo.includes("chief") ||
+    addrTo.includes("clerk") ||
+    addrTo.includes("ශාඛා ප්‍රධානී") ||
+    addrRole.includes("chief") ||
+    addrRole.includes("clerk") ||
+    addrRole.includes("subject");
+
+  // Check if it's still addressed/forwarded purely to Assistant Secretary Discipline / Bandula
+  const isStillWithDiscipline =
+    (fwdTo.includes("bandula") || fwdTo.includes("assistant_secretary_discipline") || actOfficer.includes("bandula") || addrTo.includes("bandula")) &&
+    !fwdTo.includes("chief") &&
+    !fwdTo.includes("clerk") &&
+    !fwdTo.includes("ශාඛා") &&
+    !fwdTo.includes("subject") &&
+    !actOfficer.includes("chief") &&
+    !actOfficer.includes("clerk") &&
+    !actOfficer.includes("subject");
+
+  if (isTargetedToChiefOrSubject && !isStillWithDiscipline) {
+    return true;
+  }
+
+  // 3. Status progression check: under subject officer, closed, finalized
+  if (
+    status === "under subject officer" ||
+    status === "assigned answer letter" ||
+    status === "closed" ||
+    status === "finalized"
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Universal submission check for any officer role (Discipline, Senior, Chief Clerk, Admin, etc.)
+ */
+export function isLetterSubmittedGeneral(l: any, userRole?: string, userName?: string): boolean {
+  if (!l) return false;
+  const roleLower = String(userRole || "").toLowerCase().trim();
+  const nameLower = String(userName || "").toLowerCase().trim();
+
+  if (roleLower.includes("chief") || roleLower.includes("clerk") || roleLower.includes("ශාඛා")) {
+    return (
+      String(l.status || "").toLowerCase().includes("subject") ||
+      String(l.action_officer || l.actionOfficer || "").toLowerCase().includes("subject") ||
+      String(l.forwarded_to || l.forwardedTo || "").toLowerCase().includes("subject") ||
+      String(l.forward_reason || l.forwardReason || "").toLowerCase().includes("assigned by chief")
+    );
+  }
+
+  if (roleLower.includes("senior") || roleLower.includes("deputy") || nameLower.includes("dharshana")) {
+    return isLetterSubmittedBySenior(l);
+  }
+
+  if (roleLower.includes("discipline") || nameLower.includes("bandula") || roleLower === "admin") {
+    return isLetterSubmittedByDiscipline(l);
+  }
+
+  // Fallback check
+  if (isLetterSubmittedByDiscipline(l) || isLetterSubmittedBySenior(l)) {
+    return true;
+  }
+
+  return Boolean(l.isForwarded || (l.forwarded_to && !l.forwarded_to.includes("additional")));
+}
+
+/**
+ * Returns formatted badge information for any letter's submission status
+ */
+export function getGeneralLetterStatusInfo(l: any, lang: string = "si", userRole?: string, userName?: string) {
+  const isSubmitted = isLetterSubmittedGeneral(l, userRole, userName);
+  const fwdTo = String(l.forwarded_to || l.forwardedTo || "");
+  const actOff = String(l.action_officer || l.actionOfficer || "");
+  const addrTo = String(l.addressed_to || l.addressedTo || "");
+  const target = fwdTo || actOff || addrTo;
+
+  let destLabel = "";
+  const targetLower = target.toLowerCase();
+  if (targetLower.includes("chief") || targetLower.includes("clerk") || targetLower.includes("ශාඛා")) {
+    destLabel = lang === "si" ? "ශාඛා ප්‍රධානී (විනය)" : lang === "ta" ? "முதன்மை எழுதுநர்" : "Chief Clerk";
+  } else if (targetLower.includes("discipline") || targetLower.includes("විනය") || targetLower.includes("bandula")) {
+    destLabel = lang === "si" ? "සහකාර ලේකම් (විනය)" : lang === "ta" ? "உதவிச் செயலாளர் (ஒழுக்கம்)" : "Asst. Sec (Discipline)";
+  } else if (targetLower.includes("investigation") || targetLower.includes("විමර්ශන") || targetLower.includes("ranjith")) {
+    destLabel = lang === "si" ? "සහකාර ලේකම් (විමර්ශන)" : lang === "ta" ? "உதவிச் செயலாளர் (விசாரணை)" : "Asst. Sec (Investigation)";
+  } else if (targetLower.includes("subject") || targetLower.includes("upul") || targetLower.includes("so-")) {
+    destLabel = lang === "si" ? "විෂයභාර නිලධාරී" : lang === "ta" ? "விடய அதிகாரி" : "Subject Officer";
+  } else if (target) {
+    destLabel = target.split("(")[0].trim();
+  }
+
+  if (isSubmitted) {
+    return {
+      isSubmitted: true,
+      badgeText: lang === "si" ? "ඉදිරිපත් කළා (යොමු වූ)" : lang === "ta" ? "சமர்ப்பிக்கப்பட்டது" : "Submitted / Forwarded",
+      destination: destLabel,
+      badgeBg: "#ecfdf5",
+      badgeColor: "#047857",
+      badgeBorder: "#a7f3d0",
+    };
+  }
+
+  return {
+    isSubmitted: false,
+    badgeText: lang === "si" ? "ඉදිරිපත් කිරීමට ඇති (පොරොත්තු)" : lang === "ta" ? "நிலுவையில் உள்ளது" : "Unsubmitted (Pending)",
     destination: "",
     badgeBg: "#fffbeb",
     badgeColor: "#b45309",
